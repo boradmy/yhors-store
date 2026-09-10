@@ -1,0 +1,18 @@
+{
+  "name": "yhors-store",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Tienda YHORS ligera con catálogo y administración privada.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cookie-parser": "^1.4.7",
+    "dotenv": "^16.4.7",
+    "express": "^5.2.1",
+    "multer": "^2.3.0"
+  }
+}
