@@ -1,54 +1,80 @@
 [
   {
+    "name": "RAMO ELEGANTE: ROASAS Y BRILLO",
+    "description": "💎✨ Ramo Elegante: Rosas y Brillo ✨💎\n\nLleva el lujo a otro nivel con nuestro exclusivo Ramo Elegante. Este ramo cuenta con 15 rosas eternas adornadas con diamantes ficticios, una delicada mariposa y está envuelto en papel premium coreano. Cada detalle ha sido cuidadosamente seleccionado",
+    "category": "details",
+    "price": 30,
+    "image": "https://i.pinimg.com/736x/13/54/ec/1354ec82e8ff3dbcfc2ad1495ddce428.jpg",
+    "featured": false,
+    "id": "8b1a4da8-af44-48cc-a263-69d2cf703c59",
+    "createdAt": "2026-09-12T04:40:49.585Z",
+    "updatedAt": "2026-09-12T04:42:49.955Z"
+  },
+  {
+    "name": "CAJA FELIZ CUMPLEAÑOS MORADO",
+    "description": "¡Celebra el cumpleaños de tus seres queridos con nuestra exclusiva Caja de Cumpleaños! 🎉🎁\n\nIncluye:\n✨ 4 exquisitos Ferrero Rocher para endulzar el momento.\n🌸 8 flores eternas\n🎈 Un hermoso letrero de \"Feliz Cumpleaños\" para adornar el festejo.\n🌹 11 delicadas rositas pequeñas blancas",
+    "category": "details",
+    "price": 30,
+    "image": "https://i.pinimg.com/736x/cc/55/99/cc55998a60eda34072d89b7594f29a57.jpg",
+    "featured": false,
+    "id": "f63f4220-3eca-4373-85a4-4e8b495289bb",
+    "createdAt": "2026-09-12T04:35:05.613Z",
+    "updatedAt": "2026-09-12T04:42:41.439Z"
+  },
+  {
     "name": "RAMO CON MARIPOSAS PAPEL ROSADO",
-    "description": "🌸✨ Ramo Rosado con mariposas ✨🌸\n\nDeleita a tus seres queridos con la belleza eterna de nuestro ramo, compuesto por 16 elegantes rosas eternas rosadas. Este delicado arreglo está adornado con 2 mariposas 🦋 y una fina 👑 corona, creando un toque encantador y sofisticado para cualquier ocasión espec",
+    "description": "🌸✨ Ramo Rosado con mariposas ✨🌸\n\nDeleita a tus seres queridos con la belleza eterna de nuestro ramo, compuesto por 16 elegantes rosas eternas rosadas. Este delicado arreglo está adornado con 2 mariposas 🦋 y una fina 👑 corona, creando un toque encantador y sofisticado para cualquier ocasión",
     "category": "details",
     "price": 35,
-    "image": "/uploads/1789184109528-1bf745404637.png",
+    "image": "https://i.pinimg.com/1200x/cf/ca/5b/cfca5ba3465dbeeb9bca64371313cde0.jpg",
     "featured": false,
     "id": "93a54450-e29f-4f6b-b3d8-a800d128ed6a",
-    "createdAt": "2026-09-12T03:35:09.551Z"
+    "createdAt": "2026-09-12T03:35:09.551Z",
+    "updatedAt": "2026-09-12T04:42:27.539Z"
   },
   {
     "name": "RAMO CON MARIPOSAS BLANCO Y DORADO",
     "description": "🌸✨ Ramo Rosado con mariposas ✨🌸\n\nDeleita a tus seres queridos con la belleza eterna de nuestro ramo, compuesto por 16 elegantes rosas eternas rosadas. Este delicado arreglo está adornado con 2 mariposas 🦋 y una fina 👑 corona, creando un toque encantador y sofisticado para cualquier ocasión",
     "category": "details",
     "price": 36.5,
-    "image": "/uploads/1789183922951-4cbc29eb1360.png",
+    "image": "https://i.pinimg.com/736x/33/fa/3c/33fa3c03839407daefecb65b30fcf3ee.jpg",
     "featured": false,
     "id": "ae8c56b7-a2c0-4821-a811-44a8eb23d980",
     "createdAt": "2026-09-12T03:32:02.982Z",
-    "updatedAt": "2026-09-12T03:32:40.719Z"
+    "updatedAt": "2026-09-12T04:29:58.972Z"
   },
   {
     "name": "RAMO BICOLOR",
     "description": "💖🌹 Caja Corazón de Rosas Eternas 🌹💖\n\nRegala amor con nuestro exclusivo arreglo en una caja en forma de corazón, que contiene 17 hermosas rosas eternas: 8 rosas moradas y 9 rosas rosadas. Cada rosa está cuidadosamente colocada en una elegante caja de MDF, diseñada para proteger las flores y asegu",
     "category": "details",
     "price": 30,
-    "image": "/uploads/1789183707288-6ac7a5728929.png",
+    "image": "https://i.pinimg.com/736x/3b/c0/e1/3bc0e19b19da248cf45fb97a01070f67.jpg",
     "featured": false,
     "id": "9bac7e22-d712-4e3f-a63e-6d033e999357",
-    "createdAt": "2026-09-12T03:28:27.306Z"
+    "createdAt": "2026-09-12T03:28:27.306Z",
+    "updatedAt": "2026-09-12T04:29:16.639Z"
   },
   {
     "name": "RAMO BLANCO Y ROSAS",
-    "description": "💜🤍 Ramo blanco y rosa 🤍💜\n\nDescubre la belleza de la combinación perfecta con nuestro impresionante ramo de 37 rosas eternas. Este elegante arreglo incluye 19 rosas moradas claras y 18 rosas blancas, adornado con 2 delicadas mariposas 🦋. Todo envuelto en un sofisticado papel premium, este ramo e",
+    "description": "💜🤍 Ramo blanco y rosa 🤍💜\n\nDescubre la belleza de la combinación perfecta con nuestro impresionante ramo de 37 rosas eternas. Este elegante arreglo incluye 19 rosas moradas claras y 18 rosas blancas, adornado con 2 delicadas mariposas 🦋. Todo envuelto en un sofisticado papel premium",
     "category": "details",
     "price": 55,
-    "image": "/uploads/1789183614556-8f419a18216b.png",
+    "image": "https://i.pinimg.com/736x/6c/2b/09/6c2b0951c92bda03a2365542923ca972.jpg",
     "featured": false,
     "id": "76ea6239-d06b-4707-9c86-e28ad256d8fd",
-    "createdAt": "2026-09-12T03:26:54.586Z"
+    "createdAt": "2026-09-12T03:26:54.586Z",
+    "updatedAt": "2026-09-12T04:42:14.438Z"
   },
   {
     "name": "RAMO ROSADITA",
     "description": "💐🌷 Ramo rosaditas 🌷💐\n\nSorprende con un toque de elegancia y frescura. Nuestro hermoso ramo mixto combina 4 rosas eternas fucsias y 3 rosas rosadas, decorado con una delicada 🦋 mariposa. Un arreglo único que añade color y encanto a cualquier ocasión especial",
     "category": "details",
     "price": 20,
-    "image": "/uploads/1789183287283-920abe9720e2.png",
+    "image": "https://i.pinimg.com/736x/6e/5d/75/6e5d7574ebf400cd353d848b04c776f3.jpg",
     "featured": false,
     "id": "52129b8d-fcc4-4057-ad39-8d1fe04267c6",
-    "createdAt": "2026-09-12T03:21:27.302Z"
+    "createdAt": "2026-09-12T03:21:27.302Z",
+    "updatedAt": "2026-09-12T04:26:48.258Z"
   },
   {
     "name": "RAMO FUSIA",
