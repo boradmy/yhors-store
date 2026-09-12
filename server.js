@@ -94,7 +94,7 @@ function cleanText(value, maxLength) {
 
 function validateProduct(input, current = {}) {
   const name = cleanText(input.name, 90);
-  const description = cleanText(input.description, 300);
+  const description = cleanText(input.description, 2000);
   const category = cleanText(input.category, 30).toLowerCase();
   const price = Number(input.price);
   const image = cleanText(input.image, 1000);
@@ -102,9 +102,20 @@ function validateProduct(input, current = {}) {
   if (!name || !description || !validCategories.includes(category) || !Number.isFinite(price) || price < 0 || price > 100000000) {
     return { error: 'Revisa nombre, descripción, categoría y precio.' };
   }
-  if (image && !(/^\/uploads\/[a-zA-Z0-9._-]+$/.test(image) || /^https:\/\/[a-zA-Z0-9./?&=_:-]+$/.test(image))) {
-    return { error: 'La URL de la imagen no es válida.' };
+  const rawImages = Array.isArray(input.images) ? input.images : [image];
+  const images = rawImages
+    .map(value => cleanText(value, 1000))
+    .filter(Boolean)
+    .slice(0, 4);
+  if (image && !(/^\/uploads\/[a-zA-Z0-9._-]+$/.test(image) || /^https:\/\/[a-zA-Z0-9./?&=_:%#-]+$/.test(image))) {
+    return { error: 'La URL de la imagen principal no es válida.' };
   }
+  for (const imageUrl of images) {
+    if (!(/^\/uploads\/[a-zA-Z0-9._-]+$/.test(imageUrl) || /^https:\/\/[a-zA-Z0-9./?&=_:%#-]+$/.test(imageUrl))) {
+      return { error: 'Una de las URL de las imágenes no es válida.' };
+    }
+  }
+  const finalImages = images.length ? images : (current.images?.length ? current.images : (current.image ? [current.image] : []));
   return {
     product: {
       ...current,
@@ -112,7 +123,8 @@ function validateProduct(input, current = {}) {
       description,
       category,
       price: Math.round(price * 100) / 100,
-      image: image || current.image || '',
+      image: finalImages[0] || '',
+      images: finalImages,
       featured: input.featured === true || input.featured === 'true'
     }
   };
@@ -125,14 +137,23 @@ function deleteUploadedImage(image) {
   if (target.startsWith(UPLOADS_DIR + path.sep) && fs.existsSync(target)) fs.unlinkSync(target);
 }
 
-app.get('/api/products', (_, res) => res.json(readProducts()));
+function normalizeProduct(product) {
+  const images = Array.isArray(product.images) && product.images.length
+    ? product.images.filter(Boolean)
+    : (product.image ? [product.image] : []);
+  return { ...product, image: product.image || images[0] || '', images };
+}
+
+app.get('/api/products', (_, res) => res.json(readProducts().map(normalizeProduct)));
 app.get('/api/storefront', (_, res) => res.json({ whatsappNumber: String(process.env.WHATSAPP_NUMBER || '').replace(/\D/g, '') }));
 app.get('/api/health', (_, res) => res.json({ ok: true }));
 
 app.post('/api/login', async (req, res) => {
   const username = cleanText(req.body?.username, 80);
   const password = String(req.body?.password || '');
-  const nameMatches = crypto.timingSafeEqual(Buffer.from(username.padEnd(80)), Buffer.from(ADMIN_USER.padEnd(80)));
+  const expectedUser = String(ADMIN_USER);
+  const nameMatches = username.length === expectedUser.length &&
+    crypto.timingSafeEqual(Buffer.from(username), Buffer.from(expectedUser));
   const passwordMatches = await bcrypt.compare(password, await bcrypt.hash(ADMIN_PASSWORD, 10));
   if (!nameMatches || !passwordMatches) return res.status(401).json({ error: 'Usuario o contraseña incorrectos.' });
   res.cookie('yhors_session', makeSession(), { httpOnly: true, sameSite: 'strict', secure: COOKIE_SECURE, maxAge: 1000 * 60 * 60 * 12, path: '/' });
@@ -145,7 +166,7 @@ app.post('/api/logout', (req, res) => {
 });
 
 app.get('/api/admin/session', (req, res) => res.json({ authenticated: hasValidSession(req), username: hasValidSession(req) ? ADMIN_USER : null }));
-app.get('/api/admin/products', requireAdmin, (_, res) => res.json(readProducts()));
+app.get('/api/admin/products', requireAdmin, (_, res) => res.json(readProducts().map(normalizeProduct)));
 
 app.post('/api/admin/upload', requireAdmin, upload.single('image'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'Selecciona una imagen JPG, PNG, WEBP o GIF de máximo 5 MB.' });
@@ -156,7 +177,7 @@ app.post('/api/admin/products', requireAdmin, (req, res) => {
   const result = validateProduct(req.body);
   if (result.error) return res.status(400).json(result);
   const products = readProducts();
-  const product = { ...result.product, id: crypto.randomUUID(), createdAt: new Date().toISOString() };
+  const product = normalizeProduct({ ...result.product, id: crypto.randomUUID(), createdAt: new Date().toISOString() });
   products.unshift(product);
   writeProducts(products);
   return res.status(201).json(product);
@@ -169,8 +190,10 @@ app.put('/api/admin/products/:id', requireAdmin, (req, res) => {
   const previous = products[index];
   const result = validateProduct(req.body, previous);
   if (result.error) return res.status(400).json(result);
-  products[index] = { ...result.product, id: previous.id, createdAt: previous.createdAt, updatedAt: new Date().toISOString() };
-  if (previous.image !== products[index].image) deleteUploadedImage(previous.image);
+  products[index] = normalizeProduct({ ...result.product, id: previous.id, createdAt: previous.createdAt, updatedAt: new Date().toISOString() });
+  const previousImages = Array.isArray(previous.images) ? previous.images : (previous.image ? [previous.image] : []);
+  const currentImages = new Set(products[index].images || []);
+  previousImages.forEach(imageUrl => { if (!currentImages.has(imageUrl)) deleteUploadedImage(imageUrl); });
   writeProducts(products);
   return res.json(products[index]);
 });
@@ -180,7 +203,7 @@ app.delete('/api/admin/products/:id', requireAdmin, (req, res) => {
   const product = products.find((item) => item.id === req.params.id);
   if (!product) return res.status(404).json({ error: 'Producto no encontrado.' });
   writeProducts(products.filter((item) => item.id !== req.params.id));
-  deleteUploadedImage(product.image);
+  (product.images || [product.image]).forEach(deleteUploadedImage);
   return res.status(204).end();
 });
 

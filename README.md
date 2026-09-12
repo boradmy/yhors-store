@@ -40,3 +40,16 @@ Para recibir pedidos, agrega el número internacional de WhatsApp sin `+` ni esp
 - La moneda visible está configurada como USD. Puedes cambiarla en `public/app.js` dentro de la función `money`.
 - Los cuatro productos iniciales son ejemplos. Entra al panel, edítalos o elimínalos y carga tus fotos reales.
 - El hosting no debe servirse como sitio estático; requiere ejecutar `server.js` para que el acceso, la carga de fotos y los cambios sean reales.
+
+
+## Mejoras de esta versión
+- Homepage con estética YHORS más elegante: negro, crema y dorado, mejor jerarquía visual y tarjetas refinadas.
+- Botón Añadir con estado de carga y confirmación visual.
+- Carrito lateral con controles +/−, edición directa de cantidad y total actualizado.
+- Tarjetas de catálogo clicables y página de detalle individual.
+- Galería de hasta 4 imágenes por producto.
+- Panel de administración ampliado para editar nombre, precio, categoría, descripción larga e imágenes.
+- Los productos antiguos siguen funcionando: el backend convierte la imagen existente en una galería de una imagen.
+
+### Importante
+Se omitieron `.env`, `.git` y `node_modules` del ZIP por seguridad/tamaño. Copia tu `.env` original al proyecto y ejecuta `npm install` antes de iniciar.
