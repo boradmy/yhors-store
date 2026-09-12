@@ -1,1 +1,126 @@
-[]
+[
+  {
+    "name": "RAMO CON MARIPOSAS PAPEL ROSADO",
+    "description": "🌸✨ Ramo Rosado con mariposas ✨🌸\n\nDeleita a tus seres queridos con la belleza eterna de nuestro ramo, compuesto por 16 elegantes rosas eternas rosadas. Este delicado arreglo está adornado con 2 mariposas 🦋 y una fina 👑 corona, creando un toque encantador y sofisticado para cualquier ocasión espec",
+    "category": "details",
+    "price": 35,
+    "image": "/uploads/1789184109528-1bf745404637.png",
+    "featured": false,
+    "id": "93a54450-e29f-4f6b-b3d8-a800d128ed6a",
+    "createdAt": "2026-09-12T03:35:09.551Z"
+  },
+  {
+    "name": "RAMO CON MARIPOSAS BLANCO Y DORADO",
+    "description": "🌸✨ Ramo Rosado con mariposas ✨🌸\n\nDeleita a tus seres queridos con la belleza eterna de nuestro ramo, compuesto por 16 elegantes rosas eternas rosadas. Este delicado arreglo está adornado con 2 mariposas 🦋 y una fina 👑 corona, creando un toque encantador y sofisticado para cualquier ocasión",
+    "category": "details",
+    "price": 36.5,
+    "image": "/uploads/1789183922951-4cbc29eb1360.png",
+    "featured": false,
+    "id": "ae8c56b7-a2c0-4821-a811-44a8eb23d980",
+    "createdAt": "2026-09-12T03:32:02.982Z",
+    "updatedAt": "2026-09-12T03:32:40.719Z"
+  },
+  {
+    "name": "RAMO BICOLOR",
+    "description": "💖🌹 Caja Corazón de Rosas Eternas 🌹💖\n\nRegala amor con nuestro exclusivo arreglo en una caja en forma de corazón, que contiene 17 hermosas rosas eternas: 8 rosas moradas y 9 rosas rosadas. Cada rosa está cuidadosamente colocada en una elegante caja de MDF, diseñada para proteger las flores y asegu",
+    "category": "details",
+    "price": 30,
+    "image": "/uploads/1789183707288-6ac7a5728929.png",
+    "featured": false,
+    "id": "9bac7e22-d712-4e3f-a63e-6d033e999357",
+    "createdAt": "2026-09-12T03:28:27.306Z"
+  },
+  {
+    "name": "RAMO BLANCO Y ROSAS",
+    "description": "💜🤍 Ramo blanco y rosa 🤍💜\n\nDescubre la belleza de la combinación perfecta con nuestro impresionante ramo de 37 rosas eternas. Este elegante arreglo incluye 19 rosas moradas claras y 18 rosas blancas, adornado con 2 delicadas mariposas 🦋. Todo envuelto en un sofisticado papel premium, este ramo e",
+    "category": "details",
+    "price": 55,
+    "image": "/uploads/1789183614556-8f419a18216b.png",
+    "featured": false,
+    "id": "76ea6239-d06b-4707-9c86-e28ad256d8fd",
+    "createdAt": "2026-09-12T03:26:54.586Z"
+  },
+  {
+    "name": "RAMO ROSADITA",
+    "description": "💐🌷 Ramo rosaditas 🌷💐\n\nSorprende con un toque de elegancia y frescura. Nuestro hermoso ramo mixto combina 4 rosas eternas fucsias y 3 rosas rosadas, decorado con una delicada 🦋 mariposa. Un arreglo único que añade color y encanto a cualquier ocasión especial",
+    "category": "details",
+    "price": 20,
+    "image": "/uploads/1789183287283-920abe9720e2.png",
+    "featured": false,
+    "id": "52129b8d-fcc4-4057-ad39-8d1fe04267c6",
+    "createdAt": "2026-09-12T03:21:27.302Z"
+  },
+  {
+    "name": "RAMO FUSIA",
+    "description": "💖🌸 Ramo Fucsia 🌸💖\n\nAñade un toque de color y alegría a cualquier día con nuestro encantador ramo de 7 rosas eternas fucsias. 🌷 Este arreglo vibrante, decorado con una elegante 👑 corona de plástico, es perfecto para sorprender a alguien especial o para decorar tu espacio con estilo y delicadeza",
+    "category": "details",
+    "price": 25,
+    "image": "/uploads/1789183183799-6041e82d3f92.png",
+    "featured": false,
+    "id": "1e882934-04c9-4fac-b730-a2f0470cae26",
+    "createdAt": "2026-09-12T03:19:43.823Z"
+  },
+  {
+    "name": "RAMO BLANCO",
+    "description": "🌿🤍 Ramo Blanco 🤍🌿\n\nElegancia pura en cada detalle. ✨ Este delicado ramo incluye 7 rosas blancas eternas, acompañadas por una fina 👑 corona de plástico, todo envuelto en un elegante papel premium. El regalo perfecto para cualquier ocasión especial. 🎁",
+    "category": "details",
+    "price": 25,
+    "image": "/uploads/1789183088312-3b2b2fb4138d.png",
+    "featured": false,
+    "id": "7a08ef0c-b7f7-4afc-8b67-bd4b9285602d",
+    "createdAt": "2026-09-12T03:18:08.337Z"
+  },
+  {
+    "name": "RAMO DE ROSAS",
+    "description": "🌹✨ Ramo Rosa ✨🌹\n\n¡Un detalle que nunca se marchita! 🎀 Nuestro exclusivo ramo contiene 50 rosas eternas hechas a mano, decorado con 🦋 3 mariposas encantadoras y una elegante 👑 corona de plástico. Perfecto para hacer inolvidable cualquier ocasión especial. 🎉",
+    "category": "details",
+    "price": 75,
+    "image": "/uploads/1789182985660-58d85eea37c2.png",
+    "featured": false,
+    "id": "455bbc83-f8af-42cb-92c8-c51b570eab3d",
+    "createdAt": "2026-09-12T03:16:25.691Z"
+  },
+  {
+    "name": "RAMO CHANCHITO",
+    "description": "🌸🐷 ¡Ternura en cada pétalo! 🌸🐷\n\nNuestro ramo de 7 rosas eternas rosadas pastel, adornado con una adorable carita de chanchito, es el detalle perfecto para cualquier ocasión. Envuelto en papel premium, este encantador arreglo es una muestra de amor y dulzura.",
+    "category": "details",
+    "price": 25,
+    "image": "/uploads/1789182896266-77d57248ac88.png",
+    "featured": false,
+    "id": "6754a209-3de2-4926-b211-3384d454d37a",
+    "createdAt": "2026-09-12T03:14:56.287Z"
+  },
+  {
+    "name": "RAMO ROSA MARIPOSA",
+    "description": "🌹✨ Delicadeza y elegancia en un solo ramo ✨🌹\n\nPresentamos nuestro hermoso ramo de 7 rosas rosadas, acompañado de una encantadora mariposa 🦋, envuelto con esmero en papel premium. Un detalle perfecto para expresar tus sentimientos más sinceros.",
+    "category": "details",
+    "price": 25,
+    "image": "/uploads/1789182638787-77121c500296.png",
+    "featured": false,
+    "id": "0870a04d-7bb6-42fa-beb5-5271f422e6d6",
+    "createdAt": "2026-09-12T03:09:45.628Z",
+    "updatedAt": "2026-09-12T03:10:38.802Z"
+  },
+  {
+    "name": "RAMO HELLO KITTY",
+    "description": "🌸 ¡Sorprende a tus seres queridos con este adorable ramo de Hello Kitty! 🌸\n💐 Ramo de 7 Rosas Eternas:\n3 rosas fucsias 💖\n4 rosas rosado pastel 🌸\n1 imagen de Hello Kitty 🐱",
+    "category": "details",
+    "price": 25,
+    "image": "/uploads/1789182608123-31df3cfb2851.png",
+    "featured": false,
+    "id": "1130bc93-61f9-46b0-b7dc-efe49ddf77b1",
+    "createdAt": "2026-09-12T03:07:53.779Z",
+    "updatedAt": "2026-09-12T03:10:08.155Z"
+  },
+  {
+    "name": "PARLANTE SMART AMAZON ECHO DOT 5ta. GENERACION – ALEXA – AZUL",
+    "description": "Disfruta de una experiencia de audio superior a los Echo Dot anteriores con Alexa, en la que obtendrás voces más nítidas, graves más profundos y sonido vibrante en cualquier habitación.\nReproduce música, audiolibros y podcasts en Amazon Music, Apple Music, Spotify y otros servicios",
+    "category": "tech",
+    "price": 80,
+    "image": "https://http2.mlstatic.com/D_NQ_NP_2X_847146-MLA100027689153_122025-F.webp",
+    "featured": false,
+    "id": "d049e7a4-05cb-493e-832e-11cc3c0fe099",
+    "createdAt": "2026-09-12T02:51:51.935Z",
+    "updatedAt": "2026-09-12T02:53:45.763Z"
+  }
+]
