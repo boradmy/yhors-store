@@ -52,7 +52,7 @@ async function renderStore() {
       <section class="hero">
         <div class="hero-glow"></div>
         <div class="hero-content">
-          <span class="eyebrow">YHORS · Selección especial</span>
+          <span class="eyebrow">YHORS · CORPORATION</span>
           <h1>PIEZAS QUE<br><em>CUENTAN</em> TU HISTORIA</h1>
           <p>Moda, tecnología, detalles y objetos elegidos para convertir cada compra en algo especial.</p>
           <a class="button hero-button" href="#catalogo">Explorar catálogo <span>→</span></a>
@@ -60,21 +60,21 @@ async function renderStore() {
       </section>
       <section class="section catalog-section" id="catalogo">
         <div class="section-heading">
-          <div><span class="eyebrow">Nuestra selección</span><h2>Encuentra tu próxima pieza</h2></div>
+          <div><span class="eyebrow">Nuestra selección</span><h2>Pasea por nuestra galería</h2></div>
           <p>Compra directa · Atención personal</p>
         </div>
         <div class="filters" id="filters"></div><div class="products" id="products"></div>
       </section>
       <section class="brand-section" id="nosotros">
         <div class="brand-section-inner">
-          <span class="eyebrow">Sobre YHORS</span>
-          <h2>Elegimos productos con<br><em>intención.</em></h2>
+          <span class="eyebrow">Sobre nosotros</span>
+          <h2>Se el<br><em>Primero #1</em></h2>
           <p>Cada producto se publica y administra directamente desde YHORS, buscando una experiencia sencilla, elegante y personal.</p>
         </div>
       </section>
     </main>
     <footer class="site-footer"><div class="footer-inner">
-      <div><span class="brand">YHORS</span><p>© ${new Date().getFullYear()} YHORS. Todos los derechos reservados.</p></div>
+      <div><span class="brand">YHORS</span><p>©2021 YHORS. Todos los derechos reservados.</p></div>
       <p>Envíos y pedidos con atención personal.</p>
     </div></footer>
     <div class="modal-backdrop" id="backdrop"></div>
