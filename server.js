@@ -13,6 +13,7 @@ const PORT = Number(process.env.PORT || 3000);
 const ADMIN_PATH = '/yhors/admin593';
 const DATA_FILE = path.join(__dirname, 'data', 'products.json');
 const STOREFRONT_FILE = path.join(__dirname, 'data', 'storefront.json');
+const CLASSIFICATIONS_FILE = path.join(__dirname, 'data', 'classifications.json');
 const UPLOADS_DIR = path.join(__dirname, 'uploads');
 const SESSION_SECRET = process.env.SESSION_SECRET || 'cambia-este-secreto-antes-de-publicar';
 const ADMIN_USER = process.env.ADMIN_USER || 'admin';
@@ -74,6 +75,26 @@ function writeStorefront(settings) {
   fs.renameSync(temporaryFile, STOREFRONT_FILE);
 }
 
+function readClassifications() {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(CLASSIFICATIONS_FILE, 'utf8'));
+    return { brands: parsed.brands || {}, productTypes: parsed.productTypes || {} };
+  } catch { return { brands: {}, productTypes: {} }; }
+}
+function writeClassifications(settings) {
+  const clean = { brands: {}, productTypes: {} };
+  for (const key of ['brands','productTypes']) {
+    for (const [category, values] of Object.entries(settings?.[key] || {})) {
+      if (!['elegant','sports','tech','cosplay','pets','details','collectibles'].includes(category)) continue;
+      clean[key][category] = [...new Set((Array.isArray(values) ? values : []).map(v => cleanText(v, 50)).filter(Boolean))].slice(0, 100);
+    }
+  }
+  const temporaryFile = `${CLASSIFICATIONS_FILE}.tmp`;
+  fs.writeFileSync(temporaryFile, `${JSON.stringify(clean, null, 2)}\n`, 'utf8');
+  fs.renameSync(temporaryFile, CLASSIFICATIONS_FILE);
+  return clean;
+}
+
 function writeProducts(products) {
   const temporaryFile = `${DATA_FILE}.tmp`;
   fs.writeFileSync(temporaryFile, `${JSON.stringify(products, null, 2)}\n`, 'utf8');
@@ -115,42 +136,37 @@ function validateProduct(input, current = {}) {
   const name = cleanText(input.name, 90);
   const description = cleanText(input.description, 2000);
   const category = cleanText(input.category, 30).toLowerCase();
-  const price = Number(input.price);
+  const brand = cleanText(input.brand, 50);
+  const productType = cleanText(input.productType, 50);
+  const salePrice = Number(input.salePrice ?? input.price);
+  const rentalRaw = input.rentalPrice;
+  const rentalPrice = rentalRaw === '' || rentalRaw === null || rentalRaw === undefined ? null : Number(rentalRaw);
   const image = cleanText(input.image, 1000);
   const validCategories = ['elegant', 'sports', 'tech', 'cosplay', 'pets', 'details', 'collectibles'];
-  if (!name || !description || !validCategories.includes(category) || !Number.isFinite(price) || price < 0 || price > 100000000) {
-    return { error: 'Revisa nombre, descripción, categoría y precio.' };
+  if (!name || !description || !validCategories.includes(category) || !Number.isFinite(salePrice) || salePrice < 0 || salePrice > 100000000) {
+    return { error: 'Revisa nombre, descripción, categoría y precio de venta.' };
+  }
+  if (category === 'cosplay' && (rentalPrice === null || !Number.isFinite(rentalPrice) || rentalPrice < 0 || rentalPrice > 100000000)) {
+    return { error: 'En Cosplay debes indicar un precio de alquiler válido.' };
   }
   const rawImages = Array.isArray(input.images) ? input.images : [image];
-  const images = rawImages
-    .map(value => cleanText(value, 1000))
-    .filter(Boolean)
-    .slice(0, 4);
-  if (image && !(/^\/uploads\/[a-zA-Z0-9._-]+$/.test(image) || /^https:\/\/[a-zA-Z0-9./?&=_:%#-]+$/.test(image))) {
-    return { error: 'La URL de la imagen principal no es válida.' };
-  }
+  const images = rawImages.map(value => cleanText(value, 1000)).filter(Boolean).slice(0, 4);
+  if (image && !(/^\/uploads\/[a-zA-Z0-9._-]+$/.test(image) || /^https:\/\/[a-zA-Z0-9./?&=_:%#-]+$/.test(image))) return { error: 'La URL de la imagen principal no es válida.' };
   for (const imageUrl of images) {
-    if (!(/^\/uploads\/[a-zA-Z0-9._-]+$/.test(imageUrl) || /^https:\/\/[a-zA-Z0-9./?&=_:%#-]+$/.test(imageUrl))) {
-      return { error: 'Una de las URL de las imágenes no es válida.' };
-    }
+    if (!(/^\/uploads\/[a-zA-Z0-9._-]+$/.test(imageUrl) || /^https:\/\/[a-zA-Z0-9./?&=_:%#-]+$/.test(imageUrl))) return { error: 'Una de las URL de las imágenes no es válida.' };
   }
   const finalImages = images.length ? images : (current.images?.length ? current.images : (current.image ? [current.image] : []));
-  return {
-    product: {
-      ...current,
-      name,
-      description,
-      category,
-      price: Math.round(price * 100) / 100,
-      image: finalImages[0] || '',
-      images: finalImages,
-      featured: input.featured === true || input.featured === 'true',
-      hero: input.hero === true || input.hero === 'true',
-      heroOrder: Number.isFinite(Number(input.heroOrder)) ? Math.max(0, Math.min(999, Number(input.heroOrder))) : (Number(current.heroOrder) || 0)
-    }
-  };
+  return { product: {
+    ...current, name, description, category, brand, productType,
+    salePrice: Math.round(salePrice * 100) / 100,
+    rentalPrice: category === 'cosplay' ? Math.round(rentalPrice * 100) / 100 : null,
+    price: Math.round(salePrice * 100) / 100,
+    image: finalImages[0] || '', images: finalImages,
+    featured: input.featured === true || input.featured === 'true',
+    hero: input.hero === true || input.hero === 'true',
+    heroOrder: Number.isFinite(Number(input.heroOrder)) ? Math.max(0, Math.min(999, Number(input.heroOrder))) : (Number(current.heroOrder) || 0)
+  }};
 }
-
 function deleteUploadedImage(image) {
   if (!image || !image.startsWith('/uploads/')) return;
   const fileName = path.basename(image);
@@ -166,6 +182,7 @@ function normalizeProduct(product) {
 }
 
 app.get('/api/products', (_, res) => res.json(readProducts().map(normalizeProduct)));
+app.get('/api/classifications', (_, res) => res.json(readClassifications()));
 app.get('/api/storefront', (_, res) => {
   const settings = readStorefront();
   return res.json({ ...settings, whatsappNumber: String(process.env.WHATSAPP_NUMBER || '').replace(/\D/g, '') });
@@ -192,6 +209,8 @@ app.post('/api/logout', (req, res) => {
 app.get('/api/admin/session', (req, res) => res.json({ authenticated: hasValidSession(req), username: hasValidSession(req) ? ADMIN_USER : null }));
 app.get('/api/admin/products', requireAdmin, (_, res) => res.json(readProducts().map(normalizeProduct)));
 app.get('/api/admin/storefront', requireAdmin, (_, res) => res.json(readStorefront()));
+app.get('/api/admin/classifications', requireAdmin, (_, res) => res.json(readClassifications()));
+app.put('/api/admin/classifications', requireAdmin, (req, res) => res.json(writeClassifications(req.body || {})));
 
 app.put('/api/admin/storefront', requireAdmin, (req, res) => {
   const products = readProducts();

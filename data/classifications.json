@@ -1,0 +1,33 @@
+{
+  "brands": {
+    "tech": [
+      "Infinix",
+      "Lenovo",
+      "Amazon"
+    ],
+    "elegant": [],
+    "sports": [],
+    "cosplay": [
+      "Doki Doki"
+    ],
+    "pets": [],
+    "details": [],
+    "collectibles": []
+  },
+  "productTypes": {
+    "tech": [
+      "Celular",
+      "Audífonos",
+      "Accesorios",
+      "Smart Home"
+    ],
+    "elegant": [],
+    "sports": [],
+    "cosplay": [
+      "Sexy"
+    ],
+    "pets": [],
+    "details": [],
+    "collectibles": []
+  }
+}

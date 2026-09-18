@@ -61,3 +61,12 @@ Se omitieron `.env`, `.git` y `node_modules` del ZIP por seguridad/tamaño. Copi
 - Selección de productos destacados configurable desde Administración.
 - Footer compartido en las páginas públicas.
 - Las selecciones se guardan en `data/storefront.json`.
+
+## YHORS 4.0 — Organización del catálogo
+- La pestaña pública `Todo` ahora se presenta como `Principal` y usa `/categoria/principal`.
+- Administración organiza el inventario por universo: Elegant, Sports, Tech, Cosplay, Pets, Details y Coleccionables.
+- Puedes crear tus propias **marcas** y **tipos de producto** por universo desde Administración.
+- Tech incluye inicialmente Infinix y Lenovo, y Celular, Audífonos y Accesorios como ejemplos editables.
+- Los productos admiten marca y tipo de producto.
+- Cosplay tiene obligatoriamente **Precio de venta** y **Precio de alquiler**.
+- Las clasificaciones se guardan en `data/classifications.json` y requieren almacenamiento persistente en el hosting.

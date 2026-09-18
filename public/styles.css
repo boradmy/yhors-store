@@ -471,3 +471,23 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}.brand{letter-sp
     font-size:.55rem;
   }
 }
+
+/* YHORS 4.0: clasificación y precios */
+.product-meta{display:block;color:var(--muted);font-size:.72rem;margin:.35rem 0;letter-spacing:.02em}
+.price-secondary{display:block;color:var(--muted);font-size:.72rem;margin-top:4px;font-weight:600}
+.detail-price .price-secondary{font-size:.8rem;margin-top:8px}
+.admin-category-group{margin:0 0 30px}
+.admin-category-heading{display:flex;align-items:baseline;gap:10px;border-bottom:1px solid var(--line);padding-bottom:10px;margin-bottom:10px}
+.admin-category-heading h3{margin:0;font-size:1.25rem}
+.admin-category-heading h3 small{color:var(--muted);font-weight:600}
+.classification-grid{display:grid;grid-template-columns:1fr 1fr;gap:28px}
+.classification-add{display:grid;grid-template-columns:150px 1fr auto;gap:8px;margin:12px 0}
+.classification-add input,.classification-add select{min-width:0;border:1px solid var(--line);border-radius:6px;padding:10px 11px;background:#fff}
+.classification-chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.classification-group{margin:0 0 14px}
+.classification-group strong{font-size:.78rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.classification-chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--paper);padding:7px 10px;border-radius:999px;font-size:.8rem}
+.classification-chip button{border:0;background:transparent;color:var(--muted);padding:0;font-size:1rem;line-height:1}
+@media(max-width:760px){.classification-grid{grid-template-columns:1fr}.classification-add{grid-template-columns:1fr}.admin-category-heading{align-items:center}}
+.catalog-filters{display:flex;flex-wrap:wrap;gap:10px;margin:0 0 26px}
+.catalog-filters select{border:1px solid var(--line);border-radius:999px;padding:10px 14px;background:#fff;color:var(--ink);min-width:170px}

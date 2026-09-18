@@ -1,7 +1,7 @@
 const app = document.querySelector('#app');
 const ADMIN_PATH = '/yhors/admin593';
 const categories = {
-  all: 'Todo', elegant: 'Elegant', sports: 'Sports', tech: 'Tech', cosplay: 'Cosplay',
+  all: 'Principal', elegant: 'Elegant', sports: 'Sports', tech: 'Tech', cosplay: 'Cosplay',
   pets: 'Pets', details: 'Details', collectibles: 'Coleccionables'
 };
 const categoryDescriptions = {
@@ -33,10 +33,10 @@ function setCart(cart) { localStorage.setItem('yhors-cart', JSON.stringify(cart)
 
 function currentCategoryFromPath() {
   const match = location.pathname.match(/^\/categoria\/([^/]+)\/?$/);
-  if (match && categories[match[1]]) return match[1];
+  if (match && (categories[match[1]] || match[1] === 'principal')) return match[1] === 'principal' ? 'all' : match[1];
   return '';
 }
-function categoryHref(key) { return key === 'all' ? '/categoria/todo' : `/categoria/${encodeURIComponent(key)}`; }
+function categoryHref(key) { return key === 'all' ? '/categoria/principal' : `/categoria/${encodeURIComponent(key)}`; }
 function categoryLinks(currentId = '') {
   return publicCategories.map(([key, label]) => `<a class="header-category ${currentId === key ? 'current' : ''}" href="${categoryHref(key)}" data-category-link="${key}">${escapeHTML(label)}</a>`).join('');
 }
@@ -111,7 +111,9 @@ function categoryBlocks() {
 }
 function productCard(product) {
   const image = productImages(product)[0];
-  return `<article class="product" data-product="${escapeHTML(product.id)}"><button class="product-open" data-open="${escapeHTML(product.id)}" aria-label="Ver ${escapeHTML(product.name)}"><div class="product-image"><img data-fallback src="${escapeHTML(image)}" alt="${escapeHTML(product.name)}" loading="lazy"></div><div class="product-info"><span class="product-category">${escapeHTML(categories[product.category] || product.category)}</span><h3>${escapeHTML(product.name)}</h3><p>${escapeHTML(product.description).replace(/\n/g, '<br>')}</p><span class="detail-link">Ver detalles <span>→</span></span></div></button><div class="product-bottom"><span class="price">${money(product.price)}</span><button class="add" data-id="${escapeHTML(product.id)}"><span>Añadir</span><span>+</span></button></div></article>`;
+  const meta = productMeta(product);
+  const rental = product.category === 'cosplay' && product.rentalPrice !== null && product.rentalPrice !== undefined && product.rentalPrice !== '' ? `<small class="price-secondary">Alquiler: ${money(product.rentalPrice)}</small>` : '';
+  return `<article class="product" data-product="${escapeHTML(product.id)}"><button class="product-open" data-open="${escapeHTML(product.id)}" aria-label="Ver ${escapeHTML(product.name)}"><div class="product-image"><img data-fallback src="${escapeHTML(image)}" alt="${escapeHTML(product.name)}" loading="lazy"></div><div class="product-info"><span class="product-category">${escapeHTML(categories[product.category] || product.category)}</span>${meta ? `<small class="product-meta">${escapeHTML(meta)}</small>` : ''}<h3>${escapeHTML(product.name)}</h3><p>${escapeHTML(product.description).replace(/\n/g, '<br>')}</p><span class="detail-link">Ver detalles <span>→</span></span></div></button><div class="product-bottom"><div><span class="price">${productPriceLabel(product)}</span>${rental}</div><button class="add" data-id="${escapeHTML(product.id)}"><span>Añadir</span><span>+</span></button></div></article>`;
 }
 function renderProductsInto(area, products, onOpen, onAdd) {
   area.innerHTML = products.length ? products.map(productCard).join('') : '<div class="empty">Aún no hay productos en esta colección.</div>';
@@ -144,14 +146,23 @@ function wireCart(products, storefront) {
 }
 
 async function loadStoreData() {
-  const [products, storefront] = await Promise.all([request('/api/products'), request('/api/storefront')]);
-  return { products, storefront };
+  const [products, storefront, classifications] = await Promise.all([request('/api/products'), request('/api/storefront'), request('/api/classifications')]);
+  return { products, storefront, classifications };
+}
+function productPriceLabel(product) {
+  return product.category === 'cosplay' && Number.isFinite(Number(product.salePrice)) ? money(product.salePrice) : money(product.price);
+}
+function productMeta(product) {
+  const parts = [];
+  if (product.brand) parts.push(product.brand);
+  if (product.productType) parts.push(product.productType);
+  return parts.join(' · ');
 }
 function openProduct(id, products) { if (!getProduct(id, products)) return; history.pushState({ product: id }, '', `?producto=${encodeURIComponent(id)}`); renderStore(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
 
 async function renderHome() {
-  let products = [], storefront = { heroProductIds: [], featuredProductIds: [], whatsappNumber: '' };
-  try { ({ products, storefront } = await loadStoreData()); } catch { /* empty state */ }
+  let products = [], storefront = { heroProductIds: [], featuredProductIds: [], whatsappNumber: '' }, classifications = {};
+  try { ({ products, storefront, classifications } = await loadStoreData()); } catch { /* empty state */ }
   const heroIds = storefront.heroProductIds || []; const featuredIds = storefront.featuredProductIds || [];
   const byIds = ids => ids.map(id => getProduct(id, products)).filter(Boolean);
   const heroProducts = byIds(heroIds).sort((a, b) => (Number(a.heroOrder) || 0) - (Number(b.heroOrder) || 0)); const featured = byIds(featuredIds);
@@ -167,17 +178,21 @@ async function renderHome() {
 }
 
 async function renderCategoryPage(categoryKey) {
-  let products = [], storefront = { whatsappNumber: '' };
-  try { ({ products, storefront } = await loadStoreData()); } catch { /* empty */ }
+  let products = [], storefront = { whatsappNumber: '' }, classifications = {};
+  try { ({ products, storefront, classifications } = await loadStoreData()); } catch { /* empty */ }
   const categoryProducts = products.filter(product => categoryKey === 'all' || product.category === categoryKey);
   const slides = categoryProducts.slice(0, 4).map(product => ({ ...product, image: productImages(product)[0], heroTitle: product.name, heroDescription: product.description }));
-  app.innerHTML = `${renderHeader(categoryKey)}<main>${heroMarkup(slides, true, categoryKey)}<section class="section category-page-section" id="productos-categoria"><div class="category-intro"><span class="eyebrow">Colección independiente</span><h1>${escapeHTML(categories[categoryKey])}</h1><p>${escapeHTML(categoryDescriptions[categoryKey])}</p></div><div class="products" id="categoryProducts"></div></section></main>${renderFooter()}${cartMarkup()}`;
-  wireMobileMenu(); wireHero(slides); const cart = wireCart(products, storefront); renderProductsInto(document.querySelector('#categoryProducts'), categoryProducts, id => openProduct(id, products), (product, button) => cart.addToCart(product, button));
+  const techBrands = classifications.brands?.[categoryKey] || []; const techTypes = classifications.productTypes?.[categoryKey] || [];
+  const filters = categoryKey !== 'all' && (techBrands.length || techTypes.length) ? `<div class="catalog-filters"><select id="brandFilter"><option value="">Todas las marcas</option>${techBrands.map(v => `<option value="${escapeHTML(v)}">${escapeHTML(v)}</option>`).join('')}</select><select id="typeFilter"><option value="">Todos los tipos</option>${techTypes.map(v => `<option value="${escapeHTML(v)}">${escapeHTML(v)}</option>`).join('')}</select></div>` : '';
+  app.innerHTML = `${renderHeader(categoryKey)}<main>${heroMarkup(slides, true, categoryKey)}<section class="section category-page-section" id="productos-categoria"><div class="category-intro"><span class="eyebrow">Colección independiente</span><h1>${escapeHTML(categories[categoryKey])}</h1><p>${escapeHTML(categoryDescriptions[categoryKey])}</p></div>${filters}<div class="products" id="categoryProducts"></div></section></main>${renderFooter()}${cartMarkup()}`;
+  wireMobileMenu(); wireHero(slides); const cart = wireCart(products, storefront); const area = document.querySelector('#categoryProducts');
+  const drawFiltered = () => { const brand = document.querySelector('#brandFilter')?.value || ''; const type = document.querySelector('#typeFilter')?.value || ''; renderProductsInto(area, categoryProducts.filter(p => (!brand || p.brand === brand) && (!type || p.productType === type)), id => openProduct(id, products), (product, button) => cart.addToCart(product, button)); };
+  document.querySelector('#brandFilter')?.addEventListener('change', drawFiltered); document.querySelector('#typeFilter')?.addEventListener('change', drawFiltered); drawFiltered();
 }
 
 async function renderProductDetail(product, products, storefront) {
   const images = productImages(product); let selected = 0;
-  app.innerHTML = `${renderHeader(product.category)}<main class="product-detail-page"><div class="breadcrumbs"><a href="${categoryHref(product.category)}">${escapeHTML(categories[product.category])}</a><span>/</span><strong>${escapeHTML(product.name)}</strong></div><section class="detail-layout"><div class="detail-gallery"><div class="detail-main-image"><img id="detailMainImage" data-fallback src="${escapeHTML(images[0])}" alt="${escapeHTML(product.name)}"></div>${images.length > 1 ? `<div class="thumbnail-row">${images.map((image, index) => `<button class="thumb ${index === 0 ? 'active' : ''}" data-image-index="${index}"><img data-fallback src="${escapeHTML(image)}" alt="Imagen ${index + 1}"></button>`).join('')}</div>` : ''}</div><div class="detail-copy"><span class="eyebrow">${escapeHTML(categories[product.category])}</span><h1>${escapeHTML(product.name)}</h1><div class="detail-price">${money(product.price)}</div><div class="detail-divider"></div><h3>Descripción</h3><div class="detail-description">${escapeHTML(product.description).replace(/\n/g, '<br>')}</div><div class="detail-buy"><button class="add detail-add" id="detailAdd"><span>Añadir al carrito</span><span>+</span></button><a class="button secondary back-button" href="${categoryHref(product.category)}">← Volver a ${escapeHTML(categories[product.category])}</a></div><div class="detail-note"><span>✓</span> Compra directa y atención personal.</div></div></section></main>${renderFooter()}${cartMarkup()}`;
+  app.innerHTML = `${renderHeader(product.category)}<main class="product-detail-page"><div class="breadcrumbs"><a href="${categoryHref(product.category)}">${escapeHTML(categories[product.category])}</a><span>/</span><strong>${escapeHTML(product.name)}</strong></div><section class="detail-layout"><div class="detail-gallery"><div class="detail-main-image"><img id="detailMainImage" data-fallback src="${escapeHTML(images[0])}" alt="${escapeHTML(product.name)}"></div>${images.length > 1 ? `<div class="thumbnail-row">${images.map((image, index) => `<button class="thumb ${index === 0 ? 'active' : ''}" data-image-index="${index}"><img data-fallback src="${escapeHTML(image)}" alt="Imagen ${index + 1}"></button>`).join('')}</div>` : ''}</div><div class="detail-copy"><span class="eyebrow">${escapeHTML(categories[product.category])}</span><h1>${escapeHTML(product.name)}</h1><div class="detail-price">${productPriceLabel(product)}${product.category === "cosplay" && product.rentalPrice !== null && product.rentalPrice !== undefined && product.rentalPrice !== "" ? `<small class="price-secondary">Alquiler: ${money(product.rentalPrice)}</small>` : ""}</div><div class="detail-divider"></div><h3>Descripción</h3><div class="detail-description">${escapeHTML(product.description).replace(/\n/g, '<br>')}</div><div class="detail-buy"><button class="add detail-add" id="detailAdd"><span>Añadir al carrito</span><span>+</span></button><a class="button secondary back-button" href="${categoryHref(product.category)}">← Volver a ${escapeHTML(categories[product.category])}</a></div><div class="detail-note"><span>✓</span> Compra directa y atención personal.</div></div></section></main>${renderFooter()}${cartMarkup()}`;
   wireMobileMenu(); wireImageFallback(document.querySelector('.product-detail-page')); document.querySelectorAll('[data-image-index]').forEach(button => button.addEventListener('click', () => { selected = Number(button.dataset.imageIndex); document.querySelector('#detailMainImage').src = images[selected]; document.querySelectorAll('.thumb').forEach(item => item.classList.remove('active')); button.classList.add('active'); }));
   const cart = wireCart(products, storefront); document.querySelector('#detailAdd').addEventListener('click', e => cart.addToCart(product, e.currentTarget));
 }
@@ -192,27 +207,106 @@ async function renderStore() {
   return renderHome();
 }
 
-function productForm(product = {}) {
+function productForm(product = {}, classifications = {}) {
   const images = Array.isArray(product.images) && product.images.length ? product.images : (product.image ? [product.image] : []);
-  return `<form id="productForm"><div class="form-grid"><div class="field"><label for="name">Nombre</label><input id="name" name="name" required maxlength="90" value="${escapeHTML(product.name || '')}"></div><div class="field"><label for="price">Precio (USD)</label><input id="price" name="price" required min="0" step="0.01" type="number" value="${escapeHTML(product.price ?? '')}"></div><div class="field"><label for="category">Categoría</label><select id="category" name="category" required>${Object.entries(categories).filter(([key]) => key !== 'all').map(([key, label]) => `<option value="${key}" ${product.category === key ? 'selected' : ''}>${label}</option>`).join('')}</select></div><div class="field"><label for="imageFile">Subir foto principal (máx. 5 MB)</label><input id="imageFile" name="imageFile" type="file" accept="image/jpeg,image/png,image/webp,image/gif"></div><div class="field full"><label for="image">URL de imagen principal</label><input id="image" name="image" type="url" placeholder="https://..." value="${escapeHTML(images[0] || product.image || '')}"></div><div class="field full"><label for="image2">Imagen adicional 2 · URL</label><input id="image2" name="image2" type="url" value="${escapeHTML(images[1] || '')}"></div><div class="field full"><label for="image3">Imagen adicional 3 · URL</label><input id="image3" name="image3" type="url" value="${escapeHTML(images[2] || '')}"></div><div class="field full"><label for="image4">Imagen adicional 4 · URL</label><input id="image4" name="image4" type="url" value="${escapeHTML(images[3] || '')}"></div><div class="field full"><label for="description">Descripción completa</label><textarea id="description" name="description" required maxlength="2000" rows="9">${escapeHTML(product.description || '')}</textarea><small class="field-help">Puedes usar saltos de línea y emojis.</small></div><div class="field"><label for="heroOrder">Orden de portada</label><input id="heroOrder" name="heroOrder" type="number" min="0" max="999" value="${escapeHTML(product.heroOrder ?? 0)}"><small class="field-help">Menor número = aparece antes.</small></div><div class="field featured-field"><label><input id="hero" name="hero" type="checkbox" ${product.hero ? 'checked' : ''}> Usar en slider de portada</label><label><input id="featured" name="featured" type="checkbox" ${product.featured ? 'checked' : ''}> Mostrar como destacado</label></div></div><div class="form-actions"><button class="button" type="submit">${product.id ? 'Guardar cambios' : 'Crear producto'}</button><button class="button secondary ${product.id ? '' : 'hidden'}" type="button" id="cancelEdit">Cancelar</button><span class="message" id="formMessage"></span></div></form>`;
+  const selectedCategory = product.category || 'elegant';
+  const brands = classifications.brands?.[selectedCategory] || [];
+  const types = classifications.productTypes?.[selectedCategory] || [];
+  const isCosplay = selectedCategory === 'cosplay';
+  return `<form id="productForm"><div class="form-grid">
+    <div class="field full"><label for="category">Categoría / universo</label><select id="category" name="category" required>${Object.entries(categories).filter(([key]) => key !== 'all').map(([key, label]) => `<option value="${key}" ${selectedCategory === key ? 'selected' : ''}>${label}</option>`).join('')}</select><small class="field-help">Las clasificaciones se administran abajo.</small></div>
+    <div class="field"><label for="name">Nombre del producto</label><input id="name" name="name" required maxlength="90" value="${escapeHTML(product.name || '')}"></div>
+    <div class="field"><label for="brand">Marca</label><select id="brand" name="brand"><option value="">Sin marca</option>${brands.map(v => `<option value="${escapeHTML(v)}" ${product.brand === v ? 'selected' : ''}>${escapeHTML(v)}</option>`).join('')}</select></div>
+    <div class="field"><label for="productType">Tipo de producto</label><select id="productType" name="productType"><option value="">Sin clasificación</option>${types.map(v => `<option value="${escapeHTML(v)}" ${product.productType === v ? 'selected' : ''}>${escapeHTML(v)}</option>`).join('')}</select></div>
+    <div class="field"><label for="salePrice">Precio de venta (USD)</label><input id="salePrice" name="salePrice" required min="0" step="0.01" type="number" value="${escapeHTML(product.salePrice ?? product.price ?? '')}"></div>
+    <div class="field ${isCosplay ? '' : 'hidden'}"><label for="rentalPrice">Precio de alquiler (USD)</label><input id="rentalPrice" name="rentalPrice" ${isCosplay ? 'required' : ''} min="0" step="0.01" type="number" value="${escapeHTML(product.rentalPrice ?? '')}"><small class="field-help">Disponible para productos de Cosplay.</small></div>
+    <div class="field"><label for="imageFile">Subir foto principal (máx. 5 MB)</label><input id="imageFile" name="imageFile" type="file" accept="image/jpeg,image/png,image/webp,image/gif"></div>
+    <div class="field full"><label for="image">URL de imagen principal</label><input id="image" name="image" type="url" placeholder="https://..." value="${escapeHTML(images[0] || product.image || '')}"></div>
+    <div class="field full"><label for="image2">Imagen adicional 2 · URL</label><input id="image2" name="image2" type="url" value="${escapeHTML(images[1] || '')}"></div>
+    <div class="field full"><label for="image3">Imagen adicional 3 · URL</label><input id="image3" name="image3" type="url" value="${escapeHTML(images[2] || '')}"></div>
+    <div class="field full"><label for="image4">Imagen adicional 4 · URL</label><input id="image4" name="image4" type="url" value="${escapeHTML(images[3] || '')}"></div>
+    <div class="field full"><label for="description">Descripción completa</label><textarea id="description" name="description" required maxlength="2000" rows="9">${escapeHTML(product.description || '')}</textarea><small class="field-help">Puedes usar saltos de línea y emojis.</small></div>
+    <div class="field"><label for="heroOrder">Orden de portada</label><input id="heroOrder" name="heroOrder" type="number" min="0" max="999" value="${escapeHTML(product.heroOrder ?? 0)}"><small class="field-help">Menor número = aparece antes.</small></div>
+    <div class="field featured-field"><label><input id="hero" name="hero" type="checkbox" ${product.hero ? 'checked' : ''}> Usar en slider de portada</label><label><input id="featured" name="featured" type="checkbox" ${product.featured ? 'checked' : ''}> Mostrar como destacado</label></div>
+  </div><div class="form-actions"><button class="button" type="submit">${product.id ? 'Guardar cambios' : 'Crear producto'}</button><button class="button secondary ${product.id ? '' : 'hidden'}" type="button" id="cancelEdit">Cancelar</button><span class="message" id="formMessage"></span></div></form>`;
 }
 function selectionPanel(products, settings) {
   const heroSet = new Set(settings.heroProductIds || []); const featuredSet = new Set(settings.featuredProductIds || []);
   return `<section class="admin-panel selection-panel"><div class="section-heading"><div><span class="eyebrow">Experiencia de inicio</span><h2>Portada y productos destacados</h2></div><p>Elige qué aparece en el slider y qué productos se muestran en la portada.</p></div><div class="selection-grid"><div><h3>Slider de portada <small>máx. 6</small></h3><div class="selection-list">${products.map(p => `<label class="selection-row"><input type="checkbox" data-hero-select="${escapeHTML(p.id)}" ${heroSet.has(p.id) ? 'checked' : ''}><img data-fallback src="${escapeHTML(productImages(p)[0])}" alt=""><span><strong>${escapeHTML(p.name)}</strong><small>${escapeHTML(categories[p.category])}</small></span></label>`).join('')}</div></div><div><h3>Productos destacados <small>máx. 8</small></h3><div class="selection-list">${products.map(p => `<label class="selection-row"><input type="checkbox" data-featured-select="${escapeHTML(p.id)}" ${featuredSet.has(p.id) ? 'checked' : ''}><img data-fallback src="${escapeHTML(productImages(p)[0])}" alt=""><span><strong>${escapeHTML(p.name)}</strong><small>${money(p.price)}</small></span></label>`).join('')}</div></div></div><div class="form-actions"><button class="button" id="saveSelections">Guardar portada y destacados</button><span class="message" id="selectionMessage"></span></div></section>`;
 }
+function classificationPanel(classifications) {
+  return `<section class="admin-panel classification-panel"><div class="section-heading"><div><span class="eyebrow">Organización</span><h2>Clasificaciones</h2></div><p>Crea tus propias marcas y tipos de producto por universo.</p></div>
+    <div class="classification-grid">
+      <div><h3>Marcas</h3><div class="classification-add"><select id="classBrandCategory">${Object.entries(categories).filter(([k])=>k!=='all').map(([k,v])=>`<option value="${k}">${v}</option>`).join('')}</select><input id="newBrand" maxlength="50" placeholder="Ej. Infinix"><button class="button small" id="addBrand">Agregar</button></div><div id="brandLists"></div></div>
+      <div><h3>Tipos de producto</h3><div class="classification-add"><select id="classTypeCategory">${Object.entries(categories).filter(([k])=>k!=='all').map(([k,v])=>`<option value="${k}">${v}</option>`).join('')}</select><input id="newType" maxlength="50" placeholder="Ej. Celular"><button class="button small" id="addType">Agregar</button></div><div id="typeLists"></div></div>
+    </div><span class="message" id="classificationMessage"></span>
+  </section>`;
+}
 async function renderAdmin() {
   const session = await request('/api/admin/session').catch(() => ({ authenticated: false })); if (!session.authenticated) return renderLogin();
-  let products = await request('/api/admin/products').catch(() => []); let settings = await request('/api/admin/storefront').catch(() => ({ heroProductIds: [], featuredProductIds: [] })); let editing = null;
-  app.innerHTML = `<main class="admin-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Administración</h1></div><button class="button secondary" id="logout">Cerrar sesión</button></div>${selectionPanel(products, settings)}<section class="admin-panel"><span class="eyebrow">Catálogo</span><h2 id="formTitle">Agregar producto</h2><div id="formArea"></div></section><section class="admin-products"><div class="section-heading"><div><span class="eyebrow">Inventario</span><h2>Productos publicados (${products.length})</h2></div><p>Edita datos, imágenes, portada y destacados.</p></div><div id="adminProducts"></div></section></div></main>`;
+  let products = await request('/api/admin/products').catch(() => []); let classifications = await request('/api/admin/classifications').catch(() => ({ brands: {}, productTypes: {} })); let settings = await request('/api/admin/storefront').catch(() => ({ heroProductIds: [], featuredProductIds: [] })); let editing = null;
+  app.innerHTML = `<main class="admin-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Administración</h1></div><button class="button secondary" id="logout">Cerrar sesión</button></div>${selectionPanel(products, settings)}${classificationPanel(classifications)}<section class="admin-panel"><span class="eyebrow">Catálogo</span><h2 id="formTitle">Agregar producto</h2><div id="formArea"></div></section><section class="admin-products"><div class="section-heading"><div><span class="eyebrow">Inventario</span><h2>Productos publicados (${products.length})</h2></div><p>Edita datos, imágenes, portada y destacados.</p></div><div id="adminProducts"></div></section></div></main>`;
   const formArea = document.querySelector('#formArea'); const listArea = document.querySelector('#adminProducts');
-  function drawList() { listArea.innerHTML = products.length ? products.map(p => `<article class="admin-product"><img data-fallback src="${escapeHTML(productImages(p)[0])}" alt=""><div><h3>${escapeHTML(p.name)} ${p.featured ? '<span class="featured-star">★ Destacado</span>' : ''} ${p.hero ? '<span class="hero-tag">◆ Portada</span>' : ''}</h3><p>${escapeHTML(categories[p.category] || p.category)} · ${money(p.price)} · ${productImages(p).length} imagen(es)</p></div><div class="admin-actions"><button class="button secondary small" data-edit="${escapeHTML(p.id)}">Editar</button><button class="button danger small" data-delete="${escapeHTML(p.id)}">Eliminar</button></div></article>`).join('') : '<div class="empty">No hay productos aún.</div>'; wireImageFallback(listArea);
+  function drawList() {
+    const categoryKeys = Object.keys(categories).filter(k => k !== 'all');
+    listArea.innerHTML = products.length ? categoryKeys.map(key => {
+      const group = products.filter(p => p.category === key);
+      if (!group.length) return '';
+      return `<section class="admin-category-group"><div class="admin-category-heading"><span class="eyebrow">Universo</span><h3>${escapeHTML(categories[key])} <small>${group.length}</small></h3></div>${group.map(p => `<article class="admin-product"><img data-fallback src="${escapeHTML(productImages(p)[0])}" alt=""><div><h3>${escapeHTML(p.name)} ${p.featured ? '<span class="featured-star">★ Destacado</span>' : ''} ${p.hero ? '<span class="hero-tag">◆ Portada</span>' : ''}</h3><p>${escapeHTML(categories[p.category] || p.category)}${productMeta(p) ? ` · ${escapeHTML(productMeta(p))}` : ''} · Venta ${productPriceLabel(p)}${p.category === 'cosplay' && p.rentalPrice !== null && p.rentalPrice !== undefined && p.rentalPrice !== '' ? ` · Alquiler ${money(p.rentalPrice)}` : ''} · ${productImages(p).length} imagen(es)</p></div><div class="admin-actions"><button class="button secondary small" data-edit="${escapeHTML(p.id)}">Editar</button><button class="button danger small" data-delete="${escapeHTML(p.id)}">Eliminar</button></div></article>`).join('')}</section>`;
+    }).join('') : '<div class="empty">No hay productos aún.</div>';
+    wireImageFallback(listArea);
     listArea.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', () => { editing = products.find(p => p.id === b.dataset.edit); drawForm(); window.scrollTo({ top: 0, behavior: 'smooth' }); }));
     listArea.querySelectorAll('[data-delete]').forEach(b => b.addEventListener('click', async () => { const product = products.find(p => p.id === b.dataset.delete); if (!confirm(`¿Eliminar “${product.name}”? Esta acción no se puede deshacer.`)) return; try { await request(`/api/admin/products/${product.id}`, { method: 'DELETE' }); products = products.filter(p => p.id !== product.id); settings.heroProductIds = settings.heroProductIds.filter(id => id !== product.id); settings.featuredProductIds = settings.featuredProductIds.filter(id => id !== product.id); await request('/api/admin/storefront', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(settings) }); drawList(); drawSelectionPanel(); drawForm(); } catch (e) { alert(e.message); } }));
   }
   function drawSelectionPanel() { document.querySelector('.selection-panel')?.remove(); const anchor = document.querySelector('.admin-top'); anchor.insertAdjacentHTML('afterend', selectionPanel(products, settings)); bindSelectionEvents(); }
   function bindSelectionEvents() { wireImageFallback(document.querySelector('.selection-panel')); document.querySelector('#saveSelections')?.addEventListener('click', async () => { const message = document.querySelector('#selectionMessage'); const heroChecked = [...document.querySelectorAll('[data-hero-select]:checked')]; const featuredChecked = [...document.querySelectorAll('[data-featured-select]:checked')]; if (heroChecked.length > 6 || featuredChecked.length > 8) { message.className = 'message error'; message.textContent = 'Máximo: 6 imágenes en portada y 8 productos destacados.'; return; } const heroProductIds = heroChecked.map(x => x.dataset.heroSelect); const featuredProductIds = featuredChecked.map(x => x.dataset.featuredSelect); try { await request('/api/admin/storefront', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ heroProductIds, featuredProductIds }) }); settings = { heroProductIds, featuredProductIds }; products = products.map(p => ({ ...p, hero: heroProductIds.includes(p.id), featured: featuredProductIds.includes(p.id) })); message.textContent = '✓ Portada y destacados guardados.'; drawList(); } catch (e) { message.className = 'message error'; message.textContent = e.message; } }); }
-  function drawForm() { formArea.innerHTML = productForm(editing || {}); document.querySelector('#formTitle').textContent = editing ? `Editar: ${editing.name}` : 'Agregar producto'; document.querySelector('#cancelEdit')?.addEventListener('click', () => { editing = null; drawForm(); }); document.querySelector('#productForm').addEventListener('submit', async event => { event.preventDefault(); const form = event.currentTarget; const submit = form.querySelector('[type="submit"]'); const message = document.querySelector('#formMessage'); submit.disabled = true; message.textContent = 'Guardando…'; try { const data = Object.fromEntries(new FormData(form).entries()); data.featured = form.elements.featured.checked; data.hero = form.elements.hero.checked; data.images = [data.image, data.image2, data.image3, data.image4].filter(Boolean); const file = form.elements.imageFile.files[0]; if (file) { const uploadData = new FormData(); uploadData.append('image', file); const uploaded = await request('/api/admin/upload', { method: 'POST', body: uploadData }); data.image = uploaded.image; data.images[0] = uploaded.image; } const url = editing ? `/api/admin/products/${editing.id}` : '/api/admin/products'; const product = await request(url, { method: editing ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); products = editing ? products.map(p => p.id === product.id ? product : p) : [product, ...products]; const heroIds = new Set(settings.heroProductIds); const featuredIds = new Set(settings.featuredProductIds); product.hero ? heroIds.add(product.id) : heroIds.delete(product.id); product.featured ? featuredIds.add(product.id) : featuredIds.delete(product.id); settings = { heroProductIds: [...heroIds].slice(0, 6), featuredProductIds: [...featuredIds].slice(0, 8) }; await request('/api/admin/storefront', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(settings) }); products = products.map(p => p.id === product.id ? { ...p, hero: settings.heroProductIds.includes(p.id), featured: settings.featuredProductIds.includes(p.id) } : p); editing = null; drawList(); drawForm(); drawSelectionPanel(); } catch (e) { message.className = 'message error'; message.textContent = e.message; submit.disabled = false; } }); }
-  document.querySelector('#logout').addEventListener('click', async () => { await request('/api/logout', { method: 'POST' }); renderLogin(); }); drawList(); drawForm(); bindSelectionEvents();
+  function renderClassifications() {
+    const render = (target, values, type) => {
+      const container = document.querySelector(target);
+      if (!container) return;
+      container.innerHTML = Object.entries(values || {}).filter(([, list]) => Array.isArray(list) && list.length).map(([cat, list]) => `<div class="classification-group"><strong>${escapeHTML(categories[cat])}</strong><div class="classification-chips">${list.map((v,i)=>`<span class="classification-chip">${escapeHTML(v)}<button type="button" data-remove-class="${type}" data-category="${escapeHTML(cat)}" data-index="${i}">×</button></span>`).join('')}</div></div>`).join('') || '<small class="field-help">Todavía no hay clasificaciones.</small>';
+      container.querySelectorAll('[data-remove-class]').forEach(btn => btn.addEventListener('click', async () => { classifications[btn.dataset.removeClass][btn.dataset.category].splice(Number(btn.dataset.index), 1); await saveClassifications(); }));
+    };
+    render('#brandLists', classifications.brands, 'brands'); render('#typeLists', classifications.productTypes, 'productTypes');
+  }
+  async function saveClassifications() {
+    try { classifications = await request('/api/admin/classifications', { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(classifications) }); renderClassifications(); drawForm(); document.querySelector('#classificationMessage').textContent='✓ Clasificaciones guardadas.'; }
+    catch(e) { const m=document.querySelector('#classificationMessage'); m.className='message error'; m.textContent=e.message; }
+  }
+  function bindClassificationEvents() {
+    const bind = (buttonId, inputId, selectId, key) => document.querySelector(buttonId)?.addEventListener('click', async () => {
+      const input=document.querySelector(inputId), cat=document.querySelector(selectId).value, value=input.value.trim();
+      if (!value) return;
+      classifications[key][cat] ||= [];
+      if (!classifications[key][cat].some(v => v.toLowerCase() === value.toLowerCase())) classifications[key][cat].push(value);
+      input.value=''; await saveClassifications();
+    });
+    bind('#addBrand','#newBrand','#classBrandCategory','brands'); bind('#addType','#newType','#classTypeCategory','productTypes');
+  }
+  function drawForm(draft = editing || {}) {
+    formArea.innerHTML = productForm(draft, classifications);
+    document.querySelector('#formTitle').textContent = editing ? `Editar: ${editing.name}` : 'Agregar producto';
+    document.querySelector('#cancelEdit')?.addEventListener('click', () => { editing = null; drawForm(); });
+    document.querySelector('#category')?.addEventListener('change', event => drawForm({ ...(editing || {}), category: event.target.value }));
+    document.querySelector('#productForm').addEventListener('submit', async event => {
+      event.preventDefault(); const form = event.currentTarget; const submit = form.querySelector('[type="submit"]'); const message = document.querySelector('#formMessage'); submit.disabled = true; message.textContent = 'Guardando…';
+      try {
+        const data = Object.fromEntries(new FormData(form).entries()); data.featured = form.elements.featured.checked; data.hero = form.elements.hero.checked; data.price = data.salePrice; data.images = [data.image, data.image2, data.image3, data.image4].filter(Boolean);
+        const file = form.elements.imageFile.files[0];
+        if (file) { const uploadData = new FormData(); uploadData.append('image', file); const uploaded = await request('/api/admin/upload', { method: 'POST', body: uploadData }); data.image = uploaded.image; data.images[0] = uploaded.image; }
+        const url = editing ? `/api/admin/products/${editing.id}` : '/api/admin/products';
+        const product = await request(url, { method: editing ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+        products = editing ? products.map(p => p.id === product.id ? product : p) : [product, ...products];
+        const heroIds = new Set(settings.heroProductIds); const featuredIds = new Set(settings.featuredProductIds); product.hero ? heroIds.add(product.id) : heroIds.delete(product.id); product.featured ? featuredIds.add(product.id) : featuredIds.delete(product.id);
+        settings = { heroProductIds: [...heroIds].slice(0, 6), featuredProductIds: [...featuredIds].slice(0, 8) };
+        await request('/api/admin/storefront', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(settings) });
+        products = products.map(p => p.id === product.id ? { ...p, hero: settings.heroProductIds.includes(p.id), featured: settings.featuredProductIds.includes(p.id) } : p);
+        editing = null; drawList(); drawForm(); drawSelectionPanel();
+      } catch (e) { message.className = 'message error'; message.textContent = e.message; submit.disabled = false; }
+    });
+  }
+
+  document.querySelector('#logout').addEventListener('click', async () => { await request('/api/logout', { method: 'POST' }); renderLogin(); }); drawList(); renderClassifications(); bindClassificationEvents(); drawForm(); bindSelectionEvents();
 }
 function renderLogin() { app.innerHTML = `<main class="login-page"><section class="login-card"><a class="brand" href="/">YHORS</a><span class="eyebrow">Panel privado</span><h1>Acceso a YHORS</h1><p>Ingresa con la cuenta de administración para actualizar el catálogo.</p><form id="loginForm" class="form-grid"><div class="field full"><label for="username">Usuario</label><input id="username" name="username" autocomplete="username" required></div><div class="field full"><label for="password">Contraseña</label><input id="password" name="password" type="password" autocomplete="current-password" required></div><div class="form-actions"><button class="button" type="submit">Iniciar sesión</button><span class="message" id="loginMessage"></span></div></form></section></main>`; document.querySelector('#loginForm').addEventListener('submit', async e => { e.preventDefault(); const form = e.currentTarget; const message = document.querySelector('#loginMessage'); try { await request('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.fromEntries(new FormData(form))) }); renderAdmin(); } catch (error) { message.className = 'message error'; message.textContent = error.message; } }); }
 
