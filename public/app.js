@@ -44,6 +44,10 @@ function renderHeader(currentCategory = '') {
   return `<header class="site-header"><div class="bar">
     <button class="mobile-menu-toggle" id="mobileMenuToggle" type="button" aria-label="Abrir menú" aria-controls="siteNav" aria-expanded="false"><span></span><span></span><span></span></button>
     <a class="brand" href="/" aria-label="YHORS inicio">YHORS</a>
+<<<<<<< HEAD
+=======
+    <button class="mobile-menu-toggle" id="mobileMenuToggle" type="button" aria-label="Abrir menú" aria-controls="siteNav" aria-expanded="false"><span></span><span></span><span></span></button>
+>>>>>>> 93354f841fe1cedb969a1fc578b72174433e999d
     <nav class="nav" id="siteNav" aria-label="Categorías">${categoryLinks(currentCategory)}</nav>
     <button class="cart-button" id="cartButton" aria-label="Abrir carrito"><span class="cart-icon" aria-hidden="true">🛒</span><span class="cart-label">Carrito</span><span class="count" id="cartCount">0</span></button>
   </div></header>`;
