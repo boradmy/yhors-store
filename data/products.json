@@ -1,5 +1,24 @@
 [
   {
+    "name": "BUNNY BULMA COSPLAY",
+    "description": "Traje completo de Bunny Culma\ncuenta con cola\norejas",
+    "category": "cosplay",
+    "price": 85,
+    "image": "https://i.pinimg.com/736x/6e/4b/d1/6e4bd191d99a65a0a7affb2478a1480b.jpg",
+    "images": [
+      "https://i.pinimg.com/736x/6e/4b/d1/6e4bd191d99a65a0a7affb2478a1480b.jpg",
+      "https://i.pinimg.com/736x/6c/a1/d1/6ca1d1b21b8b1efec4a08c5786408be1.jpg",
+      "https://i.pinimg.com/1200x/03/7c/4c/037c4c53270af13d8d0c27543baf6604.jpg",
+      "https://i.pinimg.com/736x/7d/4b/8d/7d4b8dc89a9e8d0f55dce711e9f67810.jpg"
+    ],
+    "featured": true,
+    "hero": true,
+    "heroOrder": 0,
+    "id": "bd65098b-c523-4975-ba43-68e0bcad1623",
+    "createdAt": "2026-09-18T05:45:50.324Z",
+    "updatedAt": "2026-09-18T05:50:37.063Z"
+  },
+  {
     "name": "RAMO ELEGANTE: ROASAS Y BRILLO",
     "description": "💎✨ Ramo Elegante: Rosas y Brillo ✨💎\n\nLleva el lujo a otro nivel con nuestro exclusivo Ramo Elegante. Este ramo cuenta con 15 rosas eternas adornadas con diamantes ficticios, una delicada mariposa y está envuelto en papel premium coreano. Cada detalle ha sido cuidadosamente seleccionado",
     "category": "details",
@@ -8,7 +27,8 @@
     "featured": false,
     "id": "8b1a4da8-af44-48cc-a263-69d2cf703c59",
     "createdAt": "2026-09-12T04:40:49.585Z",
-    "updatedAt": "2026-09-12T04:42:49.955Z"
+    "updatedAt": "2026-09-18T05:50:37.063Z",
+    "hero": false
   },
   {
     "name": "CAJA FELIZ CUMPLEAÑOS MORADO",
@@ -19,7 +39,8 @@
     "featured": false,
     "id": "f63f4220-3eca-4373-85a4-4e8b495289bb",
     "createdAt": "2026-09-12T04:35:05.613Z",
-    "updatedAt": "2026-09-12T04:42:41.439Z"
+    "updatedAt": "2026-09-18T05:50:37.063Z",
+    "hero": false
   },
   {
     "name": "RAMO CON MARIPOSAS PAPEL ROSADO",
@@ -30,7 +51,8 @@
     "featured": false,
     "id": "93a54450-e29f-4f6b-b3d8-a800d128ed6a",
     "createdAt": "2026-09-12T03:35:09.551Z",
-    "updatedAt": "2026-09-12T04:42:27.539Z"
+    "updatedAt": "2026-09-18T05:50:37.063Z",
+    "hero": false
   },
   {
     "name": "RAMO CON MARIPOSAS BLANCO Y DORADO",
@@ -41,7 +63,8 @@
     "featured": false,
     "id": "ae8c56b7-a2c0-4821-a811-44a8eb23d980",
     "createdAt": "2026-09-12T03:32:02.982Z",
-    "updatedAt": "2026-09-12T04:29:58.972Z"
+    "updatedAt": "2026-09-18T05:50:37.063Z",
+    "hero": false
   },
   {
     "name": "RAMO BICOLOR",
@@ -52,7 +75,8 @@
     "featured": false,
     "id": "9bac7e22-d712-4e3f-a63e-6d033e999357",
     "createdAt": "2026-09-12T03:28:27.306Z",
-    "updatedAt": "2026-09-12T04:29:16.639Z"
+    "updatedAt": "2026-09-18T05:50:37.063Z",
+    "hero": true
   },
   {
     "name": "RAMO BLANCO Y ROSAS",
@@ -63,7 +87,8 @@
     "featured": false,
     "id": "76ea6239-d06b-4707-9c86-e28ad256d8fd",
     "createdAt": "2026-09-12T03:26:54.586Z",
-    "updatedAt": "2026-09-12T04:42:14.438Z"
+    "updatedAt": "2026-09-18T05:50:37.063Z",
+    "hero": false
   },
   {
     "name": "RAMO ROSADITA",
@@ -74,7 +99,8 @@
     "featured": false,
     "id": "52129b8d-fcc4-4057-ad39-8d1fe04267c6",
     "createdAt": "2026-09-12T03:21:27.302Z",
-    "updatedAt": "2026-09-12T04:26:48.258Z"
+    "updatedAt": "2026-09-18T05:50:37.063Z",
+    "hero": false
   },
   {
     "name": "RAMO FUSIA",
@@ -85,7 +111,8 @@
     "featured": false,
     "id": "1e882934-04c9-4fac-b730-a2f0470cae26",
     "createdAt": "2026-09-12T03:19:43.823Z",
-    "updatedAt": "2026-09-12T04:19:36.555Z"
+    "updatedAt": "2026-09-18T05:50:37.063Z",
+    "hero": false
   },
   {
     "name": "RAMO BLANCO",
@@ -96,7 +123,8 @@
     "featured": false,
     "id": "7a08ef0c-b7f7-4afc-8b67-bd4b9285602d",
     "createdAt": "2026-09-12T03:18:08.337Z",
-    "updatedAt": "2026-09-12T04:19:01.333Z"
+    "updatedAt": "2026-09-18T05:50:37.063Z",
+    "hero": false
   },
   {
     "name": "RAMO DE ROSAS",
@@ -107,7 +135,8 @@
     "featured": false,
     "id": "455bbc83-f8af-42cb-92c8-c51b570eab3d",
     "createdAt": "2026-09-12T03:16:25.691Z",
-    "updatedAt": "2026-09-12T04:18:09.533Z"
+    "updatedAt": "2026-09-18T05:50:37.063Z",
+    "hero": true
   },
   {
     "name": "RAMO CHANCHITO",
@@ -118,7 +147,8 @@
     "featured": false,
     "id": "6754a209-3de2-4926-b211-3384d454d37a",
     "createdAt": "2026-09-12T03:14:56.287Z",
-    "updatedAt": "2026-09-12T04:17:36.925Z"
+    "updatedAt": "2026-09-18T05:50:37.063Z",
+    "hero": false
   },
   {
     "name": "RAMO ROSA MARIPOSA",
@@ -129,7 +159,8 @@
     "featured": false,
     "id": "0870a04d-7bb6-42fa-beb5-5271f422e6d6",
     "createdAt": "2026-09-12T03:09:45.628Z",
-    "updatedAt": "2026-09-12T04:16:45.489Z"
+    "updatedAt": "2026-09-18T05:50:37.063Z",
+    "hero": false
   },
   {
     "name": "RAMO HELLO KITTY",
@@ -140,7 +171,8 @@
     "featured": false,
     "id": "1130bc93-61f9-46b0-b7dc-efe49ddf77b1",
     "createdAt": "2026-09-12T03:07:53.779Z",
-    "updatedAt": "2026-09-12T04:15:12.978Z"
+    "updatedAt": "2026-09-18T05:50:37.063Z",
+    "hero": false
   },
   {
     "name": "PARLANTE SMART AMAZON ECHO DOT 5ta. GENERACION – ALEXA – AZUL",
@@ -148,14 +180,16 @@
     "category": "tech",
     "price": 80,
     "image": "https://http2.mlstatic.com/D_NQ_NP_2X_847146-MLA100027689153_122025-F.webp",
-    "featured": false,
+    "featured": true,
     "id": "d049e7a4-05cb-493e-832e-11cc3c0fe099",
     "createdAt": "2026-09-12T02:51:51.935Z",
-    "updatedAt": "2026-09-12T16:39:53.167Z",
+    "updatedAt": "2026-09-18T05:50:37.063Z",
     "images": [
       "https://http2.mlstatic.com/D_NQ_NP_2X_847146-MLA100027689153_122025-F.webp",
       "https://www.computron.com.ec/wp-content/uploads/2025/07/C2N6L4-BL20gr.jpg",
       "https://nanotech-market.com/wp-content/uploads/2023/04/Lime-Green-and-Black-Active-Hype-Personal-Fitness-Coach-Instagram-Post-2023-04-13T153344.841.png"
-    ]
+    ],
+    "hero": true,
+    "heroOrder": 0
   }
 ]

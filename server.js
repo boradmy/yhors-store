@@ -12,6 +12,7 @@ const app = express();
 const PORT = Number(process.env.PORT || 3000);
 const ADMIN_PATH = '/yhors/admin593';
 const DATA_FILE = path.join(__dirname, 'data', 'products.json');
+const STOREFRONT_FILE = path.join(__dirname, 'data', 'storefront.json');
 const UPLOADS_DIR = path.join(__dirname, 'uploads');
 const SESSION_SECRET = process.env.SESSION_SECRET || 'cambia-este-secreto-antes-de-publicar';
 const ADMIN_USER = process.env.ADMIN_USER || 'admin';
@@ -53,6 +54,24 @@ function readProducts() {
   } catch {
     return [];
   }
+}
+
+function readStorefront() {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(STOREFRONT_FILE, 'utf8'));
+    return {
+      heroProductIds: Array.isArray(parsed.heroProductIds) ? parsed.heroProductIds.filter(Boolean).slice(0, 8) : [],
+      featuredProductIds: Array.isArray(parsed.featuredProductIds) ? parsed.featuredProductIds.filter(Boolean).slice(0, 12) : []
+    };
+  } catch {
+    return { heroProductIds: [], featuredProductIds: [] };
+  }
+}
+
+function writeStorefront(settings) {
+  const temporaryFile = `${STOREFRONT_FILE}.tmp`;
+  fs.writeFileSync(temporaryFile, `${JSON.stringify(settings, null, 2)}\n`, 'utf8');
+  fs.renameSync(temporaryFile, STOREFRONT_FILE);
 }
 
 function writeProducts(products) {
@@ -125,7 +144,9 @@ function validateProduct(input, current = {}) {
       price: Math.round(price * 100) / 100,
       image: finalImages[0] || '',
       images: finalImages,
-      featured: input.featured === true || input.featured === 'true'
+      featured: input.featured === true || input.featured === 'true',
+      hero: input.hero === true || input.hero === 'true',
+      heroOrder: Number.isFinite(Number(input.heroOrder)) ? Math.max(0, Math.min(999, Number(input.heroOrder))) : (Number(current.heroOrder) || 0)
     }
   };
 }
@@ -145,7 +166,10 @@ function normalizeProduct(product) {
 }
 
 app.get('/api/products', (_, res) => res.json(readProducts().map(normalizeProduct)));
-app.get('/api/storefront', (_, res) => res.json({ whatsappNumber: String(process.env.WHATSAPP_NUMBER || '').replace(/\D/g, '') }));
+app.get('/api/storefront', (_, res) => {
+  const settings = readStorefront();
+  return res.json({ ...settings, whatsappNumber: String(process.env.WHATSAPP_NUMBER || '').replace(/\D/g, '') });
+});
 app.get('/api/health', (_, res) => res.json({ ok: true }));
 
 app.post('/api/login', async (req, res) => {
@@ -167,6 +191,21 @@ app.post('/api/logout', (req, res) => {
 
 app.get('/api/admin/session', (req, res) => res.json({ authenticated: hasValidSession(req), username: hasValidSession(req) ? ADMIN_USER : null }));
 app.get('/api/admin/products', requireAdmin, (_, res) => res.json(readProducts().map(normalizeProduct)));
+app.get('/api/admin/storefront', requireAdmin, (_, res) => res.json(readStorefront()));
+
+app.put('/api/admin/storefront', requireAdmin, (req, res) => {
+  const products = readProducts();
+  const ids = new Set(products.map(product => product.id));
+  const heroProductIds = Array.isArray(req.body?.heroProductIds) ? req.body.heroProductIds.filter(id => ids.has(id)).slice(0, 8) : [];
+  const featuredProductIds = Array.isArray(req.body?.featuredProductIds) ? req.body.featuredProductIds.filter(id => ids.has(id)).slice(0, 12) : [];
+  const settings = { heroProductIds, featuredProductIds };
+  writeStorefront(settings);
+  const heroSet = new Set(heroProductIds);
+  const featuredSet = new Set(featuredProductIds);
+  const updated = products.map(product => ({ ...product, hero: heroSet.has(product.id), featured: featuredSet.has(product.id), updatedAt: new Date().toISOString() }));
+  writeProducts(updated);
+  return res.json(settings);
+});
 
 app.post('/api/admin/upload', requireAdmin, upload.single('image'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'Selecciona una imagen JPG, PNG, WEBP o GIF de máximo 5 MB.' });

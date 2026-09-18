@@ -53,3 +53,11 @@ Para recibir pedidos, agrega el número internacional de WhatsApp sin `+` ni esp
 
 ### Importante
 Se omitieron `.env`, `.git` y `node_modules` del ZIP por seguridad/tamaño. Copia tu `.env` original al proyecto y ejecuta `npm install` antes de iniciar.
+
+
+## YHORS 3.0
+- Header con categorías independientes: `/categoria/todo`, `/categoria/elegant`, `/categoria/sports`, `/categoria/tech`, `/categoria/cosplay`, `/categoria/pets`, `/categoria/details` y `/categoria/collectibles`.
+- Portada editorial con slider configurable desde Administración.
+- Selección de productos destacados configurable desde Administración.
+- Footer compartido en las páginas públicas.
+- Las selecciones se guardan en `data/storefront.json`.
