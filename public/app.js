@@ -43,9 +43,31 @@ function categoryLinks(currentId = '') {
 function renderHeader(currentCategory = '') {
   return `<header class="site-header"><div class="bar">
     <a class="brand" href="/" aria-label="YHORS inicio">YHORS</a>
-    <nav class="nav" aria-label="Categorías">${categoryLinks(currentCategory)}</nav>
+    <button class="mobile-menu-toggle" id="mobileMenuToggle" type="button" aria-label="Abrir menú" aria-controls="siteNav" aria-expanded="false"><span></span><span></span><span></span></button>
+    <nav class="nav" id="siteNav" aria-label="Categorías">${categoryLinks(currentCategory)}</nav>
     <button class="cart-button" id="cartButton" aria-label="Abrir carrito"><span class="cart-icon" aria-hidden="true">🛒</span><span class="cart-label">Carrito</span><span class="count" id="cartCount">0</span></button>
   </div></header>`;
+}
+function wireMobileMenu() {
+  const toggle = document.querySelector('#mobileMenuToggle');
+  const nav = document.querySelector('#siteNav');
+  if (!toggle || !nav) return;
+  const close = () => {
+    nav.classList.remove('mobile-open');
+    toggle.classList.remove('open');
+    toggle.setAttribute('aria-expanded', 'false');
+    toggle.setAttribute('aria-label', 'Abrir menú');
+  };
+  toggle.addEventListener('click', () => {
+    const open = nav.classList.toggle('mobile-open');
+    toggle.classList.toggle('open', open);
+    toggle.setAttribute('aria-expanded', String(open));
+    toggle.setAttribute('aria-label', open ? 'Cerrar menú' : 'Abrir menú');
+  });
+  nav.querySelectorAll('a').forEach(link => link.addEventListener('click', close));
+  if (document.__yhorsMobileEscapeHandler) document.removeEventListener('keydown', document.__yhorsMobileEscapeHandler);
+  document.__yhorsMobileEscapeHandler = event => { if (event.key === 'Escape') close(); };
+  document.addEventListener('keydown', document.__yhorsMobileEscapeHandler);
 }
 function renderFooter() {
   return `<footer class="site-footer"><div class="footer-inner footer-grid">
@@ -140,7 +162,7 @@ async function renderHome() {
     ${categoryBlocks()}
     <section class="brand-section" id="nosotros"><div class="brand-section-inner"><span class="eyebrow">Sobre nosotros</span><h2>YHORS<br><em>más que un producto</em></h2><p>Un catálogo dividido por universos para que cada persona encuentre algo que conecte con su estilo, sus pasiones y sus momentos especiales.</p></div></section>
   </main>${renderFooter()}${cartMarkup()}</div>`;
-  wireHero(heroSlides); const cart = wireCart(products, storefront); const featuredArea = document.querySelector('#featuredProducts'); renderProductsInto(featuredArea, featured, id => openProduct(id, products), (product, button) => cart.addToCart(product, button));
+  wireMobileMenu(); wireHero(heroSlides); const cart = wireCart(products, storefront); const featuredArea = document.querySelector('#featuredProducts'); renderProductsInto(featuredArea, featured, id => openProduct(id, products), (product, button) => cart.addToCart(product, button));
   if (!featured.length) featuredArea.innerHTML = '<div class="empty featured-empty">Todavía no has seleccionado productos destacados.<br><small>Entra a YHORS Administración y marca los productos que quieres mostrar aquí.</small></div>';
 }
 
@@ -150,13 +172,13 @@ async function renderCategoryPage(categoryKey) {
   const categoryProducts = products.filter(product => categoryKey === 'all' || product.category === categoryKey);
   const slides = categoryProducts.slice(0, 4).map(product => ({ ...product, image: productImages(product)[0], heroTitle: product.name, heroDescription: product.description }));
   app.innerHTML = `${renderHeader(categoryKey)}<main>${heroMarkup(slides, true, categoryKey)}<section class="section category-page-section" id="productos-categoria"><div class="category-intro"><span class="eyebrow">Colección independiente</span><h1>${escapeHTML(categories[categoryKey])}</h1><p>${escapeHTML(categoryDescriptions[categoryKey])}</p></div><div class="products" id="categoryProducts"></div></section></main>${renderFooter()}${cartMarkup()}`;
-  wireHero(slides); const cart = wireCart(products, storefront); renderProductsInto(document.querySelector('#categoryProducts'), categoryProducts, id => openProduct(id, products), (product, button) => cart.addToCart(product, button));
+  wireMobileMenu(); wireHero(slides); const cart = wireCart(products, storefront); renderProductsInto(document.querySelector('#categoryProducts'), categoryProducts, id => openProduct(id, products), (product, button) => cart.addToCart(product, button));
 }
 
 async function renderProductDetail(product, products, storefront) {
   const images = productImages(product); let selected = 0;
   app.innerHTML = `${renderHeader(product.category)}<main class="product-detail-page"><div class="breadcrumbs"><a href="${categoryHref(product.category)}">${escapeHTML(categories[product.category])}</a><span>/</span><strong>${escapeHTML(product.name)}</strong></div><section class="detail-layout"><div class="detail-gallery"><div class="detail-main-image"><img id="detailMainImage" data-fallback src="${escapeHTML(images[0])}" alt="${escapeHTML(product.name)}"></div>${images.length > 1 ? `<div class="thumbnail-row">${images.map((image, index) => `<button class="thumb ${index === 0 ? 'active' : ''}" data-image-index="${index}"><img data-fallback src="${escapeHTML(image)}" alt="Imagen ${index + 1}"></button>`).join('')}</div>` : ''}</div><div class="detail-copy"><span class="eyebrow">${escapeHTML(categories[product.category])}</span><h1>${escapeHTML(product.name)}</h1><div class="detail-price">${money(product.price)}</div><div class="detail-divider"></div><h3>Descripción</h3><div class="detail-description">${escapeHTML(product.description).replace(/\n/g, '<br>')}</div><div class="detail-buy"><button class="add detail-add" id="detailAdd"><span>Añadir al carrito</span><span>+</span></button><a class="button secondary back-button" href="${categoryHref(product.category)}">← Volver a ${escapeHTML(categories[product.category])}</a></div><div class="detail-note"><span>✓</span> Compra directa y atención personal.</div></div></section></main>${renderFooter()}${cartMarkup()}`;
-  wireImageFallback(document.querySelector('.product-detail-page')); document.querySelectorAll('[data-image-index]').forEach(button => button.addEventListener('click', () => { selected = Number(button.dataset.imageIndex); document.querySelector('#detailMainImage').src = images[selected]; document.querySelectorAll('.thumb').forEach(item => item.classList.remove('active')); button.classList.add('active'); }));
+  wireMobileMenu(); wireImageFallback(document.querySelector('.product-detail-page')); document.querySelectorAll('[data-image-index]').forEach(button => button.addEventListener('click', () => { selected = Number(button.dataset.imageIndex); document.querySelector('#detailMainImage').src = images[selected]; document.querySelectorAll('.thumb').forEach(item => item.classList.remove('active')); button.classList.add('active'); }));
   const cart = wireCart(products, storefront); document.querySelector('#detailAdd').addEventListener('click', e => cart.addToCart(product, e.currentTarget));
 }
 
