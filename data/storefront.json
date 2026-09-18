@@ -1,12 +1,13 @@
 {
   "heroProductIds": [
-    "9bac7e22-d712-4e3f-a63e-6d033e999357",
-    "455bbc83-f8af-42cb-92c8-c51b570eab3d",
-    "d049e7a4-05cb-493e-832e-11cc3c0fe099",
-    "bd65098b-c523-4975-ba43-68e0bcad1623"
+    "ee9073b6-3ac9-442d-939e-ee7dabcb402c",
+    "bd65098b-c523-4975-ba43-68e0bcad1623",
+    "93a54450-e29f-4f6b-b3d8-a800d128ed6a",
+    "d049e7a4-05cb-493e-832e-11cc3c0fe099"
   ],
   "featuredProductIds": [
-    "d049e7a4-05cb-493e-832e-11cc3c0fe099",
-    "bd65098b-c523-4975-ba43-68e0bcad1623"
+    "ee9073b6-3ac9-442d-939e-ee7dabcb402c",
+    "bd65098b-c523-4975-ba43-68e0bcad1623",
+    "d049e7a4-05cb-493e-832e-11cc3c0fe099"
   ]
 }
