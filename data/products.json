@@ -1,5 +1,72 @@
 [
   {
+    "name": "NOTEBOOK LENOVO IP1 15AMN7 R5 7520U 8GB-256GB SSD-BLUE-15.6\"-W11 TECLADO INGLES",
+    "description": "-Pantalla: 15.6\" FHD (1920 × 1080) TN, 220 nits, antirreflejo.\n- Procesador: AMD Ryzen™ 5 7520U, 4 núcleos / 8 hilos, hasta 4.3 GHz.\n- Gráficos integrados: AMD Radeon™ 610M Graphics.\n- Memoria RAM: 8 GB LPDDR5-5500, soldada.\n- Disco duro: 256 GB SSD M.2 2242 PCIe 4.0x4 NVMe.\n- Ranura adicional: M.2 2280 PCIe 3.0 x2 hasta 1 TB de SSD.\n- Cámara: HD 720p con obturador de privacidad.\n- Sistema Operativo: Windows® 11 Home, inglés.\n- Bluetooth: 5.2.\n- Wi-Fi®: Wi-Fi 6, 802.11ax 2x2.",
+    "category": "tech",
+    "brand": "Lenovo",
+    "productType": "Laptop",
+    "salePrice": 599.99,
+    "rentalPrice": null,
+    "price": 599.99,
+    "image": "https://gztechnoshop.com/wp-content/uploads/2025/12/22535_20506.jpg",
+    "images": [
+      "https://gztechnoshop.com/wp-content/uploads/2025/12/22535_20506.jpg",
+      "https://www.novogar.com.ar/Image/0/750_750-not2.webp",
+      "https://http2.mlstatic.com/D_NQ_NP_932370-MLV107243906099_022026-O.webp",
+      "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcToj6rOEfkWFiIghcxOApq4ffCvJBRGqa4vwZKB0GlcAUgqhpMNBOPEYwfP&s=10"
+    ],
+    "featured": true,
+    "hero": true,
+    "heroOrder": 0,
+    "id": "7757b362-1f89-4e24-be36-de4d49a71c19",
+    "createdAt": "2026-09-18T22:28:10.558Z",
+    "updatedAt": "2026-09-18T22:29:55.027Z"
+  },
+  {
+    "name": "Xiaomi Redmi 15C / 128GB",
+    "description": "Características principales\nPantalla: 6.9″, 720 x 1600 pixels\nProcesador: MediaTek Helio G81\nRAM: 4GB\nAlmacenamiento: 128GB\nExpansión: microSD\nCámara: 50MP\nCámara Frontal: 8MP\nBatería: 6000 mAh\nCarga rápida: 33W\nOS: Android 15\nOtros: GPS, Conector de audio 3.5 mm, Desbloqueo dactilar",
+    "category": "tech",
+    "brand": "Xiaomi",
+    "productType": "Celular",
+    "salePrice": 175.99,
+    "rentalPrice": null,
+    "price": 175.99,
+    "image": "https://mobilestore.ec/wp-content/uploads/2025/08/Xiaomi-Redmi-15C-Verde-Menta-Mobile-Store-Ecuador.jpg",
+    "images": [
+      "https://mobilestore.ec/wp-content/uploads/2025/08/Xiaomi-Redmi-15C-Verde-Menta-Mobile-Store-Ecuador.jpg",
+      "https://mobilestore.ec/wp-content/uploads/2025/08/Xiaomi-Redmi-15C-Negro-Ocaso-Mobile-Store-Ecuador.jpg",
+      "https://mobilestore.ec/wp-content/uploads/2025/08/Xiaomi-Redmi-15C-Azul-Lunar-Mobile-Store-Ecuador.jpg"
+    ],
+    "featured": true,
+    "hero": false,
+    "heroOrder": 0,
+    "id": "bef5e66f-1fe6-49d3-909d-2f3be7e3eb61",
+    "createdAt": "2026-09-18T22:19:16.444Z",
+    "updatedAt": "2026-09-18T22:29:55.027Z"
+  },
+  {
+    "name": "Xiaomi Redmi A7 Pro / 128GB",
+    "description": "Pantalla: 6.9″, 720 x 1600 pixels\nProcesador: Unisoc T8300 2.2GHz\nRAM: 4GB\nAlmacenamiento: 128GB\nExpansión: microSD\nCámara: Dual, 32MP+Aux\nCámara Frontal: 8MP\nBatería: 6300 mAh\nCarga rápida: 15W\nOS: Android 16\nResistencia al agua limitada: IP54\nOtros: GPS, Conector de audio 3.5 mm, Desbloqueo  dactilar",
+    "category": "tech",
+    "brand": "Xiaomi",
+    "productType": "Celular",
+    "salePrice": 164.99,
+    "rentalPrice": null,
+    "price": 164.99,
+    "image": "https://mobilestore.ec/wp-content/uploads/2026/06/Xiaomi-Redmi-A7-Pro-Verde-Mobile-Store-Ecuador.jpg",
+    "images": [
+      "https://mobilestore.ec/wp-content/uploads/2026/06/Xiaomi-Redmi-A7-Pro-Verde-Mobile-Store-Ecuador.jpg",
+      "https://mobilestore.ec/wp-content/uploads/2026/06/Xiaomi-Redmi-A7-Pro-Negro-Mobile-Store-Ecuador.jpg",
+      "https://mobilestore.ec/wp-content/uploads/2026/06/Xiaomi-Redmi-A7-Pro-Azul-Mobile-Store-Ecuador.jpg"
+    ],
+    "featured": true,
+    "hero": false,
+    "heroOrder": 1,
+    "id": "4dd34631-e5fd-429a-b0ee-6ebad6a4a63b",
+    "createdAt": "2026-09-18T22:10:26.489Z",
+    "updatedAt": "2026-09-18T22:29:55.027Z"
+  },
+  {
     "name": "Xiaomi Redmi A7 Pro / 64GB",
     "description": "Características principales\nPantalla: 6.9″, 720 x 1600 pixels\nProcesador: Unisoc T8300 2.2GHz\nRAM: 4GB\nAlmacenamiento: 64GB \nExpansión: microSD\nCámara: Dual, 32MP+Aux\nCámara Frontal: 8MP\nBatería: 6300 mAh\nCarga rápida: 15W\nOS: Android 16\nResistencia al agua limitada: IP54\nOtros: GPS, Conector de audio 3.5 mm, Desbloqueo  dactilar",
     "category": "tech",
@@ -15,8 +82,8 @@
     "heroOrder": 1,
     "id": "ee9073b6-3ac9-442d-939e-ee7dabcb402c",
     "createdAt": "2026-09-18T07:27:32.602Z",
-    "updatedAt": "2026-09-18T20:41:26.931Z",
-    "brand": "Infinix",
+    "updatedAt": "2026-09-18T22:29:55.027Z",
+    "brand": "Xiaomi",
     "productType": "Celular",
     "salePrice": 149.99,
     "rentalPrice": null
@@ -38,7 +105,7 @@
     "heroOrder": 0,
     "id": "bd65098b-c523-4975-ba43-68e0bcad1623",
     "createdAt": "2026-09-18T05:45:50.324Z",
-    "updatedAt": "2026-09-18T20:41:26.931Z",
+    "updatedAt": "2026-09-18T22:29:55.027Z",
     "brand": "Doki Doki",
     "productType": "Sexy",
     "salePrice": 85,
@@ -53,7 +120,7 @@
     "featured": false,
     "id": "8b1a4da8-af44-48cc-a263-69d2cf703c59",
     "createdAt": "2026-09-12T04:40:49.585Z",
-    "updatedAt": "2026-09-18T20:41:26.931Z",
+    "updatedAt": "2026-09-18T22:29:55.027Z",
     "hero": false
   },
   {
@@ -65,7 +132,7 @@
     "featured": false,
     "id": "f63f4220-3eca-4373-85a4-4e8b495289bb",
     "createdAt": "2026-09-12T04:35:05.613Z",
-    "updatedAt": "2026-09-18T20:41:26.931Z",
+    "updatedAt": "2026-09-18T22:29:55.027Z",
     "hero": false
   },
   {
@@ -77,8 +144,8 @@
     "featured": false,
     "id": "93a54450-e29f-4f6b-b3d8-a800d128ed6a",
     "createdAt": "2026-09-12T03:35:09.551Z",
-    "updatedAt": "2026-09-18T20:41:26.931Z",
-    "hero": true
+    "updatedAt": "2026-09-18T22:29:55.027Z",
+    "hero": false
   },
   {
     "name": "RAMO CON MARIPOSAS BLANCO Y DORADO",
@@ -89,7 +156,7 @@
     "featured": false,
     "id": "ae8c56b7-a2c0-4821-a811-44a8eb23d980",
     "createdAt": "2026-09-12T03:32:02.982Z",
-    "updatedAt": "2026-09-18T20:41:26.931Z",
+    "updatedAt": "2026-09-18T22:29:55.027Z",
     "hero": false
   },
   {
@@ -101,7 +168,7 @@
     "featured": false,
     "id": "9bac7e22-d712-4e3f-a63e-6d033e999357",
     "createdAt": "2026-09-12T03:28:27.306Z",
-    "updatedAt": "2026-09-18T20:41:26.931Z",
+    "updatedAt": "2026-09-18T22:29:55.027Z",
     "hero": false
   },
   {
@@ -113,7 +180,7 @@
     "featured": false,
     "id": "76ea6239-d06b-4707-9c86-e28ad256d8fd",
     "createdAt": "2026-09-12T03:26:54.586Z",
-    "updatedAt": "2026-09-18T20:41:26.931Z",
+    "updatedAt": "2026-09-18T22:29:55.027Z",
     "hero": false
   },
   {
@@ -125,7 +192,7 @@
     "featured": false,
     "id": "52129b8d-fcc4-4057-ad39-8d1fe04267c6",
     "createdAt": "2026-09-12T03:21:27.302Z",
-    "updatedAt": "2026-09-18T20:41:26.931Z",
+    "updatedAt": "2026-09-18T22:29:55.027Z",
     "hero": false
   },
   {
@@ -137,7 +204,7 @@
     "featured": false,
     "id": "1e882934-04c9-4fac-b730-a2f0470cae26",
     "createdAt": "2026-09-12T03:19:43.823Z",
-    "updatedAt": "2026-09-18T20:41:26.931Z",
+    "updatedAt": "2026-09-18T22:29:55.027Z",
     "hero": false
   },
   {
@@ -149,7 +216,7 @@
     "featured": false,
     "id": "7a08ef0c-b7f7-4afc-8b67-bd4b9285602d",
     "createdAt": "2026-09-12T03:18:08.337Z",
-    "updatedAt": "2026-09-18T20:41:26.931Z",
+    "updatedAt": "2026-09-18T22:29:55.027Z",
     "hero": false
   },
   {
@@ -161,7 +228,7 @@
     "featured": false,
     "id": "455bbc83-f8af-42cb-92c8-c51b570eab3d",
     "createdAt": "2026-09-12T03:16:25.691Z",
-    "updatedAt": "2026-09-18T20:41:26.931Z",
+    "updatedAt": "2026-09-18T22:29:55.027Z",
     "hero": false
   },
   {
@@ -173,7 +240,7 @@
     "featured": false,
     "id": "6754a209-3de2-4926-b211-3384d454d37a",
     "createdAt": "2026-09-12T03:14:56.287Z",
-    "updatedAt": "2026-09-18T20:41:26.931Z",
+    "updatedAt": "2026-09-18T22:29:55.027Z",
     "hero": false
   },
   {
@@ -185,7 +252,7 @@
     "featured": false,
     "id": "0870a04d-7bb6-42fa-beb5-5271f422e6d6",
     "createdAt": "2026-09-12T03:09:45.628Z",
-    "updatedAt": "2026-09-18T20:41:26.931Z",
+    "updatedAt": "2026-09-18T22:29:55.027Z",
     "hero": true
   },
   {
@@ -197,7 +264,7 @@
     "featured": false,
     "id": "1130bc93-61f9-46b0-b7dc-efe49ddf77b1",
     "createdAt": "2026-09-12T03:07:53.779Z",
-    "updatedAt": "2026-09-18T20:41:26.931Z",
+    "updatedAt": "2026-09-18T22:29:55.027Z",
     "hero": false
   },
   {
@@ -209,7 +276,7 @@
     "featured": true,
     "id": "d049e7a4-05cb-493e-832e-11cc3c0fe099",
     "createdAt": "2026-09-12T02:51:51.935Z",
-    "updatedAt": "2026-09-18T20:41:26.931Z",
+    "updatedAt": "2026-09-18T22:29:55.027Z",
     "images": [
       "https://http2.mlstatic.com/D_NQ_NP_2X_847146-MLA100027689153_122025-F.webp",
       "https://www.computron.com.ec/wp-content/uploads/2025/07/C2N6L4-BL20gr.jpg",
