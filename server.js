@@ -19,6 +19,7 @@ const SESSION_SECRET = process.env.SESSION_SECRET || 'cambia-este-secreto-antes-
 const ADMIN_USER = process.env.ADMIN_USER || 'admin';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'cambia-esta-contrasena';
 const COOKIE_SECURE = process.env.COOKIE_SECURE === 'true';
+const SITE_URL = String(process.env.SITE_URL || 'https://yhors-store.onrender.com').replace(/\/+$/, '');
 
 fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 
@@ -33,6 +34,31 @@ app.use((req, res, next) => {
 app.use(express.json({ limit: '1mb' }));
 app.use(cookieParser());
 app.use('/uploads', express.static(UPLOADS_DIR, { maxAge: '7d', immutable: true }));
+
+function escapeXml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[char]));
+}
+
+function productUrl(product) {
+  return `${SITE_URL}/?producto=${encodeURIComponent(product.id)}`;
+}
+
+app.get('/robots.txt', (_, res) => {
+  res.type('text/plain').send(`User-agent: *\nAllow: /\n\nSitemap: ${SITE_URL}/sitemap.xml\n`);
+});
+
+app.get('/sitemap.xml', (_, res) => {
+  const products = readProducts();
+  const categories = ['principal', 'elegant', 'sports', 'tech', 'cosplay', 'pets', 'details', 'collectibles'];
+  const urls = [
+    { loc: `${SITE_URL}/`, priority: '1.0' },
+    ...categories.map(category => ({ loc: `${SITE_URL}/categoria/${category}`, priority: category === 'principal' ? '0.9' : '0.8' })),
+    ...products.map(product => ({ loc: productUrl(product), lastmod: product.updatedAt || product.createdAt, priority: '0.7' }))
+  ];
+  const body = urls.map(item => `<url><loc>${escapeXml(item.loc)}</loc>${item.lastmod ? `<lastmod>${escapeXml(new Date(item.lastmod).toISOString())}</lastmod>` : ''}<changefreq>weekly</changefreq><priority>${item.priority}</priority></url>`).join('');
+  res.type('application/xml').send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${body}</urlset>`);
+});
+
 app.use(express.static(path.join(__dirname, 'public'), { maxAge: '1h' }));
 
 const storage = multer.diskStorage({
@@ -136,6 +162,7 @@ function validateProduct(input, current = {}) {
   const name = cleanText(input.name, 90);
   const description = cleanText(input.description, 2000);
   const category = cleanText(input.category, 30).toLowerCase();
+  const sku = cleanText(input.sku, 40).toUpperCase();
   const brand = cleanText(input.brand, 50);
   const productType = cleanText(input.productType, 50);
   const salePrice = Number(input.salePrice ?? input.price);
@@ -143,8 +170,8 @@ function validateProduct(input, current = {}) {
   const rentalPrice = rentalRaw === '' || rentalRaw === null || rentalRaw === undefined ? null : Number(rentalRaw);
   const image = cleanText(input.image, 1000);
   const validCategories = ['elegant', 'sports', 'tech', 'cosplay', 'pets', 'details', 'collectibles'];
-  if (!name || !description || !validCategories.includes(category) || !Number.isFinite(salePrice) || salePrice < 0 || salePrice > 100000000) {
-    return { error: 'Revisa nombre, descripción, categoría y precio de venta.' };
+  if (!name || !description || !sku || !/^[A-Z0-9][A-Z0-9._-]{0,39}$/.test(sku) || !validCategories.includes(category) || !Number.isFinite(salePrice) || salePrice < 0 || salePrice > 100000000) {
+    return { error: 'Revisa nombre, SKU, descripción, categoría y precio de venta. El SKU debe tener hasta 40 caracteres y usar letras, números, guiones, puntos o guion bajo.' };
   }
   if (category === 'cosplay' && (rentalPrice === null || !Number.isFinite(rentalPrice) || rentalPrice < 0 || rentalPrice > 100000000)) {
     return { error: 'En Cosplay debes indicar un precio de alquiler válido.' };
@@ -157,7 +184,7 @@ function validateProduct(input, current = {}) {
   }
   const finalImages = images.length ? images : (current.images?.length ? current.images : (current.image ? [current.image] : []));
   return { product: {
-    ...current, name, description, category, brand, productType,
+    ...current, name, sku, description, category, brand, productType,
     salePrice: Math.round(salePrice * 100) / 100,
     rentalPrice: category === 'cosplay' ? Math.round(rentalPrice * 100) / 100 : null,
     price: Math.round(salePrice * 100) / 100,
@@ -178,7 +205,12 @@ function normalizeProduct(product) {
   const images = Array.isArray(product.images) && product.images.length
     ? product.images.filter(Boolean)
     : (product.image ? [product.image] : []);
-  return { ...product, image: product.image || images[0] || '', images };
+  return { ...product, sku: cleanText(product.sku, 40).toUpperCase(), image: product.image || images[0] || '', images };
+}
+
+function skuExists(products, sku, exceptId = '') {
+  const normalized = cleanText(sku, 40).toUpperCase();
+  return products.some(product => product.id !== exceptId && cleanText(product.sku, 40).toUpperCase() === normalized);
 }
 
 app.get('/api/products', (_, res) => res.json(readProducts().map(normalizeProduct)));
@@ -235,6 +267,7 @@ app.post('/api/admin/products', requireAdmin, (req, res) => {
   const result = validateProduct(req.body);
   if (result.error) return res.status(400).json(result);
   const products = readProducts();
+  if (skuExists(products, result.product.sku)) return res.status(409).json({ error: `El SKU “${result.product.sku}” ya está asignado a otro producto.` });
   const product = normalizeProduct({ ...result.product, id: crypto.randomUUID(), createdAt: new Date().toISOString() });
   products.unshift(product);
   writeProducts(products);
@@ -248,6 +281,7 @@ app.put('/api/admin/products/:id', requireAdmin, (req, res) => {
   const previous = products[index];
   const result = validateProduct(req.body, previous);
   if (result.error) return res.status(400).json(result);
+  if (skuExists(products, result.product.sku, previous.id)) return res.status(409).json({ error: `El SKU “${result.product.sku}” ya está asignado a otro producto.` });
   products[index] = normalizeProduct({ ...result.product, id: previous.id, createdAt: previous.createdAt, updatedAt: new Date().toISOString() });
   const previousImages = Array.isArray(previous.images) ? previous.images : (previous.image ? [previous.image] : []);
   const currentImages = new Set(products[index].images || []);
