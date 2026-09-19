@@ -32,6 +32,23 @@ app.use((req, res, next) => {
 });
 app.use(express.json({ limit: '1mb' }));
 app.use(cookieParser());
+
+app.get('/robots.txt', (_, res) => {
+  res.type('text/plain').send(`User-agent: *\nAllow: /\nSitemap: https://yhors-store.onrender.com/sitemap.xml\n`);
+});
+
+app.get('/sitemap.xml', (_, res) => {
+  const products = readProducts();
+  const urls = [
+    'https://yhors-store.onrender.com/',
+    ...['elegant','sports','tech','cosplay','pets','details','collectibles'].map(category => `https://yhors-store.onrender.com/categoria/${category}`),
+    ...products.map(product => `https://yhors-store.onrender.com/?producto=${encodeURIComponent(product.id)}`)
+  ];
+  const uniqueUrls = [...new Set(urls)];
+  const body = uniqueUrls.map(url => `  <url><loc>${url.replace(/&/g, '&amp;')}</loc></url>`).join('\n');
+  res.type('application/xml').send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${body}\n</urlset>`);
+});
+
 app.use('/uploads', express.static(UPLOADS_DIR, { maxAge: '7d', immutable: true }));
 app.use(express.static(path.join(__dirname, 'public'), { maxAge: '1h' }));
 
@@ -132,17 +149,42 @@ function cleanText(value, maxLength) {
   return typeof value === 'string' ? value.trim().slice(0, maxLength) : '';
 }
 
-function validateProduct(input, current = {}) {
+function normalizeSku(value) {
+  return String(value || '').trim().toUpperCase().replace(/[^A-Z0-9._-]/g, '').slice(0, 40);
+}
+
+function skuBaseForProduct(product = {}) {
+  const categoryCodes = { elegant: 'ELE', sports: 'SPT', tech: 'TEC', cosplay: 'COS', pets: 'PET', details: 'DET', collectibles: 'COL' };
+  const category = categoryCodes[String(product.category || '').toLowerCase()] || 'YHR';
+  const source = String(product.name || 'PROD').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 12) || 'PROD';
+  return `YH-${category}-${source}`;
+}
+
+function makeUniqueSku(inputSku, product, products, currentId = '') {
+  const requested = normalizeSku(inputSku);
+  const base = requested || skuBaseForProduct(product);
+  const used = new Set(products.filter(item => item.id !== currentId).map(item => normalizeSku(item.sku)).filter(Boolean));
+  if (!used.has(base)) return base;
+  for (let i = 2; i < 10000; i += 1) {
+    const candidate = `${base.slice(0, 36)}-${i}`;
+    if (!used.has(candidate)) return candidate;
+  }
+  return `YH-${Date.now()}`;
+}
+
+function validateProduct(input, current = {}, allProducts = []) {
   const name = cleanText(input.name, 90);
   const description = cleanText(input.description, 2000);
   const category = cleanText(input.category, 30).toLowerCase();
   const brand = cleanText(input.brand, 50);
   const productType = cleanText(input.productType, 50);
+  const requestedSku = normalizeSku(input.sku);
   const salePrice = Number(input.salePrice ?? input.price);
   const rentalRaw = input.rentalPrice;
   const rentalPrice = rentalRaw === '' || rentalRaw === null || rentalRaw === undefined ? null : Number(rentalRaw);
   const image = cleanText(input.image, 1000);
   const validCategories = ['elegant', 'sports', 'tech', 'cosplay', 'pets', 'details', 'collectibles'];
+  const sku = makeUniqueSku(requestedSku, { name, category }, allProducts, current.id || '');
   if (!name || !description || !validCategories.includes(category) || !Number.isFinite(salePrice) || salePrice < 0 || salePrice > 100000000) {
     return { error: 'Revisa nombre, descripción, categoría y precio de venta.' };
   }
@@ -157,7 +199,7 @@ function validateProduct(input, current = {}) {
   }
   const finalImages = images.length ? images : (current.images?.length ? current.images : (current.image ? [current.image] : []));
   return { product: {
-    ...current, name, description, category, brand, productType,
+    ...current, name, description, category, brand, productType, sku,
     salePrice: Math.round(salePrice * 100) / 100,
     rentalPrice: category === 'cosplay' ? Math.round(rentalPrice * 100) / 100 : null,
     price: Math.round(salePrice * 100) / 100,
@@ -178,7 +220,7 @@ function normalizeProduct(product) {
   const images = Array.isArray(product.images) && product.images.length
     ? product.images.filter(Boolean)
     : (product.image ? [product.image] : []);
-  return { ...product, image: product.image || images[0] || '', images };
+  return { ...product, sku: normalizeSku(product.sku) || makeUniqueSku('', product, [], product.id), image: product.image || images[0] || '', images };
 }
 
 app.get('/api/products', (_, res) => res.json(readProducts().map(normalizeProduct)));
@@ -232,9 +274,9 @@ app.post('/api/admin/upload', requireAdmin, upload.single('image'), (req, res) =
 });
 
 app.post('/api/admin/products', requireAdmin, (req, res) => {
-  const result = validateProduct(req.body);
-  if (result.error) return res.status(400).json(result);
   const products = readProducts();
+  const result = validateProduct(req.body, {}, products);
+  if (result.error) return res.status(400).json(result);
   const product = normalizeProduct({ ...result.product, id: crypto.randomUUID(), createdAt: new Date().toISOString() });
   products.unshift(product);
   writeProducts(products);
@@ -246,7 +288,7 @@ app.put('/api/admin/products/:id', requireAdmin, (req, res) => {
   const index = products.findIndex((product) => product.id === req.params.id);
   if (index < 0) return res.status(404).json({ error: 'Producto no encontrado.' });
   const previous = products[index];
-  const result = validateProduct(req.body, previous);
+  const result = validateProduct(req.body, previous, products);
   if (result.error) return res.status(400).json(result);
   products[index] = normalizeProduct({ ...result.product, id: previous.id, createdAt: previous.createdAt, updatedAt: new Date().toISOString() });
   const previousImages = Array.isArray(previous.images) ? previous.images : (previous.image ? [previous.image] : []);

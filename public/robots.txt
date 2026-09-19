@@ -1,4 +1,3 @@
 User-agent: *
 Allow: /
-
 Sitemap: https://yhors-store.onrender.com/sitemap.xml
