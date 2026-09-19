@@ -41,13 +41,33 @@ function categoryLinks(currentId = '') {
   return publicCategories.map(([key, label]) => `<a class="header-category ${currentId === key ? 'current' : ''}" href="${categoryHref(key)}" data-category-link="${key}">${escapeHTML(label)}</a>`).join('');
 }
 function renderHeader(currentCategory = '') {
-  return `<header class="site-header"><div class="bar">
-    <button class="mobile-menu-toggle" id="mobileMenuToggle" type="button" aria-label="Abrir menú" aria-controls="siteNav" aria-expanded="false"><span></span><span></span><span></span></button>
-    <a class="brand" href="/" aria-label="YHORS inicio">YHORS</a>
-    <nav class="nav" id="siteNav" aria-label="Categorías">${categoryLinks(currentCategory)}</nav>
-    <button class="cart-button" id="cartButton" aria-label="Abrir carrito"><span class="cart-icon" aria-hidden="true">🛒</span><span class="cart-label">Carrito</span><span class="count" id="cartCount">0</span></button>
-  </div></header>`;
+  return `<header class="site-header">
+    <div class="topbar"><div class="header-main">
+      <button class="mobile-menu-toggle" id="mobileMenuToggle" type="button" aria-label="Abrir menú" aria-controls="siteNav" aria-expanded="false"><span></span><span></span><span></span></button>
+      <a class="brand" href="/" aria-label="YHORS inicio"><span>YHORS</span><small>STORE</small></a>
+      <form class="search-form" id="siteSearch" role="search">
+        <input id="siteSearchInput" type="search" name="buscar" placeholder="Buscar productos, marcas o categorías" autocomplete="off">
+        <button type="submit" aria-label="Buscar">⌕</button>
+      </form>
+      <button class="cart-button" id="cartButton" aria-label="Abrir carrito"><span class="cart-icon" aria-hidden="true">🛒</span><span class="cart-label">Carrito</span><span class="count" id="cartCount">0</span></button>
+    </div></div>
+    <div class="nav-wrap"><nav class="nav" id="siteNav" aria-label="Categorías">${categoryLinks(currentCategory)}</nav></div>
+  </header>`;
 }
+function wireSearch() {
+  const form = document.querySelector('#siteSearch');
+  if (!form) return;
+  const input = form.querySelector('input');
+  const query = new URLSearchParams(location.search).get('buscar') || '';
+  input.value = query;
+  form.addEventListener('submit', event => {
+    event.preventDefault();
+    const value = input.value.trim();
+    history.pushState({}, '', value ? `/?buscar=${encodeURIComponent(value)}` : '/');
+    renderStore();
+  });
+}
+
 function wireMobileMenu() {
   const toggle = document.querySelector('#mobileMenuToggle');
   const nav = document.querySelector('#siteNav');
@@ -112,14 +132,21 @@ function categoryBlocks() {
 function productCard(product) {
   const image = productImages(product)[0];
   const meta = productMeta(product);
-  const rental = product.category === 'cosplay' && product.rentalPrice !== null && product.rentalPrice !== undefined && product.rentalPrice !== '' ? `<small class="price-secondary">Alquiler: ${money(product.rentalPrice)}</small>` : '';
-  return `<article class="product" data-product="${escapeHTML(product.id)}"><button class="product-open" data-open="${escapeHTML(product.id)}" aria-label="Ver ${escapeHTML(product.name)}"><div class="product-image"><img data-fallback src="${escapeHTML(image)}" alt="${escapeHTML(product.name)}" loading="lazy"></div><div class="product-info"><span class="product-category">${escapeHTML(categories[product.category] || product.category)}</span>${meta ? `<small class="product-meta">${escapeHTML(meta)}</small>` : ''}<h3>${escapeHTML(product.name)}</h3><p>${escapeHTML(product.description).replace(/\n/g, '<br>')}</p><span class="detail-link">Ver detalles <span>→</span></span></div></button><div class="product-bottom"><div><span class="price">${productPriceLabel(product)}</span>${rental}</div><button class="add" data-id="${escapeHTML(product.id)}"><span>Añadir</span><span>+</span></button></div></article>`;
+  const isCosplayRental = product.category === 'cosplay' && product.rentalPrice !== null && product.rentalPrice !== undefined && product.rentalPrice !== '';
+  const rental = isCosplayRental ? `<small class="price-secondary">Alquiler: ${money(product.rentalPrice)}</small>` : '';
+  const action = isCosplayRental ? `<button class="add cosplay-options" data-open-option="${escapeHTML(product.id)}"><span>Ver opciones</span><span>→</span></button>` : `<button class="add" data-id="${escapeHTML(product.id)}"><span>Añadir</span><span>+</span></button>`;
+  return `<article class="product" data-product="${escapeHTML(product.id)}"><button class="product-open" data-open="${escapeHTML(product.id)}" aria-label="Ver ${escapeHTML(product.name)}"><div class="product-image"><img data-fallback src="${escapeHTML(image)}" alt="${escapeHTML(product.name)}" loading="lazy"></div><div class="product-info"><span class="product-category">${escapeHTML(categories[product.category] || product.category)}</span>${meta ? `<small class="product-meta">${escapeHTML(meta)}</small>` : ''}<h3>${escapeHTML(product.name)}</h3><p>${escapeHTML(product.description).replace(/\n/g, '<br>')}</p><span class="detail-link">Ver detalles <span>→</span></span></div></button><div class="product-bottom"><div><span class="price">${productPriceLabel(product)}</span>${rental}</div>${action}</div></article>`;
 }
+
 function renderProductsInto(area, products, onOpen, onAdd) {
   area.innerHTML = products.length ? products.map(productCard).join('') : '<div class="empty">Aún no hay productos en esta colección.</div>';
   wireImageFallback(area);
   area.querySelectorAll('[data-open]').forEach(button => button.addEventListener('click', e => { e.preventDefault(); onOpen(button.dataset.open); }));
-  area.querySelectorAll('.add').forEach(button => button.addEventListener('click', e => { e.stopPropagation(); const product = products.find(item => item.id === button.dataset.id); if (product) onAdd(product, button); }));
+  area.querySelectorAll('.add').forEach(button => button.addEventListener('click', e => { e.stopPropagation();
+    const productId = button.dataset.openOption;
+    if (productId) { onOpen(productId); return; }
+    const product = products.find(item => item.id === button.dataset.id); if (product) onAdd(product, button);
+  }));
 }
 
 function wireCart(products, storefront) {
@@ -128,20 +155,25 @@ function wireCart(products, storefront) {
   const updateCartCount = () => { if (count) count.textContent = cart.reduce((sum, line) => sum + Number(line.quantity || 0), 0); };
   const drawCart = () => {
     if (!area) return;
-    area.innerHTML = cart.length ? cart.map(line => `<div class="cart-item"><img data-fallback src="${escapeHTML(productImages(line)[0])}" alt=""><div class="cart-item-main"><h4>${escapeHTML(line.name)}</h4><p class="cart-line-price">${money(line.price)}</p><div class="quantity-control"><button type="button" data-qty="${escapeHTML(line.id)}" data-change="-1">−</button><input type="number" min="1" value="${Number(line.quantity) || 1}" data-input="${escapeHTML(line.id)}"><button type="button" data-qty="${escapeHTML(line.id)}" data-change="1">+</button></div></div><button class="remove" data-remove="${escapeHTML(line.id)}">Quitar</button></div>`).join('') : '<div class="empty cart-empty">Tu carrito está vacío.<br><small>Agrega algo que te guste.</small></div>';
+    area.innerHTML = cart.length ? cart.map(line => `<div class="cart-item"><img data-fallback src="${escapeHTML(productImages(line)[0])}" alt=""><div class="cart-item-main"><h4>${escapeHTML(line.name)}</h4>${line.purchaseMode ? `<span class="cart-mode">${line.purchaseMode === 'rental' ? 'Alquiler' : 'Compra'}</span>` : ''}<p class="cart-line-price">${money(line.price)}</p><div class="quantity-control"><button type="button" data-qty="${escapeHTML(line.id)}" data-change="-1">−</button><input type="number" min="1" value="${Number(line.quantity) || 1}" data-input="${escapeHTML(line.id)}"><button type="button" data-qty="${escapeHTML(line.id)}" data-change="1">+</button></div></div><button class="remove" data-remove="${escapeHTML(line.id)}">Quitar</button></div>`).join('') : '<div class="empty cart-empty">Tu carrito está vacío.<br><small>Agrega algo que te guste.</small></div>';
     const total = cart.reduce((sum, line) => sum + Number(line.price) * Number(line.quantity), 0); document.querySelector('#cartTotal').textContent = money(total); wireImageFallback(area);
     area.querySelectorAll('[data-qty]').forEach(btn => btn.addEventListener('click', () => { const line = cart.find(item => item.id === btn.dataset.qty); if (!line) return; line.quantity = Math.max(1, Number(line.quantity) + Number(btn.dataset.change)); setCart(cart); updateCartCount(); drawCart(); }));
     area.querySelectorAll('[data-input]').forEach(input => input.addEventListener('change', () => { const line = cart.find(item => item.id === input.dataset.input); if (!line) return; line.quantity = Math.max(1, parseInt(input.value || '1', 10)); setCart(cart); updateCartCount(); drawCart(); }));
     area.querySelectorAll('[data-remove]').forEach(btn => btn.addEventListener('click', () => { cart = cart.filter(line => line.id !== btn.dataset.remove); setCart(cart); updateCartCount(); drawCart(); }));
   };
-  const addToCart = (product, button) => {
-    const existing = cart.find(item => item.id === product.id); if (existing) existing.quantity += 1; else cart.push({ ...product, quantity: 1 }); setCart(cart); updateCartCount(); drawCart();
+  const addToCart = (product, button, purchaseMode = 'purchase') => {
+    const price = purchaseMode === 'rental' ? Number(product.rentalPrice) : (product.category === 'cosplay' && Number.isFinite(Number(product.salePrice)) ? Number(product.salePrice) : Number(product.price));
+    const cartKey = `${product.id}::${purchaseMode}`;
+    const existing = cart.find(item => (item.cartKey || item.id) === cartKey);
+    if (existing) existing.quantity += 1;
+    else cart.push({ ...product, id: cartKey, productId: product.id, price, purchaseMode, quantity: 1 });
+    setCart(cart); updateCartCount(); drawCart();
     button.disabled = true; const original = button.innerHTML; button.innerHTML = '<span class="spinner"></span><span>Añadiendo</span>'; setTimeout(() => { button.innerHTML = '<span class="check">✓</span><span>Añadido</span>'; button.classList.add('added'); setTimeout(() => { button.innerHTML = original; button.classList.remove('added'); button.disabled = false; }, 850); }, 420);
   };
   const openCart = () => { document.querySelector('#drawer')?.classList.add('open'); document.querySelector('#backdrop')?.classList.add('show'); document.body.classList.add('no-scroll'); };
   const closeCart = () => { document.querySelector('#drawer')?.classList.remove('open'); document.querySelector('#backdrop')?.classList.remove('show'); document.body.classList.remove('no-scroll'); };
   document.querySelector('#cartButton')?.addEventListener('click', openCart); document.querySelector('#closeCart')?.addEventListener('click', closeCart); document.querySelector('#backdrop')?.addEventListener('click', closeCart);
-  document.querySelector('#checkout')?.addEventListener('click', () => { const message = document.querySelector('#checkoutMessage'); if (!cart.length) { message.textContent = 'Agrega al menos un producto para continuar.'; return; } const details = cart.map(line => `• ${line.quantity} × ${line.name} — ${money(line.price * line.quantity)}`).join('\n'); const total = cart.reduce((sum, line) => sum + line.price * line.quantity, 0); const text = `Hola, quiero hacer este pedido de YHORS:\n${details}\n\nTotal: ${money(total)}`; if (storefront.whatsappNumber) window.open(`https://wa.me/${storefront.whatsappNumber}?text=${encodeURIComponent(text)}`, '_blank', 'noopener'); else { navigator.clipboard?.writeText(text); message.textContent = 'El resumen del pedido se copió. Configura WHATSAPP_NUMBER en .env para recibir pedidos por WhatsApp.'; } });
+  document.querySelector('#checkout')?.addEventListener('click', () => { const message = document.querySelector('#checkoutMessage'); if (!cart.length) { message.textContent = 'Agrega al menos un producto para continuar.'; return; } const details = cart.map(line => `• ${line.quantity} × ${line.name}${line.purchaseMode ? ` — ${line.purchaseMode === 'rental' ? 'Alquiler' : 'Compra'}` : ''} — ${money(line.price * line.quantity)}`).join('\n'); const total = cart.reduce((sum, line) => sum + line.price * line.quantity, 0); const text = `Hola, quiero hacer este pedido de YHORS:\n${details}\n\nTotal: ${money(total)}`; if (storefront.whatsappNumber) window.open(`https://wa.me/${storefront.whatsappNumber}?text=${encodeURIComponent(text)}`, '_blank', 'noopener'); else { navigator.clipboard?.writeText(text); message.textContent = 'El resumen del pedido se copió. Configura WHATSAPP_NUMBER en .env para recibir pedidos por WhatsApp.'; } });
   updateCartCount(); drawCart(); return { addToCart, openCart, closeCart };
 }
 
@@ -158,23 +190,147 @@ function productMeta(product) {
   if (product.productType) parts.push(product.productType);
   return parts.join(' · ');
 }
+function normalizeSearch(value = '') {
+  return String(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+}
+function productMatchesQuery(product, query) {
+  const terms = normalizeSearch(query).split(/\s+/).filter(Boolean);
+  if (!terms.length) return true;
+  const haystack = normalizeSearch([
+    product.name, product.brand, product.productType, categories[product.category], product.category,
+    product.description, product.heroTitle, product.heroDescription
+  ].filter(Boolean).join(' '));
+  return terms.every(term => haystack.includes(term));
+}
+function allClassificationValues(classifications = {}, key, category = null) {
+  const source = category && category !== 'all'
+    ? (classifications[key]?.[category] || [])
+    : Object.values(classifications[key] || {}).flat();
+  return [...new Set(source.filter(Boolean))].sort((a,b) => a.localeCompare(b, 'es', { sensitivity: 'base' }));
+}
+function catalogFilters(classifications = {}, currentCategory = 'all', active = {}) {
+  const scoped = currentCategory && currentCategory !== 'all';
+  const brands = allClassificationValues(classifications, 'brands', currentCategory);
+  const types = allClassificationValues(classifications, 'productTypes', currentCategory);
+  const categoriesHtml = publicCategories
+    .map(([key, label]) => `<label class="filter-check"><input type="checkbox" data-filter-category value="${escapeHTML(key)}" ${active.category === key ? 'checked' : ''}><span>${escapeHTML(label)}</span></label>`)
+    .join('');
+  const brandsHtml = brands.map(value => `<label class="filter-check"><input type="checkbox" data-filter-brand value="${escapeHTML(value)}" ${active.brand === value ? 'checked' : ''}><span>${escapeHTML(value)}</span></label>`).join('');
+  const typesHtml = types.map(value => `<label class="filter-check"><input type="checkbox" data-filter-type value="${escapeHTML(value)}" ${active.type === value ? 'checked' : ''}><span>${escapeHTML(value)}</span></label>`).join('');
+  const categoriesBlock = scoped ? '' : `
+    <div class="filter-accordion">
+      <button type="button" class="filter-title" aria-expanded="false"><span>Categorías</span><span>⌄</span></button>
+      <div class="filter-options">${categoriesHtml}</div>
+    </div>`;
+  const brandsBlock = brands.length ? `
+    <div class="filter-accordion">
+      <button type="button" class="filter-title" aria-expanded="false"><span>Marcas</span><span>⌄</span></button>
+      <div class="filter-options">${brandsHtml}</div>
+    </div>` : '';
+  const typesBlock = types.length ? `
+    <div class="filter-accordion">
+      <button type="button" class="filter-title" aria-expanded="false"><span>Tipo de producto</span><span>⌄</span></button>
+      <div class="filter-options">${typesHtml}</div>
+    </div>` : '';
+  const contextLabel = scoped ? `Filtros de ${escapeHTML(categories[currentCategory] || currentCategory)}` : 'Filtros del catálogo';
+  return `<aside class="catalog-sidebar" aria-label="${contextLabel}">
+    <button type="button" class="mobile-filter-toggle" aria-expanded="false"><span>Filtros</span><span class="mobile-filter-count">Abrir opciones</span><span class="mobile-filter-chevron">⌄</span></button>
+    <div class="sidebar-head">
+      <div><span class="eyebrow">Filtrar</span><h2>${scoped ? escapeHTML(categories[currentCategory]) : 'Encuentra lo tuyo'}</h2></div>
+      <button type="button" class="clear-filters" id="clearCatalogFilters">Restablecer</button>
+    </div>
+    ${categoriesBlock}${brandsBlock}${typesBlock}
+  </aside>`;
+}
+function applyCatalogFilters(products, active = {}) {
+  return products.filter(product =>
+    (!active.category || active.category === 'all' || product.category === active.category) &&
+    (!active.brand || product.brand === active.brand) &&
+    (!active.type || product.productType === active.type) &&
+    (!active.minPrice || Number(productPriceLabel(product).replace(/[^0-9.,-]/g, '').replace(',', '.')) >= Number(active.minPrice)) &&
+    (!active.maxPrice || Number(productPriceLabel(product).replace(/[^0-9.,-]/g, '').replace(',', '.')) <= Number(active.maxPrice))
+  );
+}
+function wireCatalogFilters(products, classifications, initial = {}, renderResults) {
+  const sidebar = document.querySelector('.catalog-sidebar');
+  if (!sidebar) return;
+  const active = { ...initial };
+  const categoryControl = sidebar.querySelector('[data-filter-category]');
+  const contextualCategory = initial.category || '';
+  const draw = () => {
+    // En páginas de una categoría, la categoría queda fija aunque se limpien los filtros.
+    active.category = categoryControl
+      ? (sidebar.querySelector('[data-filter-category]:checked')?.value || '')
+      : contextualCategory;
+    active.brand = sidebar.querySelector('[data-filter-brand]:checked')?.value || '';
+    active.type = sidebar.querySelector('[data-filter-type]:checked')?.value || '';
+    const selectedCount = [categoryControl ? active.category : '', active.brand, active.type].filter(Boolean).filter(value => value !== contextualCategory).length;
+    const mobileLabel = sidebar.querySelector('.mobile-filter-count');
+    if (mobileLabel && !sidebar.classList.contains('mobile-open')) mobileLabel.textContent = selectedCount ? `${selectedCount} filtro${selectedCount === 1 ? '' : 's'} activo${selectedCount === 1 ? '' : 's'}` : 'Abrir opciones';
+    renderResults(applyCatalogFilters(products, active), active);
+  };
+  sidebar.querySelectorAll('[data-filter-category],[data-filter-brand],[data-filter-type]').forEach(input => input.addEventListener('change', () => {
+    const group = input.dataset.filterCategory !== undefined ? 'category' : input.dataset.filterBrand !== undefined ? 'brand' : 'type';
+    sidebar.querySelectorAll(`input[data-filter-${group}]`).forEach(item => { if (item !== input) item.checked = false; });
+    draw();
+  }));
+  sidebar.querySelectorAll('.filter-title').forEach(button => button.addEventListener('click', () => {
+    const box = button.parentElement;
+    const open = box.classList.toggle('open');
+    button.setAttribute('aria-expanded', String(open));
+  }));
+  sidebar.querySelector('.mobile-filter-toggle')?.addEventListener('click', () => {
+    const open = sidebar.classList.toggle('mobile-open');
+    const toggle = sidebar.querySelector('.mobile-filter-toggle');
+    toggle?.setAttribute('aria-expanded', String(open));
+    const label = toggle?.querySelector('.mobile-filter-count');
+    if (label) label.textContent = open ? 'Cerrar opciones' : 'Abrir opciones';
+  });
+  sidebar.querySelector('#clearCatalogFilters')?.addEventListener('click', () => {
+    sidebar.querySelectorAll('input[data-filter-brand], input[data-filter-type]').forEach(input => input.checked = false);
+    if (categoryControl) sidebar.querySelectorAll('input[data-filter-category]').forEach(input => input.checked = false);
+    draw();
+    sidebar.querySelectorAll('.filter-accordion.open').forEach(box => {
+      box.classList.remove('open');
+      box.querySelector('.filter-title')?.setAttribute('aria-expanded', 'false');
+    });
+    sidebar.classList.remove('mobile-open');
+    sidebar.querySelector('.mobile-filter-toggle')?.setAttribute('aria-expanded', 'false');
+    const mobileLabel = sidebar.querySelector('.mobile-filter-count');
+    if (mobileLabel) mobileLabel.textContent = 'Abrir opciones';
+  });
+  draw();
+}
 function openProduct(id, products) { if (!getProduct(id, products)) return; history.pushState({ product: id }, '', `?producto=${encodeURIComponent(id)}`); renderStore(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
 
 async function renderHome() {
   let products = [], storefront = { heroProductIds: [], featuredProductIds: [], whatsappNumber: '' }, classifications = {};
   try { ({ products, storefront, classifications } = await loadStoreData()); } catch { /* empty state */ }
+  const searchTerm = (new URLSearchParams(location.search).get('buscar') || '').trim().toLowerCase();
   const heroIds = storefront.heroProductIds || []; const featuredIds = storefront.featuredProductIds || [];
   const byIds = ids => ids.map(id => getProduct(id, products)).filter(Boolean);
-  const heroProducts = byIds(heroIds).sort((a, b) => (Number(a.heroOrder) || 0) - (Number(b.heroOrder) || 0)); const featured = byIds(featuredIds);
+  const heroProducts = byIds(heroIds).sort((a, b) => (Number(a.heroOrder) || 0) - (Number(b.heroOrder) || 0));
+  const featured = byIds(featuredIds);
   const heroSource = heroProducts.length ? heroProducts : (featured.length ? featured : products.slice(0, 4));
   const heroSlides = heroSource.map((product, index) => ({ ...product, image: productImages(product)[0], heroTitle: product.heroTitle || (index === 0 && !heroProducts.length ? 'PIEZAS QUE\nCUENTAN TU HISTORIA' : product.name), heroDescription: product.heroDescription || product.description }));
-  app.innerHTML = `${renderHeader('all')}<main>${heroMarkup(heroSlides)}
-    <section class="section featured-section" id="destacados"><div class="section-heading"><div><span class="eyebrow">Selección YHORS</span><h2>Productos destacados</h2></div><p>Elegidos especialmente desde administración.</p></div><div class="products" id="featuredProducts"></div></section>
-    ${categoryBlocks()}
+  const matchesSearch = product => {
+    const haystack = [product.name, product.brand, product.productType, categories[product.category], product.description].filter(Boolean).join(' ').toLowerCase();
+    return haystack.includes(searchTerm);
+  };
+  const searchResults = searchTerm ? products.filter(matchesSearch) : [];
+  const visibleFeatured = searchTerm ? searchResults : featured;
+  const featuredTitle = searchTerm ? `Resultados para “${escapeHTML(searchTerm)}”` : 'Selección YHORS';
+  const featuredText = searchTerm ? `${searchResults.length} producto(s) encontrado(s) en nuestro catálogo.` : 'Tecnología, detalles y piezas elegidas para destacar.';
+  const searchCatalog = searchTerm ? `<section class="catalog-shell section search-only" id="destacados"><div class="search-results-heading"><div><span class="eyebrow">Búsqueda YHORS</span><h1>Resultados para “${escapeHTML(searchTerm)}”</h1></div><p>Explora los productos relacionados con tu búsqueda.</p></div><div class="catalog-results"><div class="results-count" id="resultsCount"></div><div class="products" id="featuredProducts"></div></div></section>` : `<section class="section featured-section" id="destacados"><div class="section-heading"><div><span class="eyebrow">Edición YHORS</span><h2>Selección YHORS</h2></div><p>Tecnología, detalles y piezas elegidas para destacar.</p></div><div class="products" id="featuredProducts"></div></section>`;
+  app.innerHTML = `${renderHeader('all')}<main>
+    ${searchTerm ? '' : `<section class="promo-ribbon" aria-label="Beneficios YHORS"><div class="promo-item"><span>01</span><strong>DISEÑO CON IDENTIDAD</strong><small>Una tienda pensada alrededor de YHORS.</small></div><div class="promo-item"><span>02</span><strong>SELECCIÓN CURADA</strong><small>Productos elegidos por estilo y utilidad.</small></div><div class="promo-item"><span>03</span><strong>ATENCIÓN DIRECTA</strong><small>Pedidos y consultas de forma personal.</small></div></section>${heroMarkup(heroSlides)}`}
+    ${searchCatalog}
+    ${!searchTerm ? `<section class="statement-strip"><div><span class="eyebrow">YHORS-STORE</span><h2>Elegancia que también se encuentra en los detalles.</h2></div><a class="button" href="#categorias">Explorar universos <span>→</span></a></section>${categoryBlocks()}` : ''}
     <section class="brand-section" id="nosotros"><div class="brand-section-inner"><span class="eyebrow">Sobre nosotros</span><h2>YHORS<br><em>más que un producto</em></h2><p>Un catálogo dividido por universos para que cada persona encuentre algo que conecte con su estilo, sus pasiones y sus momentos especiales.</p></div></section>
   </main>${renderFooter()}${cartMarkup()}</div>`;
-  wireMobileMenu(); wireHero(heroSlides); const cart = wireCart(products, storefront); const featuredArea = document.querySelector('#featuredProducts'); renderProductsInto(featuredArea, featured, id => openProduct(id, products), (product, button) => cart.addToCart(product, button));
-  if (!featured.length) featuredArea.innerHTML = '<div class="empty featured-empty">Todavía no has seleccionado productos destacados.<br><small>Entra a YHORS Administración y marca los productos que quieres mostrar aquí.</small></div>';
+  wireMobileMenu(); wireSearch(); wireHero(heroSlides); const cart = wireCart(products, storefront); const featuredArea = document.querySelector('#featuredProducts');
+  const renderSearchResults = (items) => { renderProductsInto(featuredArea, items, id => openProduct(id, products), (product, button) => cart.addToCart(product, button)); const count = document.querySelector('#resultsCount'); if (count) count.textContent = `${items.length} producto${items.length === 1 ? '' : 's'} encontrado${items.length === 1 ? '' : 's'}`; if (!items.length) featuredArea.innerHTML = '<div class="empty featured-empty">No encontramos productos con esa búsqueda.<br><small>Prueba con otra marca, categoría o nombre.</small></div>'; };
+  if (searchTerm) { renderSearchResults(searchResults); } else { renderProductsInto(featuredArea, visibleFeatured, id => openProduct(id, products), (product, button) => cart.addToCart(product, button)); if (!visibleFeatured.length) featuredArea.innerHTML = '<div class="empty featured-empty">Todavía no has seleccionado productos destacados.<br><small>Entra a YHORS Administración y marca los productos que quieres mostrar aquí.</small></div>'; }
 }
 
 async function renderCategoryPage(categoryKey) {
@@ -182,19 +338,20 @@ async function renderCategoryPage(categoryKey) {
   try { ({ products, storefront, classifications } = await loadStoreData()); } catch { /* empty */ }
   const categoryProducts = products.filter(product => categoryKey === 'all' || product.category === categoryKey);
   const slides = categoryProducts.slice(0, 4).map(product => ({ ...product, image: productImages(product)[0], heroTitle: product.name, heroDescription: product.description }));
-  const techBrands = classifications.brands?.[categoryKey] || []; const techTypes = classifications.productTypes?.[categoryKey] || [];
-  const filters = categoryKey !== 'all' && (techBrands.length || techTypes.length) ? `<div class="catalog-filters"><select id="brandFilter"><option value="">Todas las marcas</option>${techBrands.map(v => `<option value="${escapeHTML(v)}">${escapeHTML(v)}</option>`).join('')}</select><select id="typeFilter"><option value="">Todos los tipos</option>${techTypes.map(v => `<option value="${escapeHTML(v)}">${escapeHTML(v)}</option>`).join('')}</select></div>` : '';
-  app.innerHTML = `${renderHeader(categoryKey)}<main>${heroMarkup(slides, true, categoryKey)}<section class="section category-page-section" id="productos-categoria"><div class="category-intro"><span class="eyebrow">Colección independiente</span><h1>${escapeHTML(categories[categoryKey])}</h1><p>${escapeHTML(categoryDescriptions[categoryKey])}</p></div>${filters}<div class="products" id="categoryProducts"></div></section></main>${renderFooter()}${cartMarkup()}`;
-  wireMobileMenu(); wireHero(slides); const cart = wireCart(products, storefront); const area = document.querySelector('#categoryProducts');
-  const drawFiltered = () => { const brand = document.querySelector('#brandFilter')?.value || ''; const type = document.querySelector('#typeFilter')?.value || ''; renderProductsInto(area, categoryProducts.filter(p => (!brand || p.brand === brand) && (!type || p.productType === type)), id => openProduct(id, products), (product, button) => cart.addToCart(product, button)); };
-  document.querySelector('#brandFilter')?.addEventListener('change', drawFiltered); document.querySelector('#typeFilter')?.addEventListener('change', drawFiltered); drawFiltered();
+  app.innerHTML = `${renderHeader(categoryKey)}<main>${heroMarkup(slides, true, categoryKey)}<section class="section category-page-section" id="productos-categoria"><div class="category-intro"><div><span class="eyebrow">Colección independiente</span><h1>${escapeHTML(categories[categoryKey])}</h1></div><p>${escapeHTML(categoryDescriptions[categoryKey])}</p></div><div class="catalog-layout">${catalogFilters(classifications, categoryKey, { category: categoryKey })}<div class="catalog-results"><div class="results-count" id="resultsCount"></div><div class="products" id="categoryProducts"></div></div></div></section></main>${renderFooter()}${cartMarkup()}`;
+  wireMobileMenu(); wireSearch(); wireHero(slides); const cart = wireCart(products, storefront); const area = document.querySelector('#categoryProducts');
+  const renderCategoryResults = (items) => { renderProductsInto(area, items, id => openProduct(id, products), (product, button) => cart.addToCart(product, button)); const count = document.querySelector('#resultsCount'); if (count) count.textContent = `${items.length} producto${items.length === 1 ? '' : 's'} en ${escapeHTML(categories[categoryKey])}`; if (!items.length) area.innerHTML = '<div class="empty">No hay productos que coincidan con estos filtros.</div>'; };
+  wireCatalogFilters(categoryProducts, classifications, { category: categoryKey }, renderCategoryResults);
 }
 
 async function renderProductDetail(product, products, storefront) {
-  const images = productImages(product); let selected = 0;
-  app.innerHTML = `${renderHeader(product.category)}<main class="product-detail-page"><div class="breadcrumbs"><a href="${categoryHref(product.category)}">${escapeHTML(categories[product.category])}</a><span>/</span><strong>${escapeHTML(product.name)}</strong></div><section class="detail-layout"><div class="detail-gallery"><div class="detail-main-image"><img id="detailMainImage" data-fallback src="${escapeHTML(images[0])}" alt="${escapeHTML(product.name)}"></div>${images.length > 1 ? `<div class="thumbnail-row">${images.map((image, index) => `<button class="thumb ${index === 0 ? 'active' : ''}" data-image-index="${index}"><img data-fallback src="${escapeHTML(image)}" alt="Imagen ${index + 1}"></button>`).join('')}</div>` : ''}</div><div class="detail-copy"><span class="eyebrow">${escapeHTML(categories[product.category])}</span><h1>${escapeHTML(product.name)}</h1><div class="detail-price">${productPriceLabel(product)}${product.category === "cosplay" && product.rentalPrice !== null && product.rentalPrice !== undefined && product.rentalPrice !== "" ? `<small class="price-secondary">Alquiler: ${money(product.rentalPrice)}</small>` : ""}</div><div class="detail-divider"></div><h3>Descripción</h3><div class="detail-description">${escapeHTML(product.description).replace(/\n/g, '<br>')}</div><div class="detail-buy"><button class="add detail-add" id="detailAdd"><span>Añadir al carrito</span><span>+</span></button><a class="button secondary back-button" href="${categoryHref(product.category)}">← Volver a ${escapeHTML(categories[product.category])}</a></div><div class="detail-note"><span>✓</span> Compra directa y atención personal.</div></div></section></main>${renderFooter()}${cartMarkup()}`;
+  const images = productImages(product); let selected = 0; const isCosplay = product.category === 'cosplay'; const hasRental = isCosplay && Number.isFinite(Number(product.rentalPrice));
+  const modeOptions = hasRental ? `<div class="purchase-choice"><span class="choice-label">¿Cómo quieres obtenerlo?</span><div class="purchase-options" role="radiogroup" aria-label="Modalidad"><button type="button" class="purchase-option active" data-purchase-mode="purchase"><strong>Comprar</strong><span>${productPriceLabel(product)}</span></button><button type="button" class="purchase-option" data-purchase-mode="rental"><strong>Alquilar</strong><span>${money(product.rentalPrice)}</span></button></div></div>` : '';
+  app.innerHTML = `${renderHeader(product.category)}<main class="product-detail-page"><div class="breadcrumbs"><a href="${categoryHref(product.category)}">${escapeHTML(categories[product.category])}</a><span>/</span><strong>${escapeHTML(product.name)}</strong></div><section class="detail-layout"><div class="detail-gallery"><div class="detail-main-image"><img id="detailMainImage" data-fallback src="${escapeHTML(images[0])}" alt="${escapeHTML(product.name)}"></div>${images.length > 1 ? `<div class="thumbnail-row">${images.map((image, index) => `<button class="thumb ${index === 0 ? 'active' : ''}" data-image-index="${index}"><img data-fallback src="${escapeHTML(image)}" alt="Imagen ${index + 1}"></button>`).join('')}</div>` : ''}</div><div class="detail-copy"><span class="eyebrow">${escapeHTML(categories[product.category])}</span><h1>${escapeHTML(product.name)}</h1><div class="detail-price" id="detailPrice">${productPriceLabel(product)}${hasRental ? `<small class="price-secondary">Alquiler: ${money(product.rentalPrice)}</small>` : ''}</div><div class="detail-divider"></div>${modeOptions}<h3>Descripción</h3><div class="detail-description">${escapeHTML(product.description).replace(/\n/g, '<br>')}</div><div class="detail-buy"><button class="add detail-add" id="detailAdd"><span>${hasRental ? 'Añadir al carrito' : 'Añadir al carrito'}</span><span>+</span></button><a class="button secondary back-button" href="${categoryHref(product.category)}">← Volver a ${escapeHTML(categories[product.category])}</a></div><div class="detail-note"><span>✓</span>${hasRental ? 'Elige comprar o alquilar antes de añadirlo al carrito.' : 'Compra directa y atención personal.'}</div></div></section></main>${renderFooter()}${cartMarkup()}`;
   wireMobileMenu(); wireImageFallback(document.querySelector('.product-detail-page')); document.querySelectorAll('[data-image-index]').forEach(button => button.addEventListener('click', () => { selected = Number(button.dataset.imageIndex); document.querySelector('#detailMainImage').src = images[selected]; document.querySelectorAll('.thumb').forEach(item => item.classList.remove('active')); button.classList.add('active'); }));
-  const cart = wireCart(products, storefront); document.querySelector('#detailAdd').addEventListener('click', e => cart.addToCart(product, e.currentTarget));
+  const cart = wireCart(products, storefront); let purchaseMode = 'purchase';
+  document.querySelectorAll('[data-purchase-mode]').forEach(button => button.addEventListener('click', () => { purchaseMode = button.dataset.purchaseMode; document.querySelectorAll('[data-purchase-mode]').forEach(item => item.classList.toggle('active', item === button)); document.querySelector('#detailPrice').firstChild.textContent = purchaseMode === 'rental' ? money(product.rentalPrice) : productPriceLabel(product); }));
+  document.querySelector('#detailAdd').addEventListener('click', e => cart.addToCart(product, e.currentTarget, hasRental ? purchaseMode : 'purchase'));
 }
 
 async function renderStore() {

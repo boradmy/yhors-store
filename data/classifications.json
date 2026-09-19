@@ -8,9 +8,7 @@
     ],
     "elegant": [],
     "sports": [],
-    "cosplay": [
-      "Doki Doki"
-    ],
+    "cosplay": [],
     "pets": [],
     "details": [],
     "collectibles": []
@@ -29,7 +27,10 @@
       "Sexy"
     ],
     "pets": [],
-    "details": [],
+    "details": [
+      "Ramo",
+      "Caja"
+    ],
     "collectibles": []
   }
 }

@@ -491,3 +491,408 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}.brand{letter-sp
 @media(max-width:760px){.classification-grid{grid-template-columns:1fr}.classification-add{grid-template-columns:1fr}.admin-category-heading{align-items:center}}
 .catalog-filters{display:flex;flex-wrap:wrap;gap:10px;margin:0 0 26px}
 .catalog-filters select{border:1px solid var(--line);border-radius:999px;padding:10px 14px;background:#fff;color:var(--ink);min-width:170px}
+
+/* YHORS STORE · nueva fachada premium inspirada en e-commerce, sin replicar otros sitios */
+.site-header{background:rgba(17,16,15,.97);border-bottom:1px solid rgba(210,176,113,.22);box-shadow:0 8px 30px rgba(0,0,0,.16)}
+.topbar{border-bottom:1px solid rgba(255,255,255,.07)}
+.header-main{max-width:1440px;margin:auto;min-height:78px;padding:0 28px;display:grid;grid-template-columns:auto minmax(320px,1fr) auto;align-items:center;gap:34px}
+.site-header .brand{display:flex;align-items:baseline;gap:7px;color:#fff;font-size:1.5rem;letter-spacing:.32em;line-height:1;white-space:nowrap}
+.site-header .brand small{font-size:.48rem;letter-spacing:.24em;color:var(--gold-light);font-weight:700}
+.search-form{height:44px;display:flex;align-items:stretch;max-width:760px;width:100%;justify-self:center;border:1px solid rgba(210,176,113,.42);background:#fff;border-radius:3px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,.12)}
+.search-form input{min-width:0;flex:1;border:0;outline:0;padding:0 17px;color:#171513;background:#fff;font-size:.83rem}
+.search-form input::placeholder{color:#817a70}
+.search-form button{width:54px;border:0;background:var(--gold);color:#171513;font-size:1.5rem;font-weight:800;line-height:1;transition:.2s}
+.search-form button:hover{background:#d5b16e}
+.nav-wrap{max-width:1440px;margin:auto;min-height:48px;display:flex;align-items:center;justify-content:center}
+.nav-wrap .nav{width:100%;justify-content:center;flex:initial}
+.header-category{padding:16px 18px!important;font-size:.72rem!important;letter-spacing:.07em;text-transform:uppercase}
+.header-category:after{bottom:7px!important;left:18px!important;right:18px!important}
+.cart-button{font-size:.8rem!important;white-space:nowrap}
+
+.promo-ribbon{max-width:1440px;margin:0 auto;padding:0 28px;display:grid;grid-template-columns:repeat(3,1fr);background:#f8f5ef;border-bottom:1px solid #e2d8c8}
+.promo-item{min-height:74px;display:grid;grid-template-columns:42px 1fr;grid-template-rows:auto auto;column-gap:11px;align-content:center;border-right:1px solid #e2d8c8;padding:10px 24px}
+.promo-item:first-child{padding-left:4px}.promo-item:last-child{border-right:0}
+.promo-item span{grid-row:1/3;color:var(--gold);font-family:Georgia,serif;font-size:1.35rem;font-style:italic}
+.promo-item strong{font-size:.66rem;letter-spacing:.12em;color:#171513}.promo-item small{font-size:.67rem;color:#7b746b;margin-top:3px}
+
+.hero-slider{height:min(650px,calc(100vh - 130px));min-height:520px;background:#0f0e0d}
+.hero-bg{padding:22px 5vw 22px 32%;object-fit:contain;object-position:center right}
+.hero-overlay{background:linear-gradient(90deg,rgba(8,7,6,.88) 0%,rgba(8,7,6,.62) 32%,rgba(8,7,6,.12) 72%),linear-gradient(0deg,rgba(8,7,6,.58),transparent 42%,rgba(8,7,6,.12))}
+.hero-content{max-width:600px}
+.hero h1{font-size:clamp(3rem,5.5vw,6rem);text-shadow:0 5px 28px rgba(0,0,0,.2)}
+.hero-button{background:#fff;color:#171513;border-color:#fff}
+.hero-button:hover{background:var(--gold-light);border-color:var(--gold-light)}
+
+.featured-section{background:#fff;padding-top:68px}
+.section-heading h2{font-family:Georgia,"Times New Roman",serif;font-weight:400}
+.product{border-radius:2px;border-color:#e4ddd2;box-shadow:0 5px 20px rgba(24,20,15,.045)}
+.product-image{aspect-ratio:4/5;background:#f3f0ea}
+.product-image img{object-fit:contain;padding:14px}
+.product:hover .product-image img{transform:scale(1.025)}
+.product h3{font-size:.92rem;font-weight:750}
+.add{border-radius:2px}
+
+.statement-strip{max-width:1220px;margin:20px auto 0;padding:38px 26px 58px;display:flex;align-items:center;justify-content:space-between;gap:30px;border-top:1px solid #ded7cc}
+.statement-strip h2{font-family:Georgia,"Times New Roman",serif;font-weight:400;font-size:clamp(1.7rem,3vw,2.7rem);max-width:700px;margin:10px 0 0;line-height:1.08}
+.statement-strip .button{background:#171513;color:#fff;border-color:#171513}
+.statement-strip .button:hover{background:var(--gold);border-color:var(--gold);color:#171513}
+
+/* Evita deformar fotos verticales: se muestran completas y el fondo aporta profundidad. */
+.hero-slide .hero-bg{object-fit:contain}
+
+@media(max-width:900px){
+  .header-main{padding:0 18px;gap:18px;grid-template-columns:auto 1fr auto}
+  .search-form{max-width:none}
+  .nav-wrap{padding:0 10px}
+  .header-category{padding-left:11px!important;padding-right:11px!important}
+  .header-category:after{left:11px!important;right:11px!important}
+  .promo-ribbon{padding:0 18px}
+  .promo-item{padding:10px 13px}
+}
+@media(max-width:760px){
+  .topbar{border-bottom:0}
+  .header-main{min-height:64px;height:64px;padding:0 14px;grid-template-columns:auto auto 1fr auto;gap:10px}
+  .site-header .brand{font-size:.98rem;letter-spacing:.25em}
+  .site-header .brand small{font-size:.39rem}
+  .search-form{grid-column:3;height:38px}
+  .search-form input{font-size:.7rem;padding:0 10px}
+  .search-form button{width:42px;font-size:1.25rem}
+  .nav-wrap{min-height:0;padding:0}
+  .site-header .nav{position:absolute;top:64px;left:0;right:0}
+  .site-header .nav.mobile-open{display:flex!important}
+  .site-header .mobile-menu-toggle{display:flex!important}
+  .cart-label{display:none}
+  .promo-ribbon{grid-template-columns:1fr 1fr 1fr;padding:0}
+  .promo-item{min-height:68px;padding:9px 8px;grid-template-columns:1fr;display:block;text-align:center;border-right:1px solid #e2d8c8}
+  .promo-item span{display:block;font-size:.75rem;margin-bottom:3px}
+  .promo-item strong{display:block;font-size:.53rem;line-height:1.2}
+  .promo-item small{display:none}
+  .hero-slider{height:500px;min-height:500px}
+  .hero-bg{padding:10px 14% 90px;object-position:center center;filter:drop-shadow(0 16px 25px rgba(0,0,0,.28))}
+  .hero-overlay{background:linear-gradient(0deg,rgba(8,7,6,.9) 0%,rgba(8,7,6,.48) 28%,rgba(8,7,6,.08) 62%)}
+  .hero-content{left:18px;right:18px;bottom:28px;max-width:none}
+  .hero-content .eyebrow{font-size:.55rem}
+  .hero h1{font-size:clamp(1.55rem,7vw,2.25rem);max-width:92%;margin:7px 0 11px}
+  .hero p{display:none}
+  .hero-button{padding:9px 13px;font-size:.7rem}
+  .hero-dots{bottom:12px}
+  .statement-strip{margin-top:0;padding:35px 18px 45px;display:block}
+  .statement-strip .button{margin-top:20px}
+  .section-heading h2{font-size:1.9rem}
+  .product-image{aspect-ratio:4/5}
+}
+@media(max-width:440px){
+  .header-main{grid-template-columns:auto auto 1fr auto;gap:7px;padding:0 10px}
+  .site-header .brand{font-size:.82rem;letter-spacing:.2em}
+  .search-form input::placeholder{font-size:.61rem}
+  .search-form button{width:36px}
+  .promo-item strong{font-size:.48rem}
+  .hero-slider{height:470px;min-height:470px}
+  .hero-bg{padding-left:9%;padding-right:9%;padding-bottom:86px}
+}
+
+/* YHORS 3.1 · buscador y filtros laterales elegantes */
+.catalog-shell{max-width:1440px;padding-top:64px;padding-bottom:88px;background:#faf8f4}
+.search-results-heading{display:flex;align-items:end;justify-content:space-between;gap:35px;margin-bottom:38px}
+.search-results-heading h1{font-family:Georgia,"Times New Roman",serif;font-size:clamp(2.4rem,5vw,4.5rem);font-weight:400;letter-spacing:-.045em;line-height:.98;margin:10px 0 0}
+.search-results-heading p{max-width:430px;margin:0 0 4px;color:var(--muted);line-height:1.7;font-size:.86rem}
+.catalog-layout{display:grid;grid-template-columns:255px minmax(0,1fr);gap:42px;align-items:start}
+.catalog-sidebar{position:sticky;top:138px;background:#fff;border:1px solid #e2ddd4;box-shadow:0 10px 35px rgba(30,25,18,.055)}
+.sidebar-head{position:relative;padding:24px 22px 20px;border-bottom:1px solid var(--line)}
+.sidebar-head h2{font-family:Georgia,"Times New Roman",serif;font-weight:400;font-size:1.45rem;margin:7px 0 0}
+.clear-filters{position:absolute;right:20px;bottom:20px;border:0;background:transparent;color:var(--gold);font-size:.68rem;font-weight:800;text-transform:uppercase;letter-spacing:.08em;padding:4px}
+.clear-filters:hover{text-decoration:underline}
+.filter-accordion{border-bottom:1px solid var(--line)}
+.filter-title{width:100%;display:flex;justify-content:space-between;align-items:center;padding:18px 22px;border:0;background:#fff;color:var(--ink);font-size:.86rem;font-weight:800;text-align:left}
+.filter-title span:last-child{font-size:1.1rem;color:#777;transition:transform .2s}
+.filter-accordion.open .filter-title span:last-child{transform:rotate(180deg)}
+.filter-options{display:none;padding:0 22px 18px;gap:9px}
+.filter-accordion.open .filter-options{display:grid}
+.filter-check{display:flex;align-items:center;gap:10px;min-height:27px;color:#5f5952;font-size:.76rem;cursor:pointer}
+.filter-check input{appearance:none;width:16px;height:16px;border:1px solid #c9c2b8;border-radius:3px;background:#fff;margin:0;position:relative;flex:0 0 auto}
+.filter-check input:checked{background:var(--ink);border-color:var(--ink)}
+.filter-check input:checked:after{content:"✓";position:absolute;color:#fff;font-size:.66rem;font-weight:900;left:3px;top:0}
+.filter-check:hover span{color:var(--ink)}
+.filter-empty{color:#9a938a;font-size:.72rem;line-height:1.5}
+.catalog-results{min-width:0}
+.results-count{min-height:20px;margin:0 0 16px;color:var(--muted);font-size:.72rem;font-weight:700;letter-spacing:.04em}
+.catalog-results .products{grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}
+.catalog-results .product{min-width:0}
+.cosplay-options{min-width:116px}
+.cart-mode{display:inline-flex;margin:0 0 5px;padding:3px 7px;border-radius:999px;background:#f3eee6;color:#8a6a36;font-size:.61rem;font-weight:850;text-transform:uppercase;letter-spacing:.07em}
+.purchase-choice{margin:0 0 26px}
+.choice-label{display:block;margin-bottom:10px;color:var(--muted);font-size:.72rem;font-weight:800;text-transform:uppercase;letter-spacing:.1em}
+.purchase-options{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.purchase-option{display:flex;flex-direction:column;align-items:flex-start;gap:5px;padding:15px;border:1px solid var(--line);background:#fff;border-radius:6px;color:var(--ink);text-align:left;transition:.2s}
+.purchase-option strong{font-size:.8rem}
+.purchase-option span{font-size:1rem;font-weight:850}
+.purchase-option:hover{border-color:var(--gold)}
+.purchase-option.active{border-color:var(--ink);background:#171513;color:#fff;box-shadow:0 8px 22px rgba(23,21,19,.12)}
+.purchase-option.active span{color:#dfbd7d}
+.price-secondary{display:block;color:var(--muted);font-size:.68rem;font-weight:650;margin-top:4px}
+.detail-price .price-secondary{font-size:.72rem;margin-top:7px}
+
+@media(max-width:1050px){
+  .catalog-layout{grid-template-columns:225px minmax(0,1fr);gap:25px}
+  .catalog-results .products{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:760px){
+  .catalog-shell{padding:45px 16px 65px}
+  .search-results-heading{display:block;margin-bottom:26px}
+  .search-results-heading h1{font-size:2.45rem}
+  .search-results-heading p{margin-top:12px}
+  .catalog-layout{display:block}
+  .catalog-sidebar{position:relative;top:auto;margin-bottom:25px}
+  .catalog-results .products{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+  .catalog-results .product-info{padding:10px 10px 5px}
+  .catalog-results .product-bottom{padding:8px 10px 10px}
+  .catalog-results .product h3{font-size:.78rem}
+  .catalog-results .product p{font-size:.68rem}
+  .catalog-results .price{font-size:.78rem}
+  .catalog-results .add{font-size:.62rem;padding:7px 8px;min-width:0}
+  .purchase-options{gap:8px}
+  .purchase-option{padding:13px 12px}
+}
+@media(max-width:440px){
+  .catalog-results .products{gap:8px}
+  .search-results-heading h1{font-size:2.1rem}
+  .catalog-sidebar{margin-left:-2px;margin-right:-2px}
+  .filter-title{padding:16px 18px}
+  .filter-options{padding-left:18px;padding-right:18px}
+  .sidebar-head{padding-left:18px;padding-right:18px}
+  .clear-filters{right:16px}
+}
+
+
+/* Filtros: comportamiento mejorado en móvil */
+.mobile-filter-toggle{
+  display:none;
+  width:100%;
+  border:0;
+  border-bottom:1px solid var(--line);
+  background:#fff;
+  color:var(--ink);
+  padding:15px 18px;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  font-size:.78rem;
+  font-weight:850;
+  text-transform:uppercase;
+  letter-spacing:.08em;
+  cursor:pointer;
+}
+.mobile-filter-toggle > span:first-child{font-size:.78rem}
+.mobile-filter-count{margin-left:auto;color:var(--muted);font-size:.65rem;font-weight:700;text-transform:none;letter-spacing:.02em}
+.mobile-filter-chevron{font-size:1rem;color:#777;transition:transform .2s}
+.catalog-sidebar.mobile-open .mobile-filter-chevron{transform:rotate(180deg)}
+@media(max-width:760px){
+  .catalog-sidebar{
+    overflow:hidden;
+    border-radius:2px;
+    box-shadow:0 8px 24px rgba(30,25,18,.045);
+  }
+  .mobile-filter-toggle{display:flex}
+  .catalog-sidebar .sidebar-head{padding:15px 18px 17px}
+  .catalog-sidebar .sidebar-head h2{font-size:1.18rem;margin-top:4px}
+  .catalog-sidebar:not(.mobile-open) .sidebar-head{display:none}
+  .catalog-sidebar:not(.mobile-open) .filter-accordion{display:none}
+  .catalog-sidebar.mobile-open .sidebar-head{display:flex;align-items:center;justify-content:space-between;gap:16px}
+  .catalog-sidebar.mobile-open .filter-accordion{display:block}
+  .catalog-sidebar.mobile-open .clear-filters{
+    position:static;
+    flex:0 0 auto;
+    padding:7px 2px;
+    font-size:.62rem;
+  }
+  .catalog-sidebar.mobile-open .filter-title{
+    padding:15px 18px;
+    font-size:.76rem;
+  }
+  .catalog-sidebar.mobile-open .filter-options{
+    padding:0 18px 15px;
+    gap:7px;
+  }
+  .catalog-sidebar.mobile-open .filter-check{
+    min-height:30px;
+    font-size:.72rem;
+  }
+  .catalog-sidebar.mobile-open .filter-check input{width:15px;height:15px}
+}
+@media(max-width:440px){
+  .mobile-filter-toggle{padding:14px 16px}
+  .catalog-sidebar.mobile-open .sidebar-head{padding-left:16px;padding-right:16px}
+  .catalog-sidebar.mobile-open .filter-title{padding-left:16px;padding-right:16px}
+  .catalog-sidebar.mobile-open .filter-options{padding-left:16px;padding-right:16px}
+}
+
+
+
+/* La búsqueda es una vista limpia: sin filtros y con el catálogo aprovechando todo el ancho. */
+.search-only .catalog-results .products{grid-template-columns:repeat(4,minmax(0,1fr));gap:18px}
+.search-only .results-count{margin-bottom:16px}
+@media(max-width:1050px){
+  .search-only .catalog-results .products{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
+@media(max-width:760px){
+  .search-only .catalog-results .products{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+}
+@media(max-width:440px){
+  .search-only .catalog-results .products{gap:8px}
+}
+
+/* YHORS 3.4 · Catálogos de categorías con la misma presentación premium de Buscar */
+.category-page-section{
+  max-width:1440px;
+  padding-top:64px;
+  padding-bottom:88px;
+  background:#faf8f4;
+}
+.category-page-section .category-intro{
+  display:flex;
+  align-items:end;
+  justify-content:space-between;
+  gap:35px;
+  margin-bottom:38px;
+}
+.category-page-section .category-intro h1{
+  font-family:Georgia,"Times New Roman",serif;
+  font-size:clamp(2.4rem,5vw,4.5rem);
+  font-weight:400;
+  letter-spacing:-.045em;
+  line-height:.98;
+  margin:10px 0 0;
+}
+.category-page-section .category-intro p{
+  max-width:430px;
+  margin:0 0 4px;
+  color:var(--muted);
+  line-height:1.7;
+  font-size:.86rem;
+}
+.category-page-section .catalog-layout{
+  grid-template-columns:255px minmax(0,1fr);
+  gap:42px;
+}
+.category-page-section .catalog-results .products{
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:18px;
+}
+/* Keep the same generous product-card information density as the search results. */
+.category-page-section .catalog-results .product-info{
+  padding:17px 17px 8px;
+  gap:9px;
+}
+.category-page-section .catalog-results .product h3{font-size:1rem;line-height:1.25}
+.category-page-section .catalog-results .product p{font-size:.82rem;line-height:1.5}
+.category-page-section .catalog-results .product-bottom{padding:13px 17px 17px}
+@media(max-width:1050px){
+  .category-page-section .catalog-layout{grid-template-columns:225px minmax(0,1fr);gap:25px}
+  .category-page-section .catalog-results .products{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
+@media(max-width:760px){
+  .category-page-section{
+    max-width:none;
+    padding:45px 16px 65px;
+  }
+  .category-page-section .category-intro{
+    display:block;
+    margin-bottom:26px;
+  }
+  .category-page-section .category-intro h1{font-size:2.45rem}
+  .category-page-section .category-intro p{margin-top:12px}
+  .category-page-section .catalog-layout{display:block}
+  .category-page-section .catalog-results .products{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    gap:10px;
+  }
+  .category-page-section .catalog-results .product-info{padding:10px 10px 5px;gap:7px}
+  .category-page-section .catalog-results .product h3{font-size:.78rem}
+  .category-page-section .catalog-results .product p{font-size:.68rem}
+  .category-page-section .catalog-results .product-bottom{padding:8px 10px 10px}
+}
+@media(max-width:440px){
+  .category-page-section .category-intro h1{font-size:2.1rem}
+  .category-page-section .catalog-results .products{gap:8px}
+}
+
+
+/* YHORS 4.1 · corrección final de encabezado de filtros y pie de página */
+.sidebar-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:14px;
+}
+.sidebar-head > div{
+  min-width:0;
+  flex:1 1 auto;
+}
+.sidebar-head h2{
+  margin:7px 0 0;
+  white-space:nowrap;
+}
+.clear-filters{
+  position:static;
+  flex:0 0 auto;
+  margin:0;
+  padding:4px 0;
+  white-space:nowrap;
+}
+
+/* Los enlaces del footer reutilizan .header-category, así que aquí se neutralizan
+   sus paddings de navegación para que no queden gigantes ni separados. */
+.site-footer .footer-links > div{
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  justify-content:flex-start;
+  gap:8px 18px;
+}
+.site-footer .footer-links a.header-category,
+.site-footer .footer-links a.header-category.current{
+  display:inline-flex;
+  width:auto;
+  min-height:0;
+  align-items:center;
+  justify-content:flex-start;
+  padding:0 !important;
+  margin:0;
+  border:0;
+  background:transparent !important;
+  color:#aaa49a !important;
+  font-size:.74rem !important;
+  line-height:1.45;
+  letter-spacing:.04em;
+  white-space:nowrap;
+}
+.site-footer .footer-links a.header-category:after{
+  display:none;
+}
+.site-footer .footer-links a.header-category:hover,
+.site-footer .footer-links a.header-category.current:hover{
+  color:var(--gold-light) !important;
+}
+
+@media(max-width:760px){
+  .sidebar-head h2{font-size:1.12rem;}
+  .clear-filters{font-size:.62rem;}
+  .site-footer .footer-grid{
+    grid-template-columns:1fr;
+    gap:28px;
+  }
+  .site-footer .footer-links > div{
+    gap:8px 16px;
+  }
+  .site-footer .footer-links a.header-category,
+  .site-footer .footer-links a.header-category.current{
+    padding:0 !important;
+    min-height:0;
+  }
+}
+
+@media(max-width:360px){
+  .sidebar-head{gap:8px;}
+  .sidebar-head h2{font-size:1rem;}
+  .clear-filters{font-size:.58rem;}
+}
