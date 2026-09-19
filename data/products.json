@@ -1,23 +1,5 @@
 [
   {
-    "name": "Prueba SKU",
-    "sku": "YH-TEST-999",
-    "description": "Producto de prueba",
-    "category": "tech",
-    "brand": "",
-    "productType": "",
-    "salePrice": 10,
-    "rentalPrice": null,
-    "price": 10,
-    "image": "",
-    "images": [],
-    "featured": false,
-    "hero": false,
-    "heroOrder": 0,
-    "id": "8aa7d542-39e1-40df-9eb8-5806a4b03765",
-    "createdAt": "2026-09-19T21:23:53.772Z"
-  },
-  {
     "name": "NOTEBOOK LENOVO IP1 15AMN7 R5 7520U 8GB-256GB SSD-BLUE-15.6\"-W11 TECLADO INGLES",
     "description": "-Pantalla: 15.6\" FHD (1920 × 1080) TN, 220 nits, antirreflejo.\n- Procesador: AMD Ryzen™ 5 7520U, 4 núcleos / 8 hilos, hasta 4.3 GHz.\n- Gráficos integrados: AMD Radeon™ 610M Graphics.\n- Memoria RAM: 8 GB LPDDR5-5500, soldada.\n- Disco duro: 256 GB SSD M.2 2242 PCIe 4.0x4 NVMe.\n- Ranura adicional: M.2 2280 PCIe 3.0 x2 hasta 1 TB de SSD.\n- Cámara: HD 720p con obturador de privacidad.\n- Sistema Operativo: Windows® 11 Home, inglés.\n- Bluetooth: 5.2.\n- Wi-Fi®: Wi-Fi 6, 802.11ax 2x2.",
     "category": "tech",
@@ -38,8 +20,7 @@
     "heroOrder": 0,
     "id": "7757b362-1f89-4e24-be36-de4d49a71c19",
     "createdAt": "2026-09-18T22:28:10.558Z",
-    "updatedAt": "2026-09-19T18:41:16.813Z",
-    "sku": "YH-TEC-001"
+    "updatedAt": "2026-09-19T18:41:16.813Z"
   },
   {
     "name": "Xiaomi Redmi 15C / 128GB",
@@ -61,8 +42,7 @@
     "heroOrder": 0,
     "id": "bef5e66f-1fe6-49d3-909d-2f3be7e3eb61",
     "createdAt": "2026-09-18T22:19:16.444Z",
-    "updatedAt": "2026-09-19T18:41:16.813Z",
-    "sku": "YH-TEC-002"
+    "updatedAt": "2026-09-19T18:41:16.813Z"
   },
   {
     "name": "Xiaomi Redmi A7 Pro / 128GB",
@@ -84,8 +64,7 @@
     "heroOrder": 1,
     "id": "4dd34631-e5fd-429a-b0ee-6ebad6a4a63b",
     "createdAt": "2026-09-18T22:10:26.489Z",
-    "updatedAt": "2026-09-19T18:41:16.813Z",
-    "sku": "YH-TEC-003"
+    "updatedAt": "2026-09-19T18:41:16.813Z"
   },
   {
     "name": "Xiaomi Redmi A7 Pro / 64GB",
@@ -107,8 +86,7 @@
     "brand": "Xiaomi",
     "productType": "Celular",
     "salePrice": 149.99,
-    "rentalPrice": null,
-    "sku": "YH-TEC-004"
+    "rentalPrice": null
   },
   {
     "name": "BUNNY BULMA COSPLAY",
@@ -131,8 +109,7 @@
     "brand": "Doki Doki",
     "productType": "Sexy",
     "salePrice": 85,
-    "rentalPrice": 55,
-    "sku": "YH-COS-001"
+    "rentalPrice": 55
   },
   {
     "name": "RAMO ELEGANTE: ROASAS Y BRILLO",
@@ -152,8 +129,7 @@
     "images": [
       "https://i.pinimg.com/736x/13/54/ec/1354ec82e8ff3dbcfc2ad1495ddce428.jpg"
     ],
-    "heroOrder": 0,
-    "sku": "YH-DET-001"
+    "heroOrder": 0
   },
   {
     "name": "CAJA FELIZ CUMPLEAÑOS MORADO",
@@ -173,8 +149,7 @@
     "images": [
       "https://i.pinimg.com/736x/cc/55/99/cc55998a60eda34072d89b7594f29a57.jpg"
     ],
-    "heroOrder": 0,
-    "sku": "YH-DET-002"
+    "heroOrder": 0
   },
   {
     "name": "RAMO CON MARIPOSAS PAPEL ROSADO",
@@ -194,8 +169,7 @@
     "images": [
       "https://i.pinimg.com/1200x/cf/ca/5b/cfca5ba3465dbeeb9bca64371313cde0.jpg"
     ],
-    "heroOrder": 0,
-    "sku": "YH-DET-003"
+    "heroOrder": 0
   },
   {
     "name": "RAMO CON MARIPOSAS BLANCO Y DORADO",
@@ -215,8 +189,7 @@
     "images": [
       "https://i.pinimg.com/736x/33/fa/3c/33fa3c03839407daefecb65b30fcf3ee.jpg"
     ],
-    "heroOrder": 0,
-    "sku": "YH-DET-004"
+    "heroOrder": 0
   },
   {
     "name": "RAMO BICOLOR",
@@ -236,8 +209,7 @@
     "images": [
       "https://i.pinimg.com/736x/3b/c0/e1/3bc0e19b19da248cf45fb97a01070f67.jpg"
     ],
-    "heroOrder": 0,
-    "sku": "YH-DET-005"
+    "heroOrder": 0
   },
   {
     "name": "RAMO BLANCO Y ROSAS",
@@ -257,8 +229,7 @@
     "images": [
       "https://i.pinimg.com/736x/6c/2b/09/6c2b0951c92bda03a2365542923ca972.jpg"
     ],
-    "heroOrder": 0,
-    "sku": "YH-DET-006"
+    "heroOrder": 0
   },
   {
     "name": "RAMO ROSADITA",
@@ -278,8 +249,7 @@
     "images": [
       "https://i.pinimg.com/736x/6e/5d/75/6e5d7574ebf400cd353d848b04c776f3.jpg"
     ],
-    "heroOrder": 0,
-    "sku": "YH-DET-007"
+    "heroOrder": 0
   },
   {
     "name": "RAMO FUSIA",
@@ -299,8 +269,7 @@
     "images": [
       "https://i.pinimg.com/736x/b7/c1/0e/b7c10e1bdb2ec1e113f475e2ddffd670.jpg"
     ],
-    "heroOrder": 0,
-    "sku": "YH-DET-008"
+    "heroOrder": 0
   },
   {
     "name": "RAMO BLANCO",
@@ -320,8 +289,7 @@
     "images": [
       "https://i.pinimg.com/1200x/bf/fc/d6/bffcd6a53ce0fcc0882a54a51dc7f243.jpg"
     ],
-    "heroOrder": 0,
-    "sku": "YH-DET-009"
+    "heroOrder": 0
   },
   {
     "name": "RAMO DE ROSAS",
@@ -341,8 +309,7 @@
     "images": [
       "https://i.pinimg.com/736x/7b/ec/4d/7bec4d6a2152b68ff55e7bfb9e5f0892.jpg"
     ],
-    "heroOrder": 0,
-    "sku": "YH-DET-010"
+    "heroOrder": 0
   },
   {
     "name": "RAMO CHANCHITO",
@@ -362,8 +329,7 @@
     "images": [
       "https://i.pinimg.com/736x/be/90/9b/be909b08e2060a611c4ffdeaa939a71d.jpg"
     ],
-    "heroOrder": 0,
-    "sku": "YH-DET-011"
+    "heroOrder": 0
   },
   {
     "name": "RAMO ROSA MARIPOSA",
@@ -383,8 +349,7 @@
     "images": [
       "https://i.pinimg.com/736x/01/47/d7/0147d7f780744c365d8b3eb5eb8a27d0.jpg"
     ],
-    "heroOrder": 0,
-    "sku": "YH-DET-012"
+    "heroOrder": 0
   },
   {
     "name": "RAMO HELLO KITTY",
@@ -404,8 +369,7 @@
     "images": [
       "https://i.pinimg.com/1200x/47/99/4e/47994e16e1ee10b6f6376ddcce9b0c19.jpg"
     ],
-    "heroOrder": 0,
-    "sku": "YH-DET-013"
+    "heroOrder": 0
   },
   {
     "name": "PARLANTE SMART AMAZON ECHO DOT 5ta. GENERACION – ALEXA – AZUL",
@@ -427,7 +391,6 @@
     "brand": "Amazon",
     "productType": "Smart Home",
     "salePrice": 80,
-    "rentalPrice": null,
-    "sku": "YH-TEC-005"
+    "rentalPrice": null
   }
 ]
