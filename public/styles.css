@@ -915,22 +915,22 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}.brand{letter-sp
 /* Fichas públicas: jerarquía más sobria y SKU visible junto al precio. */
 .product h3{font-size:.86rem;line-height:1.22;font-weight:750}
 .product-info{gap:7px}
-.sku-label{display:block;margin-top:3px;color:#918a81;font-size:.62rem;line-height:1.25;font-weight:700;letter-spacing:.035em}
 .product-bottom .price{font-size:.98rem}
 
 /* Página de publicación: título compacto, SKU bajo el precio e imagen con un poco más de aire. */
 .detail-copy h1{font-size:clamp(1.75rem,3.1vw,3rem);line-height:1.05;margin:12px 0 15px}
 .detail-main-image{background:#fff}
 .detail-main-image img{padding:7%;}
-.detail-sku{display:block;margin-top:6px;color:#8d867d;font-size:.68rem;font-weight:700;letter-spacing:.035em;line-height:1.25}
 .detail-price .price-secondary{margin-top:6px}
+.detail-sku{display:inline-flex;align-items:center;gap:7px;margin:0 0 16px;padding:6px 11px;border-radius:999px;background:rgba(181,138,67,.12);color:#9a722e;font-size:.68rem;line-height:1;letter-spacing:.055em;font-weight:700;border:1px solid rgba(181,138,67,.12)}
+.detail-sku strong{font-weight:800;color:#9a722e;letter-spacing:.035em}
+.detail-sku-icon{display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;font-size:.78rem;line-height:1;color:#b58a43;transform:rotate(-18deg)}
 
 @media(max-width:760px){
   .inventory-toolbar{align-items:stretch;flex-direction:column;gap:7px}
   .inventory-search{width:100%}
   .inventory-count{padding-left:2px}
   .product h3{font-size:.76rem}
-  .sku-label{font-size:.58rem}
   .product-bottom .price{font-size:.8rem}
   .detail-copy h1{font-size:2rem}
   .detail-main-image img{padding:6%}
