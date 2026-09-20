@@ -1,5 +1,51 @@
 [
   {
+    "name": "COSPLAY YAO MIKO (Genshin Impact)",
+    "description": "Canjea tu gracia y astucia en tu próximo evento con este deslumbrante cosplay de la Gran Sacerdotisa del Gran Santuario Narukami.\n\nOpciones: Disponible para compra o alquiler por fin de semana.\n\nDetalles: Excelente nivel de acabado, comodidad y fidelidad al personaje.\n\nIdeal para: Convenciones, pasarelas y sesiones fotográficas.",
+    "category": "cosplay",
+    "brand": "",
+    "productType": "Genshin Impact",
+    "sku": "YH-COS-YAOMIKO",
+    "salePrice": 95,
+    "rentalPrice": 65,
+    "price": 95,
+    "image": "https://i.pinimg.com/736x/2e/73/e3/2e73e335a6e022f318cc0a7e0d108c42.jpg",
+    "images": [
+      "https://i.pinimg.com/736x/2e/73/e3/2e73e335a6e022f318cc0a7e0d108c42.jpg",
+      "https://i.pinimg.com/736x/e0/55/48/e05548947b8306126f9f972a0105920e.jpg",
+      "https://i.pinimg.com/1200x/97/e8/cf/97e8cf4703df95b6a21b53154d70293f.jpg"
+    ],
+    "featured": true,
+    "hero": false,
+    "heroOrder": 0,
+    "id": "deaacc06-5472-4d5d-b7b0-03e4ee998427",
+    "createdAt": "2026-09-19T22:39:31.944Z",
+    "updatedAt": "2026-09-19T22:45:13.944Z"
+  },
+  {
+    "name": "COSPLAY AHIRI (Leage of Leyends)",
+    "description": "Lleva el estilo y la elegancia de la campeona de League of Legends a tu próximo evento. Confeccionado con materiales de alta calidad y gran nivel de detalle.\n\nOpciones: Disponible para compra o alquiler por fin de semana.\n\nIdeal para: Convenciones, sesiones de fotos y fiestas temáticas.",
+    "category": "cosplay",
+    "brand": "",
+    "productType": "Genshin Impact",
+    "sku": "YH-COS-AHIRI",
+    "salePrice": 85,
+    "rentalPrice": 55,
+    "price": 85,
+    "image": "https://i.pinimg.com/1200x/ae/c2/a6/aec2a6043c5dc538f5bd254ddf288e59.jpg",
+    "images": [
+      "https://i.pinimg.com/1200x/ae/c2/a6/aec2a6043c5dc538f5bd254ddf288e59.jpg",
+      "https://i.pinimg.com/736x/08/50/49/085049f8495c3166fa79069bd5ca8e4d.jpg",
+      "https://i.pinimg.com/736x/35/e5/01/35e5012b7d7a1bffddfcfb0c213a6fe4.jpg"
+    ],
+    "featured": true,
+    "hero": true,
+    "heroOrder": 0,
+    "id": "d9dabf42-3c1c-4bdc-aa71-624acf051cfc",
+    "createdAt": "2026-09-19T22:32:43.305Z",
+    "updatedAt": "2026-09-19T22:45:13.944Z"
+  },
+  {
     "name": "NOTEBOOK LENOVO IP1 15AMN7 R5 7520U 8GB-256GB SSD-BLUE-15.6\"-W11 TECLADO INGLES",
     "description": "-Pantalla: 15.6\" FHD (1920 × 1080) TN, 220 nits, antirreflejo.\n- Procesador: AMD Ryzen™ 5 7520U, 4 núcleos / 8 hilos, hasta 4.3 GHz.\n- Gráficos integrados: AMD Radeon™ 610M Graphics.\n- Memoria RAM: 8 GB LPDDR5-5500, soldada.\n- Disco duro: 256 GB SSD M.2 2242 PCIe 4.0x4 NVMe.\n- Ranura adicional: M.2 2280 PCIe 3.0 x2 hasta 1 TB de SSD.\n- Cámara: HD 720p con obturador de privacidad.\n- Sistema Operativo: Windows® 11 Home, inglés.\n- Bluetooth: 5.2.\n- Wi-Fi®: Wi-Fi 6, 802.11ax 2x2.",
     "category": "tech",
@@ -20,8 +66,8 @@
     "heroOrder": 0,
     "id": "7757b362-1f89-4e24-be36-de4d49a71c19",
     "createdAt": "2026-09-18T22:28:10.558Z",
-    "updatedAt": "2026-09-19T18:41:16.813Z",
-    "sku": "YH-TEC-NOTEBOOK-LEN"
+    "updatedAt": "2026-09-19T22:45:13.944Z",
+    "sku": "82XQ01V5LM"
   },
   {
     "name": "Xiaomi Redmi 15C / 128GB",
@@ -43,8 +89,8 @@
     "heroOrder": 0,
     "id": "bef5e66f-1fe6-49d3-909d-2f3be7e3eb61",
     "createdAt": "2026-09-18T22:19:16.444Z",
-    "updatedAt": "2026-09-19T18:41:16.813Z",
-    "sku": "YH-TEC-XIAOMI-REDMI"
+    "updatedAt": "2026-09-19T22:45:13.944Z",
+    "sku": "YH-TEC-XIAOMI-REDMI-15C-128"
   },
   {
     "name": "Xiaomi Redmi A7 Pro / 128GB",
@@ -66,8 +112,8 @@
     "heroOrder": 1,
     "id": "4dd34631-e5fd-429a-b0ee-6ebad6a4a63b",
     "createdAt": "2026-09-18T22:10:26.489Z",
-    "updatedAt": "2026-09-19T18:41:16.813Z",
-    "sku": "YH-TEC-XIAOMI-REDMI-2"
+    "updatedAt": "2026-09-19T22:45:13.944Z",
+    "sku": "YH-TEC-XIAOMI-REDMI-A7PRO-128"
   },
   {
     "name": "Xiaomi Redmi A7 Pro / 64GB",
@@ -85,12 +131,12 @@
     "heroOrder": 1,
     "id": "ee9073b6-3ac9-442d-939e-ee7dabcb402c",
     "createdAt": "2026-09-18T07:27:32.602Z",
-    "updatedAt": "2026-09-19T18:41:16.813Z",
+    "updatedAt": "2026-09-19T22:45:13.944Z",
     "brand": "Xiaomi",
     "productType": "Celular",
     "salePrice": 149.99,
     "rentalPrice": null,
-    "sku": "YH-TEC-XIAOMI-REDMI-3"
+    "sku": "YH-TEC-XIAOMI-REDMI-A7PRO-64"
   },
   {
     "name": "BUNNY BULMA COSPLAY",
@@ -101,20 +147,19 @@
     "images": [
       "https://i.pinimg.com/736x/6e/4b/d1/6e4bd191d99a65a0a7affb2478a1480b.jpg",
       "https://i.pinimg.com/736x/6c/a1/d1/6ca1d1b21b8b1efec4a08c5786408be1.jpg",
-      "https://i.pinimg.com/1200x/03/7c/4c/037c4c53270af13d8d0c27543baf6604.jpg",
-      "https://i.pinimg.com/736x/7d/4b/8d/7d4b8dc89a9e8d0f55dce711e9f67810.jpg"
+      "https://i.pinimg.com/1200x/03/7c/4c/037c4c53270af13d8d0c27543baf6604.jpg"
     ],
     "featured": true,
     "hero": true,
     "heroOrder": 0,
     "id": "bd65098b-c523-4975-ba43-68e0bcad1623",
     "createdAt": "2026-09-18T05:45:50.324Z",
-    "updatedAt": "2026-09-19T18:41:16.813Z",
-    "brand": "Doki Doki",
+    "updatedAt": "2026-09-19T22:45:13.944Z",
+    "brand": "",
     "productType": "Sexy",
     "salePrice": 85,
     "rentalPrice": 55,
-    "sku": "YH-COS-BUNNY-BULMA-"
+    "sku": "YH-COS-BUNNY-BULMA"
   },
   {
     "name": "RAMO ELEGANTE: ROASAS Y BRILLO",
@@ -125,7 +170,7 @@
     "featured": false,
     "id": "8b1a4da8-af44-48cc-a263-69d2cf703c59",
     "createdAt": "2026-09-12T04:40:49.585Z",
-    "updatedAt": "2026-09-19T18:41:16.813Z",
+    "updatedAt": "2026-09-19T22:45:13.944Z",
     "hero": false,
     "brand": "",
     "productType": "Ramo",
@@ -146,7 +191,7 @@
     "featured": false,
     "id": "f63f4220-3eca-4373-85a4-4e8b495289bb",
     "createdAt": "2026-09-12T04:35:05.613Z",
-    "updatedAt": "2026-09-19T18:41:16.813Z",
+    "updatedAt": "2026-09-19T22:45:13.944Z",
     "hero": false,
     "brand": "",
     "productType": "Caja",
@@ -167,7 +212,7 @@
     "featured": false,
     "id": "93a54450-e29f-4f6b-b3d8-a800d128ed6a",
     "createdAt": "2026-09-12T03:35:09.551Z",
-    "updatedAt": "2026-09-19T18:41:16.813Z",
+    "updatedAt": "2026-09-19T22:45:13.944Z",
     "hero": false,
     "brand": "",
     "productType": "Ramo",
@@ -188,7 +233,7 @@
     "featured": false,
     "id": "ae8c56b7-a2c0-4821-a811-44a8eb23d980",
     "createdAt": "2026-09-12T03:32:02.982Z",
-    "updatedAt": "2026-09-19T18:41:16.813Z",
+    "updatedAt": "2026-09-19T22:45:13.944Z",
     "hero": false,
     "brand": "",
     "productType": "Ramo",
@@ -209,7 +254,7 @@
     "featured": false,
     "id": "9bac7e22-d712-4e3f-a63e-6d033e999357",
     "createdAt": "2026-09-12T03:28:27.306Z",
-    "updatedAt": "2026-09-19T18:41:16.813Z",
+    "updatedAt": "2026-09-19T22:45:13.944Z",
     "hero": false,
     "brand": "",
     "productType": "Ramo",
@@ -230,7 +275,7 @@
     "featured": false,
     "id": "76ea6239-d06b-4707-9c86-e28ad256d8fd",
     "createdAt": "2026-09-12T03:26:54.586Z",
-    "updatedAt": "2026-09-19T18:41:16.813Z",
+    "updatedAt": "2026-09-19T22:45:13.944Z",
     "hero": false,
     "brand": "",
     "productType": "Ramo",
@@ -251,7 +296,7 @@
     "featured": false,
     "id": "52129b8d-fcc4-4057-ad39-8d1fe04267c6",
     "createdAt": "2026-09-12T03:21:27.302Z",
-    "updatedAt": "2026-09-19T18:41:16.813Z",
+    "updatedAt": "2026-09-19T22:45:13.944Z",
     "hero": false,
     "brand": "",
     "productType": "Ramo",
@@ -272,7 +317,7 @@
     "featured": false,
     "id": "1e882934-04c9-4fac-b730-a2f0470cae26",
     "createdAt": "2026-09-12T03:19:43.823Z",
-    "updatedAt": "2026-09-19T18:41:16.813Z",
+    "updatedAt": "2026-09-19T22:45:13.944Z",
     "hero": false,
     "brand": "",
     "productType": "Ramo",
@@ -293,7 +338,7 @@
     "featured": false,
     "id": "7a08ef0c-b7f7-4afc-8b67-bd4b9285602d",
     "createdAt": "2026-09-12T03:18:08.337Z",
-    "updatedAt": "2026-09-19T18:41:16.813Z",
+    "updatedAt": "2026-09-19T22:45:13.944Z",
     "hero": false,
     "brand": "",
     "productType": "Ramo",
@@ -314,7 +359,7 @@
     "featured": false,
     "id": "455bbc83-f8af-42cb-92c8-c51b570eab3d",
     "createdAt": "2026-09-12T03:16:25.691Z",
-    "updatedAt": "2026-09-19T18:41:16.813Z",
+    "updatedAt": "2026-09-19T22:45:13.944Z",
     "hero": false,
     "brand": "",
     "productType": "Ramo",
@@ -335,7 +380,7 @@
     "featured": false,
     "id": "6754a209-3de2-4926-b211-3384d454d37a",
     "createdAt": "2026-09-12T03:14:56.287Z",
-    "updatedAt": "2026-09-19T18:41:16.813Z",
+    "updatedAt": "2026-09-19T22:45:13.944Z",
     "hero": false,
     "brand": "",
     "productType": "Ramo",
@@ -356,7 +401,7 @@
     "featured": false,
     "id": "0870a04d-7bb6-42fa-beb5-5271f422e6d6",
     "createdAt": "2026-09-12T03:09:45.628Z",
-    "updatedAt": "2026-09-19T18:41:16.813Z",
+    "updatedAt": "2026-09-19T22:45:13.944Z",
     "hero": true,
     "brand": "",
     "productType": "Ramo",
@@ -377,7 +422,7 @@
     "featured": false,
     "id": "1130bc93-61f9-46b0-b7dc-efe49ddf77b1",
     "createdAt": "2026-09-12T03:07:53.779Z",
-    "updatedAt": "2026-09-19T18:41:16.813Z",
+    "updatedAt": "2026-09-19T22:45:13.944Z",
     "hero": false,
     "brand": "",
     "productType": "Ramo",
@@ -398,7 +443,7 @@
     "featured": true,
     "id": "d049e7a4-05cb-493e-832e-11cc3c0fe099",
     "createdAt": "2026-09-12T02:51:51.935Z",
-    "updatedAt": "2026-09-19T18:41:16.813Z",
+    "updatedAt": "2026-09-19T22:45:13.944Z",
     "images": [
       "https://http2.mlstatic.com/D_NQ_NP_2X_847146-MLA100027689153_122025-F.webp",
       "https://www.computron.com.ec/wp-content/uploads/2025/07/C2N6L4-BL20gr.jpg",
@@ -410,6 +455,6 @@
     "productType": "Smart Home",
     "salePrice": 80,
     "rentalPrice": null,
-    "sku": "YH-TEC-PARLANTE-SMA"
+    "sku": "C2N6L4-BL"
   }
 ]

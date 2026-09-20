@@ -898,3 +898,40 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}.brand{letter-sp
 }
 
 .sku-badge{font-size:.68rem;letter-spacing:.08em;color:var(--muted);margin-top:-2px}.sku-badge strong{color:var(--ink);font-weight:800}
+
+/* YHORS 4.2 · inventario rápido + fichas más limpias */
+.inventory-heading{margin-bottom:14px}
+.inventory-toolbar{display:flex;align-items:center;gap:12px;margin:0 0 16px}
+.inventory-search{position:relative;display:flex;align-items:center;width:min(430px,100%);height:42px;background:#fff;border:1px solid var(--line);border-radius:7px;box-shadow:0 3px 12px rgba(30,25,18,.035)}
+.inventory-search:focus-within{border-color:var(--gold);box-shadow:0 0 0 3px rgba(181,138,67,.10)}
+.inventory-search>span{padding-left:13px;color:#8a837a;font-size:1rem;line-height:1}
+.inventory-search input{width:100%;height:100%;border:0;outline:0;background:transparent;padding:0 8px;font-size:.78rem;color:var(--ink)}
+.inventory-search input::placeholder{color:#9b958c}
+.inventory-search button{width:32px;height:32px;margin-right:5px;border:0;background:transparent;color:#8a837a;font-size:1.15rem;line-height:1;border-radius:5px}
+.inventory-search button:hover{background:#f1ede6;color:var(--ink)}
+.inventory-count{font-size:.7rem;color:var(--muted);font-weight:700;white-space:nowrap}
+.admin-sku{font-size:.72rem;color:#8f6b2f;font-weight:800}
+
+/* Fichas públicas: jerarquía más sobria y SKU visible junto al precio. */
+.product h3{font-size:.86rem;line-height:1.22;font-weight:750}
+.product-info{gap:7px}
+.sku-label{display:block;margin-top:3px;color:#918a81;font-size:.62rem;line-height:1.25;font-weight:700;letter-spacing:.035em}
+.product-bottom .price{font-size:.98rem}
+
+/* Página de publicación: título compacto, SKU bajo el precio e imagen con un poco más de aire. */
+.detail-copy h1{font-size:clamp(1.75rem,3.1vw,3rem);line-height:1.05;margin:12px 0 15px}
+.detail-main-image{background:#fff}
+.detail-main-image img{padding:7%;}
+.detail-sku{display:block;margin-top:6px;color:#8d867d;font-size:.68rem;font-weight:700;letter-spacing:.035em;line-height:1.25}
+.detail-price .price-secondary{margin-top:6px}
+
+@media(max-width:760px){
+  .inventory-toolbar{align-items:stretch;flex-direction:column;gap:7px}
+  .inventory-search{width:100%}
+  .inventory-count{padding-left:2px}
+  .product h3{font-size:.76rem}
+  .sku-label{font-size:.58rem}
+  .product-bottom .price{font-size:.8rem}
+  .detail-copy h1{font-size:2rem}
+  .detail-main-image img{padding:6%}
+}
