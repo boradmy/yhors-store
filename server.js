@@ -127,7 +127,10 @@ function corpSeoBody() {
 }
 
 app.get('/robots.txt', (_, res) => {
-  res.type('text/plain').send(`User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: ${ADMIN_PATH}\nDisallow: ${ADMIN_PATH}/\nSitemap: ${SITE_URL}/sitemap.xml\n`);
+  res.status(200)
+    .type('text/plain')
+    .set('Cache-Control', 'no-cache, no-store, must-revalidate')
+    .send(`User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: ${ADMIN_PATH}\nDisallow: ${ADMIN_PATH}/\nSitemap: ${SITE_URL}/sitemap.xml\n`);
 });
 
 app.get('/sitemap.xml', (_, res) => {
@@ -139,8 +142,23 @@ app.get('/sitemap.xml', (_, res) => {
     ...VALID_PUBLIC_CATEGORIES.map(category => ({ loc: `${SITE_URL}/categoria/${category}` })),
     ...products.map(product => ({ loc: productUrl(product), lastmod: product.updatedAt || product.createdAt }))
   ];
-  const body = urls.map(({loc,lastmod}) => `  <url><loc>${esc(loc)}</loc>${lastmod ? `<lastmod>${new Date(lastmod).toISOString()}</lastmod>` : ''}</url>`).join('\n');
-  res.type('application/xml').send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${body}\n</urlset>`);
+
+  const body = urls.map(({ loc, lastmod }) => {
+    let safeLastmod = '';
+    if (lastmod) {
+      const date = new Date(lastmod);
+      if (!Number.isNaN(date.getTime())) {
+        safeLastmod = `<lastmod>${date.toISOString()}</lastmod>`;
+      }
+    }
+    return `  <url><loc>${esc(loc)}</loc>${safeLastmod}</url>`;
+  }).join('\n');
+
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${body}\n</urlset>\n`;
+  res.status(200)
+    .set('Content-Type', 'application/xml; charset=utf-8')
+    .set('Cache-Control', 'no-cache, no-store, must-revalidate')
+    .send(xml);
 });
 
 // SEO-friendly public routes are rendered server-side so search engines receive useful HTML on first response.
