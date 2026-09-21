@@ -70,3 +70,13 @@ Se omitieron `.env`, `.git` y `node_modules` del ZIP por seguridad/tamaño. Copi
 - Los productos admiten marca y tipo de producto.
 - Cosplay tiene obligatoriamente **Precio de venta** y **Precio de alquiler**.
 - Las clasificaciones se guardan en `data/classifications.json` y requieren almacenamiento persistente en el hosting.
+
+
+## SEO e indexación de Google
+- Cada producto público tiene una URL permanente `/producto/nombre-del-producto-sku` y las URLs antiguas `?producto=...` redirigen con 301.
+- El servidor genera HTML inicial con título, descripción, canonical, Open Graph y datos estructurados `Product`/`Offer` para las fichas.
+- `/sitemap.xml` se genera automáticamente a partir del catálogo y `/robots.txt` referencia ese sitemap.
+- `/yhors-corp` crea una página pública para la identidad YHORS-CORP.
+- Las búsquedas internas usan `noindex,follow` para evitar indexar miles de URLs de búsqueda.
+- Después de publicar, agrega `https://TU-DOMINIO/sitemap.xml` en Google Search Console y usa la inspección de URL para la portada y varias fichas. La indexación y los resultados enriquecidos no son instantáneos ni garantizados por Google.
+- `PUBLIC_BASE_URL` debe ser el dominio público real de producción (por ejemplo `https://yhors-store.onrender.com` o tu dominio propio).

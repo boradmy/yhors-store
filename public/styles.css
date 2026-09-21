@@ -935,3 +935,25 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}.brand{letter-sp
   .detail-copy h1{font-size:2rem}
   .detail-main-image img{padding:6%}
 }
+
+
+/* YHORS · UX: quitar subrayado de todos los textos dentro de las tarjetas de producto.
+   Las tarjetas siguen siendo enlaces accesibles, pero visualmente conservan una tipografía limpia. */
+.product-open,
+.product-open:hover,
+.product-open:focus,
+.product-open:active,
+.product-open * {
+  text-decoration: none !important;
+}
+
+.product-open {
+  color: inherit;
+}
+
+.product-open h3,
+.product-open p,
+.product-open small,
+.product-open span {
+  text-decoration: none !important;
+}

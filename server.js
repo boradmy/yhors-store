@@ -33,21 +33,204 @@ app.use((req, res, next) => {
 app.use(express.json({ limit: '1mb' }));
 app.use(cookieParser());
 
+
+const SITE_URL = String(process.env.PUBLIC_BASE_URL || 'https://yhors-store.onrender.com').replace(/\/$/, '');
+const SITE_NAME = 'YHORS-STORE';
+const CORPORATE_NAME = 'YHORS-CORP';
+const CATEGORY_LABELS = {
+  principal: 'Principal', elegant: 'Elegant', sports: 'Sports', tech: 'Tech', cosplay: 'Cosplay',
+  pets: 'Pets', details: 'Details', collectibles: 'Coleccionables'
+};
+const CATEGORY_DESCRIPTIONS = {
+  principal: 'Descubre todo el universo YHORS en un solo lugar.',
+  elegant: 'Detalles refinados, regalos y piezas pensadas para momentos especiales.',
+  sports: 'Accesorios y productos para quienes viven con energía y movimiento.',
+  tech: 'Tecnología, gadgets y soluciones que combinan utilidad con estilo.',
+  cosplay: 'Piezas para transformar tu personaje y llevar tu imaginación más lejos.',
+  pets: 'Detalles y productos para consentir a quienes siempre están contigo.',
+  details: 'Regalos, arreglos y detalles creados para sorprender.',
+  collectibles: 'Figuras y objetos para quienes disfrutan coleccionar lo extraordinario.'
+};
+const VALID_PUBLIC_CATEGORIES = Object.keys(CATEGORY_LABELS).filter(key => key !== 'principal');
+function seoSlug(value = '') {
+  return String(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+    .replace(/&/g, ' y ').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 90) || 'producto';
+}
+function productSlug(product) {
+  const base = seoSlug(product.name);
+  const sku = seoSlug(product.sku || '');
+  return sku ? `${base}-${sku}` : `${base}-${String(product.id || '').slice(0, 8)}`;
+}
+function productUrl(product) { return `${SITE_URL}/producto/${encodeURIComponent(productSlug(product))}`; }
+function findProductBySlug(products, slug) {
+  const target = decodeURIComponent(String(slug || '')).toLowerCase();
+  return products.find(product => productSlug(product).toLowerCase() === target);
+}
+function esc(value = '') { return String(value).replace(/[&<>'"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', "'":'&#39;', '"':'&quot;' }[c])); }
+function stripText(value = '') { return String(value).replace(/\s+/g, ' ').trim(); }
+function absoluteImage(value = '') {
+  if (!value) return `${SITE_URL}/favicon.svg`;
+  return value.startsWith('http') ? value : `${SITE_URL}${value.startsWith('/') ? '' : '/'}${value}`;
+}
+function seoDescription(text, fallback) {
+  const clean = stripText(text || fallback);
+  return clean.length > 155 ? `${clean.slice(0, 152).replace(/\s+\S*$/, '')}…` : clean;
+}
+function jsonLd(value) { return JSON.stringify(value).replace(/</g, '\\u003c'); }
+function baseHead({ title, description, canonical, robots = 'index,follow', image = '', json = [] }) {
+  const graph = Array.isArray(json) ? json : [json];
+  return `
+    <meta name="description" content="${esc(description)}">
+    <meta name="robots" content="${esc(robots)}">
+    <link rel="canonical" href="${esc(canonical)}">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="${SITE_NAME}">
+    <meta property="og:locale" content="es_EC">
+    <meta property="og:title" content="${esc(title)}">
+    <meta property="og:description" content="${esc(description)}">
+    <meta property="og:url" content="${esc(canonical)}">
+    ${image ? `<meta property="og:image" content="${esc(image)}">` : ''}
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="${esc(title)}">
+    <meta name="twitter:description" content="${esc(description)}">
+    ${image ? `<meta name="twitter:image" content="${esc(image)}">` : ''}
+    ${graph.map(item => `<script type="application/ld+json">${jsonLd(item)}</script>`).join('\n')}
+  `;
+}
+function layout({ title, description, canonical, body, robots, image, json }) {
+  const template = fs.readFileSync(path.join(__dirname, 'public', 'index.html'), 'utf8');
+  const head = baseHead({ title, description, canonical, robots, image, json });
+  return template.replace('<meta name="description" content="YHORS · piezas que cuentan tu historia.">', head)
+    .replace('<title>YHORS-STORE</title>', `<title>${esc(title)}</title>`)
+    .replace('<div id="app"></div>', `<div id="app">${body}</div>`);
+}
+function productSeoBody(product) {
+  const images = Array.isArray(product.images) && product.images.length ? product.images : (product.image ? [product.image] : []);
+  const image = images[0] || '';
+  const category = CATEGORY_LABELS[product.category] || product.category;
+  const price = Number(product.salePrice ?? product.price);
+  const rental = product.category === 'cosplay' && Number.isFinite(Number(product.rentalPrice)) ? `<p class="price-secondary">Alquiler: $${Number(product.rentalPrice).toFixed(2)}</p>` : '';
+  return `<main class="product-detail-page"><div class="breadcrumbs"><a href="/categoria/${encodeURIComponent(product.category)}">${esc(category)}</a><span>/</span><strong>${esc(product.name)}</strong></div><section class="detail-layout"><div class="detail-gallery"><div class="detail-main-image"><img src="${esc(absoluteImage(image))}" alt="${esc(product.name)}" width="800" height="800"></div>${images.length > 1 ? `<div class="thumbnail-row">${images.slice(1,4).map((url,i)=>`<img src="${esc(absoluteImage(url))}" alt="${esc(product.name)} - imagen ${i+2}" width="200" height="200">`).join('')}</div>`:''}</div><div class="detail-copy"><span class="eyebrow">${esc(category)}</span><h1>${esc(product.name)}</h1><div class="detail-price">$${price.toFixed(2)}</div>${rental}<div class="detail-sku"><span>SKU: <strong>${esc(product.sku || '—')}</strong></span></div><div class="detail-divider"></div><h2>Descripción</h2><div class="detail-description">${esc(product.description).replace(/\n/g,'<br>')}</div><div class="detail-buy"><a class="button" href="/categoria/${encodeURIComponent(product.category)}">Ver más productos <span>→</span></a></div></div></section></main>`;
+}
+function categorySeoBody(categoryKey, products) {
+  const label = CATEGORY_LABELS[categoryKey];
+  const list = products.filter(p => categoryKey === 'principal' || p.category === categoryKey);
+  return `<main><section class="section category-page-section"><div class="category-intro"><div><span class="eyebrow">YHORS-STORE</span><h1>${esc(label)}</h1></div><p>${esc(CATEGORY_DESCRIPTIONS[categoryKey])}</p></div><section class="section"><div class="products">${list.map(p => `<article class="product"><a class="product-open" href="${esc(productUrl(p))}"><div class="product-image"><img src="${esc(absoluteImage((p.images||[])[0]||p.image))}" alt="${esc(p.name)}" width="800" height="800"></div><div class="product-info"><span class="product-category">${esc(CATEGORY_LABELS[p.category] || p.category)}</span><h2>${esc(p.name)}</h2><p>${esc(seoDescription(p.description, p.name))}</p><span class="detail-link">Ver detalles →</span></div></a></article>`).join('')}</div></section></section></main>`;
+}
+function homeSeoBody(products) {
+  const featured = products.filter(p => p.featured).slice(0, 12);
+  const items = (featured.length ? featured : products).slice(0, 12);
+  return `<main><section class="hero-slider"><div class="hero-content"><span class="eyebrow">YHORS-STORE</span><h1>Tecnología, detalles y piezas que cuentan tu historia.</h1><p>Descubre el catálogo YHORS: tecnología, regalos, cosplay, mascotas, coleccionables y productos seleccionados.</p><a class="button" href="/categoria/principal">Explorar catálogo <span>→</span></a></div></section><section class="section"><div class="section-heading"><div><span class="eyebrow">Selección YHORS</span><h2>Productos destacados</h2></div><p>Explora productos disponibles en nuestra tienda online.</p></div><div class="products">${items.map(p=>`<article class="product"><a class="product-open" href="${esc(productUrl(p))}"><div class="product-image"><img src="${esc(absoluteImage((p.images||[])[0]||p.image))}" alt="${esc(p.name)}" width="800" height="800"></div><div class="product-info"><span class="product-category">${esc(CATEGORY_LABELS[p.category]||p.category)}</span><h2>${esc(p.name)}</h2><p>${esc(seoDescription(p.description,p.name))}</p><span class="detail-link">Ver detalles →</span></div></a></article>`).join('')}</div></section><section class="section category-blocks"><div class="section-heading"><div><span class="eyebrow">Explora por universo</span><h2>Categorías YHORS</h2></div></div><div class="category-grid">${Object.entries(CATEGORY_LABELS).filter(([k])=>k!=='principal').map(([k,v])=>`<a class="category-card" href="/categoria/${k}"><h2>${esc(v)}</h2><p>${esc(CATEGORY_DESCRIPTIONS[k])}</p></a>`).join('')}</div></section><section class="brand-section"><div class="brand-section-inner"><span class="eyebrow">YHORS-CORP</span><h2>YHORS<br><em>más que un producto</em></h2><p>YHORS-CORP es el espacio corporativo de la marca YHORS y su ecosistema digital, mientras YHORS-STORE presenta el catálogo de productos.</p><a class="button" href="/yhors-corp">Conocer YHORS-CORP <span>→</span></a></div></section></main>`;
+}
+function corpSeoBody() {
+  return `<main class="section"><div class="brand-section-inner"><span class="eyebrow">YHORS-CORP</span><h1>YHORS-CORP</h1><p>Espacio corporativo de YHORS y punto de referencia para conocer el ecosistema de la marca.</p><h2>YHORS-STORE</h2><p>YHORS-STORE es la tienda online de YHORS, con un catálogo de tecnología, detalles, cosplay, mascotas, coleccionables y otros productos seleccionados.</p><a class="button" href="/">Visitar YHORS-STORE <span>→</span></a></div></main>`;
+}
+
 app.get('/robots.txt', (_, res) => {
-  res.type('text/plain').send(`User-agent: *\nAllow: /\nSitemap: https://yhors-store.onrender.com/sitemap.xml\n`);
+  res.type('text/plain').send(`User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: ${ADMIN_PATH}\nDisallow: ${ADMIN_PATH}/\nSitemap: ${SITE_URL}/sitemap.xml\n`);
 });
 
 app.get('/sitemap.xml', (_, res) => {
-  const products = readProducts();
+  const products = readProducts().map(normalizeProduct);
   const urls = [
-    'https://yhors-store.onrender.com/',
-    ...['elegant','sports','tech','cosplay','pets','details','collectibles'].map(category => `https://yhors-store.onrender.com/categoria/${category}`),
-    ...products.map(product => `https://yhors-store.onrender.com/?producto=${encodeURIComponent(product.id)}`)
+    { loc: `${SITE_URL}/` },
+    { loc: `${SITE_URL}/yhors-corp` },
+    { loc: `${SITE_URL}/categoria/principal` },
+    ...VALID_PUBLIC_CATEGORIES.map(category => ({ loc: `${SITE_URL}/categoria/${category}` })),
+    ...products.map(product => ({ loc: productUrl(product), lastmod: product.updatedAt || product.createdAt }))
   ];
-  const uniqueUrls = [...new Set(urls)];
-  const body = uniqueUrls.map(url => `  <url><loc>${url.replace(/&/g, '&amp;')}</loc></url>`).join('\n');
+  const body = urls.map(({loc,lastmod}) => `  <url><loc>${esc(loc)}</loc>${lastmod ? `<lastmod>${new Date(lastmod).toISOString()}</lastmod>` : ''}</url>`).join('\n');
   res.type('application/xml').send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${body}\n</urlset>`);
 });
+
+// SEO-friendly public routes are rendered server-side so search engines receive useful HTML on first response.
+app.get('/producto/:slug', (req, res) => {
+  const products = readProducts().map(normalizeProduct);
+  const product = findProductBySlug(products, req.params.slug);
+  if (!product) return res.status(404).send(layout({
+    title: 'Producto no encontrado | YHORS-STORE',
+    description: 'El producto solicitado no está disponible en YHORS-STORE.',
+    canonical: `${SITE_URL}/producto/${encodeURIComponent(req.params.slug)}`,
+    robots: 'noindex,follow',
+    body: `<main class="section"><h1>Producto no encontrado</h1><p>Este producto ya no está disponible.</p><a class="button" href="/">Volver a YHORS-STORE</a></main>`
+  }));
+  const url = productUrl(product);
+  const images = Array.isArray(product.images) && product.images.length ? product.images : (product.image ? [product.image] : []);
+  const description = seoDescription(product.description, `${product.name} disponible en YHORS-STORE.`);
+  const price = Number(product.salePrice ?? product.price);
+  const productJson = {
+    '@context': 'https://schema.org', '@type': 'Product', name: product.name,
+    image: images.map(absoluteImage), description: stripText(product.description), sku: product.sku || undefined,
+    brand: product.brand ? { '@type': 'Brand', name: product.brand } : undefined,
+    category: CATEGORY_LABELS[product.category] || product.category,
+    offers: Number.isFinite(price) ? { '@type': 'Offer', url, priceCurrency: 'USD', price: price.toFixed(2), seller: { '@type': 'Organization', name: CORPORATE_NAME, url: `${SITE_URL}/yhors-corp` } } : undefined
+  };
+  Object.keys(productJson).forEach(k => productJson[k] === undefined && delete productJson[k]);
+  const breadcrumb = { '@context':'https://schema.org', '@type':'BreadcrumbList', itemListElement:[
+    { '@type':'ListItem', position:1, name:'YHORS-STORE', item:`${SITE_URL}/` },
+    { '@type':'ListItem', position:2, name:CATEGORY_LABELS[product.category] || product.category, item:`${SITE_URL}/categoria/${product.category}` },
+    { '@type':'ListItem', position:3, name:product.name, item:url }
+  ]};
+  return res.send(layout({ title: `${product.name} | YHORS-STORE`, description, canonical:url, image:images[0] ? absoluteImage(images[0]) : '', json:[productJson,breadcrumb], body:productSeoBody(product) }));
+});
+
+app.get('/categoria/:category', (req, res, next) => {
+  const key = String(req.params.category || '').toLowerCase();
+  if (key === 'principal') return next();
+  if (!VALID_PUBLIC_CATEGORIES.includes(key)) return next();
+  const products = readProducts().map(normalizeProduct);
+  const label = CATEGORY_LABELS[key];
+  const canonical = `${SITE_URL}/categoria/${key}`;
+  const description = CATEGORY_DESCRIPTIONS[key];
+  const itemList = products.filter(p=>p.category===key).slice(0,100).map((p,i)=>({ '@type':'ListItem', position:i+1, name:p.name, url:productUrl(p) }));
+  const breadcrumb = { '@context':'https://schema.org', '@type':'BreadcrumbList', itemListElement:[
+    { '@type':'ListItem', position:1, name:'YHORS-STORE', item:`${SITE_URL}/` },
+    { '@type':'ListItem', position:2, name:label, item:canonical }
+  ]};
+  const listJson = { '@context':'https://schema.org', '@type':'ItemList', name:`Productos ${label} | YHORS-STORE`, itemListElement:itemList };
+  return res.send(layout({ title:`${label} | YHORS-STORE`, description, canonical, json:[breadcrumb,listJson], body:categorySeoBody(key,products) }));
+});
+
+app.get('/categoria/todo', (_, res) => res.redirect(301, '/categoria/principal'));
+
+app.get('/categoria/principal', (_, res) => {
+  const products = readProducts().map(normalizeProduct);
+  const canonical = `${SITE_URL}/categoria/principal`;
+  const itemList = products.slice(0,100).map((p,i)=>({ '@type':'ListItem', position:i+1, name:p.name, url:productUrl(p) }));
+  return res.send(layout({ title:'Catálogo | YHORS-STORE', description:CATEGORY_DESCRIPTIONS.principal, canonical, json:[
+    { '@context':'https://schema.org', '@type':'ItemList', name:'Catálogo YHORS-STORE', itemListElement:itemList },
+    { '@context':'https://schema.org', '@type':'BreadcrumbList', itemListElement:[{ '@type':'ListItem', position:1, name:'YHORS-STORE', item:`${SITE_URL}/` },{ '@type':'ListItem', position:2, name:'Catálogo', item:canonical }] }
+  ], body:categorySeoBody('principal',products) }));
+});
+
+app.get('/yhors-corp', (_, res) => {
+  const canonical = `${SITE_URL}/yhors-corp`;
+  return res.send(layout({ title:'YHORS-CORP | YHORS', description:'YHORS-CORP: espacio corporativo de YHORS y referencia de su ecosistema digital.', canonical, json:[
+    { '@context':'https://schema.org', '@type':'Organization', name:CORPORATE_NAME, url:canonical, brand:{ '@type':'Brand', name:'YHORS' }, sameAs:[SITE_URL] },
+    { '@context':'https://schema.org', '@type':'BreadcrumbList', itemListElement:[{ '@type':'ListItem', position:1, name:'YHORS-STORE', item:`${SITE_URL}/` },{ '@type':'ListItem', position:2, name:'YHORS-CORP', item:canonical }] }
+  ], body:corpSeoBody() }));
+});
+
+app.get('/', (req, res, next) => {
+  // Redirect legacy product query URLs to their permanent, descriptive URL.
+  if (req.query.producto) {
+    const product = readProducts().map(normalizeProduct).find(item => item.id === String(req.query.producto));
+    if (product) return res.redirect(301, productUrl(product));
+  }
+  // Search result pages are useful to users but should not become an indexable URL for every query.
+  if (req.query.buscar) {
+    const query = stripText(req.query.buscar).slice(0, 80);
+    const products = readProducts().map(normalizeProduct);
+    return res.send(layout({ title: `Resultados para ${query} | YHORS-STORE`, description: `Resultados de búsqueda de ${query} en YHORS-STORE.`, canonical: `${SITE_URL}/`, robots: 'noindex,follow', json: [], body: `<main class="section"><div class="section-heading"><div><span class="eyebrow">Búsqueda YHORS</span><h1>Resultados para “${esc(query)}”</h1></div><p>Usa el buscador para explorar productos, marcas y categorías de YHORS-STORE.</p></div><p><a class="button" href="/">Volver al catálogo <span>→</span></a></p></main>` }));
+  }
+  const products = readProducts().map(normalizeProduct);
+  const canonical = `${SITE_URL}/`;
+  const organization = { '@context':'https://schema.org', '@type':'Organization', name:CORPORATE_NAME, url:`${SITE_URL}/yhors-corp`, brand:{ '@type':'Brand', name:'YHORS' }, subOrganization:{ '@type':'OnlineStore', name:SITE_NAME, url:canonical } };
+  const website = { '@context':'https://schema.org', '@type':'WebSite', name:SITE_NAME, alternateName:['YHORS','YHORS-STORE'], url:canonical, potentialAction:{ '@type':'SearchAction', target:`${SITE_URL}/?buscar={search_term_string}`, 'query-input':'required name=search_term_string' } };
+  return res.send(layout({ title:'YHORS-STORE | Tecnología, detalles, cosplay y más', description:'YHORS-STORE: tecnología, celulares, accesorios, cosplay, detalles, regalos, mascotas y coleccionables. Descubre productos seleccionados en Ecuador.', canonical, json:[organization,website], body:homeSeoBody(products) }));
+});
+
+app.use(ADMIN_PATH, (req, res, next) => { res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive'); next(); });
 
 app.use('/uploads', express.static(UPLOADS_DIR, { maxAge: '7d', immutable: true }));
 app.use(express.static(path.join(__dirname, 'public'), { maxAge: '1h' }));
