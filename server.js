@@ -461,11 +461,20 @@ app.put('/api/admin/storefront', requireAdmin, (req, res) => {
   const ids = new Set(products.map(product => product.id));
   const heroProductIds = Array.isArray(req.body?.heroProductIds) ? req.body.heroProductIds.filter(id => ids.has(id)).slice(0, 8) : [];
   const featuredProductIds = Array.isArray(req.body?.featuredProductIds) ? req.body.featuredProductIds.filter(id => ids.has(id)).slice(0, 12) : [];
+  const heroOrders = (req.body && req.body.heroOrders && typeof req.body.heroOrders === 'object') ? req.body.heroOrders : {};
   const settings = { heroProductIds, featuredProductIds };
   writeStorefront(settings);
   const heroSet = new Set(heroProductIds);
   const featuredSet = new Set(featuredProductIds);
-  const updated = products.map(product => ({ ...product, hero: heroSet.has(product.id), featured: featuredSet.has(product.id), updatedAt: new Date().toISOString() }));
+  const updated = products.map(product => ({
+    ...product,
+    hero: heroSet.has(product.id),
+    featured: featuredSet.has(product.id),
+    heroOrder: heroSet.has(product.id)
+      ? Math.max(1, Math.min(999, Number(heroOrders[product.id]) || (heroProductIds.indexOf(product.id) + 1)))
+      : 0,
+    updatedAt: new Date().toISOString()
+  }));
   writeProducts(updated);
   return res.json(settings);
 });

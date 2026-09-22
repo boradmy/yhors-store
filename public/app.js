@@ -411,9 +411,46 @@ function productForm(product = {}, classifications = {}) {
   </div><div class="form-actions"><button class="button" type="submit">${product.id ? 'Guardar cambios' : 'Crear producto'}</button><button class="button secondary ${product.id ? '' : 'hidden'}" type="button" id="cancelEdit">Cancelar</button><span class="message" id="formMessage"></span></div></form>`;
 }
 function selectionPanel(products, settings) {
-  const heroSet = new Set(settings.heroProductIds || []); const featuredSet = new Set(settings.featuredProductIds || []);
-  return `<section class="admin-panel selection-panel"><div class="section-heading"><div><span class="eyebrow">Experiencia de inicio</span><h2>Portada y productos destacados</h2></div><p>Elige qué aparece en el slider y qué productos se muestran en la portada.</p></div><div class="selection-grid"><div><h3>Slider de portada <small>máx. 6</small></h3><div class="selection-list">${products.map(p => `<label class="selection-row"><input type="checkbox" data-hero-select="${escapeHTML(p.id)}" ${heroSet.has(p.id) ? 'checked' : ''}><img data-fallback src="${escapeHTML(productImages(p)[0])}" alt=""><span><strong>${escapeHTML(p.name)}</strong><small>${escapeHTML(categories[p.category])}</small></span></label>`).join('')}</div></div><div><h3>Productos destacados <small>máx. 8</small></h3><div class="selection-list">${products.map(p => `<label class="selection-row"><input type="checkbox" data-featured-select="${escapeHTML(p.id)}" ${featuredSet.has(p.id) ? 'checked' : ''}><img data-fallback src="${escapeHTML(productImages(p)[0])}" alt=""><span><strong>${escapeHTML(p.name)}</strong><small>${money(p.price)}</small></span></label>`).join('')}</div></div></div><div class="form-actions"><button class="button" id="saveSelections">Guardar portada y destacados</button><span class="message" id="selectionMessage"></span></div></section>`;
+  const heroIds = settings.heroProductIds || [];
+  const featuredIds = settings.featuredProductIds || [];
+  const heroSet = new Set(heroIds);
+  const featuredSet = new Set(featuredIds);
+  const heroOrderMap = new Map(heroIds.map((id, index) => [id, Number(products.find(p => p.id === id)?.heroOrder) > 0 ? Number(products.find(p => p.id === id).heroOrder) : index + 1]));
+  const featuredOrderMap = new Map(featuredIds.map((id, index) => [id, index + 1]));
+  const row = (p, type) => {
+    const isHero = type === 'hero';
+    const selected = isHero ? heroSet.has(p.id) : featuredSet.has(p.id);
+    const order = isHero ? heroOrderMap.get(p.id) : featuredOrderMap.get(p.id);
+    const mark = isHero ? '◆' : '✦';
+    const label = isHero ? 'Usar' : 'Mostrar';
+    const meta = isHero ? (categories[p.category] || '') : money(p.price);
+    return `<div class="selection-row" data-selection-row data-selection-name="${escapeHTML(`${p.name} ${p.sku || ''} ${p.brand || ''} ${categories[p.category] || ''}`.toLowerCase())}">
+      <label class="selection-main">
+        <input class="selection-toggle ${isHero ? 'hero-toggle' : 'featured-toggle'}" type="checkbox" data-${isHero ? 'hero' : 'featured'}-select="${escapeHTML(p.id)}" ${selected ? 'checked' : ''} aria-label="${label} ${escapeHTML(p.name)} ${isHero ? 'en portada' : 'como destacado'}">
+        <span class="selection-mark" aria-hidden="true">${mark}</span>
+        <img data-fallback src="${escapeHTML(productImages(p)[0])}" alt="">
+        <span class="selection-copy"><strong>${escapeHTML(p.name)}</strong><small>${escapeHTML(meta)}</small></span>
+      </label>
+      <span class="selection-order"><span>Orden</span><input class="selection-order-input" type="number" min="1" max="999" value="${selected ? escapeHTML(order || 1) : ''}" data-${isHero ? 'hero' : 'featured'}-order="${escapeHTML(p.id)}" ${selected ? '' : 'disabled'} aria-label="Orden de ${escapeHTML(p.name)}"></span>
+    </div>`;
+  };
+  return `<section class="admin-panel selection-panel">
+    <div class="section-heading"><div><span class="eyebrow">Experiencia de inicio</span><h2>Portada y productos destacados</h2></div><p>Busca productos, selecciónalos y define directamente el orden en que aparecerán.</p></div>
+    <div class="selection-grid">
+      <div>
+        <div class="selection-heading-row"><div><h3>Slider de portada <small>máx. 6</small></h3><span class="selection-order-help">1 = primero</span></div><label class="selection-search"><span aria-hidden="true">⌕</span><input type="search" id="heroSelectionSearch" placeholder="Buscar producto, SKU o marca…" autocomplete="off"><button type="button" id="clearHeroSelectionSearch" aria-label="Limpiar búsqueda">×</button></label></div>
+        <div class="selection-list" id="heroSelectionList">${products.map(p => row(p, 'hero')).join('')}</div>
+      </div>
+      <div>
+        <div class="selection-heading-row"><div><h3>Productos destacados <small>máx. 8</small></h3><span class="selection-order-help">1 = primero</span></div><label class="selection-search"><span aria-hidden="true">⌕</span><input type="search" id="featuredSelectionSearch" placeholder="Buscar producto, SKU o marca…" autocomplete="off"><button type="button" id="clearFeaturedSelectionSearch" aria-label="Limpiar búsqueda">×</button></label></div>
+        <div class="selection-list" id="featuredSelectionList">${products.map(p => row(p, 'featured')).join('')}</div>
+      </div>
+    </div>
+    <div class="form-actions"><button class="button" id="saveSelections">Guardar portada y destacados</button><span class="message" id="selectionMessage"></span></div>
+  </section>`;
 }
+
+
 function classificationPanel(classifications) {
   return `<section class="admin-panel classification-panel"><div class="section-heading"><div><span class="eyebrow">Organización</span><h2>Clasificaciones</h2></div><p>Crea tus propias marcas y tipos de producto por universo.</p></div>
     <div class="classification-grid">
@@ -448,7 +485,118 @@ async function renderAdmin() {
   document.querySelector('#inventorySearch')?.addEventListener('input', drawList);
   document.querySelector('#clearInventorySearch')?.addEventListener('click', () => { const input = document.querySelector('#inventorySearch'); if (!input) return; input.value = ''; input.focus(); drawList(); });
   function drawSelectionPanel() { document.querySelector('.selection-panel')?.remove(); const anchor = document.querySelector('.admin-top'); anchor.insertAdjacentHTML('afterend', selectionPanel(products, settings)); bindSelectionEvents(); }
-  function bindSelectionEvents() { wireImageFallback(document.querySelector('.selection-panel')); document.querySelector('#saveSelections')?.addEventListener('click', async () => { const message = document.querySelector('#selectionMessage'); const heroChecked = [...document.querySelectorAll('[data-hero-select]:checked')]; const featuredChecked = [...document.querySelectorAll('[data-featured-select]:checked')]; if (heroChecked.length > 6 || featuredChecked.length > 8) { message.className = 'message error'; message.textContent = 'Máximo: 6 imágenes en portada y 8 productos destacados.'; return; } const heroProductIds = heroChecked.map(x => x.dataset.heroSelect); const featuredProductIds = featuredChecked.map(x => x.dataset.featuredSelect); try { await request('/api/admin/storefront', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ heroProductIds, featuredProductIds }) }); settings = { heroProductIds, featuredProductIds }; products = products.map(p => ({ ...p, hero: heroProductIds.includes(p.id), featured: featuredProductIds.includes(p.id) })); message.textContent = '✓ Portada y destacados guardados.'; drawList(); } catch (e) { message.className = 'message error'; message.textContent = e.message; } }); }
+  function bindSelectionEvents() {
+    const panel = document.querySelector('.selection-panel');
+    if (!panel) return;
+    wireImageFallback(panel);
+    const wireSearch = (inputId, listId, clearId) => {
+      const input = document.querySelector(inputId);
+      const list = document.querySelector(listId);
+      const clear = document.querySelector(clearId);
+      const apply = () => {
+        const query = (input?.value || '').trim().toLowerCase();
+        list?.querySelectorAll('[data-selection-row]').forEach(row => {
+          row.hidden = Boolean(query) && !String(row.dataset.selectionName || '').includes(query);
+        });
+      };
+      input?.addEventListener('input', apply);
+      clear?.addEventListener('click', () => { if (input) { input.value = ''; input.focus(); apply(); } });
+    };
+    wireSearch('#heroSelectionSearch', '#heroSelectionList', '#clearHeroSelectionSearch');
+    wireSearch('#featuredSelectionSearch', '#featuredSelectionList', '#clearFeaturedSelectionSearch');
+
+    const reorderSelectionRows = (listId) => {
+      const list = document.querySelector(listId);
+      if (!list) return;
+      const rows = [...list.querySelectorAll('.selection-row')];
+      const selected = rows.filter(row => row.querySelector('.selection-toggle')?.checked);
+      const unselected = rows.filter(row => !row.querySelector('.selection-toggle')?.checked);
+      selected.sort((a, b) => {
+        const ao = Number(a.querySelector('.selection-order-input')?.value) || 999999;
+        const bo = Number(b.querySelector('.selection-order-input')?.value) || 999999;
+        return ao - bo;
+      });
+      [...selected, ...unselected].forEach(row => list.appendChild(row));
+    };
+
+    // Evita que el navegador haga scroll automático al checkbox oculto.
+    // La selección se realiza manualmente y la página conserva exactamente su posición.
+    panel.querySelectorAll('.selection-main').forEach(label => {
+      label.addEventListener('click', e => {
+        if (e.target.closest('.selection-order-input')) return;
+        e.preventDefault();
+        const toggle = label.querySelector('.selection-toggle');
+        if (!toggle) return;
+        toggle.checked = !toggle.checked;
+        toggle.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+    });
+
+    panel.querySelectorAll('.selection-order-input').forEach(input => {
+      input.addEventListener('click', e => e.stopPropagation());
+      input.addEventListener('pointerdown', e => e.stopPropagation());
+      input.addEventListener('input', () => {
+        const listId = input.dataset.heroOrder ? '#heroSelectionList' : '#featuredSelectionList';
+        reorderSelectionRows(listId);
+      });
+      input.addEventListener('change', () => {
+        const listId = input.dataset.heroOrder ? '#heroSelectionList' : '#featuredSelectionList';
+        reorderSelectionRows(listId);
+      });
+    });
+
+    panel.querySelectorAll('.selection-toggle').forEach(toggle => {
+      toggle.addEventListener('change', () => {
+        const row = toggle.closest('.selection-row');
+        const order = row?.querySelector('.selection-order-input');
+        if (order) {
+          order.disabled = !toggle.checked;
+          if (toggle.checked && !order.value) {
+            const selector = toggle.dataset.heroSelect ? '[data-hero-order]' : '[data-featured-order]';
+            const usedOrders = [...panel.querySelectorAll(selector)]
+              .filter(input => !input.disabled)
+              .map(input => Number(input.value) || 0);
+            order.value = String(Math.max(0, ...usedOrders) + 1);
+          }
+        }
+        reorderSelectionRows(toggle.dataset.heroSelect ? '#heroSelectionList' : '#featuredSelectionList');
+      });
+    });
+
+    reorderSelectionRows('#heroSelectionList');
+    reorderSelectionRows('#featuredSelectionList');
+
+    document.querySelector('#saveSelections')?.addEventListener('click', async () => {
+      const message = document.querySelector('#selectionMessage');
+      const heroChecked = [...panel.querySelectorAll('[data-hero-select]:checked')];
+      const featuredChecked = [...panel.querySelectorAll('[data-featured-select]:checked')];
+      if (heroChecked.length > 6 || featuredChecked.length > 8) { message.className = 'message error'; message.textContent = 'Máximo: 6 imágenes en portada y 8 productos destacados.'; return; }
+
+      const sortByOrder = (items, attr) => items.map((checkbox, index) => {
+        const orderInput = panel.querySelector(`[data-${attr}-order="${CSS.escape(checkbox.dataset[`${attr}Select`])}"]`);
+        const order = Math.max(1, Math.min(999, Number(orderInput?.value) || index + 1));
+        return { id: checkbox.dataset[`${attr}Select`], order, index };
+      }).sort((a, b) => a.order - b.order || a.index - b.index);
+
+      const heroOrdered = sortByOrder(heroChecked, 'hero');
+      const featuredOrdered = sortByOrder(featuredChecked, 'featured');
+      const heroProductIds = heroOrdered.map(item => item.id);
+      const featuredProductIds = featuredOrdered.map(item => item.id);
+      try {
+        await request('/api/admin/storefront', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ heroProductIds, featuredProductIds, heroOrders: Object.fromEntries(heroOrdered.map(item => [item.id, item.order])) }) });
+        settings = { heroProductIds, featuredProductIds };
+        products = products.map(p => ({
+          ...p,
+          hero: heroProductIds.includes(p.id),
+          featured: featuredProductIds.includes(p.id),
+          heroOrder: heroOrdered.find(item => item.id === p.id)?.order || 0
+        }));
+        message.className = 'message';
+        message.textContent = '✓ Portada y destacados guardados con el orden indicado.';
+        drawList();
+      } catch (e) { message.className = 'message error'; message.textContent = e.message; }
+    });
+  }
   function renderClassifications() {
     const render = (target, values, type) => {
       const container = document.querySelector(target);
