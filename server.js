@@ -126,10 +126,11 @@ function corpSeoBody() {
   return `<main class="section"><div class="brand-section-inner"><span class="eyebrow">YHORS-CORP</span><h1>YHORS-CORP</h1><p>Espacio corporativo de YHORS y punto de referencia para conocer el ecosistema de la marca.</p><h2>YHORS-STORE</h2><p>YHORS-STORE es la tienda online de YHORS, con un catálogo de tecnología, detalles, cosplay, mascotas, coleccionables y otros productos seleccionados.</p><a class="button" href="/">Visitar YHORS-STORE <span>→</span></a></div></main>`;
 }
 
+// SEO public files are served explicitly so crawler access is independent of the static/admin middleware.
 app.get('/robots.txt', (_, res) => {
   res.status(200)
-    .type('text/plain')
-    .set('Cache-Control', 'no-cache, no-store, must-revalidate')
+    .set('Content-Type', 'text/plain; charset=utf-8')
+    .set('Cache-Control', 'public, max-age=0, must-revalidate')
     .send(`User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: ${ADMIN_PATH}\nDisallow: ${ADMIN_PATH}/\nSitemap: ${SITE_URL}/sitemap.xml\n`);
 });
 
@@ -157,7 +158,7 @@ app.get('/sitemap.xml', (_, res) => {
   const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${body}\n</urlset>\n`;
   res.status(200)
     .set('Content-Type', 'application/xml; charset=utf-8')
-    .set('Cache-Control', 'no-cache, no-store, must-revalidate')
+    .set('Cache-Control', 'public, max-age=0, must-revalidate')
     .send(xml);
 });
 
