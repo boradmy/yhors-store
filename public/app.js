@@ -111,26 +111,83 @@ function cartMarkup() {
   </aside>`;
 }
 
+function compactHeroText(value, max = 180) {
+  const clean = String(value || '').replace(/\s+/g, ' ').trim();
+  if (!clean) return '';
+  return clean.length > max ? `${clean.slice(0, max - 1).trim()}…` : clean;
+}
 function heroMarkup(slides, isCategory = false, categoryKey = 'all') {
   const safeSlides = slides.length ? slides : [{ image: placeholder, name: categories[categoryKey] || 'YHORS', category: categoryKey, description: categoryDescriptions[categoryKey] }];
   return `<section class="hero-slider ${isCategory ? 'category-hero' : ''}" id="heroSlider" aria-label="${escapeHTML(categories[categoryKey] || 'Colección YHORS')}">
-    <div class="hero-track">${safeSlides.map((slide, index) => `<article class="hero-slide ${index === 0 ? 'active' : ''}" data-slide="${index}">
+    <div class="hero-track">${safeSlides.map((slide, index) => {
+      const title = slide.heroTitle || (isCategory ? categories[categoryKey] : slide.name) || 'PIEZAS QUE CUENTAN TU HISTORIA';
+      const description = compactHeroText(slide.heroDescription || slide.description || categoryDescriptions[categoryKey] || 'Descubre una selección pensada para hacer especial cada ocasión.');
+      const href = slide.id ? productHref(slide) : (isCategory ? '#productos-categoria' : '#destacados');
+      return `<article class="hero-slide ${index === 0 ? 'active' : ''}" data-slide="${index}">
       <div class="hero-backdrop" aria-hidden="true" style="background-image:url('${escapeHTML(slide.image)}')"></div><img class="hero-bg" data-fallback src="${escapeHTML(slide.image)}" alt="${escapeHTML(slide.name || 'YHORS')}"><div class="hero-overlay"></div>
       <div class="hero-content"><span class="eyebrow">YHORS · ${escapeHTML(categories[slide.category] || categories[categoryKey] || 'COLECCIÓN')}</span>
-      <h1>${escapeHTML(slide.heroTitle || (isCategory ? categories[categoryKey] : slide.name) || 'PIEZAS QUE CUENTAN TU HISTORIA').replace(/\n/g, '<br>')}</h1>
-      <p>${escapeHTML(slide.heroDescription || slide.description || categoryDescriptions[categoryKey] || 'Descubre una selección pensada para hacer especial cada ocasión.')}</p>
-      <a class="button hero-button" href="${isCategory ? '#productos-categoria' : '#destacados'}">${isCategory ? 'Explorar colección' : 'Descubrir YHORS'} <span>→</span></a></div>
-    </article>`).join('')}</div>
+      <h1>${escapeHTML(title).replace(/\n/g, '<br>')}</h1>
+      <p>${escapeHTML(description)}</p>
+      <a class="button hero-button" href="${escapeHTML(href)}">${isCategory && !slide.id ? 'Explorar colección' : 'Ver producto'}</a></div>
+    </article>`;
+    }).join('')}</div>
     ${safeSlides.length > 1 ? `<button class="hero-arrow hero-prev" type="button" aria-label="Anterior">‹</button><button class="hero-arrow hero-next" type="button" aria-label="Siguiente">›</button><div class="hero-dots">${safeSlides.map((_, i) => `<button type="button" class="hero-dot ${i === 0 ? 'active' : ''}" data-hero-index="${i}" aria-label="Ir a la imagen ${i + 1}"></button>`).join('')}</div>` : ''}
   </section>`;
 }
 function wireHero(slides) {
-  const slider = document.querySelector('#heroSlider'); if (!slider) return; wireImageFallback(slider); if (slides.length <= 1) return;
-  let current = 0; const slideEls = [...slider.querySelectorAll('.hero-slide')]; const dots = [...slider.querySelectorAll('.hero-dot')];
-  const go = index => { current = (index + slideEls.length) % slideEls.length; slideEls.forEach((el, i) => el.classList.toggle('active', i === current)); dots.forEach((el, i) => el.classList.toggle('active', i === current)); };
-  slider.querySelector('.hero-prev')?.addEventListener('click', () => go(current - 1)); slider.querySelector('.hero-next')?.addEventListener('click', () => go(current + 1));
+  const slider = document.querySelector('#heroSlider');
+  if (!slider) return;
+  wireImageFallback(slider);
+  if (slides.length <= 1) return;
+
+  let current = 0;
+  const slideEls = [...slider.querySelectorAll('.hero-slide')];
+  const dots = [...slider.querySelectorAll('.hero-dot')];
+  const DURATION = 5500;
+  let autoTimer = null;
+
+  const restartProgress = () => {
+    dots.forEach(dot => {
+      dot.classList.remove('active');
+      // Force a reflow so the CSS progress animation always starts from 0.
+      void dot.offsetWidth;
+    });
+    if (dots[current]) dots[current].classList.add('active');
+  };
+
+  const go = (index, restartAuto = true) => {
+    current = (index + slideEls.length) % slideEls.length;
+    slideEls.forEach((el, i) => el.classList.toggle('active', i === current));
+    restartProgress();
+    if (restartAuto) scheduleNext();
+  };
+
+  const scheduleNext = () => {
+    clearTimeout(autoTimer);
+    autoTimer = setTimeout(() => go(current + 1, true), DURATION);
+  };
+
+  slider.querySelector('.hero-prev')?.addEventListener('click', () => go(current - 1));
+  slider.querySelector('.hero-next')?.addEventListener('click', () => go(current + 1));
   dots.forEach(dot => dot.addEventListener('click', () => go(Number(dot.dataset.heroIndex))));
-  let timer = setInterval(() => go(current + 1), 5500); slider.addEventListener('mouseenter', () => clearInterval(timer)); slider.addEventListener('mouseleave', () => { timer = setInterval(() => go(current + 1), 5500); });
+
+  // The progress bar is now the clock: when it finishes, the next slide starts.
+  slider.addEventListener('mouseenter', () => {
+    paused = true;
+    clearTimeout(autoTimer);
+    const dot = dots[current];
+    if (dot) dot.style.setProperty('--hero-progress-play-state', 'paused');
+  });
+  slider.addEventListener('mouseleave', () => {
+    paused = false;
+    const dot = dots[current];
+    if (dot) dot.style.setProperty('--hero-progress-play-state', 'running');
+    scheduleNext();
+  });
+
+  // Initial state.
+  restartProgress();
+  scheduleNext();
 }
 
 function categoryBlocks() {

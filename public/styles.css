@@ -359,19 +359,11 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}.brand{letter-sp
     max-width:92%;
     text-shadow:0 2px 12px rgba(0,0,0,.35);
   }
-  /* En móvil el CTA queda reducido a: "Ver detalles →" */
+  /* En móvil se muestra únicamente "Ver producto". */
   .hero-button{
     padding:9px 14px;
-    font-size:0;
-    min-height:38px;
-  }
-  .hero-button::before{
-    content:"Ver detalles";
     font-size:.72rem;
-    font-weight:800;
-  }
-  .hero-button span{
-    font-size:.88rem;
+    min-height:38px;
   }
   .hero-arrow{
     width:32px;
@@ -1009,3 +1001,174 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}.brand{letter-sp
 .save-success{transition:opacity .35s ease,transform .35s ease,max-width .35s ease,padding .35s ease,margin .35s ease}
 .save-fade-out{opacity:0;transform:translateY(-3px);pointer-events:none}
 @media(max-width:700px){.product-editor-preview-media{width:76px;height:76px;flex-basis:76px}.product-editor-preview{align-items:flex-start}}
+
+/* YHORS 4.4 · portada más limpia y botón directo al producto */
+.hero-content h1{
+  max-width: 760px;
+  font-size: clamp(2.65rem, 4.7vw, 5rem);
+  line-height: 1.02;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+.hero-content p{
+  max-width: 520px;
+  margin-top: 10px;
+  font-size: .82rem;
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  opacity: .92;
+}
+.detail-sku{
+  margin-top: 9px;
+  margin-bottom: 16px;
+}
+
+@media(max-width:760px){
+  .hero-content h1{
+    font-size: clamp(1.28rem, 6.2vw, 1.72rem);
+    line-height: 1.08;
+    max-width: 88%;
+    margin-bottom: 8px;
+    -webkit-line-clamp: 3;
+  }
+  .hero-content p{
+    display: -webkit-box;
+    max-width: 78%;
+    margin: 0 0 9px;
+    font-size: .62rem;
+    line-height: 1.3;
+    -webkit-line-clamp: 2;
+    opacity: .9;
+  }
+  .hero-button{font-size:.68rem;padding:9px 12px}
+  .detail-sku{margin-top:10px}
+}
+
+
+/* YHORS 4.5 · refinamiento final de portada: CTA, indicadores animados y mejor lectura */
+.hero-content h1{
+  font-size:clamp(2.85rem,5vw,5.2rem);
+  max-width:800px;
+  -webkit-line-clamp:3;
+}
+.hero-content p{
+  max-width:600px;
+  font-size:.9rem;
+  line-height:1.45;
+  margin-top:12px;
+  display:-webkit-box;
+  -webkit-box-orient:vertical;
+  -webkit-line-clamp:3;
+}
+
+.hero-dots{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+}
+.hero-dot{
+  position:relative;
+  width:34px;
+  height:4px;
+  padding:0;
+  border:0;
+  border-radius:999px;
+  overflow:hidden;
+  background:rgba(255,255,255,.38);
+  opacity:.9;
+  transition:width .35s ease,background .35s ease,opacity .35s ease,transform .35s ease;
+}
+.hero-dot:hover{opacity:1;transform:translateY(-1px)}
+.hero-dot.active{
+  width:48px;
+  background:rgba(255,255,255,.28);
+  opacity:1;
+}
+.hero-dot.active::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  border-radius:inherit;
+  background:#fff;
+  transform-origin:left center;
+  animation:heroDotProgress 5.5s linear forwards;
+}
+@keyframes heroDotProgress{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+
+/* El SKU queda visualmente más separado del precio. */
+.detail-sku{
+  margin-top:14px;
+  margin-bottom:16px;
+}
+
+@media(max-width:760px){
+  .hero-content h1{
+    font-size:clamp(1.48rem,7vw,1.92rem);
+    line-height:1.07;
+    max-width:94%;
+    margin-bottom:9px;
+    -webkit-line-clamp:3;
+  }
+  .hero-content p{
+    display:-webkit-box;
+    max-width:92%;
+    font-size:.7rem;
+    line-height:1.38;
+    margin:0 0 10px;
+    -webkit-line-clamp:3;
+  }
+  .hero-button{font-size:.7rem;padding:9px 13px}
+  .hero-dot{width:27px;height:3px;}
+  .hero-dot.active{width:39px;}
+  .detail-sku{margin-top:14px}
+}
+
+@media(max-width:440px){
+  .hero-content h1{font-size:clamp(1.4rem,7vw,1.78rem);max-width:96%}
+  .hero-content p{font-size:.68rem;max-width:95%;-webkit-line-clamp:3}
+  .hero-dot{width:24px}
+  .hero-dot.active{width:35px}
+}
+
+/* YHORS 4.6 · progreso de portada sincronizado con el cambio automático */
+.hero-dot.active::after{
+  animation-duration:5.5s;
+  animation-timing-function:linear;
+  animation-fill-mode:forwards;
+  animation-play-state:var(--hero-progress-play-state, running);
+}
+
+/* En móvil: títulos más compactos para nombres largos como notebooks */
+@media(max-width:760px){
+  .hero-content h1{
+    font-size:clamp(1.22rem,5.6vw,1.62rem);
+    line-height:1.08;
+    max-width:92%;
+    -webkit-line-clamp:2;
+    overflow:hidden;
+  }
+  .hero-content p{
+    font-size:.68rem;
+    line-height:1.32;
+    max-width:92%;
+    -webkit-line-clamp:3;
+    overflow:hidden;
+  }
+}
+@media(max-width:440px){
+  .hero-content h1{
+    font-size:clamp(1.16rem,5.2vw,1.48rem);
+    max-width:94%;
+    -webkit-line-clamp:2;
+  }
+  .hero-content p{
+    font-size:.65rem;
+    -webkit-line-clamp:3;
+  }
+}
