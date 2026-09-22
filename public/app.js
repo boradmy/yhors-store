@@ -401,6 +401,7 @@ function productForm(product = {}, classifications = {}) {
     <div class="field"><label for="salePrice">Precio de venta (USD)</label><input id="salePrice" name="salePrice" required min="0" step="0.01" type="number" value="${escapeHTML(product.salePrice ?? product.price ?? '')}"></div>
     <div class="field ${isCosplay ? '' : 'hidden'}"><label for="rentalPrice">Precio de alquiler (USD)</label><input id="rentalPrice" name="rentalPrice" ${isCosplay ? 'required' : ''} min="0" step="0.01" type="number" value="${escapeHTML(product.rentalPrice ?? '')}"><small class="field-help">Disponible para productos de Cosplay.</small></div>
     <div class="field"><label for="imageFile">Subir foto principal (máx. 5 MB)</label><input id="imageFile" name="imageFile" type="file" accept="image/jpeg,image/png,image/webp,image/gif"></div>
+    <div class="field full product-image-preview-field"><label>Vista previa del producto</label><div class="product-editor-preview"><div class="product-editor-preview-media"><img id="productImagePreview" data-fallback src="${escapeHTML(images[0] || product.image || placeholder)}" alt="Vista previa"></div><div class="product-editor-preview-copy"><strong>${escapeHTML(product.name || 'Nuevo producto')}</strong><small>Imagen principal · se actualiza al cambiar la URL o seleccionar un archivo.</small></div></div></div>
     <div class="field full"><label for="image">URL de imagen principal</label><input id="image" name="image" type="url" placeholder="https://..." value="${escapeHTML(images[0] || product.image || '')}"></div>
     <div class="field full"><label for="image2">Imagen adicional 2 · URL</label><input id="image2" name="image2" type="url" value="${escapeHTML(images[1] || '')}"></div>
     <div class="field full"><label for="image3">Imagen adicional 3 · URL</label><input id="image3" name="image3" type="url" value="${escapeHTML(images[2] || '')}"></div>
@@ -424,25 +425,25 @@ function selectionPanel(products, settings) {
     const mark = isHero ? '◆' : '✦';
     const label = isHero ? 'Usar' : 'Mostrar';
     const meta = isHero ? (categories[p.category] || '') : money(p.price);
-    return `<div class="selection-row" data-selection-row data-selection-name="${escapeHTML(`${p.name} ${p.sku || ''} ${p.brand || ''} ${categories[p.category] || ''}`.toLowerCase())}">
+    return `<div class="selection-row ${selected ? 'is-selected' : ''}" data-selection-row data-selection-name="${escapeHTML(`${p.name} ${p.sku || ''} ${p.brand || ''} ${categories[p.category] || ''}`.toLowerCase())}" draggable="${selected ? 'true' : 'false'}">
       <label class="selection-main">
         <input class="selection-toggle ${isHero ? 'hero-toggle' : 'featured-toggle'}" type="checkbox" data-${isHero ? 'hero' : 'featured'}-select="${escapeHTML(p.id)}" ${selected ? 'checked' : ''} aria-label="${label} ${escapeHTML(p.name)} ${isHero ? 'en portada' : 'como destacado'}">
         <span class="selection-mark" aria-hidden="true">${mark}</span>
         <img data-fallback src="${escapeHTML(productImages(p)[0])}" alt="">
         <span class="selection-copy"><strong>${escapeHTML(p.name)}</strong><small>${escapeHTML(meta)}</small></span>
       </label>
-      <span class="selection-order"><span>Orden</span><input class="selection-order-input" type="number" min="1" max="999" value="${selected ? escapeHTML(order || 1) : ''}" data-${isHero ? 'hero' : 'featured'}-order="${escapeHTML(p.id)}" ${selected ? '' : 'disabled'} aria-label="Orden de ${escapeHTML(p.name)}"></span>
+      <span class="selection-order" aria-label="${selected ? `Orden ${order || 1}` : 'No seleccionado'}"><span>Orden</span><b class="selection-order-number" data-order-number="${escapeHTML(p.id)}">${selected ? escapeHTML(order || 1) : '—'}</b><span class="drag-hint" aria-hidden="true">↕</span></span>
     </div>`;
   };
   return `<section class="admin-panel selection-panel">
-    <div class="section-heading"><div><span class="eyebrow">Experiencia de inicio</span><h2>Portada y productos destacados</h2></div><p>Busca productos, selecciónalos y define directamente el orden en que aparecerán.</p></div>
+    <div class="section-heading"><div><span class="eyebrow">Experiencia de inicio</span><h2>Portada y productos destacados</h2></div><p>Busca productos, selecciónalos y arrástralos para definir el orden en que aparecerán.</p></div>
     <div class="selection-grid">
       <div>
-        <div class="selection-heading-row"><div><h3>Slider de portada <small>máx. 6</small></h3><span class="selection-order-help">1 = primero</span></div><label class="selection-search"><span aria-hidden="true">⌕</span><input type="search" id="heroSelectionSearch" placeholder="Buscar producto, SKU o marca…" autocomplete="off"><button type="button" id="clearHeroSelectionSearch" aria-label="Limpiar búsqueda">×</button></label></div>
+        <div class="selection-heading-row"><div><h3>Slider de portada <small>máx. 6</small></h3><span class="selection-order-help">Arrastra para ordenar · se numera solo</span></div><label class="selection-search"><span aria-hidden="true">⌕</span><input type="search" id="heroSelectionSearch" placeholder="Buscar producto, SKU o marca…" autocomplete="off"><button type="button" id="clearHeroSelectionSearch" aria-label="Limpiar búsqueda">×</button></label></div>
         <div class="selection-list" id="heroSelectionList">${products.map(p => row(p, 'hero')).join('')}</div>
       </div>
       <div>
-        <div class="selection-heading-row"><div><h3>Productos destacados <small>máx. 8</small></h3><span class="selection-order-help">1 = primero</span></div><label class="selection-search"><span aria-hidden="true">⌕</span><input type="search" id="featuredSelectionSearch" placeholder="Buscar producto, SKU o marca…" autocomplete="off"><button type="button" id="clearFeaturedSelectionSearch" aria-label="Limpiar búsqueda">×</button></label></div>
+        <div class="selection-heading-row"><div><h3>Productos destacados <small>máx. 8</small></h3><span class="selection-order-help">Arrastra para ordenar · se numera solo</span></div><label class="selection-search"><span aria-hidden="true">⌕</span><input type="search" id="featuredSelectionSearch" placeholder="Buscar producto, SKU o marca…" autocomplete="off"><button type="button" id="clearFeaturedSelectionSearch" aria-label="Limpiar búsqueda">×</button></label></div>
         <div class="selection-list" id="featuredSelectionList">${products.map(p => row(p, 'featured')).join('')}</div>
       </div>
     </div>
@@ -462,7 +463,7 @@ function classificationPanel(classifications) {
 async function renderAdmin() {
   const session = await request('/api/admin/session').catch(() => ({ authenticated: false })); if (!session.authenticated) return renderLogin();
   let products = await request('/api/admin/products').catch(() => []); let classifications = await request('/api/admin/classifications').catch(() => ({ brands: {}, productTypes: {} })); let settings = await request('/api/admin/storefront').catch(() => ({ heroProductIds: [], featuredProductIds: [] })); let editing = null;
-  app.innerHTML = `<main class="admin-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Administración</h1></div><button class="button secondary" id="logout">Cerrar sesión</button></div>${selectionPanel(products, settings)}${classificationPanel(classifications)}<section class="admin-panel"><span class="eyebrow">Catálogo</span><h2 id="formTitle">Agregar producto</h2><div id="formArea"></div></section><section class="admin-products"><div class="section-heading inventory-heading"><div><span class="eyebrow">Inventario</span><h2>Productos publicados (${products.length})</h2></div><p>Edita datos, imágenes, portada y destacados.</p></div><div class="inventory-toolbar"><label class="inventory-search"><span aria-hidden="true">⌕</span><input id="inventorySearch" type="search" placeholder="Buscar por nombre, SKU, marca o categoría…" autocomplete="off"><button id="clearInventorySearch" type="button" aria-label="Limpiar búsqueda">×</button></label><span class="inventory-count" id="inventoryCount">${products.length} productos</span></div><div id="adminProducts"></div></section></div></main>`;
+  app.innerHTML = `<main class="admin-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Administración</h1></div><button class="button secondary" id="logout">Cerrar sesión</button></div>${selectionPanel(products, settings)}${classificationPanel(classifications)}<section class="admin-panel product-editor-panel" id="productEditorPanel"><span class="eyebrow">Catálogo</span><h2 id="formTitle">Agregar producto</h2><div id="formArea"></div></section><section class="admin-products"><div class="section-heading inventory-heading"><div><span class="eyebrow">Inventario</span><h2>Productos publicados (${products.length})</h2></div><p>Edita datos, imágenes, portada y destacados.</p></div><div class="inventory-toolbar"><label class="inventory-search"><span aria-hidden="true">⌕</span><input id="inventorySearch" type="search" placeholder="Buscar por nombre, SKU, marca o categoría…" autocomplete="off"><button id="clearInventorySearch" type="button" aria-label="Limpiar búsqueda">×</button></label><span class="inventory-count" id="inventoryCount">${products.length} productos</span></div><div id="adminProducts"></div></section></div></main>`;
   const formArea = document.querySelector('#formArea'); const listArea = document.querySelector('#adminProducts');
   function drawList() {
     const categoryKeys = Object.keys(categories).filter(k => k !== 'all');
@@ -479,7 +480,7 @@ async function renderAdmin() {
       return `<section class="admin-category-group"><div class="admin-category-heading"><span class="eyebrow">Universo</span><h3>${escapeHTML(categories[key])} <small>${group.length}</small></h3></div>${group.map(p => `<article class="admin-product"><img data-fallback src="${escapeHTML(productImages(p)[0])}" alt=""><div><h3>${escapeHTML(p.name)} ${p.featured ? '<span class="featured-star">★ Destacado</span>' : ''} ${p.hero ? '<span class="hero-tag">◆ Portada</span>' : ''}</h3><p><strong class="admin-sku">SKU: ${escapeHTML(p.sku || '—')}</strong> · ${escapeHTML(categories[p.category] || p.category)}${productMeta(p) ? ` · ${escapeHTML(productMeta(p))}` : ''} · Venta ${productPriceLabel(p)}${p.category === 'cosplay' && p.rentalPrice !== null && p.rentalPrice !== undefined && p.rentalPrice !== '' ? ` · Alquiler ${money(p.rentalPrice)}` : ''} · ${productImages(p).length} imagen(es)</p></div><div class="admin-actions"><button class="button secondary small" data-edit="${escapeHTML(p.id)}">Editar</button><button class="button danger small" data-delete="${escapeHTML(p.id)}">Eliminar</button></div></article>`).join('')}</section>`;
     }).join('') : `<div class="empty">${query ? 'No encontramos productos con esa búsqueda.' : 'No hay productos aún.'}</div>`;
     wireImageFallback(listArea);
-    listArea.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', () => { editing = products.find(p => p.id === b.dataset.edit); drawForm(); window.scrollTo({ top: 0, behavior: 'smooth' }); }));
+    listArea.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', () => { editing = products.find(p => p.id === b.dataset.edit); drawForm(); requestAnimationFrame(() => document.querySelector('#productEditorPanel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })); }));
     listArea.querySelectorAll('[data-delete]').forEach(b => b.addEventListener('click', async () => { const product = products.find(p => p.id === b.dataset.delete); if (!confirm(`¿Eliminar “${product.name}”? Esta acción no se puede deshacer.`)) return; try { await request(`/api/admin/products/${product.id}`, { method: 'DELETE' }); products = products.filter(p => p.id !== product.id); settings.heroProductIds = settings.heroProductIds.filter(id => id !== product.id); settings.featuredProductIds = settings.featuredProductIds.filter(id => id !== product.id); await request('/api/admin/storefront', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(settings) }); drawList(); drawSelectionPanel(); drawForm(); } catch (e) { alert(e.message); } }));
   }
   document.querySelector('#inventorySearch')?.addEventListener('input', drawList);
@@ -505,25 +506,85 @@ async function renderAdmin() {
     wireSearch('#heroSelectionSearch', '#heroSelectionList', '#clearHeroSelectionSearch');
     wireSearch('#featuredSelectionSearch', '#featuredSelectionList', '#clearFeaturedSelectionSearch');
 
-    const reorderSelectionRows = (listId) => {
+    const renumberSelectionRows = (listId) => {
       const list = document.querySelector(listId);
       if (!list) return;
+
+      // Los seleccionados quedan siempre ANCLADOS ARRIBA.
+      // Dentro de ese bloque se conserva exactamente el orden conseguido
+      // con el arrastre. Los no seleccionados quedan debajo.
       const rows = [...list.querySelectorAll('.selection-row')];
-      const selected = rows.filter(row => row.querySelector('.selection-toggle')?.checked);
-      const unselected = rows.filter(row => !row.querySelector('.selection-toggle')?.checked);
-      selected.sort((a, b) => {
-        const ao = Number(a.querySelector('.selection-order-input')?.value) || 999999;
-        const bo = Number(b.querySelector('.selection-order-input')?.value) || 999999;
-        return ao - bo;
+      const selectedRows = rows.filter(row => row.querySelector('.selection-toggle')?.checked);
+      const unselectedRows = rows.filter(row => !row.querySelector('.selection-toggle')?.checked);
+      [...selectedRows, ...unselectedRows].forEach(row => list.appendChild(row));
+
+      let number = 1;
+      [...selectedRows, ...unselectedRows].forEach(row => {
+        const toggle = row.querySelector('.selection-toggle');
+        const badge = row.querySelector('.selection-order-number');
+        const order = row.querySelector('.selection-order');
+        const selected = Boolean(toggle?.checked);
+        row.classList.toggle('is-selected', selected);
+        row.draggable = selected;
+        if (badge) badge.textContent = selected ? String(number++) : '—';
+        if (order) order.setAttribute('aria-label', selected ? `Orden ${number - 1}` : 'No seleccionado');
       });
-      [...selected, ...unselected].forEach(row => list.appendChild(row));
+    };
+
+    const moveDraggedRow = (list, dragged, target, before) => {
+      if (!list || !dragged || !target || dragged === target) return;
+      if (before) list.insertBefore(dragged, target);
+      else list.insertBefore(dragged, target.nextSibling);
+    };
+
+    const wireDragReorder = (listId) => {
+      const list = document.querySelector(listId);
+      if (!list) return;
+      let draggedRow = null;
+
+      list.querySelectorAll('.selection-row').forEach(row => {
+        row.addEventListener('dragstart', e => {
+          if (!row.querySelector('.selection-toggle')?.checked) {
+            e.preventDefault();
+            return;
+          }
+          draggedRow = row;
+          row.classList.add('dragging');
+          e.dataTransfer.effectAllowed = 'move';
+          e.dataTransfer.setData('text/plain', row.dataset.selectionName || '');
+        });
+
+        row.addEventListener('dragend', () => {
+          row.classList.remove('dragging');
+          list.querySelectorAll('.drag-over').forEach(item => item.classList.remove('drag-over'));
+          draggedRow = null;
+          renumberSelectionRows(listId);
+        });
+
+        row.addEventListener('dragover', e => {
+          if (!draggedRow || draggedRow === row || !row.querySelector('.selection-toggle')?.checked) return;
+          e.preventDefault();
+          const rect = row.getBoundingClientRect();
+          const before = e.clientY < rect.top + rect.height / 2;
+          list.querySelectorAll('.drag-over').forEach(item => item.classList.remove('drag-over'));
+          row.classList.add('drag-over');
+          moveDraggedRow(list, draggedRow, row, before);
+        });
+
+        row.addEventListener('drop', e => {
+          if (!draggedRow) return;
+          e.preventDefault();
+          row.classList.remove('drag-over');
+          renumberSelectionRows(listId);
+        });
+      });
     };
 
     // Evita que el navegador haga scroll automático al checkbox oculto.
     // La selección se realiza manualmente y la página conserva exactamente su posición.
     panel.querySelectorAll('.selection-main').forEach(label => {
       label.addEventListener('click', e => {
-        if (e.target.closest('.selection-order-input')) return;
+        if (e.target.closest('.selection-order')) return;
         e.preventDefault();
         const toggle = label.querySelector('.selection-toggle');
         if (!toggle) return;
@@ -532,39 +593,34 @@ async function renderAdmin() {
       });
     });
 
-    panel.querySelectorAll('.selection-order-input').forEach(input => {
-      input.addEventListener('click', e => e.stopPropagation());
-      input.addEventListener('pointerdown', e => e.stopPropagation());
-      input.addEventListener('input', () => {
-        const listId = input.dataset.heroOrder ? '#heroSelectionList' : '#featuredSelectionList';
-        reorderSelectionRows(listId);
-      });
-      input.addEventListener('change', () => {
-        const listId = input.dataset.heroOrder ? '#heroSelectionList' : '#featuredSelectionList';
-        reorderSelectionRows(listId);
-      });
-    });
-
     panel.querySelectorAll('.selection-toggle').forEach(toggle => {
       toggle.addEventListener('change', () => {
         const row = toggle.closest('.selection-row');
-        const order = row?.querySelector('.selection-order-input');
-        if (order) {
-          order.disabled = !toggle.checked;
-          if (toggle.checked && !order.value) {
-            const selector = toggle.dataset.heroSelect ? '[data-hero-order]' : '[data-featured-order]';
-            const usedOrders = [...panel.querySelectorAll(selector)]
-              .filter(input => !input.disabled)
-              .map(input => Number(input.value) || 0);
-            order.value = String(Math.max(0, ...usedOrders) + 1);
-          }
+        const listId = toggle.dataset.heroSelect ? '#heroSelectionList' : '#featuredSelectionList';
+        const list = document.querySelector(listId);
+        if (!list || !row) return;
+
+        if (toggle.checked) {
+          // Al seleccionar, el producto queda inmediatamente dentro del bloque
+          // de seleccionados y pasa a ser el último número de ese bloque.
+          const selectedRows = [...list.querySelectorAll('.selection-row')]
+            .filter(item => item !== row && item.querySelector('.selection-toggle')?.checked);
+          const lastSelected = selectedRows[selectedRows.length - 1];
+          if (lastSelected) list.insertBefore(row, lastSelected.nextSibling);
+          else list.insertBefore(row, list.firstElementChild);
+        } else {
+          // Al quitar la selección, baja automáticamente debajo de todos
+          // los seleccionados y los números se reajustan.
+          list.appendChild(row);
         }
-        reorderSelectionRows(toggle.dataset.heroSelect ? '#heroSelectionList' : '#featuredSelectionList');
+        renumberSelectionRows(listId);
       });
     });
 
-    reorderSelectionRows('#heroSelectionList');
-    reorderSelectionRows('#featuredSelectionList');
+    renumberSelectionRows('#heroSelectionList');
+    renumberSelectionRows('#featuredSelectionList');
+    wireDragReorder('#heroSelectionList');
+    wireDragReorder('#featuredSelectionList');
 
     document.querySelector('#saveSelections')?.addEventListener('click', async () => {
       const message = document.querySelector('#selectionMessage');
@@ -572,11 +628,16 @@ async function renderAdmin() {
       const featuredChecked = [...panel.querySelectorAll('[data-featured-select]:checked')];
       if (heroChecked.length > 6 || featuredChecked.length > 8) { message.className = 'message error'; message.textContent = 'Máximo: 6 imágenes en portada y 8 productos destacados.'; return; }
 
-      const sortByOrder = (items, attr) => items.map((checkbox, index) => {
-        const orderInput = panel.querySelector(`[data-${attr}-order="${CSS.escape(checkbox.dataset[`${attr}Select`])}"]`);
-        const order = Math.max(1, Math.min(999, Number(orderInput?.value) || index + 1));
-        return { id: checkbox.dataset[`${attr}Select`], order, index };
-      }).sort((a, b) => a.order - b.order || a.index - b.index);
+      const sortByOrder = (items, attr) => {
+        const listId = attr === 'hero' ? '#heroSelectionList' : '#featuredSelectionList';
+        const orderedRows = [...panel.querySelectorAll(`${listId} .selection-row`)]
+          .filter(row => row.querySelector('.selection-toggle')?.checked);
+        return orderedRows.map((row, index) => ({
+          id: row.querySelector(`[data-${attr}-select]`).dataset[`${attr}Select`],
+          order: index + 1,
+          index
+        }));
+      };
 
       const heroOrdered = sortByOrder(heroChecked, 'hero');
       const featuredOrdered = sortByOrder(featuredChecked, 'featured');
@@ -591,8 +652,7 @@ async function renderAdmin() {
           featured: featuredProductIds.includes(p.id),
           heroOrder: heroOrdered.find(item => item.id === p.id)?.order || 0
         }));
-        message.className = 'message';
-        message.textContent = '✓ Portada y destacados guardados con el orden indicado.';
+        showSaveSuccess(message, 'Portada y destacados guardados con el orden indicado.');
         drawList();
       } catch (e) { message.className = 'message error'; message.textContent = e.message; }
     });
@@ -620,9 +680,43 @@ async function renderAdmin() {
     });
     bind('#addBrand','#newBrand','#classBrandCategory','brands'); bind('#addType','#newType','#classTypeCategory','productTypes');
   }
+  function showSaveSuccess(messageElement, text) {
+    if (!messageElement) return;
+    if (messageElement._successTimer) clearTimeout(messageElement._successTimer);
+    messageElement.className = 'message success save-success';
+    messageElement.innerHTML = `<span class="save-check" aria-hidden="true">✓</span><span>${escapeHTML(text)}</span>`;
+    messageElement.classList.remove('save-pop');
+    void messageElement.offsetWidth;
+    messageElement.classList.add('save-pop');
+    messageElement._successTimer = setTimeout(() => {
+      messageElement.classList.remove('save-pop');
+      messageElement.classList.add('save-fade-out');
+      setTimeout(() => { messageElement.textContent = ''; messageElement.className = 'message'; }, 350);
+    }, 3000);
+  }
+
   function drawForm(draft = editing || {}) {
     formArea.innerHTML = productForm(draft, classifications);
+    wireImageFallback(formArea);
     document.querySelector('#formTitle').textContent = editing ? `Editar: ${editing.name}` : 'Agregar producto';
+    const imageUrl = document.querySelector('#image');
+    const imageFile = document.querySelector('#imageFile');
+    const preview = document.querySelector('#productImagePreview');
+    const previewName = document.querySelector('.product-editor-preview-copy strong');
+    const updatePreview = (src) => {
+      if (!preview) return;
+      preview.src = src || placeholder;
+      preview.alt = imageUrl?.value ? `Vista previa de ${draft.name || 'producto'}` : 'Vista previa del producto';
+    };
+    imageUrl?.addEventListener('input', () => updatePreview(imageUrl.value.trim()));
+    imageFile?.addEventListener('change', () => {
+      const file = imageFile.files?.[0];
+      if (!file) return;
+      const objectUrl = URL.createObjectURL(file);
+      updatePreview(objectUrl);
+      preview?.addEventListener('load', () => URL.revokeObjectURL(objectUrl), { once: true });
+    });
+    document.querySelector('#name')?.addEventListener('input', e => { if (previewName) previewName.textContent = e.target.value.trim() || 'Nuevo producto'; });
     document.querySelector('#cancelEdit')?.addEventListener('click', () => { editing = null; drawForm(); });
     document.querySelector('#category')?.addEventListener('change', event => drawForm({ ...(editing || {}), category: event.target.value }));
     document.querySelector('#productForm').addEventListener('submit', async event => {
@@ -638,7 +732,9 @@ async function renderAdmin() {
         settings = { heroProductIds: [...heroIds].slice(0, 6), featuredProductIds: [...featuredIds].slice(0, 8) };
         await request('/api/admin/storefront', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(settings) });
         products = products.map(p => p.id === product.id ? { ...p, hero: settings.heroProductIds.includes(p.id), featured: settings.featuredProductIds.includes(p.id) } : p);
-        editing = null; drawList(); drawForm(); drawSelectionPanel();
+        showSaveSuccess(message, editing ? 'Cambios guardados correctamente.' : 'Producto creado correctamente.');
+        editing = null; drawList(); drawSelectionPanel();
+        setTimeout(() => drawForm(), 650);
       } catch (e) { message.className = 'message error'; message.textContent = e.message; submit.disabled = false; }
     });
   }
