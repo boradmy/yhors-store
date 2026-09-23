@@ -475,6 +475,21 @@ function selectionPanel(products, settings) {
   const featuredSet = new Set(featuredIds);
   const heroOrderMap = new Map(heroIds.map((id, index) => [id, Number(products.find(p => p.id === id)?.heroOrder) > 0 ? Number(products.find(p => p.id === id).heroOrder) : index + 1]));
   const featuredOrderMap = new Map(featuredIds.map((id, index) => [id, index + 1]));
+
+  // El orden guardado vive en storefront.json (heroProductIds / featuredProductIds).
+  // Al recargar el administrador usamos ese orden para reconstruir la lista,
+  // en lugar del orden original de products.json.
+  const orderProducts = (items, ids) => {
+    const rank = new Map(ids.map((id, index) => [id, index]));
+    return [...items].sort((a, b) => {
+      const aRank = rank.has(a.id) ? rank.get(a.id) : Number.MAX_SAFE_INTEGER;
+      const bRank = rank.has(b.id) ? rank.get(b.id) : Number.MAX_SAFE_INTEGER;
+      return aRank - bRank;
+    });
+  };
+
+  const heroProducts = orderProducts(products, heroIds);
+  const featuredProducts = orderProducts(products, featuredIds);
   const row = (p, type) => {
     const isHero = type === 'hero';
     const selected = isHero ? heroSet.has(p.id) : featuredSet.has(p.id);
@@ -497,11 +512,11 @@ function selectionPanel(products, settings) {
     <div class="selection-grid">
       <div>
         <div class="selection-heading-row"><div><h3>Slider de portada <small>máx. 6</small></h3><span class="selection-order-help">Arrastra para ordenar · se numera solo</span></div><label class="selection-search"><span aria-hidden="true">⌕</span><input type="search" id="heroSelectionSearch" placeholder="Buscar producto, SKU o marca…" autocomplete="off"><button type="button" id="clearHeroSelectionSearch" aria-label="Limpiar búsqueda">×</button></label></div>
-        <div class="selection-list" id="heroSelectionList">${products.map(p => row(p, 'hero')).join('')}</div>
+        <div class="selection-list" id="heroSelectionList">${heroProducts.map(p => row(p, 'hero')).join('')}</div>
       </div>
       <div>
         <div class="selection-heading-row"><div><h3>Productos destacados <small>máx. 8</small></h3><span class="selection-order-help">Arrastra para ordenar · se numera solo</span></div><label class="selection-search"><span aria-hidden="true">⌕</span><input type="search" id="featuredSelectionSearch" placeholder="Buscar producto, SKU o marca…" autocomplete="off"><button type="button" id="clearFeaturedSelectionSearch" aria-label="Limpiar búsqueda">×</button></label></div>
-        <div class="selection-list" id="featuredSelectionList">${products.map(p => row(p, 'featured')).join('')}</div>
+        <div class="selection-list" id="featuredSelectionList">${featuredProducts.map(p => row(p, 'featured')).join('')}</div>
       </div>
     </div>
     <div class="form-actions"><button class="button" id="saveSelections">Guardar portada y destacados</button><span class="message" id="selectionMessage"></span></div>
