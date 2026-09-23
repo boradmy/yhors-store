@@ -80,3 +80,6 @@ Se omitieron `.env`, `.git` y `node_modules` del ZIP por seguridad/tamaño. Copi
 - Las búsquedas internas usan `noindex,follow` para evitar indexar miles de URLs de búsqueda.
 - Después de publicar, agrega `https://TU-DOMINIO/sitemap.xml` en Google Search Console y usa la inspección de URL para la portada y varias fichas. La indexación y los resultados enriquecidos no son instantáneos ni garantizados por Google.
 - `PUBLIC_BASE_URL` debe ser el dominio público real de producción (por ejemplo `https://yhors-store.onrender.com` o tu dominio propio).
+
+### Caché del sitio
+Los archivos HTML/CSS/JS se configuran para revalidarse automáticamente en cada visita. No es necesario borrar cookies o caché manualmente después de desplegar cambios.

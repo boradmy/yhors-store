@@ -252,7 +252,39 @@ app.get('/', (req, res, next) => {
 app.use(ADMIN_PATH, (req, res, next) => { res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive'); next(); });
 
 app.use('/uploads', express.static(UPLOADS_DIR, { maxAge: '7d', immutable: true }));
-app.use(express.static(path.join(__dirname, 'public'), { maxAge: '1h' }));
+
+// Los archivos de la interfaz (HTML/CSS/JS) no deben quedarse congelados en la
+// caché del navegador durante un despliegue. Esto permite que cada actualización
+// del sitio se refleje automáticamente sin que el usuario tenga que borrar
+// cookies o caché manualmente.
+app.use(express.static(path.join(__dirname, 'public'), {
+  maxAge: 0,
+  etag: true,
+  lastModified: true,
+  setHeaders: (res, filePath) => {
+    const fileName = path.basename(filePath).toLowerCase();
+
+    // HTML siempre debe comprobar si existe una versión nueva.
+    if (fileName.endsWith('.html')) {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+      return;
+    }
+
+    // CSS y JS se revalidan automáticamente en cada visita.
+    // Si no cambiaron, el servidor puede responder 304; si cambiaron,
+    // el navegador descarga la versión nueva.
+    if (fileName.endsWith('.css') || fileName.endsWith('.js')) {
+      res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+      return;
+    }
+
+    // Recursos estáticos pequeños (favicon, robots, etc.) también se
+    // revalidan para que las modificaciones se reflejen sin borrar caché.
+    res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+  }
+}));
 
 const storage = multer.diskStorage({
   destination: (_, __, done) => done(null, UPLOADS_DIR),
