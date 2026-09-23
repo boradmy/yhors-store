@@ -1,5 +1,101 @@
 [
   {
+    "name": "Infinix HOT 70 / 4 RAM / 256GB",
+    "description": "Pantalla: 6,78″, 720 x 1576 pixels | HD+\nProcesador: MediaTek Helio G100 Ultimate\nRAM: 4GB\nAlmacenamiento: 256GB\nExpansión: microSD\nCámara: 50 MP \nCámara Frontal: 8MP\nBatería: 5600 mAh\nOS: Android 15\nCarga rápida: 45W\nResistente a salpicaduras: IP65\nOtros: GPS, Desbloqueo dactilar",
+    "category": "tech",
+    "brand": "Infinix",
+    "productType": "Celular",
+    "sku": "YH-HOT70-4-256",
+    "salePrice": 220,
+    "rentalPrice": null,
+    "price": 220,
+    "image": "https://mobilestore.ec/wp-content/uploads/2026/07/Infinix-Hot-70-Silver-Mobile-Store-Ecuador.jpg",
+    "images": [
+      "https://mobilestore.ec/wp-content/uploads/2026/07/Infinix-Hot-70-Silver-Mobile-Store-Ecuador.jpg",
+      "https://mobilestore.ec/wp-content/uploads/2026/07/INFINIX-HOT-70-Dive-Blue-Mobile-Store-Ecuador.jpg",
+      "https://mobilestore.ec/wp-content/uploads/2026/07/INFINIX-HOT-70-Thermo-Orange-Mobile-Store-Ecuador.jpg",
+      "https://mobilestore.ec/wp-content/uploads/2026/07/INFINIX-HOT-70-Night-Pulse-Mobile-Store-Ecuador.jpg"
+    ],
+    "featured": false,
+    "hero": false,
+    "heroOrder": 0,
+    "id": "92291c45-de3b-4469-afc5-41e61b075d4d",
+    "createdAt": "2026-09-23T00:24:16.716Z",
+    "updatedAt": "2026-09-23T00:26:04.352Z"
+  },
+  {
+    "name": "Infinix HOT 70 / 8 RAM / 256GB",
+    "description": "Pantalla: 6,78″, 720 x 1576 pixels | HD+\nProcesador: MediaTek Helio G100 Ultimate\nRAM: 8GB\nAlmacenamiento: 256GB\nExpansión: microSD\nCámara: 50 MP \nCámara Frontal: 8MP\nBatería: 5600 mAh\nOS: Android 15\nCarga rápida: 45W\nResistente a salpicaduras: IP65\nOtros: GPS, Desbloqueo dactilar",
+    "category": "tech",
+    "brand": "Infinix",
+    "productType": "Celular",
+    "sku": "YH-INF-HOT70-8-256",
+    "salePrice": 320,
+    "rentalPrice": null,
+    "price": 320,
+    "image": "https://mobilestore.ec/wp-content/uploads/2026/07/INFINIX-HOT-70-Dive-Blue-Mobile-Store-Ecuador.jpg",
+    "images": [
+      "https://mobilestore.ec/wp-content/uploads/2026/07/INFINIX-HOT-70-Dive-Blue-Mobile-Store-Ecuador.jpg",
+      "https://mobilestore.ec/wp-content/uploads/2026/07/Infinix-Hot-70-Silver-Mobile-Store-Ecuador.jpg",
+      "https://mobilestore.ec/wp-content/uploads/2026/07/INFINIX-HOT-70-Night-Pulse-Mobile-Store-Ecuador.jpg",
+      "https://mobilestore.ec/wp-content/uploads/2026/07/INFINIX-HOT-70-Thermo-Orange-Mobile-Store-Ecuador-768x768.jpg"
+    ],
+    "featured": false,
+    "hero": false,
+    "heroOrder": 0,
+    "id": "1cfd728b-4983-41d9-aee8-fe2c32552ec0",
+    "createdAt": "2026-09-23T00:19:25.975Z",
+    "updatedAt": "2026-09-23T00:26:04.352Z"
+  },
+  {
+    "name": "Infinix SMART 20 / 4 RAM / 256GB",
+    "description": "Pantalla: 6,78″, 720 x 1576 pixels | IPS TFT\nProcesador: MediaTek Helio G81\nRAM: 4GB\nAlmacenamiento: 256GB\nExpansión: microSD\nCámara: Dual 8 MP + 2 MP\nCámara Frontal: 8MP\nBatería: 5200 mAh\nOS: Android 16\nOtros: GPS, Desbloqueo dactilar",
+    "category": "tech",
+    "brand": "Infinix",
+    "productType": "Celular",
+    "sku": "YH-INF-SMART-4-256",
+    "salePrice": 190,
+    "rentalPrice": null,
+    "price": 190,
+    "image": "https://mobilestore.ec/wp-content/uploads/2026/04/INFINIX-SMART-20-Sunlike-Orange-Mobile-Store-Ecuador.jpg",
+    "images": [
+      "https://mobilestore.ec/wp-content/uploads/2026/04/INFINIX-SMART-20-Sunlike-Orange-Mobile-Store-Ecuador.jpg",
+      "https://mobilestore.ec/wp-content/uploads/2026/04/INFINIX-SMART-20-Polaris-Titanium-Mobile-Store-Ecuador.jpg",
+      "https://mobilestore.ec/wp-content/uploads/2026/04/INFINIX-SMART-20-Shadow-Black-Mobile-Store-Ecuador.jpg",
+      "https://mobilestore.ec/wp-content/uploads/2026/04/INFINIX-SMART-20-Cloudline-Blue-Mobile-Store-Ecuador.jpg"
+    ],
+    "featured": false,
+    "hero": false,
+    "heroOrder": 0,
+    "id": "b481ee04-9287-4b71-9087-7e8192ec86f4",
+    "createdAt": "2026-09-23T00:14:46.709Z",
+    "updatedAt": "2026-09-23T00:26:04.352Z"
+  },
+  {
+    "name": "Infinix SMART 20 / 4RAM / 64GB",
+    "description": "Pantalla: 6,78″, 720 x 1576 pixels | IPS TFT\nProcesador: MediaTek Helio G81\nRAM: 4GB\nAlmacenamiento: 64GB\nExpansión: microSD\nCámara: Dual 8 MP + 2 MP\nCámara Frontal: 8MP\nBatería: 5200 mAh\nOS: Android 16\nOtros: GPS, Desbloqueo dactilar",
+    "category": "tech",
+    "brand": "Infinix",
+    "productType": "Celular",
+    "sku": "YH-INF-SMART-4-64",
+    "salePrice": 135,
+    "rentalPrice": null,
+    "price": 135,
+    "image": "https://mobilestore.ec/wp-content/uploads/2026/04/INFINIX-SMART-20-Shadow-Black-Mobile-Store-Ecuador.jpg",
+    "images": [
+      "https://mobilestore.ec/wp-content/uploads/2026/04/INFINIX-SMART-20-Shadow-Black-Mobile-Store-Ecuador.jpg",
+      "https://mobilestore.ec/wp-content/uploads/2026/04/INFINIX-SMART-20-Cloudline-Blue-Mobile-Store-Ecuador.jpg",
+      "https://mobilestore.ec/wp-content/uploads/2026/04/INFINIX-SMART-20-Sunlike-Orange-Mobile-Store-Ecuador.jpg",
+      "https://mobilestore.ec/wp-content/uploads/2026/04/INFINIX-SMART-20-Polaris-Titanium-Mobile-Store-Ecuador.jpg"
+    ],
+    "featured": false,
+    "hero": false,
+    "heroOrder": 0,
+    "id": "f11f5c70-c161-4103-9b50-efa6bda73980",
+    "createdAt": "2026-09-23T00:12:08.728Z",
+    "updatedAt": "2026-09-23T00:26:04.352Z"
+  },
+  {
     "name": "Funko Pop! Black Panther (Marvel)",
     "description": "Añade a tu colección el poder y la elegancia de Wakanda con esta increíble figura de Black Panther. \nCon su icónico traje negro con detalles plateados y su clásica pose con los brazos cruzados, este Funko Pop! es una pieza indispensable para cualquier fanático del universo Marvel.\n\nDiseño y detalles: Esta figura de vinilo destaca por su diseño estilizado característico de la marca, con detalles fieles al traje del Rey T'Challa, incluyendo las líneas plateadas en la máscara y la armadura.   \n\nIdeal para regalar o coleccionar: Perfecto para exhibir en tu repisa, escritorio o vitrina junto a otros héroes de Marvel. Es el regalo definitivo para coleccionistas y amantes del cine de superhéroes.",
     "category": "collectibles",
@@ -18,7 +114,7 @@
     "heroOrder": 6,
     "id": "4f6ff25d-52a4-4352-a54d-1abbe8ffd7d4",
     "createdAt": "2026-09-22T19:09:02.165Z",
-    "updatedAt": "2026-09-23T00:04:47.111Z"
+    "updatedAt": "2026-09-23T00:26:04.352Z"
   },
   {
     "name": "MITSURI KANROKI (Demon Slayer)",
@@ -41,7 +137,7 @@
     "heroOrder": 0,
     "id": "292b6aea-5570-4f49-a7ed-5e7ad088be99",
     "createdAt": "2026-09-21T03:49:39.444Z",
-    "updatedAt": "2026-09-23T00:04:47.111Z"
+    "updatedAt": "2026-09-23T00:26:04.352Z"
   },
   {
     "name": "COSPLAY XAYAH (League of Legends)",
@@ -64,7 +160,7 @@
     "heroOrder": 2,
     "id": "e2c3f08e-8932-4284-9659-b1690437f544",
     "createdAt": "2026-09-21T03:39:58.015Z",
-    "updatedAt": "2026-09-23T00:04:47.111Z"
+    "updatedAt": "2026-09-23T00:26:04.352Z"
   },
   {
     "name": "COSPLAY CONEJITA",
@@ -87,7 +183,7 @@
     "heroOrder": 0,
     "id": "99729117-741d-457e-b771-818a852f692d",
     "createdAt": "2026-09-21T03:31:06.404Z",
-    "updatedAt": "2026-09-23T00:04:47.111Z"
+    "updatedAt": "2026-09-23T00:26:04.352Z"
   },
   {
     "name": "COSPLAY MONJA ENTERISO (Erotico)",
@@ -109,7 +205,7 @@
     "heroOrder": 0,
     "id": "da844338-a818-438d-9aeb-e629bff3e200",
     "createdAt": "2026-09-21T03:21:24.024Z",
-    "updatedAt": "2026-09-23T00:04:47.111Z"
+    "updatedAt": "2026-09-23T00:26:04.352Z"
   },
   {
     "name": "COSPLAY MOJA (Erotico)",
@@ -131,7 +227,7 @@
     "heroOrder": 0,
     "id": "be8729ea-81a4-4ce5-8597-c0c287770e75",
     "createdAt": "2026-09-21T02:55:48.444Z",
-    "updatedAt": "2026-09-23T00:04:47.111Z"
+    "updatedAt": "2026-09-23T00:26:04.352Z"
   },
   {
     "name": "COSPLAY UTAHIME (Jujutsu Kaisen)",
@@ -154,7 +250,7 @@
     "heroOrder": 0,
     "id": "1ac654ea-61dd-4e4d-a0b6-af7666c2fd1d",
     "createdAt": "2026-09-21T02:22:09.126Z",
-    "updatedAt": "2026-09-23T00:04:47.111Z"
+    "updatedAt": "2026-09-23T00:26:04.352Z"
   },
   {
     "name": "COSPLAY YAO MIKO (Genshin Impact)",
@@ -177,7 +273,7 @@
     "heroOrder": 0,
     "id": "deaacc06-5472-4d5d-b7b0-03e4ee998427",
     "createdAt": "2026-09-19T22:39:31.944Z",
-    "updatedAt": "2026-09-23T00:04:47.111Z"
+    "updatedAt": "2026-09-23T00:26:04.352Z"
   },
   {
     "name": "COSPLAY AHRI (League of Legends)",
@@ -200,7 +296,7 @@
     "heroOrder": 1,
     "id": "d9dabf42-3c1c-4bdc-aa71-624acf051cfc",
     "createdAt": "2026-09-19T22:32:43.305Z",
-    "updatedAt": "2026-09-23T00:04:47.111Z"
+    "updatedAt": "2026-09-23T00:26:04.352Z"
   },
   {
     "name": "NOTEBOOK LENOVO IP1 15AMN7 R5 7520U 8GB-256GB SSD-BLUE-15.6\"-W11 TECLADO INGLES",
@@ -223,7 +319,7 @@
     "heroOrder": 5,
     "id": "7757b362-1f89-4e24-be36-de4d49a71c19",
     "createdAt": "2026-09-18T22:28:10.558Z",
-    "updatedAt": "2026-09-23T00:04:47.111Z",
+    "updatedAt": "2026-09-23T00:26:04.352Z",
     "sku": "82XQ01V5LM"
   },
   {
@@ -232,9 +328,9 @@
     "category": "tech",
     "brand": "Xiaomi",
     "productType": "Celular",
-    "salePrice": 175.99,
+    "salePrice": 176,
     "rentalPrice": null,
-    "price": 175.99,
+    "price": 176,
     "image": "https://mobilestore.ec/wp-content/uploads/2025/08/Xiaomi-Redmi-15C-Verde-Menta-Mobile-Store-Ecuador.jpg",
     "images": [
       "https://mobilestore.ec/wp-content/uploads/2025/08/Xiaomi-Redmi-15C-Verde-Menta-Mobile-Store-Ecuador.jpg",
@@ -246,7 +342,7 @@
     "heroOrder": 0,
     "id": "bef5e66f-1fe6-49d3-909d-2f3be7e3eb61",
     "createdAt": "2026-09-18T22:19:16.444Z",
-    "updatedAt": "2026-09-23T00:04:47.111Z",
+    "updatedAt": "2026-09-23T00:26:04.352Z",
     "sku": "YH-TEC-XIAOMI-REDMI-15C-128"
   },
   {
@@ -255,9 +351,9 @@
     "category": "tech",
     "brand": "Xiaomi",
     "productType": "Celular",
-    "salePrice": 164.99,
+    "salePrice": 165,
     "rentalPrice": null,
-    "price": 164.99,
+    "price": 165,
     "image": "https://mobilestore.ec/wp-content/uploads/2026/06/Xiaomi-Redmi-A7-Pro-Verde-Mobile-Store-Ecuador.jpg",
     "images": [
       "https://mobilestore.ec/wp-content/uploads/2026/06/Xiaomi-Redmi-A7-Pro-Verde-Mobile-Store-Ecuador.jpg",
@@ -269,14 +365,14 @@
     "heroOrder": 0,
     "id": "4dd34631-e5fd-429a-b0ee-6ebad6a4a63b",
     "createdAt": "2026-09-18T22:10:26.489Z",
-    "updatedAt": "2026-09-23T00:04:47.111Z",
+    "updatedAt": "2026-09-23T00:26:04.352Z",
     "sku": "YH-TEC-XIAOMI-REDMI-A7PRO-128"
   },
   {
     "name": "Xiaomi Redmi A7 Pro / 64GB",
     "description": "Características principales\nPantalla: 6.9″, 720 x 1600 pixels\nProcesador: Unisoc T8300 2.2GHz\nRAM: 4GB\nAlmacenamiento: 64GB \nExpansión: microSD\nCámara: Dual, 32MP+Aux\nCámara Frontal: 8MP\nBatería: 6300 mAh\nCarga rápida: 15W\nOS: Android 16\nResistencia al agua limitada: IP54\nOtros: GPS, Conector de audio 3.5 mm, Desbloqueo  dactilar",
     "category": "tech",
-    "price": 149.99,
+    "price": 150,
     "image": "https://mobilestore.ec/wp-content/uploads/2026/06/Xiaomi-Redmi-A7-Pro-Negro-Mobile-Store-Ecuador.jpg",
     "images": [
       "https://mobilestore.ec/wp-content/uploads/2026/06/Xiaomi-Redmi-A7-Pro-Negro-Mobile-Store-Ecuador.jpg",
@@ -288,10 +384,10 @@
     "heroOrder": 0,
     "id": "ee9073b6-3ac9-442d-939e-ee7dabcb402c",
     "createdAt": "2026-09-18T07:27:32.602Z",
-    "updatedAt": "2026-09-23T00:04:47.111Z",
+    "updatedAt": "2026-09-23T00:26:04.352Z",
     "brand": "Xiaomi",
     "productType": "Celular",
-    "salePrice": 149.99,
+    "salePrice": 150,
     "rentalPrice": null,
     "sku": "YH-TEC-XIAOMI-REDMI-A7PRO-64"
   },
@@ -311,7 +407,7 @@
     "heroOrder": 3,
     "id": "bd65098b-c523-4975-ba43-68e0bcad1623",
     "createdAt": "2026-09-18T05:45:50.324Z",
-    "updatedAt": "2026-09-23T00:04:47.111Z",
+    "updatedAt": "2026-09-23T00:26:04.352Z",
     "brand": "",
     "productType": "Sexy",
     "salePrice": 85,
@@ -327,7 +423,7 @@
     "featured": false,
     "id": "8b1a4da8-af44-48cc-a263-69d2cf703c59",
     "createdAt": "2026-09-12T04:40:49.585Z",
-    "updatedAt": "2026-09-23T00:04:47.111Z",
+    "updatedAt": "2026-09-23T00:26:04.352Z",
     "hero": false,
     "brand": "",
     "productType": "Ramo",
@@ -348,7 +444,7 @@
     "featured": false,
     "id": "f63f4220-3eca-4373-85a4-4e8b495289bb",
     "createdAt": "2026-09-12T04:35:05.613Z",
-    "updatedAt": "2026-09-23T00:04:47.111Z",
+    "updatedAt": "2026-09-23T00:26:04.352Z",
     "hero": false,
     "brand": "",
     "productType": "Caja",
@@ -369,7 +465,7 @@
     "featured": false,
     "id": "93a54450-e29f-4f6b-b3d8-a800d128ed6a",
     "createdAt": "2026-09-12T03:35:09.551Z",
-    "updatedAt": "2026-09-23T00:04:47.111Z",
+    "updatedAt": "2026-09-23T00:26:04.352Z",
     "hero": false,
     "brand": "",
     "productType": "Ramo",
@@ -390,7 +486,7 @@
     "featured": false,
     "id": "ae8c56b7-a2c0-4821-a811-44a8eb23d980",
     "createdAt": "2026-09-12T03:32:02.982Z",
-    "updatedAt": "2026-09-23T00:04:47.111Z",
+    "updatedAt": "2026-09-23T00:26:04.352Z",
     "hero": false,
     "brand": "",
     "productType": "Ramo",
@@ -411,7 +507,7 @@
     "featured": false,
     "id": "9bac7e22-d712-4e3f-a63e-6d033e999357",
     "createdAt": "2026-09-12T03:28:27.306Z",
-    "updatedAt": "2026-09-23T00:04:47.111Z",
+    "updatedAt": "2026-09-23T00:26:04.352Z",
     "hero": false,
     "brand": "",
     "productType": "Ramo",
@@ -432,7 +528,7 @@
     "featured": false,
     "id": "76ea6239-d06b-4707-9c86-e28ad256d8fd",
     "createdAt": "2026-09-12T03:26:54.586Z",
-    "updatedAt": "2026-09-23T00:04:47.111Z",
+    "updatedAt": "2026-09-23T00:26:04.352Z",
     "hero": false,
     "brand": "",
     "productType": "Ramo",
@@ -453,7 +549,7 @@
     "featured": false,
     "id": "52129b8d-fcc4-4057-ad39-8d1fe04267c6",
     "createdAt": "2026-09-12T03:21:27.302Z",
-    "updatedAt": "2026-09-23T00:04:47.111Z",
+    "updatedAt": "2026-09-23T00:26:04.352Z",
     "hero": false,
     "brand": "",
     "productType": "Ramo",
@@ -474,7 +570,7 @@
     "featured": false,
     "id": "1e882934-04c9-4fac-b730-a2f0470cae26",
     "createdAt": "2026-09-12T03:19:43.823Z",
-    "updatedAt": "2026-09-23T00:04:47.111Z",
+    "updatedAt": "2026-09-23T00:26:04.352Z",
     "hero": false,
     "brand": "",
     "productType": "Ramo",
@@ -495,7 +591,7 @@
     "featured": false,
     "id": "7a08ef0c-b7f7-4afc-8b67-bd4b9285602d",
     "createdAt": "2026-09-12T03:18:08.337Z",
-    "updatedAt": "2026-09-23T00:04:47.111Z",
+    "updatedAt": "2026-09-23T00:26:04.352Z",
     "hero": false,
     "brand": "",
     "productType": "Ramo",
@@ -516,7 +612,7 @@
     "featured": false,
     "id": "455bbc83-f8af-42cb-92c8-c51b570eab3d",
     "createdAt": "2026-09-12T03:16:25.691Z",
-    "updatedAt": "2026-09-23T00:04:47.111Z",
+    "updatedAt": "2026-09-23T00:26:04.352Z",
     "hero": false,
     "brand": "",
     "productType": "Ramo",
@@ -537,7 +633,7 @@
     "featured": false,
     "id": "6754a209-3de2-4926-b211-3384d454d37a",
     "createdAt": "2026-09-12T03:14:56.287Z",
-    "updatedAt": "2026-09-23T00:04:47.111Z",
+    "updatedAt": "2026-09-23T00:26:04.352Z",
     "hero": false,
     "brand": "",
     "productType": "Ramo",
@@ -558,7 +654,7 @@
     "featured": false,
     "id": "0870a04d-7bb6-42fa-beb5-5271f422e6d6",
     "createdAt": "2026-09-12T03:09:45.628Z",
-    "updatedAt": "2026-09-23T00:04:47.111Z",
+    "updatedAt": "2026-09-23T00:26:04.352Z",
     "hero": true,
     "brand": "",
     "productType": "Ramo",
@@ -579,7 +675,7 @@
     "featured": false,
     "id": "1130bc93-61f9-46b0-b7dc-efe49ddf77b1",
     "createdAt": "2026-09-12T03:07:53.779Z",
-    "updatedAt": "2026-09-23T00:04:47.111Z",
+    "updatedAt": "2026-09-23T00:26:04.352Z",
     "hero": false,
     "brand": "",
     "productType": "Ramo",
@@ -600,7 +696,7 @@
     "featured": true,
     "id": "d049e7a4-05cb-493e-832e-11cc3c0fe099",
     "createdAt": "2026-09-12T02:51:51.935Z",
-    "updatedAt": "2026-09-23T00:04:47.111Z",
+    "updatedAt": "2026-09-23T00:26:04.352Z",
     "images": [
       "https://http2.mlstatic.com/D_NQ_NP_2X_847146-MLA100027689153_122025-F.webp",
       "https://www.computron.com.ec/wp-content/uploads/2025/07/C2N6L4-BL20gr.jpg",
