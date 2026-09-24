@@ -11,11 +11,22 @@ const bcrypt = require('bcryptjs');
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
 const ADMIN_PATH = '/yhors/admin593';
-const DATA_FILE = path.join(__dirname, 'data', 'products.json');
-const STOREFRONT_FILE = path.join(__dirname, 'data', 'storefront.json');
-const CLASSIFICATIONS_FILE = path.join(__dirname, 'data', 'classifications.json');
-const ORDERS_FILE = path.join(__dirname, 'data', 'orders.json');
-const UPLOADS_DIR = path.join(__dirname, 'uploads');
+
+// YHORS puede trabajar con almacenamiento persistente sin cambiar la lógica del catálogo.
+// En Render, configura YHORS_STORAGE_DIR=/var/data/yhors y monta un Persistent Disk en /var/data.
+// Si la variable no existe, se conserva el comportamiento local original usando ./data y ./uploads.
+const STORAGE_ROOT = process.env.YHORS_STORAGE_DIR
+  ? path.resolve(process.env.YHORS_STORAGE_DIR)
+  : path.join(__dirname, 'data');
+const DATA_DIR = process.env.YHORS_STORAGE_DIR ? path.join(STORAGE_ROOT, 'data') : path.join(__dirname, 'data');
+const DATA_FILE = path.join(DATA_DIR, 'products.json');
+const STOREFRONT_FILE = path.join(DATA_DIR, 'storefront.json');
+const CLASSIFICATIONS_FILE = path.join(DATA_DIR, 'classifications.json');
+const ORDERS_FILE = path.join(DATA_DIR, 'orders.json');
+const UPLOADS_DIR = process.env.YHORS_STORAGE_DIR ? path.join(STORAGE_ROOT, 'uploads') : path.join(__dirname, 'uploads');
+const BACKUPS_DIR = process.env.YHORS_STORAGE_DIR ? path.join(STORAGE_ROOT, 'backups') : path.join(__dirname, 'data', 'backups');
+const BACKUP_RETENTION = Math.max(3, Math.min(100, Number.parseInt(process.env.YHORS_BACKUP_RETENTION || '30', 10) || 30));
+const AUTO_BACKUP_INTERVAL_MS = Math.max(60 * 60 * 1000, Number.parseInt(process.env.YHORS_AUTO_BACKUP_INTERVAL_HOURS || '6', 10) * 60 * 60 * 1000 || 6 * 60 * 60 * 1000);
 const SESSION_SECRET = process.env.SESSION_SECRET || 'cambia-este-secreto-antes-de-publicar';
 const ADMIN_USER = process.env.ADMIN_USER || 'admin';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'cambia-esta-contrasena';
@@ -23,7 +34,38 @@ const ORDERS_USER = process.env.ORDERS_USER || 'pedidos';
 const ORDERS_PASSWORD = process.env.ORDERS_PASSWORD || 'CAMBIA-ESTA-CONTRASENA-DE-PEDIDOS';
 const COOKIE_SECURE = process.env.COOKIE_SECURE === 'true';
 
-fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+function ensureStorage() {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+  fs.mkdirSync(BACKUPS_DIR, { recursive: true });
+
+  // Primera ejecución con disco vacío: copia los datos que viajan con el código.
+  // Nunca sobrescribe un archivo que ya exista en el almacenamiento persistente.
+  if (process.env.YHORS_STORAGE_DIR) {
+    const seedFiles = ['products.json', 'storefront.json', 'classifications.json', 'orders.json'];
+    for (const fileName of seedFiles) {
+      const source = path.join(__dirname, 'data', fileName);
+      const target = path.join(DATA_DIR, fileName);
+      if (!fs.existsSync(target) && fs.existsSync(source)) fs.copyFileSync(source, target);
+    }
+    const bundledUploads = path.join(__dirname, 'uploads');
+    if (fs.existsSync(bundledUploads)) {
+      for (const fileName of fs.readdirSync(bundledUploads)) {
+        const source = path.join(bundledUploads, fileName);
+        const target = path.join(UPLOADS_DIR, fileName);
+        if (fileName === '.gitkeep' || !fs.statSync(source).isFile()) continue;
+        if (!fs.existsSync(target)) fs.copyFileSync(source, target);
+      }
+    }
+  }
+
+  for (const fileName of ['products.json', 'storefront.json', 'classifications.json', 'orders.json']) {
+    const target = path.join(DATA_DIR, fileName);
+    if (!fs.existsSync(target)) fs.writeFileSync(target, fileName === 'orders.json' ? '[]\n' : fileName === 'products.json' ? '[]\n' : fileName === 'storefront.json' ? '{\n  "heroProductIds": [],\n  "featuredProductIds": []\n}\n' : '{\n  "brands": {},\n  "productTypes": {}\n}\n', 'utf8');
+  }
+}
+ensureStorage();
+setTimeout(() => maybeAutoBackup(), 1500);
 
 app.disable('x-powered-by');
 app.use((req, res, next) => {
@@ -302,6 +344,90 @@ const upload = multer({
   fileFilter: (_, file, done) => done(null, /^image\/(jpeg|png|webp|gif)$/.test(file.mimetype))
 });
 
+
+function backupTimestamp(date = new Date()) {
+  const pad = value => String(value).padStart(2, '0');
+  return `${date.getUTCFullYear()}${pad(date.getUTCMonth() + 1)}${pad(date.getUTCDate())}-${pad(date.getUTCHours())}${pad(date.getUTCMinutes())}${pad(date.getUTCSeconds())}Z`;
+}
+
+function copyDirectoryContents(sourceDir, targetDir) {
+  if (!fs.existsSync(sourceDir)) return;
+  fs.mkdirSync(targetDir, { recursive: true });
+  for (const entry of fs.readdirSync(sourceDir, { withFileTypes: true })) {
+    const source = path.join(sourceDir, entry.name);
+    const target = path.join(targetDir, entry.name);
+    if (entry.isDirectory()) copyDirectoryContents(source, target);
+    else if (entry.isFile()) fs.copyFileSync(source, target);
+  }
+}
+
+function createBackup(reason = 'manual') {
+  fs.mkdirSync(BACKUPS_DIR, { recursive: true });
+  const dirName = `YHORS-${backupTimestamp()}-${crypto.randomBytes(3).toString('hex')}`;
+  const backupDir = path.join(BACKUPS_DIR, dirName);
+  const backupDataDir = path.join(backupDir, 'data');
+  const backupUploadsDir = path.join(backupDir, 'uploads');
+  fs.mkdirSync(backupDataDir, { recursive: true });
+  fs.mkdirSync(backupUploadsDir, { recursive: true });
+
+  for (const fileName of ['products.json', 'storefront.json', 'classifications.json', 'orders.json']) {
+    const source = path.join(DATA_DIR, fileName);
+    if (fs.existsSync(source)) fs.copyFileSync(source, path.join(backupDataDir, fileName));
+  }
+  copyDirectoryContents(UPLOADS_DIR, backupUploadsDir);
+
+  const manifest = {
+    app: 'YHORS-STORE',
+    backupVersion: 1,
+    createdAt: new Date().toISOString(),
+    reason,
+    storageMode: process.env.YHORS_STORAGE_DIR ? 'persistent-configured' : 'local-filesystem',
+    files: {
+      products: fs.existsSync(path.join(backupDataDir, 'products.json')) ? fs.statSync(path.join(backupDataDir, 'products.json')).size : 0,
+      orders: fs.existsSync(path.join(backupDataDir, 'orders.json')) ? fs.statSync(path.join(backupDataDir, 'orders.json')).size : 0
+    }
+  };
+  fs.writeFileSync(path.join(backupDir, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
+  pruneBackups();
+  return { name: dirName, createdAt: manifest.createdAt, reason };
+}
+
+function listBackups() {
+  fs.mkdirSync(BACKUPS_DIR, { recursive: true });
+  return fs.readdirSync(BACKUPS_DIR, { withFileTypes: true })
+    .filter(entry => entry.isDirectory() && /^YHORS-\d{8}-\d{6}Z-[a-f0-9]{6}$/.test(entry.name))
+    .map(entry => {
+      const dir = path.join(BACKUPS_DIR, entry.name);
+      const manifestPath = path.join(dir, 'manifest.json');
+      try {
+        const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+        return { name: entry.name, createdAt: manifest.createdAt || fs.statSync(dir).mtime.toISOString(), reason: manifest.reason || 'manual' };
+      } catch {
+        return { name: entry.name, createdAt: fs.statSync(dir).mtime.toISOString(), reason: 'unknown' };
+      }
+    })
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+}
+
+function pruneBackups() {
+  const backups = listBackups();
+  for (const backup of backups.slice(BACKUP_RETENTION)) {
+    fs.rmSync(path.join(BACKUPS_DIR, backup.name), { recursive: true, force: true });
+  }
+}
+
+function maybeAutoBackup() {
+  try {
+    const latest = listBackups()[0];
+    if (!latest || (Date.now() - new Date(latest.createdAt).getTime()) >= AUTO_BACKUP_INTERVAL_MS) {
+      return createBackup('automatico');
+    }
+  } catch (error) {
+    console.error('[YHORS] No se pudo crear el respaldo automático:', error.message);
+  }
+  return null;
+}
+
 function readProducts() {
   try {
     const parsed = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
@@ -324,6 +450,7 @@ function readStorefront() {
 }
 
 function writeStorefront(settings) {
+  maybeAutoBackup();
   const temporaryFile = `${STOREFRONT_FILE}.tmp`;
   fs.writeFileSync(temporaryFile, `${JSON.stringify(settings, null, 2)}\n`, 'utf8');
   fs.renameSync(temporaryFile, STOREFRONT_FILE);
@@ -336,6 +463,7 @@ function readClassifications() {
   } catch { return { brands: {}, productTypes: {} }; }
 }
 function writeClassifications(settings) {
+  maybeAutoBackup();
   const clean = { brands: {}, productTypes: {} };
   for (const key of ['brands','productTypes']) {
     for (const [category, values] of Object.entries(settings?.[key] || {})) {
@@ -350,6 +478,7 @@ function writeClassifications(settings) {
 }
 
 function writeProducts(products) {
+  maybeAutoBackup();
   const temporaryFile = `${DATA_FILE}.tmp`;
   fs.writeFileSync(temporaryFile, `${JSON.stringify(products, null, 2)}\n`, 'utf8');
   fs.renameSync(temporaryFile, DATA_FILE);
@@ -365,6 +494,7 @@ function readOrders() {
 }
 
 function writeOrders(orders) {
+  maybeAutoBackup();
   const temporaryFile = `${ORDERS_FILE}.tmp`;
   fs.writeFileSync(temporaryFile, `${JSON.stringify(orders, null, 2)}\n`, 'utf8');
   fs.renameSync(temporaryFile, ORDERS_FILE);
@@ -720,6 +850,48 @@ app.delete('/api/admin/orders/:id', requireOrdersAccess, (req, res) => {
   if (!order) return res.status(404).json({ error: 'Pedido no encontrado.' });
   writeOrders(orders.filter(item => item.id !== req.params.id));
   return res.status(204).end();
+});
+
+
+app.get('/api/admin/backups', requireAdmin, (_, res) => {
+  return res.json({
+    storageMode: process.env.YHORS_STORAGE_DIR ? 'persistent' : 'local',
+    storageRoot: process.env.YHORS_STORAGE_DIR ? STORAGE_ROOT : 'local',
+    retention: BACKUP_RETENTION,
+    automaticEveryHours: AUTO_BACKUP_INTERVAL_MS / (60 * 60 * 1000),
+    backups: listBackups()
+  });
+});
+
+app.post('/api/admin/backups', requireAdmin, (_, res) => {
+  try {
+    const backup = createBackup('manual');
+    return res.status(201).json({ ok: true, backup });
+  } catch (error) {
+    console.error('[YHORS] Error creando respaldo manual:', error);
+    return res.status(500).json({ error: 'No se pudo crear el respaldo.' });
+  }
+});
+
+app.get('/api/admin/backups/:name/download', requireAdmin, (req, res) => {
+  const name = String(req.params.name || '');
+  if (!/^YHORS-\d{8}-\d{6}Z-[a-f0-9]{6}$/.test(name)) return res.status(400).json({ error: 'Respaldo no válido.' });
+  const backupDir = path.join(BACKUPS_DIR, name);
+  if (!fs.existsSync(backupDir)) return res.status(404).json({ error: 'Respaldo no encontrado.' });
+
+  const archivePath = path.join(BACKUPS_DIR, `${name}.tar.gz`);
+  try {
+    const { execFileSync } = require('child_process');
+    execFileSync('tar', ['-czf', archivePath, '-C', BACKUPS_DIR, name], { stdio: 'ignore', timeout: 120000 });
+    res.download(archivePath, `${name}.tar.gz`, error => {
+      fs.rmSync(archivePath, { force: true });
+      if (error && !res.headersSent) res.status(500).json({ error: 'No se pudo descargar el respaldo.' });
+    });
+  } catch (error) {
+    fs.rmSync(archivePath, { force: true });
+    console.error('[YHORS] Error exportando respaldo:', error);
+    return res.status(500).json({ error: 'No se pudo preparar el respaldo para descarga.' });
+  }
 });
 
 app.get('/api/admin/products', requireAdmin, (_, res) => res.json(readProducts().map(normalizeProduct)));

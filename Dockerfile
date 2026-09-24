@@ -4,6 +4,7 @@ COPY package*.json ./
 RUN npm ci --omit=dev
 COPY . .
 ENV NODE_ENV=production
+ENV YHORS_STORAGE_DIR=/var/data/yhors
 EXPOSE 3000
-VOLUME ["/app/data", "/app/uploads"]
+VOLUME ["/var/data"]
 CMD ["npm", "start"]

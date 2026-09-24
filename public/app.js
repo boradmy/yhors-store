@@ -713,10 +713,45 @@ async function renderAdminOrders() {
   drawOrders();
 }
 
+
+function backupPanel(data = null) {
+  const persistent = data?.storageMode === 'persistent';
+  const backups = Array.isArray(data?.backups) ? data.backups : [];
+  return `<section class="admin-panel backup-panel" id="backupPanel">
+    <div class="backup-panel-head">
+      <div>
+        <span class="eyebrow">Seguridad de datos</span>
+        <h2>Respaldos YHORS</h2>
+        <p class="admin-help">Los respaldos protegen productos, pedidos, clasificaciones, portada y fotografías. Se conserva un máximo de ${escapeHTML(data?.retention || 30)} respaldos.</p>
+      </div>
+      <div class="backup-status ${persistent ? 'is-ok' : 'is-warning'}">
+        <strong>${persistent ? 'ALMACENAMIENTO PERSISTENTE' : 'ALMACENAMIENTO LOCAL'}</strong>
+        <span>${persistent ? 'Render conservará los datos entre despliegues y reinicios.' : 'Configura el disco persistente de Render antes de producción.'}</span>
+      </div>
+    </div>
+    <div class="backup-actions">
+      <button class="button" type="button" id="createBackup">Crear respaldo ahora</button>
+      <span class="backup-last" id="backupLast">${backups[0] ? `Último: ${formatBackupDate(backups[0].createdAt)}` : 'Todavía no hay respaldos.'}</span>
+    </div>
+    <div class="backup-list" id="backupList">
+      ${backups.length ? backups.slice(0, 8).map(item => `<div class="backup-row">
+        <div><strong>${escapeHTML(item.name)}</strong><small>${escapeHTML(formatBackupDate(item.createdAt))} · ${escapeHTML(item.reason === 'automatico' ? 'Automático' : 'Manual')}</small></div>
+        <button class="button secondary small" type="button" data-backup-download="${escapeHTML(item.name)}">Descargar</button>
+      </div>`).join('') : '<p class="backup-empty">No hay respaldos todavía.</p>'}
+    </div>
+  </section>`;
+}
+function formatBackupDate(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Fecha no disponible';
+  return date.toLocaleString('es-EC', { timeZone: 'America/Guayaquil', dateStyle: 'medium', timeStyle: 'short' });
+}
+
 async function renderAdmin() {
   const session = await request('/api/admin/session').catch(() => ({ authenticated: false })); if (!session.authenticated) return renderLogin(); if (session.role === 'orders') return renderAdminOrders();
   let products = await request('/api/admin/products').catch(() => []); let classifications = await request('/api/admin/classifications').catch(() => ({ brands: {}, productTypes: {} })); let settings = await request('/api/admin/storefront').catch(() => ({ heroProductIds: [], featuredProductIds: [] })); let editing = null;
-  app.innerHTML = `<main class="admin-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Administración</h1></div><button class="button secondary" id="logout">Cerrar sesión</button></div><nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}" class="admin-section-link active">PÁGINA WEB</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link">PEDIDOS</a></nav>${selectionPanel(products, settings)}${classificationPanel(classifications)}<section class="admin-panel product-editor-panel" id="productEditorPanel"><span class="eyebrow">Catálogo</span><h2 id="formTitle">Agregar producto</h2><div id="formArea"></div></section><section class="admin-products"><div class="section-heading inventory-heading"><div><span class="eyebrow">Inventario</span><h2>Productos publicados (${products.length})</h2></div><p>Edita datos, imágenes, portada y destacados.</p></div><div class="inventory-toolbar"><label class="inventory-search"><span aria-hidden="true">⌕</span><input id="inventorySearch" type="search" placeholder="Buscar por nombre, SKU, marca o categoría…" autocomplete="off"><button id="clearInventorySearch" type="button" aria-label="Limpiar búsqueda">×</button></label><span class="inventory-count" id="inventoryCount">${products.length} productos</span></div><div id="adminProducts"></div></section></div></main>`;
+  const backupState = await request('/api/admin/backups').catch(() => ({ storageMode: 'local', backups: [], retention: 30 }));
+  app.innerHTML = `<main class="admin-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Administración</h1></div><button class="button secondary" id="logout">Cerrar sesión</button></div><nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}" class="admin-section-link active">PÁGINA WEB</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link">PEDIDOS</a></nav>${backupPanel(backupState)}${selectionPanel(products, settings)}${classificationPanel(classifications)}<section class="admin-panel product-editor-panel" id="productEditorPanel"><span class="eyebrow">Catálogo</span><h2 id="formTitle">Agregar producto</h2><div id="formArea"></div></section><section class="admin-products"><div class="section-heading inventory-heading"><div><span class="eyebrow">Inventario</span><h2>Productos publicados (${products.length})</h2></div><p>Edita datos, imágenes, portada y destacados.</p></div><div class="inventory-toolbar"><label class="inventory-search"><span aria-hidden="true">⌕</span><input id="inventorySearch" type="search" placeholder="Buscar por nombre, SKU, marca o categoría…" autocomplete="off"><button id="clearInventorySearch" type="button" aria-label="Limpiar búsqueda">×</button></label><span class="inventory-count" id="inventoryCount">${products.length} productos</span></div><div id="adminProducts"></div></section></div></main>`;
   const formArea = document.querySelector('#formArea'); const listArea = document.querySelector('#adminProducts');
   function drawList() {
     const categoryKeys = Object.keys(categories).filter(k => k !== 'all');
@@ -1013,7 +1048,41 @@ async function renderAdmin() {
     });
   }
 
-  document.querySelector('#logout').addEventListener('click', async () => { await request('/api/logout', { method: 'POST' }); renderLogin(); }); drawList(); renderClassifications(); bindClassificationEvents(); drawForm(); bindSelectionEvents();
+  async function refreshBackups() {
+    const state = await request('/api/admin/backups');
+    const panel = document.querySelector('#backupPanel');
+    if (!panel) return;
+    const replacement = document.createRange().createContextualFragment(backupPanel(state));
+    panel.replaceWith(replacement);
+    bindBackupEvents();
+  }
+  function bindBackupEvents() {
+    document.querySelector('#createBackup')?.addEventListener('click', async () => {
+      const button = document.querySelector('#createBackup');
+      if (!button) return;
+      const original = button.textContent;
+      button.disabled = true;
+      button.textContent = 'Creando respaldo…';
+      try {
+        await request('/api/admin/backups', { method: 'POST' });
+        await refreshBackups();
+      } catch (e) {
+        alert(e.message);
+        button.disabled = false;
+        button.textContent = original;
+      }
+    });
+    document.querySelectorAll('[data-backup-download]').forEach(button => {
+      button.addEventListener('click', () => {
+        const name = button.dataset.backupDownload;
+        window.location.href = `/api/admin/backups/${encodeURIComponent(name)}/download`;
+      });
+    });
+  }
+
+  document.querySelector('#logout').addEventListener('click', async () => { await request('/api/logout', { method: 'POST' }); renderLogin(); });
+  bindBackupEvents();
+  drawList(); renderClassifications(); bindClassificationEvents(); drawForm(); bindSelectionEvents();
 }
 function renderLogin() { app.innerHTML = `<main class="login-page"><section class="login-card"><a class="brand" href="/">YHORS</a><span class="eyebrow">Panel privado</span><h1>Acceso a YHORS</h1><p>Ingresa con la cuenta de administración para actualizar el catálogo.</p><form id="loginForm" class="form-grid"><div class="field full"><label for="username">Usuario</label><input id="username" name="username" autocomplete="username" required></div><div class="field full"><label for="password">Contraseña</label><input id="password" name="password" type="password" autocomplete="current-password" required></div><div class="form-actions"><button class="button" type="submit">Iniciar sesión</button><span class="message" id="loginMessage"></span></div></form></section></main>`; document.querySelector('#loginForm').addEventListener('submit', async e => { e.preventDefault(); const form = e.currentTarget; const message = document.querySelector('#loginMessage'); try { await request('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.fromEntries(new FormData(form))) }); const session = await request('/api/admin/session'); session.role === 'orders' ? renderAdminOrders() : renderAdmin(); } catch (error) { message.className = 'message error'; message.textContent = error.message; } }); }
 

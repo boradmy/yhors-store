@@ -126,3 +126,54 @@ Variables:
 - `ORDERS_PASSWORD`
 
 El usuario principal usa `ADMIN_USER` / `ADMIN_PASSWORD`.
+
+
+## YHORS 11 — Persistencia y respaldos
+
+Esta versión separa el **código** de los **datos** para que las futuras actualizaciones del proyecto no reemplacen el catálogo ni los pedidos.
+
+### Cómo funciona
+
+- En desarrollo local, YHORS sigue usando `data/` y `uploads/`.
+- En producción, cuando `YHORS_STORAGE_DIR` está configurado, YHORS guarda allí:
+  - `data/products.json`
+  - `data/orders.json`
+  - `data/storefront.json`
+  - `data/classifications.json`
+  - `uploads/`
+  - `backups/`
+- Si el almacenamiento persistente está vacío en la primera ejecución, YHORS copia los archivos que vienen con el código **solo si todavía no existen**. Después no vuelve a sobrescribirlos.
+- Antes de modificaciones de datos, YHORS crea respaldos automáticos con un intervalo configurable (6 horas por defecto).
+- El administrador también tiene un botón **Crear respaldo ahora** y puede descargar los últimos respaldos.
+- Se conservan 30 respaldos por defecto. Puedes cambiarlo con `YHORS_BACKUP_RETENTION`.
+- El respaldo contiene productos, pedidos, clasificaciones, portada y fotografías.
+
+### Render — configuración recomendada
+
+Para usar esta protección en Render:
+
+1. Adjunta un **Persistent Disk** a tu Web Service.
+2. Usa como mount path:
+   `/var/data`
+3. Configura la variable de entorno:
+   `YHORS_STORAGE_DIR=/var/data/yhors`
+4. Opcional:
+   `YHORS_BACKUP_RETENTION=30`
+5. Opcional:
+   `YHORS_AUTO_BACKUP_INTERVAL_HOURS=6`
+
+**Importante:** el Persistent Disk es el que hace que los archivos sobrevivan a reinicios y despliegues. El sistema de respaldos es una segunda capa de seguridad.
+
+Render indica que los Persistent Disks solo están disponibles para servicios web/persistentes/background de pago y se cobran por almacenamiento; actualmente el precio publicado es **$0.25 por GB/mes**. Render también crea snapshots automáticos diarios del disco y los conserva al menos siete días.
+
+### Flujo seguro para futuras versiones
+
+Cuando hagamos una nueva versión de YHORS:
+
+1. Se actualiza el código.
+2. Se despliega la nueva versión.
+3. `data/`, `uploads/` y `backups/` permanecen en el disco.
+4. Los archivos persistentes existentes **no se reemplazan por los archivos del ZIP**.
+5. Si alguna vez necesitas recuperar información, puedes descargar un respaldo desde Administración.
+
+Antes de hacer cambios grandes, también puedes pulsar **Crear respaldo ahora**. Así tendrás un punto de recuperación independiente de la actualización.
