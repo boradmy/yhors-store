@@ -14,10 +14,13 @@ const ADMIN_PATH = '/yhors/admin593';
 const DATA_FILE = path.join(__dirname, 'data', 'products.json');
 const STOREFRONT_FILE = path.join(__dirname, 'data', 'storefront.json');
 const CLASSIFICATIONS_FILE = path.join(__dirname, 'data', 'classifications.json');
+const ORDERS_FILE = path.join(__dirname, 'data', 'orders.json');
 const UPLOADS_DIR = path.join(__dirname, 'uploads');
 const SESSION_SECRET = process.env.SESSION_SECRET || 'cambia-este-secreto-antes-de-publicar';
 const ADMIN_USER = process.env.ADMIN_USER || 'admin';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'cambia-esta-contrasena';
+const ORDERS_USER = process.env.ORDERS_USER || 'pedidos';
+const ORDERS_PASSWORD = process.env.ORDERS_PASSWORD || 'CAMBIA-ESTA-CONTRASENA-DE-PEDIDOS';
 const COOKIE_SECURE = process.env.COOKIE_SECURE === 'true';
 
 fs.mkdirSync(UPLOADS_DIR, { recursive: true });
@@ -352,30 +355,129 @@ function writeProducts(products) {
   fs.renameSync(temporaryFile, DATA_FILE);
 }
 
+function readOrders() {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(ORDERS_FILE, 'utf8'));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeOrders(orders) {
+  const temporaryFile = `${ORDERS_FILE}.tmp`;
+  fs.writeFileSync(temporaryFile, `${JSON.stringify(orders, null, 2)}\n`, 'utf8');
+  fs.renameSync(temporaryFile, ORDERS_FILE);
+}
+
+function nextOrderNumber(orders) {
+  const max = orders.reduce((highest, order) => {
+    const match = String(order.orderNumber || '').match(/YH-(\d+)/i);
+    return match ? Math.max(highest, Number(match[1])) : highest;
+  }, 0);
+  return `YH-${String(max + 1).padStart(4, '0')}`;
+}
+
+function validateOrder(input) {
+  const customer = input?.customer || {};
+  const name = cleanText(customer.name, 100);
+  const phone = cleanText(customer.phone, 40);
+  const cedula = cleanText(customer.cedula, 13).replace(/\D/g, '');
+  const email = cleanText(customer.email, 120);
+  const city = cleanText(customer.city, 80);
+  const address = cleanText(customer.address, 240);
+  const mapsUrl = cleanText(customer.mapsUrl, 500);
+  const notes = cleanText(customer.notes, 500);
+  const deliveryMethod = cleanText(input?.deliveryMethod, 30);
+  const shippingCosts = { office: 0, local: 3, courier: 5 };
+  const deliveryLabels = {
+    office: 'Retiro en oficina',
+    local: 'Envío YHORS',
+    courier: 'Courier'
+  };
+  if (!shippingCosts.hasOwnProperty(deliveryMethod)) return { error: 'Selecciona una modalidad de entrega válida.' };
+  if (!name || !phone || !cedula || !city) return { error: 'Completa nombre, teléfono, cédula/RUC y ciudad.' };
+  if (!/^\d{10,13}$/.test(cedula)) return { error: 'La cédula/RUC debe tener entre 10 y 13 dígitos.' };
+  if (deliveryMethod !== 'office' && !address) return { error: 'Ingresa la dirección para el envío seleccionado.' };
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { error: 'El correo electrónico no es válido.' };
+  if (mapsUrl && !/^https?:\/\//i.test(mapsUrl)) return { error: 'El enlace de Google Maps no es válido.' };
+
+  const requestedItems = Array.isArray(input?.items) ? input.items : [];
+  if (requestedItems.length < 1 || requestedItems.length > 50) return { error: 'El pedido no contiene productos válidos.' };
+
+  const products = readProducts().map(normalizeProduct);
+  const byId = new Map(products.map(product => [product.id, product]));
+  const items = [];
+  for (const requested of requestedItems) {
+    const product = byId.get(String(requested.productId || ''));
+    const quantity = Math.max(1, Math.min(99, Number.parseInt(requested.quantity, 10) || 0));
+    if (!product || !quantity) return { error: 'Uno de los productos del carrito ya no está disponible.' };
+    const purchaseMode = requested.purchaseMode === 'rental' ? 'rental' : 'purchase';
+    const price = purchaseMode === 'rental' ? Number(product.rentalPrice) : Number(product.salePrice ?? product.price);
+    if (!Number.isFinite(price) || price < 0 || (purchaseMode === 'rental' && product.rentalPrice === null)) {
+      return { error: `El producto “${product.name}” no tiene un precio válido.` };
+    }
+    items.push({
+      productId: product.id,
+      sku: product.sku || '',
+      name: product.name,
+      category: product.category,
+      purchaseMode,
+      quantity,
+      unitPrice: Math.round(price * 100) / 100,
+      subtotal: Math.round(price * quantity * 100) / 100
+    });
+  }
+  const subtotal = Math.round(items.reduce((sum, item) => sum + item.subtotal, 0) * 100) / 100;
+  const shippingCost = shippingCosts[deliveryMethod];
+  const total = Math.round((subtotal + shippingCost) * 100) / 100;
+  return {
+    order: {
+      customer: { name, phone, cedula, email, city, address: deliveryMethod === 'office' ? '' : address, mapsUrl, notes },
+      delivery: { method: deliveryMethod, label: deliveryLabels[deliveryMethod], cost: shippingCost },
+      items, subtotal, shippingCost, total
+    }
+  };
+}
+
 function sign(value) {
   return crypto.createHmac('sha256', SESSION_SECRET).update(value).digest('base64url');
 }
 
-function makeSession() {
-  const payload = Buffer.from(JSON.stringify({ user: ADMIN_USER, expires: Date.now() + 1000 * 60 * 60 * 12 })).toString('base64url');
+function makeSession(user, role) {
+  const payload = Buffer.from(JSON.stringify({ user, role, expires: Date.now() + 1000 * 60 * 60 * 12 })).toString('base64url');
   return `${payload}.${sign(payload)}`;
 }
 
-function hasValidSession(req) {
+function getSession(req) {
   const token = req.cookies.yhors_session;
-  if (!token || !token.includes('.')) return false;
+  if (!token || !token.includes('.')) return null;
   const [payload, signature] = token.split('.');
-  if (signature.length !== sign(payload).length || !crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(sign(payload)))) return false;
+  const expected = sign(payload);
+  if (signature.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) return null;
   try {
     const session = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
-    return session.user === ADMIN_USER && Number(session.expires) > Date.now();
+    if (!session.user || !['admin', 'orders'].includes(session.role) || Number(session.expires) <= Date.now()) return null;
+    if (session.role === 'admin' && session.user !== ADMIN_USER) return null;
+    if (session.role === 'orders' && session.user !== ORDERS_USER) return null;
+    return session;
   } catch {
-    return false;
+    return null;
   }
 }
 
+function hasValidSession(req) { return Boolean(getSession(req)); }
+
 function requireAdmin(req, res, next) {
-  if (!hasValidSession(req)) return res.status(401).json({ error: 'No autorizado.' });
+  const session = getSession(req);
+  if (!session) return res.status(401).json({ error: 'No autorizado.' });
+  if (session.role !== 'admin') return res.status(403).json({ error: 'Esta cuenta solo tiene acceso a Gestión de pedidos.' });
+  return next();
+}
+
+function requireOrdersAccess(req, res, next) {
+  const session = getSession(req);
+  if (!session) return res.status(401).json({ error: 'No autorizado.' });
   return next();
 }
 
@@ -383,6 +485,79 @@ function cleanText(value, maxLength) {
   return typeof value === 'string' ? value.trim().slice(0, maxLength) : '';
 }
 
+
+function escapeEmailHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, char => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[char]));
+}
+
+async function sendOrderConfirmationEmail(order) {
+  const email = order?.customer?.email;
+  if (!email) return { sent: false, reason: 'no-customer-email' };
+
+  const itemsHtml = (order.items || []).map(item =>
+    `<tr><td style="padding:8px 0">${escapeEmailHtml(item.quantity)}× ${escapeEmailHtml(item.name)}<br><small>SKU: ${escapeEmailHtml(item.sku || '—')}</small></td><td style="padding:8px 0;text-align:right">$${Number(item.subtotal || 0).toFixed(2)}</td></tr>`
+  ).join('');
+  const mapsHtml = order.customer.mapsUrl ? `<p><strong>Ubicación:</strong> <a href="${escapeEmailHtml(order.customer.mapsUrl)}">Abrir en Google Maps</a></p>` : '';
+  const html = `<div style="font-family:Arial,sans-serif;max-width:620px;margin:auto;color:#222">
+    <h1 style="margin-bottom:4px">YHORS STORE</h1>
+    <p>Hola ${escapeEmailHtml(order.customer.name)}, recibimos correctamente tu pedido.</p>
+    <div style="padding:16px;border:1px solid #ddd;border-radius:10px">
+      <h2 style="margin-top:0">Pedido #${escapeEmailHtml(order.orderNumber)}</h2>
+      <p><strong>Estado:</strong> ${escapeEmailHtml(order.status)}</p>
+      <p><strong>Entrega:</strong> ${escapeEmailHtml(order.delivery.label)} · $${Number(order.shippingCost || 0).toFixed(2)}</p>
+      <table style="width:100%;border-collapse:collapse">${itemsHtml}</table>
+      <hr style="border:0;border-top:1px solid #ddd">
+      <p><strong>Subtotal:</strong> $${Number(order.subtotal || 0).toFixed(2)}</p>
+      <p><strong>Envío:</strong> $${Number(order.shippingCost || 0).toFixed(2)}</p>
+      <p style="text-align:right;font-size:18px"><strong>Total: $${Number(order.total || 0).toFixed(2)}</strong></p>
+    </div>
+    <p><strong>Cédula / RUC:</strong> ${escapeEmailHtml(order.customer.cedula || '—')}</p>
+    <p><strong>Ciudad:</strong> ${escapeEmailHtml(order.customer.city || '—')}</p>
+    <p><strong>Dirección:</strong> ${escapeEmailHtml(order.customer.address || 'Retiro en oficina')}</p>
+    ${mapsHtml}
+    ${order.customer.notes ? `<p><strong>Nota:</strong> ${escapeEmailHtml(order.customer.notes)}</p>` : ''}
+    <p style="color:#777">Te contactaremos para continuar con la coordinación de tu pedido.</p>
+  </div>`;
+  const text = `YHORS STORE · Pedido #${order.orderNumber}\n\nHola ${order.customer.name}, recibimos correctamente tu pedido.\n\nTotal: $${Number(order.total || 0).toFixed(2)}\nEntrega: ${order.delivery.label}\nCédula/RUC: ${order.customer.cedula || '—'}\nCiudad: ${order.customer.city || '—'}\nDirección: ${order.customer.address || 'Retiro en oficina'}${order.customer.mapsUrl ? `\nGoogle Maps: ${order.customer.mapsUrl}` : ''}`;
+
+  // Opción recomendada sin dominio: Google Apps Script envía desde tu propia cuenta Gmail.
+  const appsScriptUrl = process.env.GOOGLE_APPS_SCRIPT_URL;
+  const appsScriptToken = process.env.GOOGLE_APPS_SCRIPT_TOKEN;
+  if (appsScriptUrl && appsScriptToken) {
+    const response = await fetch(appsScriptUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        token: appsScriptToken,
+        to: email,
+        bcc: process.env.GOOGLE_NOTIFY_TO || '',
+        subject: `YHORS STORE · Pedido #${order.orderNumber} recibido`,
+        html,
+        text,
+        name: process.env.GOOGLE_FROM_NAME || 'YHORS STORE'
+      })
+    });
+    if (!response.ok) throw new Error(`Google Apps Script rechazó el correo (${response.status}).`);
+    const result = await response.text().catch(() => '');
+    if (result && /error|exception|failed/i.test(result)) throw new Error(`Google Apps Script reportó un error: ${result.slice(0, 300)}`);
+    return { sent: true, provider: 'google-apps-script' };
+  }
+
+  // Compatibilidad temporal con Resend si todavía está configurado.
+  const apiKey = process.env.RESEND_API_KEY;
+  const from = process.env.RESEND_FROM_EMAIL;
+  if (!apiKey || !from) return { sent: false, reason: 'email-provider-not-configured' };
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({ from, to: [email], subject: `YHORS STORE · Pedido #${order.orderNumber} recibido`, html })
+  });
+  if (!response.ok) {
+    const detail = await response.text().catch(() => '');
+    throw new Error(`Resend rechazó el correo (${response.status}): ${detail.slice(0, 300)}`);
+  }
+  return { sent: true, provider: 'resend' };
+}
 function normalizeSku(value) {
   return String(value || '').trim().toUpperCase().replace(/[^A-Z0-9._-]/g, '').slice(0, 40);
 }
@@ -468,13 +643,22 @@ app.get('/api/health', (_, res) => res.json({ ok: true }));
 app.post('/api/login', async (req, res) => {
   const username = cleanText(req.body?.username, 80);
   const password = String(req.body?.password || '');
-  const expectedUser = String(ADMIN_USER);
-  const nameMatches = username.length === expectedUser.length &&
-    crypto.timingSafeEqual(Buffer.from(username), Buffer.from(expectedUser));
-  const passwordMatches = await bcrypt.compare(password, await bcrypt.hash(ADMIN_PASSWORD, 10));
-  if (!nameMatches || !passwordMatches) return res.status(401).json({ error: 'Usuario o contraseña incorrectos.' });
-  res.cookie('yhors_session', makeSession(), { httpOnly: true, sameSite: 'strict', secure: COOKIE_SECURE, maxAge: 1000 * 60 * 60 * 12, path: '/' });
-  return res.json({ ok: true });
+  const accounts = [
+    { user: String(ADMIN_USER), password: String(ADMIN_PASSWORD), role: 'admin' },
+    { user: String(ORDERS_USER), password: String(ORDERS_PASSWORD), role: 'orders' }
+  ];
+  let account = null;
+  for (const candidate of accounts) {
+    const nameMatches = username.length === candidate.user.length && crypto.timingSafeEqual(Buffer.from(username), Buffer.from(candidate.user));
+    if (nameMatches) {
+      const passwordMatches = await bcrypt.compare(password, await bcrypt.hash(candidate.password, 10));
+      if (passwordMatches) account = candidate;
+      break;
+    }
+  }
+  if (!account) return res.status(401).json({ error: 'Usuario o contraseña incorrectos.' });
+  res.cookie('yhors_session', makeSession(account.user, account.role), { httpOnly: true, sameSite: 'strict', secure: COOKIE_SECURE, maxAge: 1000 * 60 * 60 * 12, path: '/' });
+  return res.json({ ok: true, role: account.role });
 });
 
 app.post('/api/logout', (req, res) => {
@@ -482,7 +666,49 @@ app.post('/api/logout', (req, res) => {
   res.json({ ok: true });
 });
 
-app.get('/api/admin/session', (req, res) => res.json({ authenticated: hasValidSession(req), username: hasValidSession(req) ? ADMIN_USER : null }));
+
+app.post('/api/orders', async (req, res) => {
+  const result = validateOrder(req.body || {});
+  if (result.error) return res.status(400).json(result);
+  const orders = readOrders();
+  const order = {
+    id: crypto.randomUUID(),
+    orderNumber: nextOrderNumber(orders),
+    status: 'Pendiente',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    ...result.order
+  };
+  orders.unshift(order);
+  writeOrders(orders);
+  try { await sendOrderConfirmationEmail(order); } catch (emailError) { console.error('[YHORS] No se pudo enviar la confirmación por correo:', emailError.message); }
+  return res.status(201).json({ orderNumber: order.orderNumber, status: order.status, total: order.total });
+});
+
+app.get('/api/admin/session', (req, res) => { const session = getSession(req); return res.json({ authenticated: Boolean(session), username: session?.user || null, role: session?.role || null }); });
+
+app.get('/api/admin/orders', requireOrdersAccess, (_, res) => res.json(readOrders()));
+app.put('/api/admin/orders/:id', requireOrdersAccess, (req, res) => {
+  const allowed = ['Pendiente', 'Confirmado', 'Preparando', 'Enviado', 'Entregado', 'Cancelado'];
+  const status = cleanText(req.body?.status, 30);
+  const normalizedStatus = allowed.find(item => item.toLocaleLowerCase('es-EC') === status.toLocaleLowerCase('es-EC'));
+  if (!normalizedStatus) return res.status(400).json({ error: 'Estado de pedido no válido.' });
+  const orders = readOrders();
+  const index = orders.findIndex(order => order.id === req.params.id);
+  if (index < 0) return res.status(404).json({ error: 'Pedido no encontrado.' });
+  orders[index] = { ...orders[index], status: normalizedStatus, updatedAt: new Date().toISOString() };
+  writeOrders(orders);
+  return res.json(orders[index]);
+});
+
+app.delete('/api/admin/orders/:id', requireOrdersAccess, (req, res) => {
+  const orders = readOrders();
+  const order = orders.find(item => item.id === req.params.id);
+  if (!order) return res.status(404).json({ error: 'Pedido no encontrado.' });
+  writeOrders(orders.filter(item => item.id !== req.params.id));
+  return res.status(204).end();
+});
+
 app.get('/api/admin/products', requireAdmin, (_, res) => res.json(readProducts().map(normalizeProduct)));
 app.get('/api/admin/storefront', requireAdmin, (_, res) => res.json(readStorefront()));
 app.get('/api/admin/classifications', requireAdmin, (_, res) => res.json(readClassifications()));

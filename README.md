@@ -8,8 +8,11 @@ Tienda ligera para publicar en un hosting con Node.js. No lleva React, compilaci
 - Panel que no aparece en el menú público: `/yhors/admin593`.
 - Inicio de sesión con usuario y contraseña configurables.
 - Crear, editar, destacar y eliminar productos.
-- Carga de fotos JPG, PNG, WEBP o GIF de hasta 5 MB, o uso de una URL de imagen.
-- Pedido por WhatsApp al configurar el número de la tienda.
+- Galería de hasta 4 fotos: cada posición admite subida de archivo o URL de imagen.
+- Checkout integrado en una página independiente `/pedido`: el cliente completa sus datos, ubicación de Google Maps y modalidad de entrega.
+- Pedidos persistentes con numeración `YH-0001`, `YH-0002`, etc.
+- Panel administrativo de pedidos independiente, con filtros por fecha/estado/búsqueda, tarjetas compactas desplegables y eliminación de pedidos de prueba. Estados: Pendiente, Confirmado, Preparando, Enviado, Entregado y Cancelado.
+- WhatsApp queda como canal opcional de atención, no como sistema principal de pedidos.
 - Cabeceras de seguridad, cookie de sesión HTTP-only y validación del lado del servidor.
 
 ## Arranque local
@@ -31,7 +34,7 @@ Build command: npm ci --omit=dev
 Start command: npm start
 ```
 
-Los productos se guardan en `data/products.json` y las fotos en `uploads/`. **Debes montar almacenamiento persistente** para esas dos carpetas; de lo contrario, las fotos y cambios se perderán al reiniciar o redesplegar. El `Dockerfile` declara ambos volúmenes para despliegues con Docker.
+Los productos se guardan en `data/products.json`, los pedidos en `data/orders.json` y las fotos en `uploads/`. **Debes montar almacenamiento persistente** para `data/` y `uploads/`; de lo contrario, las fotos y cambios se perderán al reiniciar o redesplegar. El `Dockerfile` declara ambos volúmenes para despliegues con Docker.
 
 Para recibir pedidos, agrega el número internacional de WhatsApp sin `+` ni espacios a `WHATSAPP_NUMBER`, por ejemplo `573001234567`.
 
@@ -83,3 +86,43 @@ Se omitieron `.env`, `.git` y `node_modules` del ZIP por seguridad/tamaño. Copi
 
 ### Caché del sitio
 Los archivos HTML/CSS/JS se configuran para revalidarse automáticamente en cada visita. No es necesario borrar cookies o caché manualmente después de desplegar cambios.
+
+
+### YHORS STORE — Sistema de pedidos integrado
+El checkout ya no depende de Google Forms ni necesita abrir WhatsApp para registrar una compra. El cliente agrega productos al carrito, pulsa **Finalizar pedido**, completa nombre, teléfono, correo opcional, ciudad, dirección y notas, y recibe un número de pedido como `#YH-0001`.
+
+Los pedidos se guardan en `data/orders.json`. El panel `/yhors/admin593` incluye la sección **Pedidos recibidos**, con búsqueda, filtro por estado y actualización del flujo:
+`Pendiente → Confirmado → Preparando → Enviado → Entregado`
+También existe `Cancelado` para pedidos que no continúen.
+
+Para producción en Render, el almacenamiento persistente debe incluir la carpeta `data/`, además de `uploads/`, para conservar catálogo, clasificaciones, portada y pedidos después de reinicios o despliegues.
+
+
+## Sistema de pedidos actualizado
+
+- `/pedido`: checkout independiente en una pestaña nueva.
+- Formas de entrega:
+  - Retiro en oficina: $0
+  - Envío YHORS: $3
+  - Courier: $5
+- El servidor calcula el subtotal, envío y total para evitar manipulación desde el navegador.
+- `/yhors/admin593`: administración del catálogo.
+- `/yhors/admin593/pedidos`: panel independiente para gestionar pedidos.
+- Los pedidos pueden cambiar de estado y eliminarse desde el panel.
+- Los pedidos se almacenan en `data/orders.json`.
+
+
+## Pedidos y notificaciones por correo
+- El checkout permite elegir **Retiro en oficina ($0)**, **Envío YHORS ($3)** o **Courier ($5)**.
+- Puede solicitar una **Dirección vía Google Maps** para facilitar la entrega.
+- Si el cliente proporciona correo y se configuran `RESEND_API_KEY` y `RESEND_FROM_EMAIL`, el servidor envía automáticamente una confirmación transaccional del pedido mediante Resend. Si no se configuran, el pedido igualmente se registra normalmente.
+
+## Acceso secundario de pedidos
+
+La aplicación admite una segunda cuenta con rol `orders`. Esta cuenta solo puede gestionar pedidos y no tiene acceso a productos, clasificaciones ni configuración de la página web.
+
+Variables:
+- `ORDERS_USER`
+- `ORDERS_PASSWORD`
+
+El usuario principal usa `ADMIN_USER` / `ADMIN_PASSWORD`.

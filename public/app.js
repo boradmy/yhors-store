@@ -106,8 +106,9 @@ function renderFooter() {
 function cartMarkup() {
   return `<div class="modal-backdrop" id="backdrop"></div><aside class="drawer" id="drawer" aria-label="Carrito de compra">
     <div class="drawer-head"><div><span class="eyebrow">Tu selección</span><h2>Carrito</h2></div><button class="icon-close" id="closeCart" aria-label="Cerrar">×</button></div>
-    <div class="cart-items" id="cartItems"></div><div class="cart-total"><span>Total</span><span id="cartTotal">$0</span></div>
-    <button class="button checkout-button" id="checkout">Finalizar pedido <span>→</span></button><p class="message" id="checkoutMessage"></p>
+    <div class="cart-items" id="cartItems"></div><div class="cart-total"><span>Subtotal</span><span id="cartTotal">$0</span></div>
+    <button class="button checkout-button" id="checkout">Finalizar pedido <span>→</span></button>
+    <p class="message" id="checkoutMessage"></p>
   </aside>`;
 }
 
@@ -237,8 +238,89 @@ function wireCart(products, storefront) {
   const openCart = () => { document.querySelector('#drawer')?.classList.add('open'); document.querySelector('#backdrop')?.classList.add('show'); document.body.classList.add('no-scroll'); };
   const closeCart = () => { document.querySelector('#drawer')?.classList.remove('open'); document.querySelector('#backdrop')?.classList.remove('show'); document.body.classList.remove('no-scroll'); };
   document.querySelector('#cartButton')?.addEventListener('click', openCart); document.querySelector('#closeCart')?.addEventListener('click', closeCart); document.querySelector('#backdrop')?.addEventListener('click', closeCart);
-  document.querySelector('#checkout')?.addEventListener('click', () => { const message = document.querySelector('#checkoutMessage'); if (!cart.length) { message.textContent = 'Agrega al menos un producto para continuar.'; return; } const details = cart.map(line => `SKU: ${line.sku || '—'}\nCantidad: ${line.quantity}\nDescripcion: ${line.name}\n${line.purchaseMode === 'rental' ? 'Alquiler' : 'Compra'}\nPrecio: ${money(line.price * line.quantity)}`).join('\n\n--------------------\n\n'); const total = cart.reduce((sum, line) => sum + line.price * line.quantity, 0); const text = `Hola, quiero hacer este pedido de YHORS:\n${details}\n\nTotal: ${money(total)}`; if (storefront.whatsappNumber) window.open(`https://wa.me/${storefront.whatsappNumber}?text=${encodeURIComponent(text)}`, '_blank', 'noopener'); else { navigator.clipboard?.writeText(text); message.textContent = 'El resumen del pedido se copió. Configura WHATSAPP_NUMBER en .env para recibir pedidos por WhatsApp.'; } });
+  const checkoutButton = document.querySelector('#checkout');
+  const checkoutMessage = document.querySelector('#checkoutMessage');
+  checkoutButton?.addEventListener('click', () => {
+    if (!cart.length) {
+      checkoutMessage.textContent = 'Agrega al menos un producto para continuar.';
+      return;
+    }
+    window.open('/pedido', '_blank', 'noopener');
+  });
   updateCartCount(); drawCart(); return { addToCart, openCart, closeCart };
+}
+
+
+function checkoutPage() {
+  let cart = getCart();
+  const subtotal = () => cart.reduce((sum, line) => sum + Number(line.price || 0) * Number(line.quantity || 0), 0);
+  const shipping = { office: 0, local: 3, courier: 5 };
+  const labels = {
+    office: { title: 'Retiro en oficina', text: 'Retira tu pedido directamente en la oficina YHORS.', price: 0 },
+    local: { title: 'Envío YHORS', text: 'Entrega dentro de la ciudad. Recargo fijo de $3,00.', price: 3 },
+    courier: { title: 'Courier', text: 'Envío mediante servicio de courier. Recargo fijo de $5,00.', price: 5 }
+  };
+  if (!cart.length) {
+    app.innerHTML = `<main class="checkout-page"><div class="checkout-page-inner"><span class="eyebrow">YHORS-STORE</span><h1>Tu carrito está vacío</h1><p>Agrega productos antes de realizar un pedido.</p><a class="button" href="/">Volver a la tienda <span>→</span></a></div></main>`;
+    return;
+  }
+  app.innerHTML = `<main class="checkout-page"><div class="checkout-page-inner">
+    <div class="checkout-page-top"><a class="brand" href="/">YHORS <small>STORE</small></a><a class="checkout-back" href="/">← Seguir comprando</a></div>
+    <div class="checkout-layout">
+      <section class="checkout-card"><span class="eyebrow">Finalizar pedido</span><h1>Datos de tu pedido</h1><p class="checkout-intro">Completa tus datos y selecciona cómo quieres recibir tu compra.</p>
+        <form id="fullCheckoutForm" class="form-grid">
+          <div class="field"><label for="fullCedula">Cédula / RUC *</label><input id="fullCedula" name="cedula" type="text" inputmode="numeric" minlength="10" maxlength="13" pattern="[0-9]{10,13}" autocomplete="off" placeholder="Cédula o RUC" required></div>
+          <div class="field"><label for="fullName">Nombre completo *</label><input id="fullName" name="name" required maxlength="100" autocomplete="name" placeholder="Nombre y apellido"></div>
+          <div class="field"><label for="fullPhone">Teléfono / WhatsApp *</label><input id="fullPhone" name="phone" required maxlength="40" autocomplete="tel" placeholder="099 999 9999"></div>
+          <div class="field"><label for="fullEmail">Correo electrónico</label><input id="fullEmail" name="email" type="email" maxlength="120" autocomplete="email" placeholder="correo@ejemplo.com"></div>
+          <div class="field"><label for="fullCity">Ciudad *</label><input id="fullCity" name="city" required maxlength="80" autocomplete="address-level2" placeholder="Quito"></div>
+          <div class="field full" id="fullAddressField"><label for="fullAddress">Dirección *</label><input id="fullAddress" name="address" maxlength="240" autocomplete="street-address" placeholder="Calle, número y referencia"></div>
+          <div class="field full hidden" id="fullMapsField"><label for="fullMapsUrl">Dirección vía Google Maps <small>(opcional)</small></label><input id="fullMapsUrl" name="mapsUrl" type="url" maxlength="500" placeholder="Pega aquí el enlace de tu ubicación de Google Maps"></div>
+          <div class="field full"><label>Forma de entrega *</label>
+            <div class="delivery-options">
+              ${Object.entries(labels).map(([key,item],i)=>`<label class="delivery-option"><input type="radio" name="deliveryMethod" value="${key}" ${i===0?'checked':''}><span><strong>${item.title}</strong><small>${item.text}</small></span><b>${item.price ? money(item.price) : 'Sin costo'}</b></label>`).join('')}
+            </div>
+          </div>
+          <div class="field full"><label for="fullNotes">Notas del pedido</label><textarea id="fullNotes" name="notes" maxlength="500" rows="3" placeholder="Referencia, horario u otra indicación"></textarea></div>
+          <div class="form-actions full"><button class="button" type="submit">Confirmar pedido <span>→</span></button><span class="message" id="fullCheckoutMessage"></span></div>
+        </form>
+      </section>
+      <aside class="checkout-card order-review"><span class="eyebrow">Resumen</span><h2>Tu pedido</h2><div id="fullOrderItems">${cart.map(line=>`<div class="checkout-item"><div><strong>${escapeHTML(line.quantity)}× ${escapeHTML(line.name || 'Producto')}</strong><small>SKU: ${escapeHTML(line.sku || '—')}</small></div><strong>${money(Number(line.price)*Number(line.quantity))}</strong></div>`).join('')}</div>
+        <div class="checkout-totals"><div><span>Subtotal</span><strong id="fullSubtotal">${money(subtotal())}</strong></div><div><span>Envío</span><strong id="fullShipping">Sin costo</strong></div><div class="checkout-grand"><span>Total</span><strong id="fullTotal">${money(subtotal())}</strong></div></div>
+      </aside>
+    </div>
+  </div></main>`;
+  const address = document.querySelector('#fullAddress');
+  const addressField = document.querySelector('#fullAddressField');
+  const shippingEl = document.querySelector('#fullShipping');
+  const totalEl = document.querySelector('#fullTotal');
+  const updateDelivery = () => {
+    const method = document.querySelector('input[name="deliveryMethod"]:checked')?.value || 'office';
+    const cost = shipping[method];
+    const mapsField = document.querySelector('#fullMapsField');
+    const mapsInput = document.querySelector('#fullMapsUrl');
+    address.required = method !== 'office';
+    addressField.querySelector('label').textContent = method === 'office' ? 'Dirección (opcional)' : 'Dirección *';
+    address.placeholder = method === 'office' ? 'No es necesaria para retiro en oficina' : 'Calle, número y referencia';
+    if (mapsField) mapsField.classList.toggle('hidden', method !== 'local');
+    if (mapsInput && method !== 'local') mapsInput.value = '';
+    shippingEl.textContent = cost ? money(cost) : 'Sin costo';
+    totalEl.textContent = money(subtotal() + cost);
+  };
+  document.querySelectorAll('input[name="deliveryMethod"]').forEach(r => r.addEventListener('change', updateDelivery));
+  updateDelivery();
+  document.querySelector('#fullCheckoutForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const form=e.currentTarget, submit=form.querySelector('[type="submit"]'), message=document.querySelector('#fullCheckoutMessage');
+    submit.disabled=true; message.className='message'; message.textContent='Registrando pedido…';
+    try {
+      const data=Object.fromEntries(new FormData(form).entries());
+      const payload={customer:{name:data.name,phone:data.phone,cedula:data.cedula,email:data.email,city:data.city,address:data.address,mapsUrl:data.mapsUrl,notes:data.notes},deliveryMethod:data.deliveryMethod,items:cart.map(line=>({productId:line.productId||line.id,quantity:Number(line.quantity),purchaseMode:line.purchaseMode||'purchase'}))};
+      const result=await request('/api/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+      localStorage.removeItem('yhors-cart'); cart=[];
+      app.innerHTML=`<main class="checkout-page"><div class="checkout-success-page"><span class="success-mark">✓</span><span class="eyebrow">Pedido recibido</span><h1>#${escapeHTML(result.orderNumber)}</h1><p>Tu pedido fue registrado correctamente.</p><div class="success-total">Total del pedido: <strong>${money(result.total)}</strong></div><p class="success-note">Guarda tu número de pedido para futuras consultas.</p><a class="button" href="/">Volver a YHORS STORE <span>→</span></a></div></main>`;
+    } catch(err) { message.className='message error'; message.textContent=err.message; submit.disabled=false; }
+  });
 }
 
 async function loadStoreData() {
@@ -445,26 +527,24 @@ async function renderStore() {
 
 function productForm(product = {}, classifications = {}) {
   const images = Array.isArray(product.images) && product.images.length ? product.images : (product.image ? [product.image] : []);
-  const selectedCategory = product.category || 'elegant';
-  const brands = classifications.brands?.[selectedCategory] || [];
-  const types = classifications.productTypes?.[selectedCategory] || [];
+  const selectedCategory = product.category || '';
+  const brands = selectedCategory ? (classifications.brands?.[selectedCategory] || []) : [];
+  const types = selectedCategory ? (classifications.productTypes?.[selectedCategory] || []) : [];
   const isCosplay = selectedCategory === 'cosplay';
   return `<form id="productForm"><div class="form-grid">
-    <div class="field full"><label for="category">Categoría / universo</label><select id="category" name="category" required>${Object.entries(categories).filter(([key]) => key !== 'all').map(([key, label]) => `<option value="${key}" ${selectedCategory === key ? 'selected' : ''}>${label}</option>`).join('')}</select><small class="field-help">Las clasificaciones se administran abajo.</small></div>
+    <div class="field full"><label for="category">Categoría / universo</label><select id="category" name="category" required><option value="">Elegir Categoría</option>${Object.entries(categories).filter(([key]) => key !== 'all').map(([key, label]) => `<option value="${key}" ${selectedCategory === key ? 'selected' : ''}>${label}</option>`).join('')}</select><small class="field-help">Las clasificaciones se administran abajo. Debes elegir una categoría para continuar.</small></div>
     <div class="field"><label for="name">Nombre del producto</label><input id="name" name="name" required maxlength="90" value="${escapeHTML(product.name || '')}"></div>
     <div class="field"><label for="sku">SKU</label><input id="sku" name="sku" required maxlength="40" pattern="[A-Za-z0-9._-]+" value="${escapeHTML(product.sku || '')}"><small class="field-help">Código único del producto. Ejemplo: YH-TEC-001</small></div>
-    <div class="field"><label for="brand">Marca</label><select id="brand" name="brand"><option value="">Sin marca</option>${brands.map(v => `<option value="${escapeHTML(v)}" ${product.brand === v ? 'selected' : ''}>${escapeHTML(v)}</option>`).join('')}</select></div>
-    <div class="field"><label for="productType">Tipo de producto</label><select id="productType" name="productType"><option value="">Sin clasificación</option>${types.map(v => `<option value="${escapeHTML(v)}" ${product.productType === v ? 'selected' : ''}>${escapeHTML(v)}</option>`).join('')}</select></div>
+    <div class="field"><label for="brand">Marca</label><select id="brand" name="brand" ${selectedCategory ? '' : 'disabled'}><option value="">Sin marca</option>${brands.map(v => `<option value="${escapeHTML(v)}" ${product.brand === v ? 'selected' : ''}>${escapeHTML(v)}</option>`).join('')}</select></div>
+    <div class="field"><label for="productType">Tipo de producto</label><select id="productType" name="productType" ${selectedCategory ? '' : 'disabled'}><option value="">Sin clasificación</option>${types.map(v => `<option value="${escapeHTML(v)}" ${product.productType === v ? 'selected' : ''}>${escapeHTML(v)}</option>`).join('')}</select></div>
     <div class="field"><label for="salePrice">Precio de venta (USD)</label><input id="salePrice" name="salePrice" required min="0" step="0.01" type="number" value="${escapeHTML(product.salePrice ?? product.price ?? '')}"></div>
     <div class="field ${isCosplay ? '' : 'hidden'}"><label for="rentalPrice">Precio de alquiler (USD)</label><input id="rentalPrice" name="rentalPrice" ${isCosplay ? 'required' : ''} min="0" step="0.01" type="number" value="${escapeHTML(product.rentalPrice ?? '')}"><small class="field-help">Disponible para productos de Cosplay.</small></div>
-    <div class="field"><label for="imageFile">Subir foto principal (máx. 5 MB)</label><input id="imageFile" name="imageFile" type="file" accept="image/jpeg,image/png,image/webp,image/gif"></div>
-    <div class="field full product-image-preview-field"><label>Vista previa del producto</label><div class="product-editor-preview"><div class="product-editor-preview-media"><img id="productImagePreview" data-fallback src="${escapeHTML(images[0] || product.image || placeholder)}" alt="Vista previa"></div><div class="product-editor-preview-copy"><strong>${escapeHTML(product.name || 'Nuevo producto')}</strong><small>Imagen principal · se actualiza al cambiar la URL o seleccionar un archivo.</small></div></div></div>
-    <div class="field full"><label for="image">URL de imagen principal</label><input id="image" name="image" type="url" placeholder="https://..." value="${escapeHTML(images[0] || product.image || '')}"></div>
-    <div class="field full"><label for="image2">Imagen adicional 2 · URL</label><input id="image2" name="image2" type="url" value="${escapeHTML(images[1] || '')}"></div>
-    <div class="field full"><label for="image3">Imagen adicional 3 · URL</label><input id="image3" name="image3" type="url" value="${escapeHTML(images[2] || '')}"></div>
-    <div class="field full"><label for="image4">Imagen adicional 4 · URL</label><input id="image4" name="image4" type="url" value="${escapeHTML(images[3] || '')}"></div>
+    <div class="field full"><span class="eyebrow image-section-label">Fotos del producto</span><small class="field-help">Puedes subir cada foto desde tu equipo o pegar directamente su URL.</small></div>
+    ${[0,1,2,3].map((index) => {
+      const num=index+1, id=index===0?'image':'image'+num, fileId=index===0?'imageFile':'imageFile'+num, label=index===0?'FOTO PRINCIPAL':'FOTO '+num, urlLabel=index===0?'URL de imagen principal':'Imagen adicional '+num+' · URL', currentImage=images[index] || (index===0 ? product.image || '' : ''), previewId=`productImagePreview${num}`;
+      return `<div class="image-upload-row field full"><div class="image-upload-layout"><div class="image-upload-preview"><span>Foto referencial</span><div class="image-reference-preview"><img id="${previewId}" data-fallback src="${escapeHTML(currentImage || placeholder)}" alt="Vista previa ${escapeHTML(label)}"></div></div><div class="image-upload-file"><label for="${fileId}">SUBIR ${label} <small>(máx. 5 MB)</small></label><input id="${fileId}" name="${fileId}" type="file" accept="image/jpeg,image/png,image/webp,image/gif"></div><div class="image-upload-url"><label for="${id}">${urlLabel}</label><input id="${id}" name="${id}" type="url" placeholder="https://..." value="${escapeHTML(currentImage)}"></div></div></div>`;
+    }).join('')}
     <div class="field full"><label for="description">Descripción completa</label><textarea id="description" name="description" required maxlength="2000" rows="9">${escapeHTML(product.description || '')}</textarea><small class="field-help">Puedes usar saltos de línea y emojis.</small></div>
-    <div class="field"><label for="heroOrder">Orden de portada</label><input id="heroOrder" name="heroOrder" type="number" min="0" max="999" value="${escapeHTML(product.heroOrder ?? 0)}"><small class="field-help">Menor número = aparece antes.</small></div>
     <div class="field featured-field"><label><input id="hero" name="hero" type="checkbox" ${product.hero ? 'checked' : ''}> Usar en slider de portada</label><label><input id="featured" name="featured" type="checkbox" ${product.featured ? 'checked' : ''}> Mostrar como destacado</label></div>
   </div><div class="form-actions"><button class="button" type="submit">${product.id ? 'Guardar cambios' : 'Crear producto'}</button><button class="button secondary ${product.id ? '' : 'hidden'}" type="button" id="cancelEdit">Cancelar</button><span class="message" id="formMessage"></span></div></form>`;
 }
@@ -532,10 +612,86 @@ function classificationPanel(classifications) {
     </div><span class="message" id="classificationMessage"></span>
   </section>`;
 }
+
+function ordersPanel(orders = []) {
+  const statuses = ['Pendiente', 'Confirmado', 'Preparando', 'Enviado', 'Entregado', 'Cancelado'];
+  return `<section class="admin-panel orders-panel" id="ordersPanel">
+    <div class="section-heading"><div><span class="eyebrow">Ventas</span><h2>Pedidos recibidos <small class="orders-count">${orders.length}</small></h2></div><p>Administra pedidos sin mezclarlos con el catálogo.</p></div>
+    <div class="orders-toolbar">
+      <label class="order-date-filter"><span>Fecha</span><input id="ordersDateFilter" type="date" aria-label="Filtrar pedidos por fecha"><button id="clearOrdersDate" type="button" title="Quitar fecha">×</button></label>
+      <select id="ordersStatusFilter"><option value="">Todos los estados</option>${statuses.map(s => `<option value="${escapeHTML(s)}">${escapeHTML(s)}</option>`).join('')}</select>
+      <input id="ordersSearch" type="search" placeholder="Buscar por pedido, cliente, teléfono o SKU…" autocomplete="off">
+    </div>
+    <div id="adminOrdersList">${ordersListMarkup(orders)}</div>
+  </section>`;
+}
+function ordersListMarkup(orders = []) {
+  const date = value => { const d = new Date(value); return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString('es-EC', { dateStyle: 'medium', timeStyle: 'short' }); };
+  const shortDate = value => { const d = new Date(value); return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString('es-EC', { day:'2-digit', month:'short', year:'numeric' }); };
+  const statuses = ['Pendiente', 'Confirmado', 'Preparando', 'Enviado', 'Entregado', 'Cancelado'];
+  const statusClass = value => ({Pendiente:'pending',Confirmado:'confirmed',Preparando:'preparing',Enviado:'shipped',Entregado:'delivered',Cancelado:'cancelled'}[value] || 'pending');
+  if (!orders.length) return '<div class="empty">No hay pedidos que coincidan con los filtros.</div>';
+  return orders.map(order => `<article class="admin-order admin-order-compact" data-order-search="${escapeHTML(`${order.orderNumber} ${order.customer?.name || ''} ${order.customer?.phone || ''} ${(order.items || []).map(i => `${i.sku} ${i.name}`).join(' ')}`.toLowerCase())}" data-order-status="${escapeHTML(order.status || '')}" data-order-date="${escapeHTML(String(order.createdAt || '').slice(0,10))}">
+    <button type="button" class="admin-order-summary" data-order-toggle="${escapeHTML(order.id)}" aria-expanded="false">
+      <span class="order-summary-date">${escapeHTML(shortDate(order.createdAt))}</span>
+      <span class="order-summary-main"><strong>#${escapeHTML(order.orderNumber)}</strong><b>${escapeHTML(order.customer?.name || 'Cliente')}</b><small class="order-summary-item">${escapeHTML((order.items?.[0]?.quantity || 1) + '× ' + (order.items?.[0]?.name || 'Sin productos'))}${(order.items?.length || 0) > 1 ? ` · +${order.items.length - 1} más` : ''}</small></span>
+      <span class="order-summary-total">${money(order.total)}</span>
+      <span class="order-summary-status status-${statusClass(order.status || 'Pendiente')}">${escapeHTML(order.status || 'Pendiente')}</span>
+      <span class="order-summary-chevron">⌄</span>
+    </button>
+    <div class="admin-order-details" id="orderDetails-${escapeHTML(order.id)}" hidden>
+      <div class="admin-order-head"><div><span class="eyebrow">${escapeHTML(date(order.createdAt))}</span><h3>#${escapeHTML(order.orderNumber)}</h3><strong>${escapeHTML(order.customer?.name || 'Cliente')}</strong></div><div class="order-status-wrap"><label>Estado</label><select data-order-status="${escapeHTML(order.id)}">${statuses.map(s => `<option ${s === order.status ? 'selected' : ''} value="${escapeHTML(s)}">${escapeHTML(s)}</option>`).join('')}</select></div></div>
+      <div class="admin-order-grid"><div><span class="order-label">Contacto</span><p>${escapeHTML(order.customer?.phone || '—')}${order.customer?.email ? `<br>${escapeHTML(order.customer.email)}` : ''}<br><strong>Cédula / RUC:</strong> ${escapeHTML(order.customer?.cedula || '—')}</p></div><div><span class="order-label">Entrega</span><p><strong>${escapeHTML(order.delivery?.label || '—')}</strong><br>${escapeHTML(order.customer?.city || '—')}${order.customer?.address ? ` · ${escapeHTML(order.customer.address)}` : ''}${order.customer?.mapsUrl ? `<br><a href="${escapeHTML(order.customer.mapsUrl)}" target="_blank" rel="noopener">📍 Abrir ubicación en Google Maps</a>` : ''}</p></div><div><span class="order-label">Total</span><p class="order-total">${money(order.total)}</p><small>Subtotal ${money(order.subtotal ?? order.total)} · Envío ${money(order.shippingCost ?? 0)}</small></div></div>
+      <div class="admin-order-items">${(order.items || []).map(item => `<div class="admin-order-item"><span><strong>${escapeHTML(item.quantity)}×</strong> ${escapeHTML(item.name)} <small>SKU: ${escapeHTML(item.sku || '—')} · ${item.purchaseMode === 'rental' ? 'Alquiler' : 'Compra'}</small></span><strong>${money(item.subtotal)}</strong></div>`).join('')}</div>
+      ${order.customer?.notes ? `<div class="order-notes"><span>Nota</span><p>${escapeHTML(order.customer.notes)}</p></div>` : ''}
+      <div class="admin-order-footer"><button class="button danger small" type="button" data-order-delete="${escapeHTML(order.id)}">Eliminar pedido</button></div>
+    </div>
+  </article>`).join('');
+}
+async function renderAdminOrders() {
+  const session = await request('/api/admin/session').catch(() => ({ authenticated: false }));
+  if (!session.authenticated) return renderLogin();
+  let orders = await request('/api/admin/orders').catch(() => []);
+  const sectionNav = session.role === 'orders'
+    ? `<nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}/pedidos" class="admin-section-link active">PEDIDOS</a></nav>`
+    : `<nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}" class="admin-section-link">PÁGINA WEB</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link active">PEDIDOS</a></nav>`;
+  app.innerHTML = `<main class="admin-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">${session.role === 'orders' ? 'Gestión de pedidos' : 'Administración'}</h1><p class="admin-subtitle">${session.role === 'orders' ? 'Panel exclusivo para pedidos de YHORS STORE' : 'Gestión de YHORS STORE'}</p></div><div class="admin-top-actions"><button class="button secondary" id="ordersLogout">Cerrar sesión</button></div></div>${sectionNav}${ordersPanel(orders)}</div></main>`;
+  const drawOrders = () => {
+    const list=document.querySelector('#adminOrdersList'); if(!list) return;
+    const query=(document.querySelector('#ordersSearch')?.value||'').trim().toLowerCase();
+    const status=document.querySelector('#ordersStatusFilter')?.value||'';
+    const dateFilter=(document.querySelector('#ordersDateFilter')?.value||'');
+    const orderLocalDate = value => { const d=new Date(value); if(Number.isNaN(d.getTime())) return ''; return d.toLocaleDateString('en-CA',{timeZone:'America/Guayaquil'}); };
+    const filtered=orders.filter(order=>(!dateFilter||orderLocalDate(order.createdAt)===dateFilter)&&(!status||order.status===status)&&(!query||`${order.orderNumber} ${order.customer?.name||''} ${order.customer?.phone||''} ${(order.items||[]).map(i=>`${i.sku} ${i.name}`).join(' ')}`.toLowerCase().includes(query)));
+    list.innerHTML=ordersListMarkup(filtered);
+    list.querySelectorAll('select[data-order-status]').forEach(select=>select.addEventListener('change',async()=>{
+      try {
+        const newStatus = String(select.value || '').trim();
+        const updated = await request(`/api/admin/orders/${select.dataset.orderStatus}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:newStatus})});
+        orders=orders.map(o=>o.id===updated.id?updated:o);
+        drawOrders();
+        alert(`Tu pedido se actualizó a: ${newStatus}.`);
+      } catch(e){ alert(e.message); drawOrders(); }
+    }));
+    list.querySelectorAll('[data-order-toggle]').forEach(button=>button.addEventListener('click',()=>{ const details=document.querySelector(`#orderDetails-${button.dataset.orderToggle}`); if(!details) return; const opening=details.hidden; details.hidden=!opening; button.setAttribute('aria-expanded',String(opening)); button.closest('.admin-order')?.classList.toggle('is-open',opening); }));
+     list.querySelectorAll('[data-order-delete]').forEach(button=>button.addEventListener('click',async()=>{
+      const order=orders.find(o=>o.id===button.dataset.orderDelete); if(!order) return;
+      if(!confirm(`¿Eliminar el pedido #${order.orderNumber}? Esta acción no se puede deshacer.`)) return;
+      try { await request(`/api/admin/orders/${order.id}`,{method:'DELETE'}); orders=orders.filter(o=>o.id!==order.id); drawOrders(); } catch(e){alert(e.message);}
+    }));
+  };
+  document.querySelector('#ordersSearch')?.addEventListener('input',drawOrders);
+  document.querySelector('#ordersStatusFilter')?.addEventListener('change',drawOrders);
+   document.querySelector('#ordersDateFilter')?.addEventListener('change',drawOrders);
+   document.querySelector('#clearOrdersDate')?.addEventListener('click',()=>{ const input=document.querySelector('#ordersDateFilter'); if(input){input.value='';drawOrders();} });
+  document.querySelector('#ordersLogout')?.addEventListener('click',async()=>{await request('/api/logout',{method:'POST'});renderLogin();});
+  drawOrders();
+}
+
 async function renderAdmin() {
-  const session = await request('/api/admin/session').catch(() => ({ authenticated: false })); if (!session.authenticated) return renderLogin();
+  const session = await request('/api/admin/session').catch(() => ({ authenticated: false })); if (!session.authenticated) return renderLogin(); if (session.role === 'orders') return renderAdminOrders();
   let products = await request('/api/admin/products').catch(() => []); let classifications = await request('/api/admin/classifications').catch(() => ({ brands: {}, productTypes: {} })); let settings = await request('/api/admin/storefront').catch(() => ({ heroProductIds: [], featuredProductIds: [] })); let editing = null;
-  app.innerHTML = `<main class="admin-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Administración</h1></div><button class="button secondary" id="logout">Cerrar sesión</button></div>${selectionPanel(products, settings)}${classificationPanel(classifications)}<section class="admin-panel product-editor-panel" id="productEditorPanel"><span class="eyebrow">Catálogo</span><h2 id="formTitle">Agregar producto</h2><div id="formArea"></div></section><section class="admin-products"><div class="section-heading inventory-heading"><div><span class="eyebrow">Inventario</span><h2>Productos publicados (${products.length})</h2></div><p>Edita datos, imágenes, portada y destacados.</p></div><div class="inventory-toolbar"><label class="inventory-search"><span aria-hidden="true">⌕</span><input id="inventorySearch" type="search" placeholder="Buscar por nombre, SKU, marca o categoría…" autocomplete="off"><button id="clearInventorySearch" type="button" aria-label="Limpiar búsqueda">×</button></label><span class="inventory-count" id="inventoryCount">${products.length} productos</span></div><div id="adminProducts"></div></section></div></main>`;
+  app.innerHTML = `<main class="admin-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Administración</h1></div><button class="button secondary" id="logout">Cerrar sesión</button></div><nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}" class="admin-section-link active">PÁGINA WEB</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link">PEDIDOS</a></nav>${selectionPanel(products, settings)}${classificationPanel(classifications)}<section class="admin-panel product-editor-panel" id="productEditorPanel"><span class="eyebrow">Catálogo</span><h2 id="formTitle">Agregar producto</h2><div id="formArea"></div></section><section class="admin-products"><div class="section-heading inventory-heading"><div><span class="eyebrow">Inventario</span><h2>Productos publicados (${products.length})</h2></div><p>Edita datos, imágenes, portada y destacados.</p></div><div class="inventory-toolbar"><label class="inventory-search"><span aria-hidden="true">⌕</span><input id="inventorySearch" type="search" placeholder="Buscar por nombre, SKU, marca o categoría…" autocomplete="off"><button id="clearInventorySearch" type="button" aria-label="Limpiar búsqueda">×</button></label><span class="inventory-count" id="inventoryCount">${products.length} productos</span></div><div id="adminProducts"></div></section></div></main>`;
   const formArea = document.querySelector('#formArea'); const listArea = document.querySelector('#adminProducts');
   function drawList() {
     const categoryKeys = Object.keys(categories).filter(k => k !== 'all');
@@ -716,13 +872,12 @@ async function renderAdmin() {
       const heroProductIds = heroOrdered.map(item => item.id);
       const featuredProductIds = featuredOrdered.map(item => item.id);
       try {
-        await request('/api/admin/storefront', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ heroProductIds, featuredProductIds, heroOrders: Object.fromEntries(heroOrdered.map(item => [item.id, item.order])) }) });
+        await request('/api/admin/storefront', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ heroProductIds, featuredProductIds }) });
         settings = { heroProductIds, featuredProductIds };
         products = products.map(p => ({
           ...p,
           hero: heroProductIds.includes(p.id),
-          featured: featuredProductIds.includes(p.id),
-          heroOrder: heroOrdered.find(item => item.id === p.id)?.order || 0
+          featured: featuredProductIds.includes(p.id)
         }));
         showSaveSuccess(message, 'Portada y destacados guardados con el orden indicado.');
         drawList();
@@ -733,8 +888,18 @@ async function renderAdmin() {
     const render = (target, values, type) => {
       const container = document.querySelector(target);
       if (!container) return;
-      container.innerHTML = Object.entries(values || {}).filter(([, list]) => Array.isArray(list) && list.length).map(([cat, list]) => `<div class="classification-group"><strong>${escapeHTML(categories[cat])}</strong><div class="classification-chips">${list.map((v,i)=>`<span class="classification-chip">${escapeHTML(v)}<button type="button" data-remove-class="${type}" data-category="${escapeHTML(cat)}" data-index="${i}">×</button></span>`).join('')}</div></div>`).join('') || '<small class="field-help">Todavía no hay clasificaciones.</small>';
+      container.innerHTML = Object.entries(values || {}).filter(([, list]) => Array.isArray(list) && list.length).map(([cat, list]) => `<div class="classification-group"><strong>${escapeHTML(categories[cat])}</strong><div class="classification-chips">${list.map((v,i)=>`<span class="classification-chip"><span class="classification-chip-text">${escapeHTML(v)}</span><button type="button" class="classification-edit" data-edit-class="${type}" data-category="${escapeHTML(cat)}" data-index="${i}" title="Editar">✎</button><button type="button" class="classification-delete" data-remove-class="${type}" data-category="${escapeHTML(cat)}" data-index="${i}" title="Eliminar">×</button></span>`).join('')}</div></div>`).join('') || '<small class="field-help">Todavía no hay clasificaciones.</small>';
       container.querySelectorAll('[data-remove-class]').forEach(btn => btn.addEventListener('click', async () => { classifications[btn.dataset.removeClass][btn.dataset.category].splice(Number(btn.dataset.index), 1); await saveClassifications(); }));
+      container.querySelectorAll('[data-edit-class]').forEach(btn => btn.addEventListener('click', async () => {
+        const key=btn.dataset.editClass, cat=btn.dataset.category, index=Number(btn.dataset.index), current=classifications[key]?.[cat]?.[index] || '';
+        const value=window.prompt('Editar clasificación:', current);
+        if (value === null) return;
+        const clean=value.trim().slice(0,50);
+        if (!clean) return;
+        const duplicate=classifications[key][cat].some((v,i)=>i!==index && v.toLowerCase()===clean.toLowerCase());
+        if (duplicate) { alert('Ya existe una clasificación con ese nombre en esta categoría.'); return; }
+        classifications[key][cat][index]=clean; await saveClassifications();
+      }));
     };
     render('#brandLists', classifications.brands, 'brands'); render('#typeLists', classifications.productTypes, 'productTypes');
   }
@@ -792,11 +957,23 @@ async function renderAdmin() {
     document.querySelector('#cancelEdit')?.addEventListener('click', () => { editing = null; drawForm(); });
     document.querySelector('#category')?.addEventListener('change', event => drawForm({ ...(editing || {}), category: event.target.value }));
     document.querySelector('#productForm').addEventListener('submit', async event => {
-      event.preventDefault(); const form = event.currentTarget; const submit = form.querySelector('[type="submit"]'); const message = document.querySelector('#formMessage'); submit.disabled = true; message.textContent = 'Guardando…';
+      event.preventDefault(); const form = event.currentTarget; const submit = form.querySelector('[type="submit"]'); const message = document.querySelector('#formMessage');
+      if (!form.elements.category.value) { message.className='message error'; message.textContent='Selecciona una categoría antes de guardar el producto.'; form.elements.category.focus(); return; }
+      submit.disabled = true; message.textContent = 'Guardando…';
       try {
-        const data = Object.fromEntries(new FormData(form).entries()); data.featured = form.elements.featured.checked; data.hero = form.elements.hero.checked; data.price = data.salePrice; data.images = [data.image, data.image2, data.image3, data.image4].filter(Boolean);
-        const file = form.elements.imageFile.files[0];
-        if (file) { const uploadData = new FormData(); uploadData.append('image', file); const uploaded = await request('/api/admin/upload', { method: 'POST', body: uploadData }); data.image = uploaded.image; data.images[0] = uploaded.image; }
+        const data = Object.fromEntries(new FormData(form).entries()); delete data.heroOrder; data.featured = form.elements.featured.checked; data.hero = form.elements.hero.checked; data.price = data.salePrice; data.images = [data.image, data.image2, data.image3, data.image4].filter(Boolean);
+        const fileFields = ['imageFile','imageFile2','imageFile3','imageFile4'];
+         for (let index = 0; index < fileFields.length; index++) {
+           const file = form.elements[fileFields[index]]?.files?.[0];
+           if (!file) continue;
+           const uploadData = new FormData(); uploadData.append('image', file);
+           const uploaded = await request('/api/admin/upload', { method: 'POST', body: uploadData });
+           const urlField = index === 0 ? 'image' : `image${index+1}`;
+           data[urlField] = uploaded.image;
+           data.images[index] = uploaded.image;
+         }
+         data.images = data.images.filter(Boolean);
+         data.image = data.images[0] || '';
         const url = editing ? `/api/admin/products/${editing.id}` : '/api/admin/products';
         const product = await request(url, { method: editing ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
         products = editing ? products.map(p => p.id === product.id ? product : p) : [product, ...products];
@@ -813,7 +990,10 @@ async function renderAdmin() {
 
   document.querySelector('#logout').addEventListener('click', async () => { await request('/api/logout', { method: 'POST' }); renderLogin(); }); drawList(); renderClassifications(); bindClassificationEvents(); drawForm(); bindSelectionEvents();
 }
-function renderLogin() { app.innerHTML = `<main class="login-page"><section class="login-card"><a class="brand" href="/">YHORS</a><span class="eyebrow">Panel privado</span><h1>Acceso a YHORS</h1><p>Ingresa con la cuenta de administración para actualizar el catálogo.</p><form id="loginForm" class="form-grid"><div class="field full"><label for="username">Usuario</label><input id="username" name="username" autocomplete="username" required></div><div class="field full"><label for="password">Contraseña</label><input id="password" name="password" type="password" autocomplete="current-password" required></div><div class="form-actions"><button class="button" type="submit">Iniciar sesión</button><span class="message" id="loginMessage"></span></div></form></section></main>`; document.querySelector('#loginForm').addEventListener('submit', async e => { e.preventDefault(); const form = e.currentTarget; const message = document.querySelector('#loginMessage'); try { await request('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.fromEntries(new FormData(form))) }); renderAdmin(); } catch (error) { message.className = 'message error'; message.textContent = error.message; } }); }
+function renderLogin() { app.innerHTML = `<main class="login-page"><section class="login-card"><a class="brand" href="/">YHORS</a><span class="eyebrow">Panel privado</span><h1>Acceso a YHORS</h1><p>Ingresa con la cuenta de administración para actualizar el catálogo.</p><form id="loginForm" class="form-grid"><div class="field full"><label for="username">Usuario</label><input id="username" name="username" autocomplete="username" required></div><div class="field full"><label for="password">Contraseña</label><input id="password" name="password" type="password" autocomplete="current-password" required></div><div class="form-actions"><button class="button" type="submit">Iniciar sesión</button><span class="message" id="loginMessage"></span></div></form></section></main>`; document.querySelector('#loginForm').addEventListener('submit', async e => { e.preventDefault(); const form = e.currentTarget; const message = document.querySelector('#loginMessage'); try { await request('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.fromEntries(new FormData(form))) }); const session = await request('/api/admin/session'); session.role === 'orders' ? renderAdminOrders() : renderAdmin(); } catch (error) { message.className = 'message error'; message.textContent = error.message; } }); }
 
 window.addEventListener('popstate', () => renderStore());
-if (window.location.pathname === ADMIN_PATH || window.location.pathname === `${ADMIN_PATH}/`) renderAdmin(); else renderStore();
+if (window.location.pathname === ADMIN_PATH || window.location.pathname === `${ADMIN_PATH}/`) renderAdmin(); else if (window.location.pathname === `${ADMIN_PATH}/pedidos` || window.location.pathname === `${ADMIN_PATH}/pedidos/`) renderAdminOrders(); else if (window.location.pathname === '/pedido' || window.location.pathname === '/pedido/') checkoutPage(); else renderStore();
+
+document.addEventListener('change', e => { const file=e.target.closest('input[type=file][id^=\"imageFile\"]'); if(!file)return; const num=file.id==='imageFile'?1:Number(file.id.replace('imageFile','')); const preview=document.querySelector(`#productImagePreview${num}`); if(preview&&file.files?.[0]){const r=new FileReader();r.onload=()=>preview.src=r.result;r.readAsDataURL(file.files[0]);}});
+document.addEventListener('input', e => { const input=e.target.closest('input[type=url][id^=\"image\"]'); if(!input)return; const num=input.id==='image'?1:Number(input.id.replace('image','')); const preview=document.querySelector(`#productImagePreview${num}`); if(preview&&input.value.trim())preview.src=input.value.trim();});

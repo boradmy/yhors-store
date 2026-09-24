@@ -1,0 +1,94 @@
+[
+  {
+    "id": "47f7b74c-b367-463a-b149-ebb76b8acd0f",
+    "orderNumber": "YH-0002",
+    "status": "Entregado",
+    "createdAt": "2026-09-24T18:33:51.891Z",
+    "updatedAt": "2026-09-24T19:32:15.898Z",
+    "customer": {
+      "name": "PEPIDO",
+      "phone": "0958609277",
+      "email": "boradmy@gmail.com",
+      "city": "quito",
+      "address": "",
+      "mapsUrl": "",
+      "notes": "nada"
+    },
+    "delivery": {
+      "method": "office",
+      "label": "Retiro en oficina",
+      "cost": 0
+    },
+    "items": [
+      {
+        "productId": "7757b362-1f89-4e24-be36-de4d49a71c19",
+        "sku": "82XQ01V5LM",
+        "name": "NOTEBOOK LENOVO IP1 15AMN7 R5 7520U 8GB-256GB SSD-BLUE-15.6\"-W11 TECLADO INGLES",
+        "category": "tech",
+        "purchaseMode": "purchase",
+        "quantity": 1,
+        "unitPrice": 599.99,
+        "subtotal": 599.99
+      },
+      {
+        "productId": "d049e7a4-05cb-493e-832e-11cc3c0fe099",
+        "sku": "C2N6L4-BL",
+        "name": "PARLANTE SMART AMAZON ECHO DOT 5ta. GENERACION – ALEXA – AZUL",
+        "category": "tech",
+        "purchaseMode": "purchase",
+        "quantity": 1,
+        "unitPrice": 80,
+        "subtotal": 80
+      }
+    ],
+    "subtotal": 679.99,
+    "shippingCost": 0,
+    "total": 679.99
+  },
+  {
+    "id": "d88112c0-18c3-42c4-8006-fc9b1d193986",
+    "orderNumber": "YH-0001",
+    "status": "Pendiente",
+    "createdAt": "2026-09-24T18:14:39.812Z",
+    "updatedAt": "2026-09-24T19:19:00.309Z",
+    "customer": {
+      "name": "Boris",
+      "phone": "0958609277",
+      "email": "boradmy@gmail.com",
+      "city": "Quito",
+      "address": "",
+      "mapsUrl": "",
+      "notes": ""
+    },
+    "delivery": {
+      "method": "office",
+      "label": "Retiro en oficina",
+      "cost": 0
+    },
+    "items": [
+      {
+        "productId": "d9dabf42-3c1c-4bdc-aa71-624acf051cfc",
+        "sku": "YH-COS-AHIRI",
+        "name": "COSPLAY AHRI (League of Legends)",
+        "category": "cosplay",
+        "purchaseMode": "purchase",
+        "quantity": 1,
+        "unitPrice": 200,
+        "subtotal": 200
+      },
+      {
+        "productId": "d9dabf42-3c1c-4bdc-aa71-624acf051cfc",
+        "sku": "YH-COS-AHIRI",
+        "name": "COSPLAY AHRI (League of Legends)",
+        "category": "cosplay",
+        "purchaseMode": "rental",
+        "quantity": 1,
+        "unitPrice": 90,
+        "subtotal": 90
+      }
+    ],
+    "subtotal": 290,
+    "shippingCost": 0,
+    "total": 290
+  }
+]
