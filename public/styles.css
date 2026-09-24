@@ -1299,3 +1299,9 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}.brand{letter-sp
 .checkout-card .form-grid .field:not(.full) { min-width: 0; }
 .checkout-card .form-grid .field input { min-height: 44px; box-sizing: border-box; }
 .checkout-card .form-grid .field input::placeholder { color: #aaa59b; }
+
+.admin-order-internal-note{margin-top:16px;padding:13px 0 0;border-top:1px solid #eeeae2}
+.admin-order-internal-note label{display:block;font-size:.68rem;text-transform:uppercase;letter-spacing:.08em;color:#777;margin-bottom:7px}
+.admin-order-internal-note textarea{width:100%;min-height:72px;resize:vertical;border:1px solid var(--line,#ded8cc);border-radius:9px;padding:10px 12px;background:#faf9f6;font:inherit;font-size:.84rem;line-height:1.45;box-sizing:border-box}
+.admin-order-internal-note textarea:focus{outline:2px solid rgba(0,0,0,.08);background:#fff}
+.admin-order-footer{gap:9px;flex-wrap:wrap}

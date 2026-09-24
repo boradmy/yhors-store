@@ -690,15 +690,28 @@ app.get('/api/admin/session', (req, res) => { const session = getSession(req); r
 app.get('/api/admin/orders', requireOrdersAccess, (_, res) => res.json(readOrders()));
 app.put('/api/admin/orders/:id', requireOrdersAccess, (req, res) => {
   const allowed = ['Pendiente', 'Confirmado', 'Preparando', 'Enviado', 'Entregado', 'Cancelado'];
-  const status = cleanText(req.body?.status, 30);
-  const normalizedStatus = allowed.find(item => item.toLocaleLowerCase('es-EC') === status.toLocaleLowerCase('es-EC'));
-  if (!normalizedStatus) return res.status(400).json({ error: 'Estado de pedido no válido.' });
+  const body = req.body || {};
+  const hasStatus = Object.prototype.hasOwnProperty.call(body, 'status');
+  const hasInternalNote = Object.prototype.hasOwnProperty.call(body, 'internalNote');
+  if (!hasStatus && !hasInternalNote) return res.status(400).json({ error: 'No hay cambios para guardar.' });
+
+  let normalizedStatus;
+  if (hasStatus) {
+    const status = cleanText(body.status, 30);
+    normalizedStatus = allowed.find(item => item.toLocaleLowerCase('es-EC') === status.toLocaleLowerCase('es-EC'));
+    if (!normalizedStatus) return res.status(400).json({ error: 'Estado de pedido no válido.' });
+  }
+
   const orders = readOrders();
   const index = orders.findIndex(order => order.id === req.params.id);
   if (index < 0) return res.status(404).json({ error: 'Pedido no encontrado.' });
-  orders[index] = { ...orders[index], status: normalizedStatus, updatedAt: new Date().toISOString() };
+
+  const updated = { ...orders[index], updatedAt: new Date().toISOString() };
+  if (hasStatus) updated.status = normalizedStatus;
+  if (hasInternalNote) updated.internalNote = cleanText(body.internalNote, 5000);
+  orders[index] = updated;
   writeOrders(orders);
-  return res.json(orders[index]);
+  return res.json(updated);
 });
 
 app.delete('/api/admin/orders/:id', requireOrdersAccess, (req, res) => {

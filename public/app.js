@@ -646,7 +646,14 @@ function ordersListMarkup(orders = []) {
       <div class="admin-order-grid"><div><span class="order-label">Contacto</span><p>${escapeHTML(order.customer?.phone || '—')}${order.customer?.email ? `<br>${escapeHTML(order.customer.email)}` : ''}<br><strong>Cédula / RUC:</strong> ${escapeHTML(order.customer?.cedula || '—')}</p></div><div><span class="order-label">Entrega</span><p><strong>${escapeHTML(order.delivery?.label || '—')}</strong><br>${escapeHTML(order.customer?.city || '—')}${order.customer?.address ? ` · ${escapeHTML(order.customer.address)}` : ''}${order.customer?.mapsUrl ? `<br><a href="${escapeHTML(order.customer.mapsUrl)}" target="_blank" rel="noopener">📍 Abrir ubicación en Google Maps</a>` : ''}</p></div><div><span class="order-label">Total</span><p class="order-total">${money(order.total)}</p><small>Subtotal ${money(order.subtotal ?? order.total)} · Envío ${money(order.shippingCost ?? 0)}</small></div></div>
       <div class="admin-order-items">${(order.items || []).map(item => `<div class="admin-order-item"><span><strong>${escapeHTML(item.quantity)}×</strong> ${escapeHTML(item.name)} <small>SKU: ${escapeHTML(item.sku || '—')} · ${item.purchaseMode === 'rental' ? 'Alquiler' : 'Compra'}</small></span><strong>${money(item.subtotal)}</strong></div>`).join('')}</div>
       ${order.customer?.notes ? `<div class="order-notes"><span>Nota</span><p>${escapeHTML(order.customer.notes)}</p></div>` : ''}
-      <div class="admin-order-footer"><button class="button danger small" type="button" data-order-delete="${escapeHTML(order.id)}">Eliminar pedido</button></div>
+      <div class="admin-order-internal-note">
+        <label for="internalNote-${escapeHTML(order.id)}">Nota interna</label>
+        <textarea id="internalNote-${escapeHTML(order.id)}" data-order-note="${escapeHTML(order.id)}" rows="3" maxlength="5000" placeholder="Escribe aquí cualquier comentario interno sobre este pedido…">${escapeHTML(order.internalNote || '')}</textarea>
+      </div>
+      <div class="admin-order-footer">
+        <button class="button secondary small" type="button" data-order-note-save="${escapeHTML(order.id)}">Guardar nota</button>
+        <button class="button danger small" type="button" data-order-delete="${escapeHTML(order.id)}">Eliminar pedido</button>
+      </div>
     </div>
   </article>`).join('');
 }
@@ -676,6 +683,22 @@ async function renderAdminOrders() {
       } catch(e){ alert(e.message); drawOrders(); }
     }));
     list.querySelectorAll('[data-order-toggle]').forEach(button=>button.addEventListener('click',()=>{ const details=document.querySelector(`#orderDetails-${button.dataset.orderToggle}`); if(!details) return; const opening=details.hidden; details.hidden=!opening; button.setAttribute('aria-expanded',String(opening)); button.closest('.admin-order')?.classList.toggle('is-open',opening); }));
+     list.querySelectorAll('[data-order-note-save]').forEach(button=>button.addEventListener('click',async()=>{
+      const id=button.dataset.orderNoteSave;
+      const textarea=list.querySelector(`[data-order-note="${id}"]`);
+      if(!textarea) return;
+      const original=button.textContent;
+      button.disabled=true;
+      try {
+        const updated=await request(`/api/admin/orders/${id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({internalNote:textarea.value})});
+        orders=orders.map(o=>o.id===updated.id?updated:o);
+        button.textContent='Nota guardada ✓';
+        setTimeout(()=>{button.textContent=original;button.disabled=false;},1200);
+      } catch(e) {
+        button.disabled=false;
+        alert(e.message);
+      }
+    }));
      list.querySelectorAll('[data-order-delete]').forEach(button=>button.addEventListener('click',async()=>{
       const order=orders.find(o=>o.id===button.dataset.orderDelete); if(!order) return;
       if(!confirm(`¿Eliminar el pedido #${order.orderNumber}? Esta acción no se puede deshacer.`)) return;
