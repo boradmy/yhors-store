@@ -775,7 +775,7 @@ function backupPanel(data = null) {
       </div>
       <div class="backup-list" id="backupList">
         ${backups.length ? backups.slice(0, 8).map(item => `<div class="backup-row">
-          <div><strong>${escapeHTML(item.name)}</strong><small>${escapeHTML(formatBackupDate(item.createdAt))} · ${escapeHTML(item.reason === 'automatico' ? 'Automático' : 'Manual')}</small></div>
+          <div><strong>Backup #${escapeHTML(item.position || 1)} de ${escapeHTML(data?.retention || 30)}</strong><small>${escapeHTML(item.name)} · ${escapeHTML(formatBackupDate(item.createdAt))} · ${escapeHTML(item.reason === 'automatico' ? 'Automático' : 'Manual')}</small></div>
           <div class="backup-row-actions">
             <button class="button secondary small" type="button" data-backup-download="${escapeHTML(item.name)}">Descargar</button>
             <button class="button danger small" type="button" data-backup-delete="${escapeHTML(item.name)}">Eliminar</button>

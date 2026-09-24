@@ -406,7 +406,12 @@ function listBackups() {
         return { name: entry.name, createdAt: fs.statSync(dir).mtime.toISOString(), reason: 'unknown' };
       }
     })
-    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+    .map((backup, index, all) => ({
+      ...backup,
+      position: index + 1,
+      retention: all.length
+    }));
 }
 
 function pruneBackups() {
@@ -875,7 +880,7 @@ app.post('/api/admin/backups', requireAdmin, (_, res) => {
 
 app.delete('/api/admin/backups/:name', requireAdmin, (req, res) => {
   const name = String(req.params.name || '');
-  if (!/^YHORS-\\d{8}-\\d{6}Z-[a-f0-9]{6}$/.test(name)) {
+  if (!/^YHORS-\d{8}-\d{6}Z-[a-f0-9]{6}$/.test(name)) {
     return res.status(400).json({ error: 'Respaldo no válido.' });
   }
   const backupDir = path.join(BACKUPS_DIR, name);

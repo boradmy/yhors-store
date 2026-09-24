@@ -1409,3 +1409,28 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}.brand{letter-sp
   background:#e5b93d;
   border-color:#cda21d;
 }
+
+/* YHORS v9 — acciones de backup siempre horizontales */
+.backup-row-actions{
+  display:flex;
+  flex-direction:row !important;
+  align-items:center;
+  justify-content:flex-end;
+  gap:7px;
+  flex-wrap:nowrap;
+}
+.backup-row-actions .button{
+  flex:0 0 auto;
+}
+@media (max-width:760px){
+  .backup-row-actions{
+    width:auto;
+    flex-direction:row !important;
+    align-items:center;
+    justify-content:flex-start;
+    flex-wrap:nowrap;
+  }
+  .backup-row-actions .button{
+    flex:0 0 auto;
+  }
+}
