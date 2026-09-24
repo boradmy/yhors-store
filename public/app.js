@@ -1,5 +1,7 @@
 const app = document.querySelector('#app');
 const ADMIN_PATH = '/yhors/admin593';
+const ORDER_STATUS_CLASS = { Pendiente:'pending', Confirmado:'confirmed', Preparando:'preparing', Enviado:'shipped', Entregado:'delivered', Cancelado:'cancelled' };
+const statusClass = value => ORDER_STATUS_CLASS[value] || 'pending';
 const categories = {
   all: 'Principal', elegant: 'Elegant', sports: 'Sports', tech: 'Tech', cosplay: 'Cosplay',
   pets: 'Pets', details: 'Details', collectibles: 'Coleccionables'
@@ -589,7 +591,7 @@ function selectionPanel(products, settings) {
       <span class="selection-order" aria-label="${selected ? `Orden ${order || 1}` : 'No seleccionado'}"><span>Orden</span><b class="selection-order-number" data-order-number="${escapeHTML(p.id)}">${selected ? escapeHTML(order || 1) : '—'}</b><span class="drag-hint" aria-hidden="true">↕</span></span>
     </div>`;
   };
-  return `<section class="admin-panel selection-panel">
+  return `<section class="admin-panel selection-panel" id="selectionPanel">
     <div class="section-heading"><div><span class="eyebrow">Experiencia de inicio</span><h2>Portada y productos destacados</h2></div><p>Busca productos, selecciónalos y arrástralos para definir el orden en que aparecerán.</p></div>
     <div class="selection-grid">
       <div>
@@ -607,7 +609,7 @@ function selectionPanel(products, settings) {
 
 
 function classificationPanel(classifications) {
-  return `<section class="admin-panel classification-panel"><div class="section-heading"><div><span class="eyebrow">Organización</span><h2>Clasificaciones</h2></div><p>Crea tus propias marcas y tipos de producto por universo.</p></div>
+  return `<section class="admin-panel classification-panel" id="classificationPanel"><div class="section-heading"><div><span class="eyebrow">Organización</span><h2>Clasificaciones</h2></div><p>Crea tus propias marcas y tipos de producto por universo.</p></div>
     <div class="classification-grid">
       <div><h3>Marcas</h3><div class="classification-add"><select id="classBrandCategory">${Object.entries(categories).filter(([k])=>k!=='all').map(([k,v])=>`<option value="${k}">${v}</option>`).join('')}</select><input id="newBrand" maxlength="50" placeholder="Ej. Infinix"><button class="button small" id="addBrand">Agregar</button></div><div id="brandLists"></div></div>
       <div><h3>Tipos de producto</h3><div class="classification-add"><select id="classTypeCategory">${Object.entries(categories).filter(([k])=>k!=='all').map(([k,v])=>`<option value="${k}">${v}</option>`).join('')}</select><input id="newType" maxlength="50" placeholder="Ej. Celular"><button class="button small" id="addType">Agregar</button></div><div id="typeLists"></div></div>
@@ -615,7 +617,7 @@ function classificationPanel(classifications) {
   </section>`;
 }
 
-function ordersPanel(orders = []) {
+function ordersPanel(orders = [], canDelete = true) {
   const statuses = ['Pendiente', 'Confirmado', 'Preparando', 'Enviado', 'Entregado', 'Cancelado'];
   return `<section class="admin-panel orders-panel" id="ordersPanel">
     <div class="section-heading"><div><span class="eyebrow">Ventas</span><h2>Pedidos recibidos <small class="orders-count">${orders.length}</small></h2></div><p>Administra pedidos sin mezclarlos con el catálogo.</p></div>
@@ -624,14 +626,14 @@ function ordersPanel(orders = []) {
       <select id="ordersStatusFilter"><option value="">Todos los estados</option>${statuses.map(s => `<option value="${escapeHTML(s)}">${escapeHTML(s)}</option>`).join('')}</select>
       <input id="ordersSearch" type="search" placeholder="Buscar por pedido, cliente, cédula/RUC, teléfono o SKU…" autocomplete="off">
     </div>
-    <div id="adminOrdersList">${ordersListMarkup(orders)}</div>
+    <div id="adminOrdersList">${ordersListMarkup(orders, { canDelete })}</div>
   </section>`;
 }
-function ordersListMarkup(orders = []) {
+function ordersListMarkup(orders = [], options = {}) {
+  const canDelete = options.canDelete !== false;
   const date = value => { const d = new Date(value); return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString('es-EC', { dateStyle: 'medium', timeStyle: 'short' }); };
   const shortDate = value => { const d = new Date(value); return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString('es-EC', { day:'2-digit', month:'short', year:'numeric' }); };
   const statuses = ['Pendiente', 'Confirmado', 'Preparando', 'Enviado', 'Entregado', 'Cancelado'];
-  const statusClass = value => ({Pendiente:'pending',Confirmado:'confirmed',Preparando:'preparing',Enviado:'shipped',Entregado:'delivered',Cancelado:'cancelled'}[value] || 'pending');
   if (!orders.length) return '<div class="empty">No hay pedidos que coincidan con los filtros.</div>';
   return orders.map(order => `<article class="admin-order admin-order-compact" data-order-search="${escapeHTML(`${order.orderNumber} ${order.customer?.name || ''} ${order.customer?.cedula || ''} ${order.customer?.phone || ''} ${order.customer?.email || ''} ${(order.items || []).map(i => `${i.sku} ${i.name}`).join(' ')}`.toLowerCase())}" data-order-status="${escapeHTML(order.status || '')}" data-order-date="${escapeHTML(String(order.createdAt || '').slice(0,10))}">
     <button type="button" class="admin-order-summary" data-order-toggle="${escapeHTML(order.id)}" aria-expanded="false">
@@ -648,11 +650,12 @@ function ordersListMarkup(orders = []) {
       ${order.customer?.notes ? `<div class="order-notes"><span>Nota</span><p>${escapeHTML(order.customer.notes)}</p></div>` : ''}
       <div class="admin-order-internal-note">
         <label for="internalNote-${escapeHTML(order.id)}">Nota interna</label>
-        <textarea id="internalNote-${escapeHTML(order.id)}" data-order-note="${escapeHTML(order.id)}" rows="3" maxlength="5000" placeholder="Escribe aquí cualquier comentario interno sobre este pedido…">${escapeHTML(order.internalNote || '')}</textarea>
+        <textarea id="internalNote-${escapeHTML(order.id)}" data-order-note="${escapeHTML(order.id)}" rows="3" maxlength="5000" placeholder="Escribe aquí cualquier comentario interno sobre este pedido…" disabled>${escapeHTML(order.internalNote || '')}</textarea>
       </div>
       <div class="admin-order-footer">
-        <button class="button secondary small" type="button" data-order-note-save="${escapeHTML(order.id)}">Guardar nota</button>
-        <button class="button danger small" type="button" data-order-delete="${escapeHTML(order.id)}">Eliminar pedido</button>
+        <button class="button success small" type="button" data-order-note-save="${escapeHTML(order.id)}" disabled>Guardar nota</button>
+        <button class="button edit-note small" type="button" data-order-note-edit="${escapeHTML(order.id)}">Editar</button>
+        ${canDelete ? `<button class="button danger small" type="button" data-order-delete="${escapeHTML(order.id)}">Eliminar pedido</button>` : ''}
       </div>
     </div>
   </article>`).join('');
@@ -664,7 +667,7 @@ async function renderAdminOrders() {
   const sectionNav = session.role === 'orders'
     ? `<nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}/pedidos" class="admin-section-link active">PEDIDOS</a></nav>`
     : `<nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}" class="admin-section-link">PÁGINA WEB</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link active">PEDIDOS</a></nav>`;
-  app.innerHTML = `<main class="admin-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">${session.role === 'orders' ? 'Gestión de pedidos' : 'Administración'}</h1><p class="admin-subtitle">${session.role === 'orders' ? 'Panel exclusivo para pedidos de YHORS STORE' : 'Gestión de YHORS STORE'}</p></div><div class="admin-top-actions"><button class="button secondary" id="ordersLogout">Cerrar sesión</button></div></div>${sectionNav}${ordersPanel(orders)}</div></main>`;
+  app.innerHTML = `<main class="admin-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">${session.role === 'orders' ? 'Gestión de pedidos' : 'Administración'}</h1><p class="admin-subtitle">${session.role === 'orders' ? 'Panel exclusivo para pedidos de YHORS STORE' : 'Gestión de YHORS STORE'}</p></div><div class="admin-top-actions"><button class="button secondary" id="ordersLogout">Cerrar sesión</button></div></div>${sectionNav}${ordersPanel(orders, session.role === 'admin')}</div></main>`;
   const drawOrders = () => {
     const list=document.querySelector('#adminOrdersList'); if(!list) return;
     const query=(document.querySelector('#ordersSearch')?.value||'').trim().toLowerCase();
@@ -672,28 +675,60 @@ async function renderAdminOrders() {
     const dateFilter=(document.querySelector('#ordersDateFilter')?.value||'');
     const orderLocalDate = value => { const d=new Date(value); if(Number.isNaN(d.getTime())) return ''; return d.toLocaleDateString('en-CA',{timeZone:'America/Guayaquil'}); };
     const filtered=orders.filter(order=>(!dateFilter||orderLocalDate(order.createdAt)===dateFilter)&&(!status||order.status===status)&&(!query||`${order.orderNumber} ${order.customer?.name||''} ${order.customer?.cedula||''} ${order.customer?.phone||''} ${order.customer?.email||''} ${(order.items||[]).map(i=>`${i.sku} ${i.name}`).join(' ')}`.toLowerCase().includes(query)));
-    list.innerHTML=ordersListMarkup(filtered);
+    list.innerHTML=ordersListMarkup(filtered, { canDelete: session.role === 'admin' });
     list.querySelectorAll('select[data-order-status]').forEach(select=>select.addEventListener('change',async()=>{
+      const id = select.dataset.orderStatus;
+      const newStatus = String(select.value || '').trim();
+      const previous = orders.find(o=>o.id===id)?.status || '';
+      select.disabled = true;
       try {
-        const newStatus = String(select.value || '').trim();
-        const updated = await request(`/api/admin/orders/${select.dataset.orderStatus}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:newStatus})});
+        const updated = await request(`/api/admin/orders/${id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:newStatus})});
         orders=orders.map(o=>o.id===updated.id?updated:o);
-        drawOrders();
-        alert(`Tu pedido se actualizó a: ${newStatus}.`);
-      } catch(e){ alert(e.message); drawOrders(); }
+        // No redibujar toda la lista: así no se cierra el pedido ni se pierde la nota escrita.
+        const card = select.closest('.admin-order');
+        const badge = card?.querySelector('.order-summary-status');
+        if (badge) {
+          badge.textContent = updated.status;
+          badge.className = `order-summary-status status-${statusClass(updated.status)}`;
+        }
+        select.className = `status-select-${statusClass(updated.status)}`;
+        select.disabled = false;
+      } catch(e) {
+        select.value = previous;
+        select.disabled = false;
+        alert(e.message);
+      }
     }));
     list.querySelectorAll('[data-order-toggle]').forEach(button=>button.addEventListener('click',()=>{ const details=document.querySelector(`#orderDetails-${button.dataset.orderToggle}`); if(!details) return; const opening=details.hidden; details.hidden=!opening; button.setAttribute('aria-expanded',String(opening)); button.closest('.admin-order')?.classList.toggle('is-open',opening); }));
-     list.querySelectorAll('[data-order-note-save]').forEach(button=>button.addEventListener('click',async()=>{
+    list.querySelectorAll('[data-order-note-edit]').forEach(button => button.addEventListener('click', () => {
+      const id = button.dataset.orderNoteEdit;
+      const textarea = list.querySelector(`[data-order-note="${id}"]`);
+      const saveButton = list.querySelector(`[data-order-note-save="${id}"]`);
+      if (!textarea || !saveButton) return;
+      textarea.disabled = false;
+      textarea.focus();
+      button.disabled = true;
+      button.textContent = 'Editando…';
+      saveButton.disabled = false;
+    }));
+    list.querySelectorAll('[data-order-note-save]').forEach(button=>button.addEventListener('click',async()=>{
       const id=button.dataset.orderNoteSave;
       const textarea=list.querySelector(`[data-order-note="${id}"]`);
-      if(!textarea) return;
+      const editButton=list.querySelector(`[data-order-note-edit="${id}"]`);
+      if(!textarea || textarea.disabled) return;
       const original=button.textContent;
       button.disabled=true;
       try {
         const updated=await request(`/api/admin/orders/${id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({internalNote:textarea.value})});
         orders=orders.map(o=>o.id===updated.id?updated:o);
+        textarea.value = updated.internalNote || '';
+        textarea.disabled = true;
+        if (editButton) {
+          editButton.disabled = false;
+          editButton.textContent = 'Editar';
+        }
         button.textContent='Nota guardada ✓';
-        setTimeout(()=>{button.textContent=original;button.disabled=false;},1200);
+        setTimeout(()=>{button.textContent='Guardar nota';},1200);
       } catch(e) {
         button.disabled=false;
         alert(e.message);
@@ -717,27 +752,36 @@ async function renderAdminOrders() {
 function backupPanel(data = null) {
   const persistent = data?.storageMode === 'persistent';
   const backups = Array.isArray(data?.backups) ? data.backups : [];
-  return `<section class="admin-panel backup-panel" id="backupPanel">
+  return `<section class="admin-panel backup-panel is-collapsed" id="backupPanel">
     <div class="backup-panel-head">
-      <div>
-        <span class="eyebrow">Seguridad de datos</span>
-        <h2>Respaldos YHORS</h2>
-        <p class="admin-help">Los respaldos protegen productos, pedidos, clasificaciones, portada y fotografías. Se conserva un máximo de ${escapeHTML(data?.retention || 30)} respaldos.</p>
-      </div>
+      <button class="backup-collapse-toggle" type="button" id="backupCollapseToggle" aria-expanded="false">
+        <span class="backup-title-wrap">
+          <span class="eyebrow">Seguridad de datos</span>
+          <strong>BACKUPS</strong>
+          <small>${backups.length ? `${backups.length} respaldo(s) disponible(s)` : 'Sin respaldos todavía'}</small>
+        </span>
+        <span class="backup-chevron">⌄</span>
+      </button>
       <div class="backup-status ${persistent ? 'is-ok' : 'is-warning'}">
         <strong>${persistent ? 'ALMACENAMIENTO PERSISTENTE' : 'ALMACENAMIENTO LOCAL'}</strong>
         <span>${persistent ? 'Render conservará los datos entre despliegues y reinicios.' : 'Configura el disco persistente de Render antes de producción.'}</span>
       </div>
     </div>
-    <div class="backup-actions">
-      <button class="button" type="button" id="createBackup">Crear respaldo ahora</button>
-      <span class="backup-last" id="backupLast">${backups[0] ? `Último: ${formatBackupDate(backups[0].createdAt)}` : 'Todavía no hay respaldos.'}</span>
-    </div>
-    <div class="backup-list" id="backupList">
-      ${backups.length ? backups.slice(0, 8).map(item => `<div class="backup-row">
-        <div><strong>${escapeHTML(item.name)}</strong><small>${escapeHTML(formatBackupDate(item.createdAt))} · ${escapeHTML(item.reason === 'automatico' ? 'Automático' : 'Manual')}</small></div>
-        <button class="button secondary small" type="button" data-backup-download="${escapeHTML(item.name)}">Descargar</button>
-      </div>`).join('') : '<p class="backup-empty">No hay respaldos todavía.</p>'}
+    <div class="backup-panel-body">
+      <p class="admin-help">Los respaldos protegen productos, pedidos, clasificaciones, portada y fotografías. Se conserva un máximo de ${escapeHTML(data?.retention || 30)} respaldos.</p>
+      <div class="backup-actions">
+        <button class="button" type="button" id="createBackup">Crear respaldo ahora</button>
+        <span class="backup-last" id="backupLast">${backups[0] ? `Último: ${formatBackupDate(backups[0].createdAt)}` : 'Todavía no hay respaldos.'}</span>
+      </div>
+      <div class="backup-list" id="backupList">
+        ${backups.length ? backups.slice(0, 8).map(item => `<div class="backup-row">
+          <div><strong>${escapeHTML(item.name)}</strong><small>${escapeHTML(formatBackupDate(item.createdAt))} · ${escapeHTML(item.reason === 'automatico' ? 'Automático' : 'Manual')}</small></div>
+          <div class="backup-row-actions">
+            <button class="button secondary small" type="button" data-backup-download="${escapeHTML(item.name)}">Descargar</button>
+            <button class="button danger small" type="button" data-backup-delete="${escapeHTML(item.name)}">Eliminar</button>
+          </div>
+        </div>`).join('') : '<p class="backup-empty">No hay respaldos todavía.</p>'}
+      </div>
     </div>
   </section>`;
 }
@@ -751,7 +795,22 @@ async function renderAdmin() {
   const session = await request('/api/admin/session').catch(() => ({ authenticated: false })); if (!session.authenticated) return renderLogin(); if (session.role === 'orders') return renderAdminOrders();
   let products = await request('/api/admin/products').catch(() => []); let classifications = await request('/api/admin/classifications').catch(() => ({ brands: {}, productTypes: {} })); let settings = await request('/api/admin/storefront').catch(() => ({ heroProductIds: [], featuredProductIds: [] })); let editing = null;
   const backupState = await request('/api/admin/backups').catch(() => ({ storageMode: 'local', backups: [], retention: 30 }));
-  app.innerHTML = `<main class="admin-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Administración</h1></div><button class="button secondary" id="logout">Cerrar sesión</button></div><nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}" class="admin-section-link active">PÁGINA WEB</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link">PEDIDOS</a></nav>${backupPanel(backupState)}${selectionPanel(products, settings)}${classificationPanel(classifications)}<section class="admin-panel product-editor-panel" id="productEditorPanel"><span class="eyebrow">Catálogo</span><h2 id="formTitle">Agregar producto</h2><div id="formArea"></div></section><section class="admin-products"><div class="section-heading inventory-heading"><div><span class="eyebrow">Inventario</span><h2>Productos publicados (${products.length})</h2></div><p>Edita datos, imágenes, portada y destacados.</p></div><div class="inventory-toolbar"><label class="inventory-search"><span aria-hidden="true">⌕</span><input id="inventorySearch" type="search" placeholder="Buscar por nombre, SKU, marca o categoría…" autocomplete="off"><button id="clearInventorySearch" type="button" aria-label="Limpiar búsqueda">×</button></label><span class="inventory-count" id="inventoryCount">${products.length} productos</span></div><div id="adminProducts"></div></section></div></main>`;
+  app.innerHTML = `<main class="admin-shell"><aside class="admin-quick-nav" aria-label="Navegación rápida">
+    <strong>YHORS</strong>
+    <button type="button" data-admin-scroll="backupPanel">Backup</button>
+    <button type="button" data-admin-scroll="selectionPanel">Portada</button>
+    <button type="button" data-admin-scroll="classificationPanel">Categorías</button>
+    <button type="button" data-admin-scroll="productEditorPanel">Producto</button>
+    <button type="button" data-admin-scroll="inventoryPanel">Inventario</button>
+  </aside><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Administración</h1></div><button class="button secondary" id="logout">Cerrar sesión</button></div><nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}" class="admin-section-link active">PÁGINA WEB</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link">PEDIDOS</a></nav>${backupPanel(backupState)}${selectionPanel(products, settings)}${classificationPanel(classifications)}<section class="admin-panel product-editor-panel" id="productEditorPanel"><span class="eyebrow">Catálogo</span><h2 id="formTitle">Agregar producto</h2><div id="formArea"></div></section><section class="admin-products" id="inventoryPanel"><div class="section-heading inventory-heading"><div><span class="eyebrow">Inventario</span><h2>Productos publicados (${products.length})</h2></div><p>Edita datos, imágenes, portada y destacados.</p></div><div class="inventory-toolbar"><label class="inventory-search"><span aria-hidden="true">⌕</span><input id="inventorySearch" type="search" placeholder="Buscar por nombre, SKU, marca o categoría…" autocomplete="off"><button id="clearInventorySearch" type="button" aria-label="Limpiar búsqueda">×</button></label><span class="inventory-count" id="inventoryCount">${products.length} productos</span></div><div id="adminProducts"></div></section></div></main>`;
+  const quickNav = document.querySelector('.admin-quick-nav');
+  quickNav?.querySelectorAll('[data-admin-scroll]').forEach(button => button.addEventListener('click', () => {
+    const target = document.getElementById(button.dataset.adminScroll);
+    if (!target) return;
+    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    quickNav.querySelectorAll('[data-admin-scroll]').forEach(item => item.classList.remove('is-active'));
+    button.classList.add('is-active');
+  }));
   const formArea = document.querySelector('#formArea'); const listArea = document.querySelector('#adminProducts');
   function drawList() {
     const categoryKeys = Object.keys(categories).filter(k => k !== 'all');
@@ -765,7 +824,7 @@ async function renderAdmin() {
     listArea.innerHTML = matches.length ? categoryKeys.map(key => {
       const group = matches.filter(p => p.category === key);
       if (!group.length) return '';
-      return `<section class="admin-category-group"><div class="admin-category-heading"><span class="eyebrow">Universo</span><h3>${escapeHTML(categories[key])} <small>${group.length}</small></h3></div>${group.map(p => `<article class="admin-product"><img data-fallback src="${escapeHTML(productImages(p)[0])}" alt=""><div><h3>${escapeHTML(p.name)} ${p.featured ? '<span class="featured-star">★ Destacado</span>' : ''} ${p.hero ? '<span class="hero-tag">◆ Portada</span>' : ''}</h3><p><strong class="admin-sku">SKU: ${escapeHTML(p.sku || '—')}</strong> · ${escapeHTML(categories[p.category] || p.category)}${productMeta(p) ? ` · ${escapeHTML(productMeta(p))}` : ''} · Venta ${productPriceLabel(p)}${p.category === 'cosplay' && p.rentalPrice !== null && p.rentalPrice !== undefined && p.rentalPrice !== '' ? ` · Alquiler ${money(p.rentalPrice)}` : ''} · ${productImages(p).length} imagen(es)</p></div><div class="admin-actions"><button class="button secondary small" data-edit="${escapeHTML(p.id)}">Editar</button><button class="button danger small" data-delete="${escapeHTML(p.id)}">Eliminar</button></div></article>`).join('')}</section>`;
+      return `<section class="admin-category-group"><div class="admin-category-heading"><span class="eyebrow">Universo</span><h3>${escapeHTML(categories[key])} <small>${group.length}</small></h3></div>${group.map(p => `<article class="admin-product"><img data-fallback src="${escapeHTML(productImages(p)[0])}" alt=""><div><h3>${escapeHTML(p.name)} ${p.featured ? '<span class="featured-star">★ Destacado</span>' : ''} ${p.hero ? '<span class="hero-tag">◆ Portada</span>' : ''}</h3><p><strong class="admin-sku">SKU: ${escapeHTML(p.sku || '—')}</strong> · ${escapeHTML(categories[p.category] || p.category)}${productMeta(p) ? ` · ${escapeHTML(productMeta(p))}` : ''} · Venta ${productPriceLabel(p)}${p.category === 'cosplay' && p.rentalPrice !== null && p.rentalPrice !== undefined && p.rentalPrice !== '' ? ` · Alquiler ${money(p.rentalPrice)}` : ''} · ${productImages(p).length} imagen(es)</p></div><div class="admin-actions"><button class="button secondary small yhors-edit-note" data-edit="${escapeHTML(p.id)}">Editar</button><button class="button danger small" data-delete="${escapeHTML(p.id)}">Eliminar</button></div></article>`).join('')}</section>`;
     }).join('') : `<div class="empty">${query ? 'No encontramos productos con esa búsqueda.' : 'No hay productos aún.'}</div>`;
     wireImageFallback(listArea);
     listArea.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', () => { editing = products.find(p => p.id === b.dataset.edit); drawForm(); requestAnimationFrame(() => document.querySelector('#productEditorPanel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })); }));
@@ -1057,6 +1116,12 @@ async function renderAdmin() {
     bindBackupEvents();
   }
   function bindBackupEvents() {
+    const backupPanel = document.querySelector('#backupPanel');
+    const collapseButton = document.querySelector('#backupCollapseToggle');
+    collapseButton?.addEventListener('click', () => {
+      const collapsed = backupPanel?.classList.toggle('is-collapsed');
+      collapseButton.setAttribute('aria-expanded', String(!collapsed));
+    });
     document.querySelector('#createBackup')?.addEventListener('click', async () => {
       const button = document.querySelector('#createBackup');
       if (!button) return;
@@ -1078,11 +1143,34 @@ async function renderAdmin() {
         window.location.href = `/api/admin/backups/${encodeURIComponent(name)}/download`;
       });
     });
+    document.querySelectorAll('[data-backup-delete]').forEach(button => {
+      button.addEventListener('click', async () => {
+        const name = button.dataset.backupDelete;
+        if (!confirm(`¿Eliminar el backup ${name}? Esta acción no se puede deshacer.`)) return;
+        button.disabled = true;
+        try {
+          await request(`/api/admin/backups/${encodeURIComponent(name)}`, { method: 'DELETE' });
+          await refreshBackups();
+        } catch (e) {
+          button.disabled = false;
+          alert(e.message);
+        }
+      });
+    });
   }
 
   document.querySelector('#logout').addEventListener('click', async () => { await request('/api/logout', { method: 'POST' }); renderLogin(); });
   bindBackupEvents();
   drawList(); renderClassifications(); bindClassificationEvents(); drawForm(); bindSelectionEvents();
+  const quickTargets = [...document.querySelectorAll('[data-admin-scroll]')].map(button => ({ button, target: document.getElementById(button.dataset.adminScroll) })).filter(item => item.target);
+  if ('IntersectionObserver' in window && quickTargets.length) {
+    const observer = new IntersectionObserver(entries => {
+      const visible = entries.filter(entry => entry.isIntersecting).sort((a,b) => b.intersectionRatio - a.intersectionRatio)[0];
+      if (!visible) return;
+      quickTargets.forEach(item => item.button.classList.toggle('is-active', item.target === visible.target));
+    }, { rootMargin: '-18% 0px -65% 0px', threshold: [0.1, 0.35, 0.6] });
+    quickTargets.forEach(item => observer.observe(item.target));
+  }
 }
 function renderLogin() { app.innerHTML = `<main class="login-page"><section class="login-card"><a class="brand" href="/">YHORS</a><span class="eyebrow">Panel privado</span><h1>Acceso a YHORS</h1><p>Ingresa con la cuenta de administración para actualizar el catálogo.</p><form id="loginForm" class="form-grid"><div class="field full"><label for="username">Usuario</label><input id="username" name="username" autocomplete="username" required></div><div class="field full"><label for="password">Contraseña</label><input id="password" name="password" type="password" autocomplete="current-password" required></div><div class="form-actions"><button class="button" type="submit">Iniciar sesión</button><span class="message" id="loginMessage"></span></div></form></section></main>`; document.querySelector('#loginForm').addEventListener('submit', async e => { e.preventDefault(); const form = e.currentTarget; const message = document.querySelector('#loginMessage'); try { await request('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.fromEntries(new FormData(form))) }); const session = await request('/api/admin/session'); session.role === 'orders' ? renderAdminOrders() : renderAdmin(); } catch (error) { message.className = 'message error'; message.textContent = error.message; } }); }
 

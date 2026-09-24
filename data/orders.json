@@ -2,9 +2,9 @@
   {
     "id": "47f7b74c-b367-463a-b149-ebb76b8acd0f",
     "orderNumber": "YH-0002",
-    "status": "Entregado",
+    "status": "Enviado",
     "createdAt": "2026-09-24T18:33:51.891Z",
-    "updatedAt": "2026-09-24T19:32:15.898Z",
+    "updatedAt": "2026-09-24T22:43:49.209Z",
     "customer": {
       "name": "PEPIDO",
       "phone": "0958609277",
@@ -43,7 +43,8 @@
     ],
     "subtotal": 679.99,
     "shippingCost": 0,
-    "total": 679.99
+    "total": 679.99,
+    "internalNote": "listo enviado producto despachado OK"
   },
   {
     "id": "d88112c0-18c3-42c4-8006-fc9b1d193986",

@@ -844,7 +844,7 @@ app.put('/api/admin/orders/:id', requireOrdersAccess, (req, res) => {
   return res.json(updated);
 });
 
-app.delete('/api/admin/orders/:id', requireOrdersAccess, (req, res) => {
+app.delete('/api/admin/orders/:id', requireAdmin, (req, res) => {
   const orders = readOrders();
   const order = orders.find(item => item.id === req.params.id);
   if (!order) return res.status(404).json({ error: 'Pedido no encontrado.' });
@@ -870,6 +870,24 @@ app.post('/api/admin/backups', requireAdmin, (_, res) => {
   } catch (error) {
     console.error('[YHORS] Error creando respaldo manual:', error);
     return res.status(500).json({ error: 'No se pudo crear el respaldo.' });
+  }
+});
+
+app.delete('/api/admin/backups/:name', requireAdmin, (req, res) => {
+  const name = String(req.params.name || '');
+  if (!/^YHORS-\\d{8}-\\d{6}Z-[a-f0-9]{6}$/.test(name)) {
+    return res.status(400).json({ error: 'Respaldo no válido.' });
+  }
+  const backupDir = path.join(BACKUPS_DIR, name);
+  if (!fs.existsSync(backupDir)) return res.status(404).json({ error: 'Respaldo no encontrado.' });
+  try {
+    fs.rmSync(backupDir, { recursive: true, force: true });
+    const archivePath = path.join(BACKUPS_DIR, `${name}.tar.gz`);
+    fs.rmSync(archivePath, { force: true });
+    return res.status(204).end();
+  } catch (error) {
+    console.error('[YHORS] Error eliminando respaldo:', error);
+    return res.status(500).json({ error: 'No se pudo eliminar el respaldo.' });
   }
 });
 
