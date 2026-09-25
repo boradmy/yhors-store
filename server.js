@@ -1346,7 +1346,7 @@ function validateOrder(input) {
     const available = Number(product?.stock || 0);
     if (!Number.isInteger(available) || available < requestedQuantity) {
       return {
-        error: `No hay suficiente stock de “${product?.name || 'este producto'}”. Disponible: ${Math.max(0, available)}.`
+        error: `No hay suficiente stock de “${product?.name || 'este producto'}”.`
       };
     }
   }
@@ -1632,7 +1632,13 @@ function normalizeProduct(product) {
   };
 }
 
-app.get('/api/products', (_, res) => res.json(readProducts().map(normalizeProduct)));
+function publicProduct(product) {
+  const normalized = normalizeProduct(product);
+  const { stock, purchasePrice, ...safe } = normalized;
+  return { ...safe, inStock: stock > 0 };
+}
+
+app.get('/api/products', (_, res) => res.json(readProducts().map(publicProduct)));
 app.get('/api/classifications', (_, res) => res.json(readClassifications()));
 app.get('/api/storefront', (_, res) => {
   const settings = readStorefront();
