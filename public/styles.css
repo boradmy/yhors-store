@@ -1602,3 +1602,28 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}.brand{letter-sp
   .inventory-filter{width:100%;justify-content:space-between}
   .inventory-filter select{flex:1;max-width:260px}
 }
+
+/* V14.13 inventory full editing + profit */
+.inventory-stock-wrap{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+.inventory-profit-badge{display:inline-flex;align-items:center;justify-content:center;font-size:.75rem;padding:7px 10px;border-radius:999px;white-space:nowrap;font-weight:800}
+.inventory-profit-badge.profit-positive{color:#176b3a;background:#e8f7ed;border:1px solid #b9dfc6}
+.inventory-profit-badge.profit-negative{color:#a52f2f;background:#fdeaea;border:1px solid #efc2c2}
+.inventory-full-edit-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:16px 0}
+.inventory-full-edit-grid label{display:grid;gap:6px;font-size:.75rem;font-weight:800}
+.inventory-full-edit-grid input,.inventory-full-edit-grid select,.inventory-full-edit-grid textarea{width:100%;box-sizing:border-box;padding:10px 11px;border:1px solid #cfcac0;border-radius:7px;background:#fff;outline:0;font:inherit}
+.inventory-full-edit-grid input:disabled,.inventory-full-edit-grid select:disabled,.inventory-full-edit-grid textarea:disabled{background:#f5f2ec;color:#666;cursor:not-allowed}
+.inventory-full-edit-grid input:focus,.inventory-full-edit-grid select:focus,.inventory-full-edit-grid textarea:focus{border-color:#b08b47;box-shadow:0 0 0 3px rgba(176,139,71,.12)}
+.inventory-field-wide{grid-column:span 3}
+.inventory-check{display:flex!important;align-items:center;gap:8px;padding:10px 0}
+.inventory-check input{width:auto!important}
+/* Public availability: elegant, compact, no quantity disclosure */
+.stock-availability{display:inline-flex!important;align-items:center;gap:7px;width:max-content;margin-top:10px;padding:7px 13px;border-radius:999px;font-size:.72rem!important;font-weight:900!important;letter-spacing:.12em;text-transform:uppercase;border:1px solid #b9dfc6;background:linear-gradient(180deg,#f4fcf6,#e8f7ed);color:#176b3a;box-shadow:0 4px 14px rgba(23,107,58,.08)}
+.stock-availability::before{content:'✓';font-size:.9rem;line-height:1}
+.stock-availability.out{color:#a52f2f!important;border-color:#efc2c2!important;background:linear-gradient(180deg,#fff7f7,#fdeaea)!important;box-shadow:0 4px 14px rgba(165,47,47,.07)}
+.stock-availability.out::before{content:'×'}
+.detail-availability{display:inline-flex;align-items:center;gap:7px;width:max-content;padding:8px 14px;border-radius:999px;font-weight:900;font-size:.78rem;letter-spacing:.1em;text-transform:uppercase;border:1px solid #b9dfc6;background:#e8f7ed;color:#176b3a}
+.detail-availability::before{content:'✓'}
+.detail-availability.out{border-color:#efc2c2;color:#a52f2f;background:#fdeaea}
+.detail-availability.out::before{content:'×'}
+@media(max-width:800px){.inventory-full-edit-grid{grid-template-columns:1fr 1fr}.inventory-field-wide{grid-column:span 2}.inventory-stock-wrap{justify-content:flex-start}}
+@media(max-width:600px){.inventory-full-edit-grid{grid-template-columns:1fr}.inventory-field-wide{grid-column:span 1}.inventory-stock-wrap{display:grid;grid-template-columns:1fr 1fr;width:100%}.inventory-profit-badge,.inventory-stock-badge{width:100%;box-sizing:border-box;text-align:center}}
