@@ -1588,3 +1588,17 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}.brand{letter-sp
 .cart-rental-days{display:flex;align-items:center;gap:8px;margin:8px 0;font-size:.9rem;font-weight:600}
 .cart-rental-days select{padding:6px 9px}
 .cart-line-price small{font-size:.72em;color:#777;font-weight:500}
+
+/* V14.11: filtros de inventario y disponibilidad */
+.inventory-filter{display:flex;align-items:center;gap:8px;white-space:nowrap}
+.inventory-filter span{font-size:.78rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+.inventory-filter select{min-height:42px;border:1px solid var(--line,#d9d4ca);border-radius:12px;background:#fff;padding:0 36px 0 12px;font:inherit}
+.stock-availability{display:block;margin-top:6px;font-size:.78rem;font-weight:700}
+.stock-availability.out{color:#a93427}
+.detail-availability{margin:10px 0 0;font-weight:700;font-size:.9rem}
+.detail-availability.out{color:#a93427}
+@media (max-width:800px){
+  .inventory-toolbar{align-items:stretch;flex-wrap:wrap}
+  .inventory-filter{width:100%;justify-content:space-between}
+  .inventory-filter select{flex:1;max-width:260px}
+}

@@ -1288,7 +1288,7 @@ function validateOrder(input) {
     local: 'Envío YHORS',
     courier: 'Courier'
   };
-  if (!shippingCosts.hasOwnProperty(deliveryMethod)) return { error: 'Selecciona una modalidad de entrega válida.' };
+  if (!Object.prototype.hasOwnProperty.call(shippingCosts, deliveryMethod)) return { error: 'Selecciona una modalidad de entrega válida.' };
   if (!name || !phone || !cedula || !city) return { error: 'Completa nombre, teléfono, cédula/RUC y ciudad.' };
   if (!/^\d{10,13}$/.test(cedula)) return { error: 'La cédula/RUC debe tener entre 10 y 13 dígitos.' };
   if (deliveryMethod !== 'office' && !address) return { error: 'Ingresa la dirección para el envío seleccionado.' };
@@ -1300,20 +1300,32 @@ function validateOrder(input) {
 
   const products = readProducts().map(normalizeProduct);
   const byId = new Map(products.map(product => [product.id, product]));
+  const purchaseDemand = new Map();
   const items = [];
+
   for (const requested of requestedItems) {
     const product = byId.get(String(requested.productId || ''));
     const quantity = Math.max(1, Math.min(99, Number.parseInt(requested.quantity, 10) || 0));
     if (!product || !quantity) return { error: 'Uno de los productos del carrito ya no está disponible.' };
+
     const purchaseMode = requested.purchaseMode === 'rental' ? 'rental' : 'purchase';
     const rentalDays = purchaseMode === 'rental' ? Number.parseInt(requested.rentalDays, 10) : null;
+
     if (purchaseMode === 'rental' && (!Number.isInteger(rentalDays) || rentalDays < 1 || rentalDays > 10)) {
       return { error: `Selecciona entre 1 y 10 días de alquiler para “${product.name}”.` };
     }
+
+    // Las compras descuentan stock. Los alquileres mantienen el stock porque
+    // el sistema todavía no tiene un flujo de devolución de prendas.
+    if (purchaseMode === 'purchase') {
+      purchaseDemand.set(product.id, (purchaseDemand.get(product.id) || 0) + quantity);
+    }
+
     const price = purchaseMode === 'rental' ? Number(product.rentalPrice) : Number(product.salePrice ?? product.price);
     if (!Number.isFinite(price) || price < 0 || (purchaseMode === 'rental' && product.rentalPrice === null)) {
       return { error: `El producto “${product.name}” no tiene un precio válido.` };
     }
+
     const durationMultiplier = purchaseMode === 'rental' ? rentalDays : 1;
     items.push({
       productId: product.id,
@@ -1327,16 +1339,49 @@ function validateOrder(input) {
       subtotal: Math.round(price * quantity * durationMultiplier * 100) / 100
     });
   }
+
+  // Validación de stock en el servidor, agrupando líneas repetidas del mismo producto.
+  for (const [productId, requestedQuantity] of purchaseDemand.entries()) {
+    const product = byId.get(productId);
+    const available = Number(product?.stock || 0);
+    if (!Number.isInteger(available) || available < requestedQuantity) {
+      return {
+        error: `No hay suficiente stock de “${product?.name || 'este producto'}”. Disponible: ${Math.max(0, available)}.`
+      };
+    }
+  }
+
   const subtotal = Math.round(items.reduce((sum, item) => sum + item.subtotal, 0) * 100) / 100;
   const shippingCost = shippingCosts[deliveryMethod];
   const total = Math.round((subtotal + shippingCost) * 100) / 100;
+
   return {
     order: {
       customer: { name, phone, cedula, email, city, address: deliveryMethod === 'office' ? '' : address, mapsUrl, notes },
       delivery: { method: deliveryMethod, label: deliveryLabels[deliveryMethod], cost: shippingCost },
       items, subtotal, shippingCost, total
-    }
+    },
+    stockProducts: products,
+    purchaseDemand
   };
+}
+
+function applyPurchaseStock(products, purchaseDemand) {
+  const updated = products.map(product => {
+    const normalized = normalizeProduct(product);
+    const demand = Number(purchaseDemand.get(normalized.id) || 0);
+    if (!demand) return normalized;
+    const currentStock = Number(normalized.stock || 0);
+    if (!Number.isInteger(currentStock) || currentStock < demand) {
+      throw new Error(`El stock de “${normalized.name}” cambió mientras se procesaba el pedido. Intenta nuevamente.`);
+    }
+    return normalizeProduct({
+      ...normalized,
+      stock: currentStock - demand,
+      updatedAt: new Date().toISOString()
+    });
+  });
+  return updated;
 }
 
 function makeSession(user, role, accountId = '') {
@@ -1850,6 +1895,7 @@ app.post('/api/logout', (req, res) => {
 app.post('/api/orders', async (req, res) => {
   const result = validateOrder(req.body || {});
   if (result.error) return res.status(400).json(result);
+
   const orders = readOrders();
   const order = {
     id: crypto.randomUUID(),
@@ -1860,8 +1906,28 @@ app.post('/api/orders', async (req, res) => {
     assignedSellerId: null,
     ...result.order
   };
-  orders.unshift(order);
-  writeOrders(orders);
+
+  // Descontamos stock únicamente para compras y guardamos ambas escrituras
+  // con rollback del catálogo si el pedido no pudiera persistirse.
+  const previousProducts = result.stockProducts.map(product => ({ ...product }));
+  let updatedProducts;
+  try {
+    updatedProducts = applyPurchaseStock(previousProducts, result.purchaseDemand);
+    writeProducts(updatedProducts);
+    orders.unshift(order);
+    try {
+      writeOrders(orders);
+    } catch (orderError) {
+      try { writeProducts(previousProducts); } catch (rollbackError) {
+        console.error('[YHORS] Falló el rollback del inventario:', rollbackError.message);
+      }
+      throw orderError;
+    }
+  } catch (error) {
+    console.error('[YHORS] No se pudo registrar el pedido:', error.message);
+    return res.status(500).json({ error: 'No se pudo registrar el pedido. No se realizó el descuento de inventario.' });
+  }
+
   try { await sendOrderConfirmationEmail(order); } catch (emailError) { console.error('[YHORS] No se pudo enviar la confirmación por correo:', emailError.message); }
   return res.status(201).json({ orderNumber: order.orderNumber, status: order.status, total: order.total });
 });
