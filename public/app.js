@@ -812,10 +812,24 @@ function formatBackupDate(value) {
   return `${parts.day}-${parts.month}-${parts.year}-${parts.hour}${parts.minute}`;
 }
 
+async function userManagementPanel(users) {
+  return `<section class="admin-panel user-management-panel" id="userManagementPanel">
+    <span class="eyebrow">Seguridad · V13</span><h2>Usuarios y accesos</h2>
+    <p class="admin-panel-copy">Crea cuentas adicionales sin guardarlas en el <code>.env</code>. Las contraseñas se almacenan únicamente como hash.</p>
+    <form id="createUserForm" class="form-grid user-create-form">
+      <div class="field"><label for="newUsername">Usuario</label><input id="newUsername" name="username" autocomplete="off" minlength="3" maxlength="80" pattern="[A-Za-z0-9._-]{3,80}" required></div>
+      <div class="field"><label for="newUserPassword">Contraseña</label><input id="newUserPassword" name="password" type="password" autocomplete="new-password" minlength="10" required></div>
+      <div class="field"><label for="newUserRole">Rol</label><select id="newUserRole" name="role"><option value="orders">Pedidos</option><option value="admin">Administrador</option></select></div>
+      <div class="form-actions"><button class="button" type="submit">Crear usuario</button></div>
+    </form>
+    <div id="adminUsersList" class="admin-users-list"></div>
+  </section>`;
+}
+
 async function renderAdmin() {
   const session = await request('/api/admin/session').catch(() => ({ authenticated: false })); if (!session.authenticated) return renderLogin(); if (session.role === 'orders') return renderAdminOrders();
   let products = await request('/api/admin/products').catch(() => []); let classifications = await request('/api/admin/classifications').catch(() => ({ brands: {}, productTypes: {} })); let settings = await request('/api/admin/storefront').catch(() => ({ heroProductIds: [], featuredProductIds: [] })); let editing = null;
-  const backupState = await request('/api/admin/backups').catch(() => ({ storageMode: 'local', backups: [], retention: 30 }));
+  const backupState = await request('/api/admin/backups').catch(() => ({ storageMode: 'local', backups: [], retention: 30 })); const users = await request('/api/admin/users').catch(() => []);
   app.innerHTML = `<main class="admin-shell"><aside class="admin-quick-nav" aria-label="Navegación rápida">
     <strong>YHORS</strong>
     <button type="button" data-admin-scroll="backupPanel">Backup</button>
@@ -823,7 +837,35 @@ async function renderAdmin() {
     <button type="button" data-admin-scroll="classificationPanel">Categorías</button>
     <button type="button" data-admin-scroll="productEditorPanel">Producto</button>
     <button type="button" data-admin-scroll="inventoryPanel">Inventario</button>
-  </aside><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Administración</h1></div><button class="button secondary" id="logout">Cerrar sesión</button></div><nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}" class="admin-section-link active">PÁGINA WEB</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link">PEDIDOS</a></nav>${backupPanel(backupState)}${selectionPanel(products, settings)}${classificationPanel(classifications)}<section class="admin-panel product-editor-panel" id="productEditorPanel"><span class="eyebrow">Catálogo</span><h2 id="formTitle">Agregar producto</h2><div id="formArea"></div></section><section class="admin-products" id="inventoryPanel"><div class="section-heading inventory-heading"><div><span class="eyebrow">Inventario</span><h2>Productos publicados (${products.length})</h2></div><p>Edita datos, imágenes, portada y destacados.</p></div><div class="inventory-toolbar"><label class="inventory-search"><span aria-hidden="true">⌕</span><input id="inventorySearch" type="search" placeholder="Buscar por nombre, SKU, marca o categoría…" autocomplete="off"><button id="clearInventorySearch" type="button" aria-label="Limpiar búsqueda">×</button></label><span class="inventory-count" id="inventoryCount">${products.length} productos</span></div><div id="adminProducts"></div></section></div></main>`;
+  </aside><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Administración</h1></div><button class="button secondary" id="logout">Cerrar sesión</button></div><nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}" class="admin-section-link active">PÁGINA WEB</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link">PEDIDOS</a></nav>${userManagementPanel(users)}${backupPanel(backupState)}${selectionPanel(products, settings)}${classificationPanel(classifications)}<section class="admin-panel product-editor-panel" id="productEditorPanel"><span class="eyebrow">Catálogo</span><h2 id="formTitle">Agregar producto</h2><div id="formArea"></div></section><section class="admin-products" id="inventoryPanel"><div class="section-heading inventory-heading"><div><span class="eyebrow">Inventario</span><h2>Productos publicados (${products.length})</h2></div><p>Edita datos, imágenes, portada y destacados.</p></div><div class="inventory-toolbar"><label class="inventory-search"><span aria-hidden="true">⌕</span><input id="inventorySearch" type="search" placeholder="Buscar por nombre, SKU, marca o categoría…" autocomplete="off"><button id="clearInventorySearch" type="button" aria-label="Limpiar búsqueda">×</button></label><span class="inventory-count" id="inventoryCount">${products.length} productos</span></div><div id="adminProducts"></div></section></div></main>`;
+  const userPanel = document.querySelector('#userManagementPanel');
+  if (userPanel) {
+    const renderUsers = (items) => {
+      const list = userPanel.querySelector('#adminUsersList');
+      if (!list) return;
+      list.innerHTML = items.map(user => `<article class="admin-user-row">
+        <div><strong>${escapeHTML(user.username)}</strong><span>${user.role === 'admin' ? 'Administrador' : 'Pedidos'} · ${user.active ? 'Activo' : 'Desactivado'}${user.source === 'environment' ? ' · Cuenta inicial' : ''}</span></div>
+        ${user.source === 'environment' ? '' : `<div class="admin-actions"><button class="button secondary small" data-user-toggle="${escapeHTML(user.id)}">${user.active ? 'Desactivar' : 'Activar'}</button><button class="button danger small" data-user-delete="${escapeHTML(user.id)}">Eliminar</button></div>`}
+      </article>`).join('') || '<div class="empty">No hay usuarios adicionales.</div>';
+      list.querySelectorAll('[data-user-toggle]').forEach(button => button.addEventListener('click', async () => {
+        const target = items.find(u => u.id === button.dataset.userToggle); if (!target) return;
+        try { const updated = await request(`/api/admin/users/${encodeURIComponent(target.id)}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ active: !target.active }) }); const i=items.findIndex(u=>u.id===updated.id); items[i]=updated; renderUsers(items); } catch(e){ alert(e.message); }
+      }));
+      list.querySelectorAll('[data-user-delete]').forEach(button => button.addEventListener('click', async () => {
+        const target = items.find(u => u.id === button.dataset.userDelete); if (!target || !confirm(`¿Eliminar el usuario “${target.username}”?`)) return;
+        try { await request(`/api/admin/users/${encodeURIComponent(target.id)}`, {method:'DELETE'}); const next=items.filter(u=>u.id!==target.id); renderUsers(next); } catch(e){ alert(e.message); }
+      }));
+    };
+    renderUsers(users);
+    userPanel.querySelector('#createUserForm')?.addEventListener('submit', async event => {
+      event.preventDefault();
+      const form=event.currentTarget; const data=Object.fromEntries(new FormData(form));
+      try {
+        const created=await request('/api/admin/users',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+        users.push(created); renderUsers(users); form.reset(); form.querySelector('[name="role"]').value='orders'; form.querySelector('[name="username"]').focus();
+      } catch(e) { alert(e.message); }
+    });
+  }
   const quickNav = document.querySelector('.admin-quick-nav');
   quickNav?.querySelectorAll('[data-admin-scroll]').forEach(button => button.addEventListener('click', () => {
     const target = document.getElementById(button.dataset.adminScroll);

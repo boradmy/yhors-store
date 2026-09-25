@@ -38,17 +38,58 @@ if (!SESSION_SECRET || SESSION_SECRET.length < 32) {
 const ADMIN_USER = process.env.ADMIN_USER || 'admin';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
 const ADMIN_PASSWORD_HASH = process.env.ADMIN_PASSWORD_HASH || '';
-const ORDERS_USER = process.env.ORDERS_USER || 'pedidos';
-const ORDERS_PASSWORD = process.env.ORDERS_PASSWORD || '';
-const ORDERS_PASSWORD_HASH = process.env.ORDERS_PASSWORD_HASH || '';
 const COOKIE_SECURE = process.env.COOKIE_SECURE === 'true';
+
+const USERS_FILE = path.join(DATA_DIR, 'users.json');
+const USER_ROLES = new Set(['admin', 'orders']);
+
+function normalizeUserRecord(user) {
+  return {
+    id: String(user?.id || ''),
+    username: String(user?.username || '').trim(),
+    passwordHash: String(user?.passwordHash || ''),
+    role: USER_ROLES.has(user?.role) ? user.role : 'orders',
+    active: user?.active !== false,
+    createdAt: user?.createdAt || null,
+    updatedAt: user?.updatedAt || null
+  };
+}
+
+function readUsers() {
+  if (!fs.existsSync(USERS_FILE)) return [];
+  try {
+    const parsed = JSON.parse(fs.readFileSync(USERS_FILE, 'utf8'));
+    return Array.isArray(parsed) ? parsed.map(normalizeUserRecord).filter(u => u.id && u.username && u.passwordHash) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeUsers(users) {
+  const tmp = `${USERS_FILE}.tmp`;
+  fs.writeFileSync(tmp, `${JSON.stringify(users.map(normalizeUserRecord), null, 2)}\\n`, 'utf8');
+  fs.renameSync(tmp, USERS_FILE);
+}
+
+function ensureUsersFile() {
+  if (!fs.existsSync(USERS_FILE)) writeUsers([]);
+}
+
+function bootstrapAdminUser() {
+  // La cuenta definida por .env sigue siendo el acceso inicial y no se guarda
+  // en users.json. Las cuentas adicionales sí se administran desde el panel.
+  if (!ADMIN_USER) throw new Error('[YHORS V13] ADMIN_USER no puede estar vacío.');
+  if (!ADMIN_PASSWORD && !ADMIN_PASSWORD_HASH) {
+    throw new Error('[YHORS V13] Configura ADMIN_PASSWORD o ADMIN_PASSWORD_HASH para la cuenta inicial.');
+  }
+}
 const SESSION_TTL_MS = Math.max(30 * 60 * 1000, Number.parseInt(process.env.SESSION_TTL_MINUTES || '720', 10) * 60 * 1000);
 const SESSION_COOKIE = 'yhors_session';
 const sessions = new Map();
 const passwordHashCache = new Map();
 
 function passwordHashFor(account) {
-  const cacheKey = account.role;
+  const cacheKey = account.id || `${account.role}:${account.user}`;
   const configuredHash = account.passwordHash;
   if (configuredHash) return configuredHash;
   if (!account.password) throw new Error(`[YHORS V13] Falta contraseña para la cuenta ${account.role}.`);
@@ -209,6 +250,8 @@ function ensureStorage() {
   }
 }
 ensureStorage();
+ensureUsersFile();
+bootstrapAdminUser();
 migrateAllOrderStorageToEncryption();
 setTimeout(() => maybeAutoBackup(), 1500);
 
@@ -1126,14 +1169,26 @@ app.get('/api/health', (_, res) => res.json({ ok: true }));
 app.post('/api/login', async (req, res) => {
   const username = cleanText(req.body?.username, 80);
   const password = String(req.body?.password || '');
-  const accounts = [
-    { user: String(ADMIN_USER), password: String(ADMIN_PASSWORD), passwordHash: String(ADMIN_PASSWORD_HASH), role: 'admin' },
-    { user: String(ORDERS_USER), password: String(ORDERS_PASSWORD), passwordHash: String(ORDERS_PASSWORD_HASH), role: 'orders' }
-  ];
+  if (!username || !password) return res.status(401).json({ error: 'Usuario o contraseña incorrectos.' });
+
+  const envAccount = {
+    id: 'env-admin',
+    user: String(ADMIN_USER),
+    password: String(ADMIN_PASSWORD),
+    passwordHash: String(ADMIN_PASSWORD_HASH),
+    role: 'admin',
+    active: true
+  };
+  const dynamicAccounts = readUsers()
+    .filter(user => user.active)
+    .map(user => ({ id: user.id, user: user.username, password: '', passwordHash: user.passwordHash, role: user.role, active: user.active }));
+  const accounts = [envAccount, ...dynamicAccounts];
+
   let account = null;
   for (const candidate of accounts) {
-    const nameMatches = username.length === candidate.user.length
-      && crypto.timingSafeEqual(Buffer.from(username), Buffer.from(candidate.user));
+    const candidateUser = String(candidate.user);
+    const nameMatches = username.length === candidateUser.length
+      && crypto.timingSafeEqual(Buffer.from(username), Buffer.from(candidateUser));
     if (!nameMatches) continue;
     const passwordMatches = await bcrypt.compare(password, passwordHashFor(candidate));
     if (passwordMatches) account = candidate;
@@ -1199,6 +1254,84 @@ app.get('/api/admin/security', requireAdmin, (_, res) => res.json({
   sessionTtlMinutes: Math.round(SESSION_TTL_MS / 60000),
   version: 'V13'
 }));
+
+app.get('/api/admin/users', requireAdmin, (_, res) => {
+  const users = readUsers().map(({ id, username, role, active, createdAt, updatedAt }) =>
+    ({ id, username, role, active, createdAt, updatedAt })
+  );
+  return res.json([{ id: 'env-admin', username: ADMIN_USER, role: 'admin', active: true, source: 'environment' }, ...users]);
+});
+
+app.post('/api/admin/users', requireAdmin, async (req, res) => {
+  const username = cleanText(req.body?.username, 80);
+  const password = String(req.body?.password || '');
+  const role = String(req.body?.role || 'orders').trim();
+  if (!/^[A-Za-z0-9._-]{3,80}$/.test(username)) return res.status(400).json({ error: 'El usuario debe tener entre 3 y 80 caracteres y usar solo letras, números, punto, guion o guion bajo.' });
+  if (password.length < 10) return res.status(400).json({ error: 'La contraseña debe tener al menos 10 caracteres.' });
+  if (!USER_ROLES.has(role)) return res.status(400).json({ error: 'Rol no válido.' });
+  if (username.toLowerCase() === String(ADMIN_USER).toLowerCase()) return res.status(409).json({ error: 'Ese usuario está reservado para la cuenta inicial.' });
+
+  const users = readUsers();
+  if (users.some(u => u.username.toLowerCase() === username.toLowerCase())) return res.status(409).json({ error: 'Ese usuario ya existe.' });
+
+  const now = new Date().toISOString();
+  const user = {
+    id: crypto.randomUUID(),
+    username,
+    passwordHash: await bcrypt.hash(password, 12),
+    role,
+    active: true,
+    createdAt: now,
+    updatedAt: now
+  };
+  users.push(user);
+  writeUsers(users);
+  return res.status(201).json({ id: user.id, username: user.username, role: user.role, active: user.active, createdAt: user.createdAt, updatedAt: user.updatedAt });
+});
+
+app.put('/api/admin/users/:id', requireAdmin, async (req, res) => {
+  const users = readUsers();
+  const index = users.findIndex(u => u.id === req.params.id);
+  if (index < 0) return res.status(404).json({ error: 'Usuario no encontrado.' });
+
+  const current = users[index];
+  const username = req.body?.username === undefined ? current.username : cleanText(req.body.username, 80);
+  const role = req.body?.role === undefined ? current.role : String(req.body.role || '').trim();
+  const active = req.body?.active === undefined ? current.active : Boolean(req.body.active);
+  const password = req.body?.password === undefined ? '' : String(req.body.password || '');
+
+  if (!/^[A-Za-z0-9._-]{3,80}$/.test(username)) return res.status(400).json({ error: 'Nombre de usuario no válido.' });
+  if (!USER_ROLES.has(role)) return res.status(400).json({ error: 'Rol no válido.' });
+  if (password && password.length < 10) return res.status(400).json({ error: 'La nueva contraseña debe tener al menos 10 caracteres.' });
+  if (username.toLowerCase() === String(ADMIN_USER).toLowerCase()) return res.status(409).json({ error: 'Ese usuario está reservado para la cuenta inicial.' });
+  if (users.some((u, i) => i !== index && u.username.toLowerCase() === username.toLowerCase())) return res.status(409).json({ error: 'Ese usuario ya existe.' });
+
+  const adminCount = users.filter(u => u.role === 'admin' && u.active).length + 1; // incluye env-admin
+  if (current.role === 'admin' && current.active && (!active || role !== 'admin') && adminCount <= 1) {
+    return res.status(400).json({ error: 'Debe quedar al menos una cuenta administrativa activa.' });
+  }
+
+  current.username = username;
+  current.role = role;
+  current.active = active;
+  current.updatedAt = new Date().toISOString();
+  if (password) current.passwordHash = await bcrypt.hash(password, 12);
+  users[index] = current;
+  writeUsers(users);
+  return res.json({ id: current.id, username: current.username, role: current.role, active: current.active, createdAt: current.createdAt, updatedAt: current.updatedAt });
+});
+
+app.delete('/api/admin/users/:id', requireAdmin, (req, res) => {
+  const users = readUsers();
+  const index = users.findIndex(u => u.id === req.params.id);
+  if (index < 0) return res.status(404).json({ error: 'Usuario no encontrado.' });
+  const target = users[index];
+  if (target.role === 'admin' && target.active && users.filter(u => u.role === 'admin' && u.active).length === 1) {
+    return res.status(400).json({ error: 'Debe quedar al menos una cuenta administrativa activa.' });
+  }
+  writeUsers(users.filter(u => u.id !== req.params.id));
+  return res.status(204).end();
+});
 
 app.get('/api/admin/orders', requireOrdersAccess, (_, res) => res.json(readOrders()));
 app.put('/api/admin/orders/:id', requireOrdersAccess, (req, res) => {
