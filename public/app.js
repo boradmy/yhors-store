@@ -752,13 +752,14 @@ async function renderAdminOrders() {
 function backupPanel(data = null) {
   const persistent = data?.storageMode === 'persistent';
   const backups = Array.isArray(data?.backups) ? data.backups : [];
+  const total = backups.length;
   return `<section class="admin-panel backup-panel is-collapsed" id="backupPanel">
     <div class="backup-panel-head">
       <button class="backup-collapse-toggle" type="button" id="backupCollapseToggle" aria-expanded="false">
         <span class="backup-title-wrap">
           <span class="eyebrow">Seguridad de datos</span>
           <strong>BACKUPS</strong>
-          <small>${backups.length ? `${backups.length} respaldo(s) disponible(s)` : 'Sin respaldos todavía'}</small>
+          <small>${total ? `${total} respaldo(s) disponible(s)` : 'Sin respaldos todavía'}</small>
         </span>
         <span class="backup-chevron">⌄</span>
       </button>
@@ -771,16 +772,30 @@ function backupPanel(data = null) {
       <p class="admin-help">Los respaldos protegen productos, pedidos, clasificaciones, portada y fotografías. Se conserva un máximo de ${escapeHTML(data?.retention || 30)} respaldos.</p>
       <div class="backup-actions">
         <button class="button" type="button" id="createBackup">Crear respaldo ahora</button>
-        <span class="backup-last" id="backupLast">${backups[0] ? `Último: ${formatBackupDate(backups[0].createdAt)}` : 'Todavía no hay respaldos.'}</span>
+        <span class="backup-last" id="backupLast">${backups[0] ? `Último respaldo: ${formatBackupDate(backups[0].createdAt)}` : 'Todavía no hay respaldos.'}</span>
       </div>
       <div class="backup-list" id="backupList">
-        ${backups.length ? backups.slice(0, 8).map(item => `<div class="backup-row">
-          <div><strong>Backup #${escapeHTML(item.position || 1)} de ${escapeHTML(data?.retention || 30)}</strong><small>${escapeHTML(item.name)} · ${escapeHTML(formatBackupDate(item.createdAt))} · ${escapeHTML(item.reason === 'automatico' ? 'Automático' : 'Manual')}</small></div>
-          <div class="backup-row-actions">
-            <button class="button secondary small" type="button" data-backup-download="${escapeHTML(item.name)}">Descargar</button>
-            <button class="button danger small" type="button" data-backup-delete="${escapeHTML(item.name)}">Eliminar</button>
-          </div>
-        </div>`).join('') : '<p class="backup-empty">No hay respaldos todavía.</p>'}
+        ${backups.length ? backups.map((item, index) => {
+          const isNewest = index === 0;
+          const isOldest = index === total - 1;
+          const marker = isNewest && isOldest ? 'MÁS RECIENTE · MÁS ANTIGUO' : isNewest ? 'MÁS RECIENTE' : isOldest ? 'MÁS ANTIGUO' : '';
+          const position = item.position || (total - index);
+          return `<div class="backup-row ${isNewest ? 'is-newest' : ''} ${isOldest ? 'is-oldest' : ''}">
+            <div class="backup-row-info">
+              <div class="backup-row-title">
+                <strong>Backup #${escapeHTML(position)} de ${escapeHTML(item.total || total)}</strong>
+                ${marker ? `<span class="backup-age-badge">${marker}</span>` : ''}
+              </div>
+              <small>Creado: <b>${escapeHTML(formatBackupDate(item.createdAt))}</b> · ${escapeHTML(item.reason === 'automatico' ? 'Automático' : item.reason === 'antes-de-restaurar' ? 'Seguridad antes de restaurar' : 'Manual')}</small>
+              <small class="backup-file-name">${escapeHTML(item.name)}</small>
+            </div>
+            <div class="backup-row-actions">
+              <button class="button secondary small" type="button" data-backup-download="${escapeHTML(item.name)}">Descargar</button>
+              <button class="button restore small" type="button" data-backup-restore="${escapeHTML(item.name)}">Restaurar</button>
+              <button class="button danger small" type="button" data-backup-delete="${escapeHTML(item.name)}">Eliminar</button>
+            </div>
+          </div>`;
+        }).join('') : '<p class="backup-empty">No hay respaldos todavía.</p>'}
       </div>
     </div>
   </section>`;
@@ -788,7 +803,11 @@ function backupPanel(data = null) {
 function formatBackupDate(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return 'Fecha no disponible';
-  return date.toLocaleString('es-EC', { timeZone: 'America/Guayaquil', dateStyle: 'medium', timeStyle: 'short' });
+  const parts = new Intl.DateTimeFormat('es-EC', {
+    timeZone: 'America/Guayaquil',
+    year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false
+  }).formatToParts(date).reduce((acc, part) => { acc[part.type] = part.value; return acc; }, {});
+  return `${parts.day}-${parts.month}-${parts.year}-${parts.hour}${parts.minute}`;
 }
 
 async function renderAdmin() {
@@ -1141,6 +1160,25 @@ async function renderAdmin() {
       button.addEventListener('click', () => {
         const name = button.dataset.backupDownload;
         window.location.href = `/api/admin/backups/${encodeURIComponent(name)}/download`;
+      });
+    });
+    document.querySelectorAll('[data-backup-restore]').forEach(button => {
+      button.addEventListener('click', async () => {
+        const name = button.dataset.backupRestore;
+        const row = button.closest('.backup-row');
+        const label = row?.querySelector('.backup-row-title strong')?.textContent || 'este backup';
+        const date = row?.querySelector('.backup-row-info small b')?.textContent || '';
+        const confirmed = confirm(`¿Restaurar ${label}${date ? ` del ${date}` : ''}?\n\nSe reemplazarán los datos actuales de YHORS por los de este respaldo. Antes de restaurar, el sistema creará automáticamente un respaldo de seguridad del estado actual.\n\n¿Deseas continuar?`);
+        if (!confirmed) return;
+        button.disabled = true;
+        try {
+          const result = await request(`/api/admin/backups/${encodeURIComponent(name)}/restore`, { method: 'POST' });
+          await refreshBackups();
+          alert(`Restauración completada.\n\nSe creó el respaldo de seguridad ${result.safetyBackup?.name || 'antes de restaurar'} por si necesitas volver al estado anterior.`);
+        } catch (e) {
+          button.disabled = false;
+          alert(e.message);
+        }
       });
     });
     document.querySelectorAll('[data-backup-delete]').forEach(button => {

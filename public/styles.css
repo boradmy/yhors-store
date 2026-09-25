@@ -1434,3 +1434,32 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}.brand{letter-sp
     flex:0 0 auto;
   }
 }
+
+/* YHORS V10 — backups: cronología, fecha exacta y restauración segura */
+.backup-list{gap:10px}
+.backup-row{
+  padding:14px 15px;
+  border-radius:14px;
+  background:rgba(255,255,255,.72);
+  transition:border-color .18s ease,box-shadow .18s ease,transform .18s ease;
+}
+.backup-row:hover{border-color:rgba(181,138,67,.35);box-shadow:0 7px 22px rgba(30,25,18,.06)}
+.backup-row.is-newest{border-color:rgba(181,138,67,.38);background:linear-gradient(90deg,rgba(181,138,67,.06),rgba(255,255,255,.72))}
+.backup-row-info{display:flex;flex-direction:column;gap:5px;min-width:0}
+.backup-row-title{display:flex;align-items:center;gap:9px;min-width:0;flex-wrap:wrap}
+.backup-row-title strong{font-size:.86rem;letter-spacing:.01em}
+.backup-age-badge{
+  display:inline-flex;align-items:center;padding:3px 7px;border-radius:999px;
+  background:#f4efe5;color:#7a6338;border:1px solid #e5d7bb;
+  font-size:.58rem;font-weight:800;letter-spacing:.08em;white-space:nowrap
+}
+.backup-row small{font-size:.72rem;line-height:1.4}
+.backup-row small b{font-weight:800;color:var(--ink)}
+.backup-file-name{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.65rem!important;opacity:.55;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.backup-row-actions .button.restore{background:#f4efe5;color:#765b2e;border-color:#d9c59f}
+.backup-row-actions .button.restore:hover{background:#eadfc9;color:#5f471f;border-color:#cbb07b}
+@media(max-width:800px){
+  .backup-row{flex-direction:column;align-items:stretch;gap:12px}
+  .backup-row-actions{width:100%;justify-content:flex-start;overflow-x:auto;padding-bottom:1px}
+  .backup-row-actions .button{flex:0 0 auto}
+}

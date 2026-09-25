@@ -475,7 +475,7 @@ function copyDirectoryContents(sourceDir, targetDir) {
   }
 }
 
-function createBackup(reason = 'manual') {
+function createBackup(reason = 'manual', options = {}) {
   fs.mkdirSync(BACKUPS_DIR, { recursive: true });
   const dirName = `YHORS-${backupTimestamp()}-${crypto.randomBytes(3).toString('hex')}`;
   const backupDir = path.join(BACKUPS_DIR, dirName);
@@ -502,13 +502,13 @@ function createBackup(reason = 'manual') {
     }
   };
   fs.writeFileSync(path.join(backupDir, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
-  pruneBackups();
+  pruneBackups(options.preserveNames || []);
   return { name: dirName, createdAt: manifest.createdAt, reason };
 }
 
 function listBackups() {
   fs.mkdirSync(BACKUPS_DIR, { recursive: true });
-  return fs.readdirSync(BACKUPS_DIR, { withFileTypes: true })
+  const backups = fs.readdirSync(BACKUPS_DIR, { withFileTypes: true })
     .filter(entry => entry.isDirectory() && /^YHORS-\d{8}-\d{6}Z-[a-f0-9]{6}$/.test(entry.name))
     .map(entry => {
       const dir = path.join(BACKUPS_DIR, entry.name);
@@ -520,18 +520,92 @@ function listBackups() {
         return { name: entry.name, createdAt: fs.statSync(dir).mtime.toISOString(), reason: 'unknown' };
       }
     })
-    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-    .map((backup, index, all) => ({
-      ...backup,
-      position: index + 1,
-      retention: all.length
-    }));
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+  // Se muestran del más reciente al más antiguo, pero el número representa
+  // la antigüedad: #1 es el más antiguo y el último número es el más reciente.
+  return backups.map((backup, index, all) => ({
+    ...backup,
+    position: all.length - index,
+    total: all.length,
+    retention: BACKUP_RETENTION
+  }));
 }
 
-function pruneBackups() {
-  const backups = listBackups();
-  for (const backup of backups.slice(BACKUP_RETENTION)) {
+function pruneBackups(preserveNames = []) {
+  const preserved = new Set(preserveNames);
+  const backups = listBackups().filter(backup => !preserved.has(backup.name));
+  const keepSlots = Math.max(0, BACKUP_RETENTION - preserved.size);
+  for (const backup of backups.slice(keepSlots)) {
     fs.rmSync(path.join(BACKUPS_DIR, backup.name), { recursive: true, force: true });
+  }
+}
+
+function isValidBackupName(name) {
+  return /^YHORS-\d{8}-\d{6}Z-[a-f0-9]{6}$/.test(String(name || ''));
+}
+
+function validateBackupDirectory(backupDir) {
+  const requiredFiles = ['products.json', 'storefront.json', 'classifications.json', 'orders.json'];
+  const dataDir = path.join(backupDir, 'data');
+  if (!fs.existsSync(dataDir)) throw new Error('El respaldo no contiene la carpeta de datos.');
+
+  for (const fileName of requiredFiles) {
+    const file = path.join(dataDir, fileName);
+    if (!fs.existsSync(file)) throw new Error(`Falta ${fileName} en el respaldo.`);
+    JSON.parse(fs.readFileSync(file, 'utf8'));
+  }
+}
+
+function replaceDirectoryContents(sourceDir, targetDir) {
+  fs.mkdirSync(targetDir, { recursive: true });
+  for (const entry of fs.readdirSync(targetDir, { withFileTypes: true })) {
+    fs.rmSync(path.join(targetDir, entry.name), { recursive: true, force: true });
+  }
+  copyDirectoryContents(sourceDir, targetDir);
+}
+
+function applyBackupDirectory(backupDir) {
+  validateBackupDirectory(backupDir);
+  const backupDataDir = path.join(backupDir, 'data');
+  const requiredFiles = ['products.json', 'storefront.json', 'classifications.json', 'orders.json'];
+
+  // Si el respaldo fuera anterior a V10, lo convertimos al cifrado antes de
+  // devolverlo a producción. Nunca se guarda un pedido descifrado en el destino.
+  const stagedOrders = path.join(backupDataDir, 'orders.json');
+  migrateOrdersFileToEncryption(stagedOrders);
+
+  for (const fileName of requiredFiles) {
+    const source = path.join(backupDataDir, fileName);
+    const target = path.join(DATA_DIR, fileName);
+    const temporaryFile = `${target}.restore.tmp`;
+    fs.copyFileSync(source, temporaryFile);
+    fs.renameSync(temporaryFile, target);
+  }
+
+  const backupUploadsDir = path.join(backupDir, 'uploads');
+  if (fs.existsSync(backupUploadsDir)) replaceDirectoryContents(backupUploadsDir, UPLOADS_DIR);
+}
+
+function restoreBackup(name) {
+  if (!isValidBackupName(name)) throw new Error('Respaldo no válido.');
+  const backupDir = path.join(BACKUPS_DIR, name);
+  if (!fs.existsSync(backupDir)) throw new Error('Respaldo no encontrado.');
+
+  // Primero se crea una copia de seguridad del estado actual.
+  const safetyBackup = createBackup('antes-de-restaurar', { preserveNames: [name] });
+  try {
+    applyBackupDirectory(backupDir);
+    pruneBackups([name, safetyBackup.name]);
+    return { restored: name, safetyBackup };
+  } catch (error) {
+    // Si algo falla, intentamos volver al estado que había justo antes.
+    try {
+      applyBackupDirectory(path.join(BACKUPS_DIR, safetyBackup.name));
+    } catch (rollbackError) {
+      console.error('[YHORS] Falló también la recuperación del respaldo de seguridad:', rollbackError);
+    }
+    throw error;
   }
 }
 
@@ -992,9 +1066,23 @@ app.post('/api/admin/backups', requireAdmin, (_, res) => {
   }
 });
 
+app.post('/api/admin/backups/:name/restore', requireAdmin, (req, res) => {
+  const name = String(req.params.name || '');
+  if (!isValidBackupName(name)) return res.status(400).json({ error: 'Respaldo no válido.' });
+  const backupDir = path.join(BACKUPS_DIR, name);
+  if (!fs.existsSync(backupDir)) return res.status(404).json({ error: 'Respaldo no encontrado.' });
+  try {
+    const result = restoreBackup(name);
+    return res.json({ ok: true, ...result });
+  } catch (error) {
+    console.error('[YHORS] Error restaurando respaldo:', error);
+    return res.status(500).json({ error: error.message || 'No se pudo restaurar el respaldo.' });
+  }
+});
+
 app.delete('/api/admin/backups/:name', requireAdmin, (req, res) => {
   const name = String(req.params.name || '');
-  if (!/^YHORS-\d{8}-\d{6}Z-[a-f0-9]{6}$/.test(name)) {
+  if (!isValidBackupName(name)) {
     return res.status(400).json({ error: 'Respaldo no válido.' });
   }
   const backupDir = path.join(BACKUPS_DIR, name);
@@ -1012,7 +1100,7 @@ app.delete('/api/admin/backups/:name', requireAdmin, (req, res) => {
 
 app.get('/api/admin/backups/:name/download', requireAdmin, (req, res) => {
   const name = String(req.params.name || '');
-  if (!/^YHORS-\d{8}-\d{6}Z-[a-f0-9]{6}$/.test(name)) return res.status(400).json({ error: 'Respaldo no válido.' });
+  if (!isValidBackupName(name)) return res.status(400).json({ error: 'Respaldo no válido.' });
   const backupDir = path.join(BACKUPS_DIR, name);
   if (!fs.existsSync(backupDir)) return res.status(404).json({ error: 'Respaldo no encontrado.' });
 
