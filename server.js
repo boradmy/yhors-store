@@ -30,10 +30,30 @@ const UPLOADS_DIR = process.env.YHORS_STORAGE_DIR ? path.join(STORAGE_ROOT, 'upl
 const BACKUPS_DIR = process.env.YHORS_STORAGE_DIR ? path.join(STORAGE_ROOT, 'backups') : path.join(__dirname, 'data', 'backups');
 const BACKUP_RETENTION = Math.max(3, Math.min(100, Number.parseInt(process.env.YHORS_BACKUP_RETENTION || '30', 10) || 30));
 const AUTO_BACKUP_INTERVAL_MS = Math.max(60 * 60 * 1000, Number.parseInt(process.env.YHORS_AUTO_BACKUP_INTERVAL_HOURS || '6', 10) * 60 * 60 * 1000 || 6 * 60 * 60 * 1000);
-const SESSION_SECRET = process.env.SESSION_SECRET || 'cambia-este-secreto-antes-de-publicar';
+const SESSION_SECRET = String(process.env.SESSION_SECRET || '').trim();
+if (!SESSION_SECRET || SESSION_SECRET.length < 32) {
+  throw new Error('[YHORS V14.1] SESSION_SECRET debe existir y tener al menos 32 caracteres.');
+}
 const ADMIN_USER = process.env.ADMIN_USER || 'admin';
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'cambia-esta-contrasena';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
+const ADMIN_PASSWORD_HASH = process.env.ADMIN_PASSWORD_HASH || '';
 const COOKIE_SECURE = process.env.COOKIE_SECURE === 'true';
+
+const SECURITY_FILE = path.join(DATA_DIR, 'security.json');
+// Seguridad V14.1: TOTP, rate limiting y sesiones server-side.
+const TWO_FACTOR_ISSUER = 'YHORS-STORE';
+const TWO_FACTOR_STEP_SECONDS = 30;
+const TWO_FACTOR_DIGITS = 6;
+const TWO_FACTOR_WINDOW = 1;
+const TWO_FACTOR_SECRET_KEY = crypto.createHash('sha256').update(`${SESSION_SECRET}|YHORS-V14-2FA`, 'utf8').digest();
+const LOGIN_LIMIT_WINDOW_MS = 15 * 60 * 1000;
+const LOGIN_LIMIT_MAX_ATTEMPTS = 5;
+const LOGIN_IP_LIMIT_MAX_ATTEMPTS = 30;
+const loginAttempts = new Map();
+const pendingTwoFactor = new Map();
+const SESSION_TTL_MS = Math.max(30 * 60 * 1000, Number.parseInt(process.env.SESSION_TTL_MINUTES || '720', 10) * 60 * 1000);
+const SESSION_COOKIE = 'yhors_session';
+const sessions = new Map();
 
 // V10: cifrado de datos personales de pedidos en reposo.
 // La clave NUNCA se guarda en el repositorio ni dentro de orders.json.
@@ -152,6 +172,207 @@ function migrateAllOrderStorageToEncryption() {
 
 const USER_ROLES = new Set(['admin', 'orders', 'store_manager']);
 
+
+function readSecurity() {
+  if (!fs.existsSync(SECURITY_FILE)) return { twoFactor: {} };
+  try {
+    const parsed = JSON.parse(fs.readFileSync(SECURITY_FILE, 'utf8'));
+    return parsed && typeof parsed === 'object'
+      ? { twoFactor: parsed.twoFactor && typeof parsed.twoFactor === 'object' ? parsed.twoFactor : {} }
+      : { twoFactor: {} };
+  } catch {
+    return { twoFactor: {} };
+  }
+}
+
+function writeSecurity(value) {
+  const tmp = `${SECURITY_FILE}.tmp`;
+  fs.writeFileSync(tmp, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
+  fs.renameSync(tmp, SECURITY_FILE);
+}
+
+function ensureSecurityFile() {
+  if (!fs.existsSync(SECURITY_FILE)) writeSecurity({ twoFactor: {} });
+}
+
+function base32Encode(buffer) {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  let bits = 0;
+  let value = 0;
+  let output = '';
+  for (const byte of buffer) {
+    value = (value << 8) | byte;
+    bits += 8;
+    while (bits >= 5) {
+      output += alphabet[(value >>> (bits - 5)) & 31];
+      bits -= 5;
+    }
+  }
+  if (bits > 0) output += alphabet[(value << (5 - bits)) & 31];
+  return output;
+}
+
+function base32Decode(input) {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  const clean = String(input || '').toUpperCase().replace(/[\s=-]/g, '');
+  let bits = 0;
+  let value = 0;
+  const bytes = [];
+  for (const char of clean) {
+    const index = alphabet.indexOf(char);
+    if (index < 0) throw new Error('Secreto 2FA inválido.');
+    value = (value << 5) | index;
+    bits += 5;
+    if (bits >= 8) {
+      bytes.push((value >>> (bits - 8)) & 255);
+      bits -= 8;
+    }
+  }
+  return Buffer.from(bytes);
+}
+
+function encryptTwoFactorSecret(secret) {
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', TWO_FACTOR_SECRET_KEY, iv);
+  const ciphertext = Buffer.concat([cipher.update(secret, 'utf8'), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return `V14.${iv.toString('base64url')}.${tag.toString('base64url')}.${ciphertext.toString('base64url')}`;
+}
+
+function decryptTwoFactorSecret(value) {
+  if (!String(value || '').startsWith('V14.')) return '';
+  try {
+    const [, iv, tag, ciphertext] = String(value).split('.');
+    const decipher = crypto.createDecipheriv('aes-256-gcm', TWO_FACTOR_SECRET_KEY, Buffer.from(iv, 'base64url'));
+    decipher.setAuthTag(Buffer.from(tag, 'base64url'));
+    return Buffer.concat([decipher.update(Buffer.from(ciphertext, 'base64url')), decipher.final()]).toString('utf8');
+  } catch {
+    return '';
+  }
+}
+
+function hotp(secret, counter) {
+  const key = base32Decode(secret);
+  const counterBuffer = Buffer.alloc(8);
+  counterBuffer.writeBigUInt64BE(BigInt(counter));
+  const digest = crypto.createHmac('sha1', key).update(counterBuffer).digest();
+  const offset = digest[digest.length - 1] & 0x0f;
+  const binary = ((digest[offset] & 0x7f) << 24)
+    | ((digest[offset + 1] & 0xff) << 16)
+    | ((digest[offset + 2] & 0xff) << 8)
+    | (digest[offset + 3] & 0xff);
+  return String(binary % 1000000).padStart(TWO_FACTOR_DIGITS, '0');
+}
+
+function verifyTotp(secret, code) {
+  const cleanCode = String(code || '').replace(/\s/g, '');
+  if (!/^\d{6}$/.test(cleanCode)) return false;
+  const currentCounter = Math.floor(Date.now() / 1000 / TWO_FACTOR_STEP_SECONDS);
+  for (let offset = -TWO_FACTOR_WINDOW; offset <= TWO_FACTOR_WINDOW; offset += 1) {
+    const expected = hotp(secret, currentCounter + offset);
+    if (crypto.timingSafeEqual(Buffer.from(cleanCode), Buffer.from(expected))) return true;
+  }
+  return false;
+}
+
+function twoFactorRecord(accountId) {
+  const security = readSecurity();
+  return security.twoFactor[String(accountId)] || null;
+}
+
+function accountTwoFactorEnabled(accountId) {
+  const record = twoFactorRecord(accountId);
+  return Boolean(record?.enabled && record?.secret);
+}
+
+function setTwoFactorRecord(accountId, record) {
+  const security = readSecurity();
+  if (record) security.twoFactor[String(accountId)] = record;
+  else delete security.twoFactor[String(accountId)];
+  writeSecurity(security);
+}
+
+function createTwoFactorSetup(accountId, username) {
+  const secret = base32Encode(crypto.randomBytes(20));
+  const label = `${TWO_FACTOR_ISSUER}:${username}`;
+  const otpauthUri = `otpauth://totp/${encodeURIComponent(label)}?secret=${secret}&issuer=${encodeURIComponent(TWO_FACTOR_ISSUER)}&algorithm=SHA1&digits=${TWO_FACTOR_DIGITS}&period=${TWO_FACTOR_STEP_SECONDS}`;
+  setTwoFactorRecord(accountId, {
+    enabled: false,
+    pendingSecret: encryptTwoFactorSecret(secret),
+    updatedAt: new Date().toISOString()
+  });
+  return { secret, otpauthUri };
+}
+
+function enableTwoFactor(accountId, username, code) {
+  const record = twoFactorRecord(accountId);
+  const secret = decryptTwoFactorSecret(record?.pendingSecret);
+  if (!secret || !verifyTotp(secret, code)) return false;
+  setTwoFactorRecord(accountId, {
+    enabled: true,
+    secret: encryptTwoFactorSecret(secret),
+    pendingSecret: '',
+    username,
+    updatedAt: new Date().toISOString()
+  });
+  return true;
+}
+
+function disableTwoFactor(accountId) {
+  setTwoFactorRecord(accountId, null);
+}
+
+function clearExpiredTwoFactorChallenges() {
+  const now = Date.now();
+  for (const [token, challenge] of pendingTwoFactor) {
+    if (challenge.expiresAt <= now) pendingTwoFactor.delete(token);
+  }
+}
+setInterval(clearExpiredTwoFactorChallenges, 60 * 1000).unref();
+
+function clientIp(req) {
+  return String(req.ip || req.socket?.remoteAddress || 'unknown').slice(0, 120);
+}
+
+function rateLimitKey(ip, username, scope = 'login') {
+  return `${scope}:${ip}:${String(username || '').toLowerCase()}`;
+}
+
+function isRateLimited(key, maxAttempts) {
+  const now = Date.now();
+  const entry = loginAttempts.get(key);
+  if (!entry) return false;
+  if (entry.resetAt <= now) {
+    loginAttempts.delete(key);
+    return false;
+  }
+  return entry.count >= maxAttempts;
+}
+
+function registerFailedAttempt(key) {
+  const now = Date.now();
+  const entry = loginAttempts.get(key);
+  if (!entry || entry.resetAt <= now) {
+    loginAttempts.set(key, { count: 1, resetAt: now + LOGIN_LIMIT_WINDOW_MS });
+    return;
+  }
+  entry.count += 1;
+}
+
+function clearFailedAttempts(ip, username) {
+  loginAttempts.delete(rateLimitKey(ip, username));
+  loginAttempts.delete(`login-ip:${ip}`);
+}
+
+function rateLimitResponse(res, resetAt) {
+  const seconds = Math.max(1, Math.ceil((resetAt - Date.now()) / 1000));
+  res.setHeader('Retry-After', String(seconds));
+  return res.status(429).json({
+    error: `Demasiados intentos. Intenta nuevamente en ${Math.ceil(seconds / 60)} minuto(s).`,
+    retryAfterSeconds: seconds
+  });
+}
+
 function normalizeUsername(value) {
   return String(value || '').trim().toLowerCase().replace(/\s+/g, '').slice(0, 40);
 }
@@ -221,6 +442,7 @@ function publicUser(user) {
     role: user.role,
     active: user.active !== false,
     system: Boolean(user.system),
+    twoFactorEnabled: accountTwoFactorEnabled(user.id),
     createdAt: user.createdAt,
     updatedAt: user.updatedAt
   };
@@ -247,11 +469,12 @@ function ensureStorage() {
   ensureUsers();
   fs.mkdirSync(UPLOADS_DIR, { recursive: true });
   fs.mkdirSync(BACKUPS_DIR, { recursive: true });
+  ensureSecurityFile();
 
   // Primera ejecución con disco vacío: copia los datos que viajan con el código.
   // Nunca sobrescribe un archivo que ya exista en el almacenamiento persistente.
   if (process.env.YHORS_STORAGE_DIR) {
-    const seedFiles = ['products.json', 'storefront.json', 'classifications.json', 'orders.json', 'users.json'];
+    const seedFiles = ['products.json', 'storefront.json', 'classifications.json', 'orders.json', 'users.json', 'security.json'];
     for (const fileName of seedFiles) {
       const source = path.join(__dirname, 'data', fileName);
       const target = path.join(DATA_DIR, fileName);
@@ -594,7 +817,7 @@ function createBackup(reason = 'manual', options = {}) {
   fs.mkdirSync(backupDataDir, { recursive: true });
   fs.mkdirSync(backupUploadsDir, { recursive: true });
 
-  for (const fileName of ['products.json', 'storefront.json', 'classifications.json', 'orders.json', 'users.json']) {
+  for (const fileName of ['products.json', 'storefront.json', 'classifications.json', 'orders.json', 'users.json', 'security.json']) {
     const source = path.join(DATA_DIR, fileName);
     if (fs.existsSync(source)) fs.copyFileSync(source, path.join(backupDataDir, fileName));
   }
@@ -666,6 +889,10 @@ function validateBackupDirectory(backupDir) {
     if (!fs.existsSync(file)) throw new Error(`Falta ${fileName} en el respaldo.`);
     JSON.parse(fs.readFileSync(file, 'utf8'));
   }
+  for (const fileName of ['users.json', 'security.json']) {
+    const file = path.join(dataDir, fileName);
+    if (fs.existsSync(file)) JSON.parse(fs.readFileSync(file, 'utf8'));
+  }
 }
 
 function replaceDirectoryContents(sourceDir, targetDir) {
@@ -724,12 +951,13 @@ function applyBackupDirectory(backupDir) {
       fs.copyFileSync(source, temporaryFile);
       fs.renameSync(temporaryFile, target);
     }
-    const backupUsersFile = path.join(backupDataDir, 'users.json');
-    if (fs.existsSync(backupUsersFile)) {
-      const target = USERS_FILE;
+    for (const fileName of ['users.json', 'security.json']) {
+      const source = path.join(backupDataDir, fileName);
+      if (!fs.existsSync(source)) continue;
+      const target = path.join(DATA_DIR, fileName);
       const temporaryFile = `${target}.restore.tmp`;
-      JSON.parse(fs.readFileSync(backupUsersFile, 'utf8'));
-      fs.copyFileSync(backupUsersFile, temporaryFile);
+      JSON.parse(fs.readFileSync(source, 'utf8'));
+      fs.copyFileSync(source, temporaryFile);
       fs.renameSync(temporaryFile, target);
     }
 
@@ -988,31 +1216,56 @@ function validateOrder(input) {
   };
 }
 
-function sign(value) {
-  return crypto.createHmac('sha256', SESSION_SECRET).update(value).digest('base64url');
-}
-
-function makeSession(user, role) {
-  const payload = Buffer.from(JSON.stringify({ user, role, expires: Date.now() + 1000 * 60 * 60 * 12 })).toString('base64url');
-  return `${payload}.${sign(payload)}`;
+function makeSession(user, role, accountId = '') {
+  sessionCleanup();
+  const token = crypto.randomBytes(32).toString('base64url');
+  const now = Date.now();
+  const session = {
+    id: token,
+    user,
+    role,
+    accountId: String(accountId || ''),
+    createdAt: now,
+    lastSeenAt: now,
+    expiresAt: now + SESSION_TTL_MS
+  };
+  sessions.set(token, session);
+  return session;
 }
 
 function getSession(req) {
-  const token = req.cookies.yhors_session;
-  if (!token || !token.includes('.')) return null;
-  const [payload, signature] = token.split('.');
-  const expected = sign(payload);
-  if (signature.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) return null;
-  try {
-    const session = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
-    if (!session.user || !USER_ROLES.has(session.role) || Number(session.expires) <= Date.now()) return null;
-    const currentUser = findUserByUsername(session.user);
-    if (!currentUser || currentUser.role !== session.role) return null;
-    return session;
-  } catch {
+  const token = req.cookies[SESSION_COOKIE];
+  if (!token) return null;
+  const session = sessions.get(token);
+  if (!session) return null;
+  if (session.expiresAt <= Date.now()) {
+    sessions.delete(token);
     return null;
   }
+  session.lastSeenAt = Date.now();
+  return session;
 }
+
+function destroySession(req) {
+  const token = req.cookies[SESSION_COOKIE];
+  if (token) sessions.delete(token);
+}
+
+function destroySessionsForAccount(accountId) {
+  const target = String(accountId || '');
+  if (!target) return;
+  for (const [token, session] of sessions) {
+    if (String(session.accountId || '') === target) sessions.delete(token);
+  }
+}
+
+function sessionCleanup() {
+  const now = Date.now();
+  for (const [token, session] of sessions) {
+    if (session.expiresAt <= now) sessions.delete(token);
+  }
+}
+setInterval(sessionCleanup, 10 * 60 * 1000).unref();
 
 function hasValidSession(req) { return Boolean(getSession(req)); }
 
@@ -1192,16 +1445,110 @@ app.post('/api/login', async (req, res) => {
   ensureUsers();
   const username = normalizeUsername(req.body?.username);
   const password = String(req.body?.password || '');
+  const ip = clientIp(req);
+
+  if (!username || !password) return res.status(401).json({ error: 'Usuario o contraseña incorrectos.' });
+
+  const key = rateLimitKey(ip, username);
+  const ipKey = `login-ip:${ip}`;
+  const usernameEntry = loginAttempts.get(key);
+  const ipEntry = loginAttempts.get(ipKey);
+  if (isRateLimited(key, LOGIN_LIMIT_MAX_ATTEMPTS)) return rateLimitResponse(res, usernameEntry.resetAt);
+  if (isRateLimited(ipKey, LOGIN_IP_LIMIT_MAX_ATTEMPTS)) return rateLimitResponse(res, ipEntry.resetAt);
+
   const account = findUserByUsername(username);
-  if (!account || !(await bcrypt.compare(password, account.passwordHash))) {
+  let passwordMatches = false;
+  if (account?.passwordHash) {
+    try { passwordMatches = await bcrypt.compare(password, account.passwordHash); } catch { passwordMatches = false; }
+  }
+
+  if (!account || !passwordMatches) {
+    registerFailedAttempt(key);
+    registerFailedAttempt(ipKey);
     return res.status(401).json({ error: 'Usuario o contraseña incorrectos.' });
   }
-  res.cookie('yhors_session', makeSession(account.username, account.role), { httpOnly: true, sameSite: 'strict', secure: COOKIE_SECURE, maxAge: 1000 * 60 * 60 * 12, path: '/' });
-  return res.json({ ok: true, role: account.role, username: account.username, name: account.name });
+
+  if (accountTwoFactorEnabled(account.id)) {
+    const challengeToken = crypto.randomBytes(32).toString('base64url');
+    pendingTwoFactor.set(challengeToken, {
+      accountId: account.id,
+      user: account.username,
+      role: account.role,
+      expiresAt: Date.now() + 5 * 60 * 1000
+    });
+    res.cookie('yhors_2fa_challenge', challengeToken, {
+      httpOnly: true,
+      sameSite: 'strict',
+      secure: COOKIE_SECURE,
+      maxAge: 5 * 60 * 1000,
+      path: '/'
+    });
+    return res.json({ ok: true, requiresTwoFactor: true, expiresInSeconds: 300 });
+  }
+
+  clearFailedAttempts(ip, username);
+  const session = makeSession(account.username, account.role, account.id);
+  res.cookie(SESSION_COOKIE, session.id, {
+    httpOnly: true,
+    sameSite: 'strict',
+    secure: COOKIE_SECURE,
+    maxAge: SESSION_TTL_MS,
+    path: '/'
+  });
+  return res.json({
+    ok: true,
+    role: session.role,
+    username: account.username,
+    name: account.name,
+    expiresAt: session.expiresAt,
+    requiresTwoFactor: false
+  });
+});
+
+app.post('/api/login/2fa', (req, res) => {
+  const challengeToken = req.cookies.yhors_2fa_challenge;
+  const code = String(req.body?.code || '').replace(/\s/g, '');
+  const ip = clientIp(req);
+  if (!challengeToken || !/^\d{6}$/.test(code)) return res.status(401).json({ error: 'Código 2FA incorrecto.' });
+
+  const challenge = pendingTwoFactor.get(challengeToken);
+  if (!challenge || challenge.expiresAt <= Date.now()) {
+    pendingTwoFactor.delete(challengeToken);
+    res.clearCookie('yhors_2fa_challenge', { httpOnly: true, sameSite: 'strict', secure: COOKIE_SECURE, path: '/' });
+    return res.status(401).json({ error: 'El desafío 2FA expiró. Inicia sesión nuevamente.' });
+  }
+
+  const key = rateLimitKey(ip, challenge.user, '2fa');
+  const entry = loginAttempts.get(key);
+  if (isRateLimited(key, LOGIN_LIMIT_MAX_ATTEMPTS)) return rateLimitResponse(res, entry.resetAt);
+
+  const record = twoFactorRecord(challenge.accountId);
+  const secret = decryptTwoFactorSecret(record?.secret);
+  if (!secret || !verifyTotp(secret, code)) {
+    registerFailedAttempt(key);
+    return res.status(401).json({ error: 'Código 2FA incorrecto.' });
+  }
+
+  clearFailedAttempts(ip, challenge.user);
+  loginAttempts.delete(key);
+  pendingTwoFactor.delete(challengeToken);
+  res.clearCookie('yhors_2fa_challenge', { httpOnly: true, sameSite: 'strict', secure: COOKIE_SECURE, path: '/' });
+
+  const session = makeSession(challenge.user, challenge.role, challenge.accountId);
+  res.cookie(SESSION_COOKIE, session.id, {
+    httpOnly: true,
+    sameSite: 'strict',
+    secure: COOKIE_SECURE,
+    maxAge: SESSION_TTL_MS,
+    path: '/'
+  });
+  return res.json({ ok: true, role: session.role, username: session.user, expiresAt: session.expiresAt });
 });
 
 app.post('/api/logout', (req, res) => {
-  res.clearCookie('yhors_session', { httpOnly: true, sameSite: 'strict', secure: COOKIE_SECURE, path: '/' });
+  destroySession(req);
+  res.clearCookie('yhors_2fa_challenge', { httpOnly: true, sameSite: 'strict', secure: COOKIE_SECURE, path: '/' });
+  res.clearCookie(SESSION_COOKIE, { httpOnly: true, sameSite: 'strict', secure: COOKIE_SECURE, path: '/' });
   res.json({ ok: true });
 });
 
@@ -1225,7 +1572,15 @@ app.post('/api/orders', async (req, res) => {
 });
 
 app.get('/api/admin/session', (req, res) => { const session = getSession(req); return res.json({ authenticated: Boolean(session), username: session?.user || null, role: session?.role || null }); });
-app.get('/api/admin/security', requireAdmin, (_, res) => res.json({ dataEncryption: 'AES-256-GCM', ordersEncryptedAtRest: true, keySource: 'YHORS_DATA_KEY environment variable', version: 'V10' }));
+app.get('/api/admin/security', requireAdmin, (_, res) => res.json({
+  dataEncryption: 'AES-256-GCM',
+  ordersEncryptedAtRest: true,
+  keySource: 'YHORS_DATA_KEY environment variable',
+  version: 'V14.1',
+  twoFactor: 'TOTP',
+  serverSideSessions: true,
+  loginRateLimit: true
+}));
 
 app.get('/api/admin/users', requireAdmin, (_, res) => {
   ensureUsers();
@@ -1284,6 +1639,9 @@ app.put('/api/admin/users/:id', requireAdmin, async (req, res) => {
   if (result.user.password) updated.passwordHash = await bcrypt.hash(result.user.password, 12);
   users[index] = updated;
   writeUsers(users);
+  if (current.role !== updated.role || current.active !== updated.active || Boolean(result.user.password)) {
+    destroySessionsForAccount(current.id);
+  }
   return res.json(publicUser(updated));
 });
 
@@ -1300,9 +1658,38 @@ app.delete('/api/admin/users/:id', requireAdmin, (req, res) => {
   }
   users.splice(index, 1);
   writeUsers(users);
+  disableTwoFactor(target.id);
+  destroySessionsForAccount(target.id);
   return res.status(204).end();
 });
 
+
+app.post('/api/admin/users/:id/2fa/setup', requireAdmin, (req, res) => {
+  ensureUsers();
+  const user = readUsers().find(item => item.id === req.params.id);
+  if (!user) return res.status(404).json({ error: 'Usuario no encontrado.' });
+  const setup = createTwoFactorSetup(user.id, user.username);
+  return res.json({ ok: true, secret: setup.secret, otpauthUri: setup.otpauthUri, issuer: TWO_FACTOR_ISSUER, period: TWO_FACTOR_STEP_SECONDS, digits: TWO_FACTOR_DIGITS });
+});
+
+app.post('/api/admin/users/:id/2fa/verify', requireAdmin, (req, res) => {
+  ensureUsers();
+  const user = readUsers().find(item => item.id === req.params.id);
+  if (!user) return res.status(404).json({ error: 'Usuario no encontrado.' });
+  const code = String(req.body?.code || '').replace(/\s/g, '');
+  if (!/^\d{6}$/.test(code)) return res.status(400).json({ error: 'Ingresa un código 2FA de 6 dígitos.' });
+  if (!enableTwoFactor(user.id, user.username, code)) return res.status(400).json({ error: 'El código 2FA no es válido o expiró.' });
+  return res.json({ ok: true, twoFactorEnabled: true });
+});
+
+app.delete('/api/admin/users/:id/2fa', requireAdmin, (req, res) => {
+  ensureUsers();
+  const user = readUsers().find(item => item.id === req.params.id);
+  if (!user) return res.status(404).json({ error: 'Usuario no encontrado.' });
+  if (user.id === getSession(req)?.accountId) return res.status(400).json({ error: 'No puedes desactivar tu propio 2FA desde esta sesión.' });
+  disableTwoFactor(user.id);
+  return res.json({ ok: true, twoFactorEnabled: false });
+});
 
 app.get('/api/admin/orders', requireOrdersAccess, (_, res) => res.json(readOrders()));
 app.put('/api/admin/orders/:id', requireOrdersAccess, (req, res) => {
