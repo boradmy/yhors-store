@@ -1477,12 +1477,30 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}.brand{letter-sp
   .backup-last{width:100%}
 }
 
-.user-management-panel { margin-bottom: 24px; }
-.admin-panel-copy { color: var(--muted, #666); max-width: 760px; }
-.user-create-form { margin-top: 18px; align-items: end; }
-.user-create-form .field { min-width: 180px; }
-.admin-users-list { display: grid; gap: 10px; margin-top: 20px; }
-.admin-user-row { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:14px 16px; border:1px solid rgba(0,0,0,.10); border-radius:12px; background:rgba(255,255,255,.6); }
-.admin-user-row > div:first-child { display:grid; gap:4px; }
-.admin-user-row span { font-size:.85rem; opacity:.7; }
-@media (max-width: 700px) { .admin-user-row { align-items:flex-start; flex-direction:column; } }
+
+/* V11 · Gestión de usuarios */
+.users-panel{margin-top:0}
+.users-layout{display:grid;grid-template-columns:minmax(320px,.9fr) minmax(420px,1.1fr);gap:24px;align-items:start}
+.user-form{background:#faf9f6;border:1px solid var(--line);border-radius:10px;padding:20px}
+.user-form-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px}
+.user-form-heading strong{font-size:1.05rem}
+.admin-user-card{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 0;border-bottom:1px solid #ebe7df}
+.admin-user-card:last-child{border-bottom:0}
+.admin-user-main{display:flex;align-items:center;gap:12px;min-width:0}
+.admin-user-avatar{width:42px;height:42px;border-radius:50%;display:grid;place-items:center;background:#111;color:#d5b36b;font-weight:800;flex:0 0 auto}
+.admin-user-main>div:last-child{display:grid;gap:3px;min-width:0}
+.admin-user-main strong{font-size:.88rem}
+.admin-user-main span{font-size:.78rem;color:var(--muted)}
+.admin-user-main small{font-size:.68rem;color:var(--muted)}
+.admin-user-card.is-disabled{opacity:.58}
+.admin-user-actions{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end}
+.users-list-wrap{background:white;border:1px solid var(--line);border-radius:10px;padding:20px}
+.users-list-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.users-list-head>div{display:grid;gap:4px}
+@media (max-width:820px){
+  .users-layout{grid-template-columns:1fr}
+}
+@media (max-width:560px){
+  .admin-user-card{align-items:flex-start;flex-direction:column}
+  .admin-user-actions{width:100%;justify-content:flex-start}
+}

@@ -25,322 +25,15 @@ const DATA_FILE = path.join(DATA_DIR, 'products.json');
 const STOREFRONT_FILE = path.join(DATA_DIR, 'storefront.json');
 const CLASSIFICATIONS_FILE = path.join(DATA_DIR, 'classifications.json');
 const ORDERS_FILE = path.join(DATA_DIR, 'orders.json');
+const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const UPLOADS_DIR = process.env.YHORS_STORAGE_DIR ? path.join(STORAGE_ROOT, 'uploads') : path.join(__dirname, 'uploads');
 const BACKUPS_DIR = process.env.YHORS_STORAGE_DIR ? path.join(STORAGE_ROOT, 'backups') : path.join(__dirname, 'data', 'backups');
 const BACKUP_RETENTION = Math.max(3, Math.min(100, Number.parseInt(process.env.YHORS_BACKUP_RETENTION || '30', 10) || 30));
 const AUTO_BACKUP_INTERVAL_MS = Math.max(60 * 60 * 1000, Number.parseInt(process.env.YHORS_AUTO_BACKUP_INTERVAL_HOURS || '6', 10) * 60 * 60 * 1000 || 6 * 60 * 60 * 1000);
-// V14: sesiones de servidor + 2FA TOTP + límite de intentos + credenciales compatibles con variables existentes.
-// En producción, SESSION_SECRET debe existir y ser largo/aleatorio.
-const SESSION_SECRET = String(process.env.SESSION_SECRET || '').trim();
-if (!SESSION_SECRET || SESSION_SECRET.length < 32) {
-  throw new Error('[YHORS V13] SESSION_SECRET debe existir y tener al menos 32 caracteres.');
-}
+const SESSION_SECRET = process.env.SESSION_SECRET || 'cambia-este-secreto-antes-de-publicar';
 const ADMIN_USER = process.env.ADMIN_USER || 'admin';
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
-const ADMIN_PASSWORD_HASH = process.env.ADMIN_PASSWORD_HASH || '';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'cambia-esta-contrasena';
 const COOKIE_SECURE = process.env.COOKIE_SECURE === 'true';
-
-const USERS_FILE = path.join(DATA_DIR, 'users.json');
-const USER_ROLES = new Set(['admin', 'orders', 'store_manager']);
-
-// V14: autenticación reforzada con TOTP (compatible con Google Authenticator,
-// Microsoft Authenticator, Authy y otras apps que soporten RFC 6238).
-const SECURITY_FILE = path.join(DATA_DIR, 'security.json');
-const TWO_FACTOR_ISSUER = 'YHORS-STORE';
-const TWO_FACTOR_STEP_SECONDS = 30;
-const TWO_FACTOR_DIGITS = 6;
-const TWO_FACTOR_WINDOW = 1;
-const TWO_FACTOR_SECRET_KEY = crypto.createHash('sha256').update(`${SESSION_SECRET}|YHORS-V14-2FA`, 'utf8').digest();
-const LOGIN_LIMIT_WINDOW_MS = 15 * 60 * 1000;
-const LOGIN_LIMIT_MAX_ATTEMPTS = 5;
-const LOGIN_IP_LIMIT_MAX_ATTEMPTS = 30;
-const loginAttempts = new Map();
-const pendingTwoFactor = new Map();
-
-function readSecurity() {
-  if (!fs.existsSync(SECURITY_FILE)) return { twoFactor: {} };
-  try {
-    const parsed = JSON.parse(fs.readFileSync(SECURITY_FILE, 'utf8'));
-    return parsed && typeof parsed === 'object' ? { twoFactor: parsed.twoFactor && typeof parsed.twoFactor === 'object' ? parsed.twoFactor : {} } : { twoFactor: {} };
-  } catch {
-    return { twoFactor: {} };
-  }
-}
-
-function writeSecurity(value) {
-  const tmp = `${SECURITY_FILE}.tmp`;
-  fs.writeFileSync(tmp, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
-  fs.renameSync(tmp, SECURITY_FILE);
-}
-
-function ensureSecurityFile() {
-  if (!fs.existsSync(SECURITY_FILE)) writeSecurity({ twoFactor: {} });
-}
-
-function base32Encode(buffer) {
-  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
-  let bits = 0;
-  let value = 0;
-  let output = '';
-  for (const byte of buffer) {
-    value = (value << 8) | byte;
-    bits += 8;
-    while (bits >= 5) {
-      output += alphabet[(value >>> (bits - 5)) & 31];
-      bits -= 5;
-    }
-  }
-  if (bits > 0) output += alphabet[(value << (5 - bits)) & 31];
-  return output;
-}
-
-function base32Decode(input) {
-  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
-  const clean = String(input || '').toUpperCase().replace(/[\s=-]/g, '');
-  let bits = 0;
-  let value = 0;
-  const bytes = [];
-  for (const char of clean) {
-    const index = alphabet.indexOf(char);
-    if (index < 0) throw new Error('Secreto 2FA inválido.');
-    value = (value << 5) | index;
-    bits += 5;
-    if (bits >= 8) {
-      bytes.push((value >>> (bits - 8)) & 255);
-      bits -= 8;
-    }
-  }
-  return Buffer.from(bytes);
-}
-
-function encryptTwoFactorSecret(secret) {
-  const iv = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv('aes-256-gcm', TWO_FACTOR_SECRET_KEY, iv);
-  const ciphertext = Buffer.concat([cipher.update(secret, 'utf8'), cipher.final()]);
-  const tag = cipher.getAuthTag();
-  return `V14.${iv.toString('base64url')}.${tag.toString('base64url')}.${ciphertext.toString('base64url')}`;
-}
-
-function decryptTwoFactorSecret(value) {
-  if (!String(value || '').startsWith('V14.')) return '';
-  try {
-    const [, iv, tag, ciphertext] = String(value).split('.');
-    const decipher = crypto.createDecipheriv('aes-256-gcm', TWO_FACTOR_SECRET_KEY, Buffer.from(iv, 'base64url'));
-    decipher.setAuthTag(Buffer.from(tag, 'base64url'));
-    return Buffer.concat([decipher.update(Buffer.from(ciphertext, 'base64url')), decipher.final()]).toString('utf8');
-  } catch {
-    return '';
-  }
-}
-
-function hotp(secret, counter) {
-  const key = base32Decode(secret);
-  const counterBuffer = Buffer.alloc(8);
-  counterBuffer.writeBigUInt64BE(BigInt(counter));
-  const digest = crypto.createHmac('sha1', key).update(counterBuffer).digest();
-  const offset = digest[digest.length - 1] & 0x0f;
-  const binary = ((digest[offset] & 0x7f) << 24)
-    | ((digest[offset + 1] & 0xff) << 16)
-    | ((digest[offset + 2] & 0xff) << 8)
-    | (digest[offset + 3] & 0xff);
-  return String(binary % 1000000).padStart(TWO_FACTOR_DIGITS, '0');
-}
-
-function totpCode(secret, timestamp = Date.now()) {
-  return hotp(secret, Math.floor(timestamp / 1000 / TWO_FACTOR_STEP_SECONDS));
-}
-
-function verifyTotp(secret, code) {
-  const cleanCode = String(code || '').replace(/\s/g, '');
-  if (!/^\d{6}$/.test(cleanCode)) return false;
-  const currentCounter = Math.floor(Date.now() / 1000 / TWO_FACTOR_STEP_SECONDS);
-  for (let offset = -TWO_FACTOR_WINDOW; offset <= TWO_FACTOR_WINDOW; offset += 1) {
-    const expected = hotp(secret, currentCounter + offset);
-    if (crypto.timingSafeEqual(Buffer.from(cleanCode), Buffer.from(expected))) return true;
-  }
-  return false;
-}
-
-function twoFactorRecord(accountId) {
-  const security = readSecurity();
-  return security.twoFactor[String(accountId)] || null;
-}
-
-function accountTwoFactorEnabled(accountId) {
-  const record = twoFactorRecord(accountId);
-  return Boolean(record?.enabled && record?.secret);
-}
-
-function setTwoFactorRecord(accountId, record) {
-  const security = readSecurity();
-  if (record) security.twoFactor[String(accountId)] = record;
-  else delete security.twoFactor[String(accountId)];
-  writeSecurity(security);
-}
-
-function createTwoFactorSetup(accountId, username) {
-  const secret = base32Encode(crypto.randomBytes(20));
-  const label = `${TWO_FACTOR_ISSUER}:${username}`;
-  const otpauthUri = `otpauth://totp/${encodeURIComponent(label)}?secret=${secret}&issuer=${encodeURIComponent(TWO_FACTOR_ISSUER)}&algorithm=SHA1&digits=${TWO_FACTOR_DIGITS}&period=${TWO_FACTOR_STEP_SECONDS}`;
-  setTwoFactorRecord(accountId, {
-    enabled: false,
-    pendingSecret: encryptTwoFactorSecret(secret),
-    updatedAt: new Date().toISOString()
-  });
-  return { secret, otpauthUri };
-}
-
-function enableTwoFactor(accountId, username, code) {
-  const record = twoFactorRecord(accountId);
-  const secret = decryptTwoFactorSecret(record?.pendingSecret);
-  if (!secret || !verifyTotp(secret, code)) return false;
-  setTwoFactorRecord(accountId, {
-    enabled: true,
-    secret: encryptTwoFactorSecret(secret),
-    pendingSecret: '',
-    username,
-    updatedAt: new Date().toISOString()
-  });
-  return true;
-}
-
-function disableTwoFactor(accountId) {
-  setTwoFactorRecord(accountId, null);
-}
-
-function clearExpiredTwoFactorChallenges() {
-  const now = Date.now();
-  for (const [token, challenge] of pendingTwoFactor) {
-    if (challenge.expiresAt <= now) pendingTwoFactor.delete(token);
-  }
-}
-setInterval(clearExpiredTwoFactorChallenges, 60 * 1000).unref();
-
-function clientIp(req) {
-  return String(req.ip || req.socket?.remoteAddress || 'unknown').slice(0, 120);
-}
-
-function rateLimitKey(ip, username, scope = 'login') {
-  return `${scope}:${ip}:${String(username || '').toLowerCase()}`;
-}
-
-function isRateLimited(key, maxAttempts) {
-  const now = Date.now();
-  const entry = loginAttempts.get(key);
-  if (!entry) return false;
-  if (entry.resetAt <= now) {
-    loginAttempts.delete(key);
-    return false;
-  }
-  return entry.count >= maxAttempts;
-}
-
-function registerFailedAttempt(key) {
-  const now = Date.now();
-  const entry = loginAttempts.get(key);
-  if (!entry || entry.resetAt <= now) {
-    loginAttempts.set(key, { count: 1, resetAt: now + LOGIN_LIMIT_WINDOW_MS });
-    return;
-  }
-  entry.count += 1;
-}
-
-function clearFailedAttempts(ip, username) {
-  loginAttempts.delete(rateLimitKey(ip, username));
-  loginAttempts.delete(`login-ip:${ip}`);
-}
-
-function rateLimitResponse(res, resetAt) {
-  const seconds = Math.max(1, Math.ceil((resetAt - Date.now()) / 1000));
-  res.setHeader('Retry-After', String(seconds));
-  return res.status(429).json({ error: `Demasiados intentos. Intenta nuevamente en ${Math.ceil(seconds / 60)} minuto(s).`, retryAfterSeconds: seconds });
-}
-
-function accountForCredentials(username) {
-  const envAccount = {
-    id: 'env-admin',
-    user: String(ADMIN_USER),
-    password: String(ADMIN_PASSWORD),
-    passwordHash: String(ADMIN_PASSWORD_HASH),
-    role: 'admin',
-    active: true
-  };
-  const dynamicAccounts = readUsers()
-    .filter(user => user.active)
-    .map(user => ({ id: user.id, user: user.username, password: '', passwordHash: user.passwordHash, role: user.role, active: user.active }));
-  return [envAccount, ...dynamicAccounts].find(candidate => {
-    const candidateUser = String(candidate.user);
-    return username.length === candidateUser.length
-      && crypto.timingSafeEqual(Buffer.from(username), Buffer.from(candidateUser));
-  }) || null;
-}
-
-function createAuthenticatedSession(account) {
-  const session = makeSession(account.user, account.role, account.id);
-  return session;
-}
-
-function normalizeUserRecord(user) {
-  return {
-    id: String(user?.id || ''),
-    username: String(user?.username || '').trim(),
-    passwordHash: String(user?.passwordHash || ''),
-    role: USER_ROLES.has(user?.role) ? user.role : 'orders',
-    active: user?.active !== false,
-    createdAt: user?.createdAt || null,
-    updatedAt: user?.updatedAt || null
-  };
-}
-
-function readUsers() {
-  if (!fs.existsSync(USERS_FILE)) return [];
-  try {
-    const parsed = JSON.parse(fs.readFileSync(USERS_FILE, 'utf8'));
-    return Array.isArray(parsed) ? parsed.map(normalizeUserRecord).filter(u => u.id && u.username && u.passwordHash) : [];
-  } catch {
-    return [];
-  }
-}
-
-function writeUsers(users) {
-  const tmp = `${USERS_FILE}.tmp`;
-  fs.writeFileSync(tmp, `${JSON.stringify(users.map(normalizeUserRecord), null, 2)}\\n`, 'utf8');
-  fs.renameSync(tmp, USERS_FILE);
-}
-
-function ensureUsersFile() {
-  if (!fs.existsSync(USERS_FILE)) writeUsers([]);
-}
-
-function bootstrapAdminUser() {
-  // La cuenta definida por .env sigue siendo el acceso inicial y no se guarda
-  // en users.json. Las cuentas adicionales sí se administran desde el panel.
-  if (!ADMIN_USER) throw new Error('[YHORS V13] ADMIN_USER no puede estar vacío.');
-  if (!ADMIN_PASSWORD && !ADMIN_PASSWORD_HASH) {
-    throw new Error('[YHORS V13] Configura ADMIN_PASSWORD o ADMIN_PASSWORD_HASH para la cuenta inicial.');
-  }
-}
-const SESSION_TTL_MS = Math.max(30 * 60 * 1000, Number.parseInt(process.env.SESSION_TTL_MINUTES || '720', 10) * 60 * 1000);
-const SESSION_COOKIE = 'yhors_session';
-const sessions = new Map();
-const passwordHashCache = new Map();
-
-function passwordHashFor(account) {
-  const cacheKey = account.id || `${account.role}:${account.user}`;
-  const configuredHash = account.passwordHash;
-  if (configuredHash) return configuredHash;
-  if (!account.password) throw new Error(`[YHORS V13] Falta contraseña para la cuenta ${account.role}.`);
-  if (!passwordHashCache.has(cacheKey)) passwordHashCache.set(cacheKey, bcrypt.hashSync(account.password, 12));
-  return passwordHashCache.get(cacheKey);
-}
-
-function sessionCleanup() {
-  const now = Date.now();
-  for (const [token, session] of sessions) {
-    if (session.expiresAt <= now) sessions.delete(token);
-  }
-}
-setInterval(sessionCleanup, 10 * 60 * 1000).unref();
 
 // V10: cifrado de datos personales de pedidos en reposo.
 // La clave NUNCA se guarda en el repositorio ni dentro de orders.json.
@@ -456,15 +149,109 @@ function migrateAllOrderStorageToEncryption() {
   }
 }
 
+
+const USER_ROLES = new Set(['admin', 'orders', 'store_manager']);
+
+function normalizeUsername(value) {
+  return String(value || '').trim().toLowerCase().replace(/\s+/g, '').slice(0, 40);
+}
+
+function normalizeUserName(value) {
+  return cleanText(value, 100);
+}
+
+function readUsers() {
+  try {
+    const raw = fs.readFileSync(USERS_FILE, 'utf8');
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeUsers(users) {
+  fs.writeFileSync(USERS_FILE, `${JSON.stringify(users, null, 2)}\n`, 'utf8');
+}
+
+function ensureUserSeed(users, username, name, password, role) {
+  const normalized = normalizeUsername(username);
+  if (!normalized || !password || !USER_ROLES.has(role)) return users;
+  const existing = users.find(user => user.username === normalized);
+  if (existing) return users;
+  users.push({
+    id: crypto.randomUUID(),
+    name: normalizeUserName(name) || normalized,
+    username: normalized,
+    passwordHash: bcrypt.hashSync(String(password), 12),
+    role,
+    active: true,
+    system: true,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  });
+  return users;
+}
+
+function ensureUsers() {
+  let users = readUsers();
+  const before = JSON.stringify(users);
+  users = ensureUserSeed(users, ADMIN_USER, 'Administrador principal', ADMIN_PASSWORD, 'admin');
+
+  // Migración: elimina la antigua cuenta del sistema "ventas" / "Ventas / Pedidos".
+  // Ya no se vuelve a crear desde variables de entorno.
+  users = users.filter(user => !(user.system && user.username === 'ventas' && user.role === 'orders'));
+
+  // Si el archivo ya existía con una cuenta del sistema, mantenemos sus datos.
+  // La sincronización con .env solo ocurre cuando esa cuenta todavía no existe.
+  if (JSON.stringify(users) !== before || !fs.existsSync(USERS_FILE)) writeUsers(users);
+  return users;
+}
+
+function findUserByUsername(username) {
+  const normalized = normalizeUsername(username);
+  return readUsers().find(user => user.username === normalized && user.active !== false) || null;
+}
+
+function publicUser(user) {
+  return {
+    id: user.id,
+    name: user.name,
+    username: user.username,
+    role: user.role,
+    active: user.active !== false,
+    system: Boolean(user.system),
+    createdAt: user.createdAt,
+    updatedAt: user.updatedAt
+  };
+}
+
+function validateNewUser(input, users, currentId = '') {
+  const name = normalizeUserName(input?.name);
+  const username = normalizeUsername(input?.username);
+  const password = String(input?.password || '');
+  const role = String(input?.role || 'orders').trim().toLowerCase();
+  const active = input?.active !== false;
+
+  if (name.length < 2) return { error: 'Ingresa el nombre del usuario.' };
+  if (!/^[a-z0-9._-]{3,40}$/.test(username)) return { error: 'El usuario debe tener entre 3 y 40 caracteres y usar solo letras, números, punto, guion o guion bajo.' };
+  if (!USER_ROLES.has(role)) return { error: 'Rol de usuario no válido.' };
+  if (password && (password.length < 8 || password.length > 200)) return { error: 'La contraseña debe tener al menos 8 caracteres.' };
+  const duplicate = users.find(user => user.username === username && user.id !== currentId);
+  if (duplicate) return { error: 'Ese nombre de usuario ya existe.' };
+  return { user: { name, username, role, active, password } };
+}
+
 function ensureStorage() {
   fs.mkdirSync(DATA_DIR, { recursive: true });
+  ensureUsers();
   fs.mkdirSync(UPLOADS_DIR, { recursive: true });
   fs.mkdirSync(BACKUPS_DIR, { recursive: true });
 
   // Primera ejecución con disco vacío: copia los datos que viajan con el código.
   // Nunca sobrescribe un archivo que ya exista en el almacenamiento persistente.
   if (process.env.YHORS_STORAGE_DIR) {
-    const seedFiles = ['products.json', 'storefront.json', 'classifications.json', 'orders.json'];
+    const seedFiles = ['products.json', 'storefront.json', 'classifications.json', 'orders.json', 'users.json'];
     for (const fileName of seedFiles) {
       const source = path.join(__dirname, 'data', fileName);
       const target = path.join(DATA_DIR, fileName);
@@ -481,15 +268,12 @@ function ensureStorage() {
     }
   }
 
-  for (const fileName of ['products.json', 'storefront.json', 'classifications.json', 'orders.json', 'users.json', 'security.json']) {
+  for (const fileName of ['products.json', 'storefront.json', 'classifications.json', 'orders.json']) {
     const target = path.join(DATA_DIR, fileName);
     if (!fs.existsSync(target)) fs.writeFileSync(target, fileName === 'orders.json' ? '[]\n' : fileName === 'products.json' ? '[]\n' : fileName === 'storefront.json' ? '{\n  "heroProductIds": [],\n  "featuredProductIds": []\n}\n' : '{\n  "brands": {},\n  "productTypes": {}\n}\n', 'utf8');
   }
 }
 ensureStorage();
-ensureUsersFile();
-ensureSecurityFile();
-bootstrapAdminUser();
 migrateAllOrderStorageToEncryption();
 setTimeout(() => maybeAutoBackup(), 1500);
 
@@ -810,7 +594,7 @@ function createBackup(reason = 'manual', options = {}) {
   fs.mkdirSync(backupDataDir, { recursive: true });
   fs.mkdirSync(backupUploadsDir, { recursive: true });
 
-  for (const fileName of ['products.json', 'storefront.json', 'classifications.json', 'orders.json', 'users.json', 'security.json']) {
+  for (const fileName of ['products.json', 'storefront.json', 'classifications.json', 'orders.json', 'users.json']) {
     const source = path.join(DATA_DIR, fileName);
     if (fs.existsSync(source)) fs.copyFileSync(source, path.join(backupDataDir, fileName));
   }
@@ -874,7 +658,6 @@ function isValidBackupName(name) {
 
 function validateBackupDirectory(backupDir) {
   const requiredFiles = ['products.json', 'storefront.json', 'classifications.json', 'orders.json'];
-  const optionalFiles = ['users.json', 'security.json'];
   const dataDir = path.join(backupDir, 'data');
   if (!fs.existsSync(dataDir)) throw new Error('El respaldo no contiene la carpeta de datos.');
 
@@ -882,10 +665,6 @@ function validateBackupDirectory(backupDir) {
     const file = path.join(dataDir, fileName);
     if (!fs.existsSync(file)) throw new Error(`Falta ${fileName} en el respaldo.`);
     JSON.parse(fs.readFileSync(file, 'utf8'));
-  }
-  for (const fileName of optionalFiles) {
-    const file = path.join(dataDir, fileName);
-    if (fs.existsSync(file)) JSON.parse(fs.readFileSync(file, 'utf8'));
   }
 }
 
@@ -945,12 +724,12 @@ function applyBackupDirectory(backupDir) {
       fs.copyFileSync(source, temporaryFile);
       fs.renameSync(temporaryFile, target);
     }
-    for (const fileName of ['users.json', 'security.json']) {
-      const source = path.join(backupDataDir, fileName);
-      if (!fs.existsSync(source)) continue;
-      const target = path.join(DATA_DIR, fileName);
+    const backupUsersFile = path.join(backupDataDir, 'users.json');
+    if (fs.existsSync(backupUsersFile)) {
+      const target = USERS_FILE;
       const temporaryFile = `${target}.restore.tmp`;
-      fs.copyFileSync(source, temporaryFile);
+      JSON.parse(fs.readFileSync(backupUsersFile, 'utf8'));
+      fs.copyFileSync(backupUsersFile, temporaryFile);
       fs.renameSync(temporaryFile, target);
     }
 
@@ -1209,48 +988,31 @@ function validateOrder(input) {
   };
 }
 
-function makeSession(user, role, accountId = '') {
-  sessionCleanup();
-  const token = crypto.randomBytes(32).toString('base64url');
-  const now = Date.now();
-  const session = {
-    id: token,
-    user,
-    role,
-    accountId: String(accountId || ''),
-    createdAt: now,
-    lastSeenAt: now,
-    expiresAt: now + SESSION_TTL_MS
-  };
-  sessions.set(token, session);
-  return session;
+function sign(value) {
+  return crypto.createHmac('sha256', SESSION_SECRET).update(value).digest('base64url');
+}
+
+function makeSession(user, role) {
+  const payload = Buffer.from(JSON.stringify({ user, role, expires: Date.now() + 1000 * 60 * 60 * 12 })).toString('base64url');
+  return `${payload}.${sign(payload)}`;
 }
 
 function getSession(req) {
-  const token = req.cookies[SESSION_COOKIE];
-  if (!token) return null;
-  const session = sessions.get(token);
-  if (!session) return null;
-  if (session.expiresAt <= Date.now()) {
-    sessions.delete(token);
+  const token = req.cookies.yhors_session;
+  if (!token || !token.includes('.')) return null;
+  const [payload, signature] = token.split('.');
+  const expected = sign(payload);
+  if (signature.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) return null;
+  try {
+    const session = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+    if (!session.user || !USER_ROLES.has(session.role) || Number(session.expires) <= Date.now()) return null;
+    const currentUser = findUserByUsername(session.user);
+    if (!currentUser || currentUser.role !== session.role) return null;
+    return session;
+  } catch {
     return null;
   }
-  session.lastSeenAt = Date.now();
-  return session;
 }
-
-function destroySession(req) {
-  const token = req.cookies[SESSION_COOKIE];
-  if (token) sessions.delete(token);
-}
-function destroySessionsForAccount(accountId) {
-  const target = String(accountId || '');
-  if (!target) return;
-  for (const [token, session] of sessions) {
-    if (String(session.accountId || '') === target) sessions.delete(token);
-  }
-}
-
 
 function hasValidSession(req) { return Boolean(getSession(req)); }
 
@@ -1427,108 +1189,19 @@ app.get('/api/storefront', (_, res) => {
 app.get('/api/health', (_, res) => res.json({ ok: true }));
 
 app.post('/api/login', async (req, res) => {
-  const username = cleanText(req.body?.username, 80);
+  ensureUsers();
+  const username = normalizeUsername(req.body?.username);
   const password = String(req.body?.password || '');
-  const ip = clientIp(req);
-  if (!username || !password) return res.status(401).json({ error: 'Usuario o contraseña incorrectos.' });
-
-  const key = rateLimitKey(ip, username);
-  const ipKey = `login-ip:${ip}`;
-  const usernameEntry = loginAttempts.get(key);
-  const ipEntry = loginAttempts.get(ipKey);
-  if (isRateLimited(key, LOGIN_LIMIT_MAX_ATTEMPTS)) return rateLimitResponse(res, usernameEntry.resetAt);
-  if (isRateLimited(ipKey, LOGIN_IP_LIMIT_MAX_ATTEMPTS)) return rateLimitResponse(res, ipEntry.resetAt);
-
-  const account = accountForCredentials(username);
-  let passwordMatches = false;
-  if (account) {
-    try { passwordMatches = await bcrypt.compare(password, passwordHashFor(account)); } catch { passwordMatches = false; }
-  }
-  if (!account || !passwordMatches) {
-    registerFailedAttempt(key);
-    registerFailedAttempt(ipKey);
+  const account = findUserByUsername(username);
+  if (!account || !(await bcrypt.compare(password, account.passwordHash))) {
     return res.status(401).json({ error: 'Usuario o contraseña incorrectos.' });
   }
-
-  clearFailedAttempts(ip, username);
-
-  if (accountTwoFactorEnabled(account.id)) {
-    const challengeToken = crypto.randomBytes(32).toString('base64url');
-    pendingTwoFactor.set(challengeToken, {
-      accountId: account.id,
-      user: account.user,
-      role: account.role,
-      expiresAt: Date.now() + 5 * 60 * 1000
-    });
-    res.cookie('yhors_2fa_challenge', challengeToken, {
-      httpOnly: true,
-      sameSite: 'strict',
-      secure: COOKIE_SECURE,
-      maxAge: 5 * 60 * 1000,
-      path: '/'
-    });
-    return res.json({ ok: true, requiresTwoFactor: true, expiresInSeconds: 300 });
-  }
-
-  const session = createAuthenticatedSession(account);
-  res.cookie(SESSION_COOKIE, session.id, {
-    httpOnly: true,
-    sameSite: 'strict',
-    secure: COOKIE_SECURE,
-    maxAge: SESSION_TTL_MS,
-    path: '/'
-  });
-  return res.json({ ok: true, role: session.role, expiresAt: session.expiresAt, requiresTwoFactor: false });
-});
-
-app.post('/api/login/2fa', (req, res) => {
-  const challengeToken = req.cookies.yhors_2fa_challenge;
-  const code = String(req.body?.code || '').replace(/\s/g, '');
-  const ip = clientIp(req);
-  if (!challengeToken || !/^\d{6}$/.test(code)) return res.status(401).json({ error: 'Código 2FA incorrecto.' });
-
-  const challenge = pendingTwoFactor.get(challengeToken);
-  if (!challenge || challenge.expiresAt <= Date.now()) {
-    pendingTwoFactor.delete(challengeToken);
-    res.clearCookie('yhors_2fa_challenge', { httpOnly: true, sameSite: 'strict', secure: COOKIE_SECURE, path: '/' });
-    return res.status(401).json({ error: 'El desafío 2FA expiró. Inicia sesión nuevamente.' });
-  }
-
-  const key = rateLimitKey(ip, challenge.user, '2fa');
-  const entry = loginAttempts.get(key);
-  if (isRateLimited(key, LOGIN_LIMIT_MAX_ATTEMPTS)) return rateLimitResponse(res, entry.resetAt);
-
-  const record = twoFactorRecord(challenge.accountId);
-  const secret = decryptTwoFactorSecret(record?.secret);
-  if (!secret || !verifyTotp(secret, code)) {
-    registerFailedAttempt(key);
-    return res.status(401).json({ error: 'Código 2FA incorrecto.' });
-  }
-
-  clearFailedAttempts(ip, challenge.user);
-  pendingTwoFactor.delete(challengeToken);
-  res.clearCookie('yhors_2fa_challenge', { httpOnly: true, sameSite: 'strict', secure: COOKIE_SECURE, path: '/' });
-
-  const session = makeSession(challenge.user, challenge.role, challenge.accountId);
-  res.cookie(SESSION_COOKIE, session.id, {
-    httpOnly: true,
-    sameSite: 'strict',
-    secure: COOKIE_SECURE,
-    maxAge: SESSION_TTL_MS,
-    path: '/'
-  });
-  return res.json({ ok: true, role: session.role, expiresAt: session.expiresAt });
+  res.cookie('yhors_session', makeSession(account.username, account.role), { httpOnly: true, sameSite: 'strict', secure: COOKIE_SECURE, maxAge: 1000 * 60 * 60 * 12, path: '/' });
+  return res.json({ ok: true, role: account.role, username: account.username, name: account.name });
 });
 
 app.post('/api/logout', (req, res) => {
-  destroySession(req);
-  res.clearCookie('yhors_2fa_challenge', { httpOnly: true, sameSite: 'strict', secure: COOKIE_SECURE, path: '/' });
-  res.clearCookie(SESSION_COOKIE, {
-    httpOnly: true,
-    sameSite: 'strict',
-    secure: COOKIE_SECURE,
-    path: '/'
-  });
+  res.clearCookie('yhors_session', { httpOnly: true, sameSite: 'strict', secure: COOKIE_SECURE, path: '/' });
   res.json({ ok: true });
 });
 
@@ -1551,175 +1224,85 @@ app.post('/api/orders', async (req, res) => {
   return res.status(201).json({ orderNumber: order.orderNumber, status: order.status, total: order.total });
 });
 
-app.get('/api/admin/session', (req, res) => {
-  const session = getSession(req);
-  return res.json({
-    authenticated: Boolean(session),
-    username: session?.user || null,
-    role: session?.role || null,
-    expiresAt: session?.expiresAt || null
-  });
-});
-app.get('/api/security/2fa', requireOrdersAccess, (req, res) => {
-  const session = getSession(req);
-  const record = twoFactorRecord(session.accountId);
-  return res.json({ enabled: Boolean(record?.enabled), accountId: session.accountId, username: session.user });
-});
-
-app.post('/api/security/2fa/setup', requireOrdersAccess, (req, res) => {
-  const session = getSession(req);
-  const setup = createTwoFactorSetup(session.accountId, session.user);
-  return res.json({ ok: true, secret: setup.secret, otpauthUri: setup.otpauthUri, issuer: TWO_FACTOR_ISSUER, period: TWO_FACTOR_STEP_SECONDS, digits: TWO_FACTOR_DIGITS });
-});
-
-app.post('/api/security/2fa/verify', requireOrdersAccess, (req, res) => {
-  const session = getSession(req);
-  const code = String(req.body?.code || '').replace(/\s/g, '');
-  if (!/^\d{6}$/.test(code)) return res.status(400).json({ error: 'Ingresa un código de 6 dígitos.' });
-  if (!enableTwoFactor(session.accountId, session.user, code)) return res.status(400).json({ error: 'Código 2FA incorrecto. Revisa la hora de tu aplicación autenticadora.' });
-  return res.json({ ok: true, enabled: true });
-});
-
-app.post('/api/security/2fa/disable', requireOrdersAccess, async (req, res) => {
-  const session = getSession(req);
-  const password = String(req.body?.password || '');
-  const code = String(req.body?.code || '').replace(/\s/g, '');
-  const account = accountForCredentials(session.user);
-  if (!account || String(account.id) !== String(session.accountId)) return res.status(401).json({ error: 'Cuenta no encontrada.' });
-  let passwordMatches = false;
-  try { passwordMatches = await bcrypt.compare(password, passwordHashFor(account)); } catch {}
-  const record = twoFactorRecord(session.accountId);
-  const secret = decryptTwoFactorSecret(record?.secret);
-  if (!passwordMatches || !secret || !verifyTotp(secret, code)) return res.status(401).json({ error: 'Contraseña o código 2FA incorrectos.' });
-  disableTwoFactor(session.accountId);
-  return res.json({ ok: true, enabled: false });
-});
-
-app.post('/api/admin/users/:id/2fa/setup', requireAdmin, (req, res) => {
-  const id = String(req.params.id || '');
-  let username = '';
-  if (id === 'env-admin') {
-    username = String(ADMIN_USER);
-  } else {
-    const user = readUsers().find(item => item.id === id);
-    if (!user) return res.status(404).json({ error: 'Usuario no encontrado.' });
-    username = user.username;
-  }
-  const setup = createTwoFactorSetup(id, username);
-  return res.json({ ok: true, secret: setup.secret, otpauthUri: setup.otpauthUri, issuer: TWO_FACTOR_ISSUER, period: TWO_FACTOR_STEP_SECONDS, digits: TWO_FACTOR_DIGITS });
-});
-
-app.post('/api/admin/users/:id/2fa/verify', requireAdmin, (req, res) => {
-  const id = String(req.params.id || '');
-  const username = id === 'env-admin' ? String(ADMIN_USER) : (readUsers().find(item => item.id === id)?.username || '');
-  if (!username) return res.status(404).json({ error: 'Usuario no encontrado.' });
-  const code = String(req.body?.code || '').replace(/\s/g, '');
-  if (!/^\d{6}$/.test(code)) return res.status(400).json({ error: 'Ingresa un código de 6 dígitos.' });
-  if (!enableTwoFactor(id, username, code)) return res.status(400).json({ error: 'Código 2FA incorrecto. Revisa la hora de la aplicación autenticadora.' });
-  return res.json({ ok: true, enabled: true });
-});
-
-app.delete('/api/admin/users/:id/2fa', requireAdmin, (req, res) => {
-  const id = String(req.params.id || '');
-  if (id !== 'env-admin' && !readUsers().some(item => item.id === id)) return res.status(404).json({ error: 'Usuario no encontrado.' });
-  disableTwoFactor(id);
-  return res.json({ ok: true, enabled: false });
-});
-
-app.get('/api/admin/security', requireAdmin, (_, res) => res.json({
-  dataEncryption: 'AES-256-GCM',
-  ordersEncryptedAtRest: true,
-  keySource: 'YHORS_DATA_KEY environment variable',
-  sessionMode: 'server-side',
-  sessionTtlMinutes: Math.round(SESSION_TTL_MS / 60000),
-  twoFactor: 'TOTP',
-  twoFactorWindowSteps: TWO_FACTOR_WINDOW,
-  loginAttemptLimit: LOGIN_LIMIT_MAX_ATTEMPTS,
-  loginAttemptWindowMinutes: Math.round(LOGIN_LIMIT_WINDOW_MS / 60000),
-  version: 'V14'
-}));
+app.get('/api/admin/session', (req, res) => { const session = getSession(req); return res.json({ authenticated: Boolean(session), username: session?.user || null, role: session?.role || null }); });
+app.get('/api/admin/security', requireAdmin, (_, res) => res.json({ dataEncryption: 'AES-256-GCM', ordersEncryptedAtRest: true, keySource: 'YHORS_DATA_KEY environment variable', version: 'V10' }));
 
 app.get('/api/admin/users', requireAdmin, (_, res) => {
-  const users = readUsers().map(({ id, username, role, active, createdAt, updatedAt }) =>
-    ({ id, username, role, active, createdAt, updatedAt, twoFactorEnabled: accountTwoFactorEnabled(id) })
-  );
-  return res.json([{ id: 'env-admin', username: ADMIN_USER, role: 'admin', active: true, source: 'environment', twoFactorEnabled: accountTwoFactorEnabled('env-admin') }, ...users]);
+  ensureUsers();
+  return res.json(readUsers().map(publicUser));
 });
 
 app.post('/api/admin/users', requireAdmin, async (req, res) => {
-  const username = cleanText(req.body?.username, 80);
-  const password = String(req.body?.password || '');
-  const role = String(req.body?.role || 'orders').trim();
-  if (!/^[A-Za-z0-9._-]{3,80}$/.test(username)) return res.status(400).json({ error: 'El usuario debe tener entre 3 y 80 caracteres y usar solo letras, números, punto, guion o guion bajo.' });
-  if (password.length < 10) return res.status(400).json({ error: 'La contraseña debe tener al menos 10 caracteres.' });
-  if (!USER_ROLES.has(role)) return res.status(400).json({ error: 'Rol no válido.' });
-  if (username.toLowerCase() === String(ADMIN_USER).toLowerCase()) return res.status(409).json({ error: 'Ese usuario está reservado para la cuenta inicial.' });
-
+  ensureUsers();
   const users = readUsers();
-  if (users.some(u => u.username.toLowerCase() === username.toLowerCase())) return res.status(409).json({ error: 'Ese usuario ya existe.' });
-
-  const now = new Date().toISOString();
+  const result = validateNewUser(req.body || {}, users);
+  if (result.error) return res.status(400).json({ error: result.error });
+  if (!result.user.password) return res.status(400).json({ error: 'La contraseña es obligatoria al crear un usuario.' });
   const user = {
     id: crypto.randomUUID(),
-    username,
-    passwordHash: await bcrypt.hash(password, 12),
-    role,
-    active: true,
-    createdAt: now,
-    updatedAt: now
+    name: result.user.name,
+    username: result.user.username,
+    passwordHash: await bcrypt.hash(result.user.password, 12),
+    role: result.user.role,
+    active: result.user.active,
+    system: false,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
   };
   users.push(user);
   writeUsers(users);
-  return res.status(201).json({ id: user.id, username: user.username, role: user.role, active: user.active, createdAt: user.createdAt, updatedAt: user.updatedAt });
+  return res.status(201).json(publicUser(user));
 });
 
 app.put('/api/admin/users/:id', requireAdmin, async (req, res) => {
+  ensureUsers();
   const users = readUsers();
-  const index = users.findIndex(u => u.id === req.params.id);
+  const index = users.findIndex(user => user.id === req.params.id);
   if (index < 0) return res.status(404).json({ error: 'Usuario no encontrado.' });
-
   const current = users[index];
-  const username = req.body?.username === undefined ? current.username : cleanText(req.body.username, 80);
-  const role = req.body?.role === undefined ? current.role : String(req.body.role || '').trim();
-  const active = req.body?.active === undefined ? current.active : Boolean(req.body.active);
-  const password = req.body?.password === undefined ? '' : String(req.body.password || '');
+  const result = validateNewUser(req.body || {}, users, current.id);
+  if (result.error) return res.status(400).json({ error: result.error });
 
-  if (!/^[A-Za-z0-9._-]{3,80}$/.test(username)) return res.status(400).json({ error: 'Nombre de usuario no válido.' });
-  if (!USER_ROLES.has(role)) return res.status(400).json({ error: 'Rol no válido.' });
-  if (password && password.length < 10) return res.status(400).json({ error: 'La nueva contraseña debe tener al menos 10 caracteres.' });
-  if (username.toLowerCase() === String(ADMIN_USER).toLowerCase()) return res.status(409).json({ error: 'Ese usuario está reservado para la cuenta inicial.' });
-  if (users.some((u, i) => i !== index && u.username.toLowerCase() === username.toLowerCase())) return res.status(409).json({ error: 'Ese usuario ya existe.' });
-
-  const adminCount = users.filter(u => u.role === 'admin' && u.active).length + 1; // incluye env-admin
-  if (current.role === 'admin' && current.active && (!active || role !== 'admin') && adminCount <= 1) {
-    return res.status(400).json({ error: 'Debe quedar al menos una cuenta administrativa activa.' });
+  if (current.system && result.user.username !== current.username) {
+    return res.status(400).json({ error: 'Las cuentas del sistema no pueden cambiar su nombre de usuario.' });
+  }
+  if (current.role === 'admin' && result.user.role !== 'admin' && users.filter(user => user.role === 'admin' && user.active !== false).length <= 1) {
+    return res.status(400).json({ error: 'Debe existir al menos un administrador activo.' });
+  }
+  if (current.username === getSession(req)?.user && result.user.active === false) {
+    return res.status(400).json({ error: 'No puedes desactivar tu propia cuenta mientras estás conectado.' });
   }
 
-  const securityChanged = Boolean(password) || !active || role !== current.role || username !== current.username;
-  current.username = username;
-  current.role = role;
-  current.active = active;
-  current.updatedAt = new Date().toISOString();
-  if (password) current.passwordHash = await bcrypt.hash(password, 12);
-  users[index] = current;
+  const updated = {
+    ...current,
+    name: result.user.name,
+    username: result.user.username,
+    role: result.user.role,
+    active: result.user.active,
+    updatedAt: new Date().toISOString()
+  };
+  if (result.user.password) updated.passwordHash = await bcrypt.hash(result.user.password, 12);
+  users[index] = updated;
   writeUsers(users);
-  if (securityChanged) destroySessionsForAccount(current.id);
-  return res.json({ id: current.id, username: current.username, role: current.role, active: current.active, createdAt: current.createdAt, updatedAt: current.updatedAt });
+  return res.json(publicUser(updated));
 });
 
 app.delete('/api/admin/users/:id', requireAdmin, (req, res) => {
+  ensureUsers();
   const users = readUsers();
-  const index = users.findIndex(u => u.id === req.params.id);
+  const index = users.findIndex(user => user.id === req.params.id);
   if (index < 0) return res.status(404).json({ error: 'Usuario no encontrado.' });
   const target = users[index];
-  if (target.role === 'admin' && target.active && users.filter(u => u.role === 'admin' && u.active).length === 1) {
-    return res.status(400).json({ error: 'Debe quedar al menos una cuenta administrativa activa.' });
+  const session = getSession(req);
+  if (target.username === session?.user) return res.status(400).json({ error: 'No puedes eliminar tu propia cuenta.' });
+  if (target.role === 'admin' && target.active !== false && users.filter(user => user.role === 'admin' && user.active !== false).length <= 1) {
+    return res.status(400).json({ error: 'Debe existir al menos un administrador activo.' });
   }
-  writeUsers(users.filter(u => u.id !== req.params.id));
-  destroySessionsForAccount(target.id);
-  disableTwoFactor(target.id);
+  users.splice(index, 1);
+  writeUsers(users);
   return res.status(204).end();
 });
+
 
 app.get('/api/admin/orders', requireOrdersAccess, (_, res) => res.json(readOrders()));
 app.put('/api/admin/orders/:id', requireOrdersAccess, (req, res) => {
@@ -1748,7 +1331,7 @@ app.put('/api/admin/orders/:id', requireOrdersAccess, (req, res) => {
   return res.json(updated);
 });
 
-app.delete('/api/admin/orders/:id', requireOrdersAccess, (req, res) => {
+app.delete('/api/admin/orders/:id', requireAdmin, (req, res) => {
   const orders = readOrders();
   const order = orders.find(item => item.id === req.params.id);
   if (!order) return res.status(404).json({ error: 'Pedido no encontrado.' });

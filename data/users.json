@@ -1,1 +1,24 @@
-[]
+[
+  {
+    "id": "4513576a-d39e-4dd9-9b88-981902875d47",
+    "name": "Administrador principal",
+    "username": "borismy",
+    "passwordHash": "$2a$12$UH3cd0lCPYckUPgFxjswSOqsB7ro1D.V.6L4zK/FC88JvrlxPLMHa",
+    "role": "admin",
+    "active": true,
+    "system": true,
+    "createdAt": "2026-09-25T14:46:07.029Z",
+    "updatedAt": "2026-09-25T14:46:07.029Z"
+  },
+  {
+    "id": "48963266-8ee0-4f32-8a0f-465fad6b80cd",
+    "name": "Maria la del Barrio",
+    "username": "maribar",
+    "passwordHash": "$2a$12$52X77b7t8uQ8EzGlT1xaKe5FVyvyh89kxMMOK2Hf7VGEhHfOxofQa",
+    "role": "orders",
+    "active": true,
+    "system": false,
+    "createdAt": "2026-09-25T14:54:18.492Z",
+    "updatedAt": "2026-09-25T14:54:18.492Z"
+  }
+]

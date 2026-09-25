@@ -660,52 +660,13 @@ function ordersListMarkup(orders = [], options = {}) {
     </div>
   </article>`).join('');
 }
-async function renderAdminUsers() {
-  const session = await request('/api/admin/session').catch(() => ({ authenticated: false }));
-  if (!session.authenticated) return renderLogin();
-  if (session.role !== 'admin') return renderAdminOrders();
-  const users = await request('/api/admin/users').catch(() => []);
-  app.innerHTML = `<main class="admin-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Administración</h1><p class="admin-subtitle">Control de usuarios y accesos</p></div><button class="button secondary" id="logout">Cerrar sesión</button></div><nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}" class="admin-section-link">PÁGINA WEB</a><a href="${ADMIN_PATH}/usuarios" class="admin-section-link active">USUARIOS</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link">PEDIDOS</a></nav>${userManagementPanel(users)}</div></main>`;
-  const userPanel = document.querySelector('#userManagementPanel');
-  const renderUsers = (items) => {
-    const list = userPanel?.querySelector('#adminUsersList');
-    if (!list) return;
-    list.innerHTML = items.map(user => `<article class="admin-user-row"><div><strong>${escapeHTML(user.username)}</strong><span>${user.role === 'admin' ? 'Administrador' : (user.role === 'store_manager' ? 'Jefe de tienda' : 'Pedidos')} · ${user.active ? 'Activo' : 'Desactivado'}${user.source === 'environment' ? ' · Cuenta inicial' : ''}</span></div><div class="admin-actions"><button class="button secondary small" data-user-2fa="${escapeHTML(user.id)}">${user.twoFactorEnabled ? '2FA activo' : 'Configurar 2FA'}</button>${user.source === 'environment' ? '' : `<button class="button secondary small" data-user-toggle="${escapeHTML(user.id)}">${user.active ? 'Desactivar' : 'Activar'}</button><button class="button danger small" data-user-delete="${escapeHTML(user.id)}">Eliminar</button>`}</div></article>`).join('') || '<div class="empty">No hay usuarios adicionales.</div>';
-    list.querySelectorAll('[data-user-2fa]').forEach(button => button.addEventListener('click', async () => {
-      const target = items.find(u => u.id === button.dataset.user2fa); if (!target) return;
-      try {
-        if (target.twoFactorEnabled) { if (!confirm(`¿Desactivar 2FA para “${target.username}”?`)) return; await request(`/api/admin/users/${encodeURIComponent(target.id)}/2fa`, { method: 'DELETE' }); target.twoFactorEnabled = false; renderUsers(items); return; }
-        const setup = await request(`/api/admin/users/${encodeURIComponent(target.id)}/2fa/setup`, { method: 'POST' });
-        alert(`Configura el autenticador para ${target.username}.\n\nSecreto: ${setup.secret}\n\nTambién puedes usar este URI otpauth si tu aplicación permite importarlo:\n${setup.otpauthUri}\n\nDespués pulsa Aceptar y escribe el código de 6 dígitos.`);
-        const code = prompt('Código 2FA de 6 dígitos:'); if (!code) return;
-        await request(`/api/admin/users/${encodeURIComponent(target.id)}/2fa/verify`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code }) });
-        target.twoFactorEnabled = true; renderUsers(items); alert('2FA activado correctamente.');
-      } catch (e) { alert(e.message); }
-    }));
-    list.querySelectorAll('[data-user-toggle]').forEach(button => button.addEventListener('click', async () => {
-      const target = items.find(u => u.id === button.dataset.userToggle); if (!target) return;
-      try { const updated = await request(`/api/admin/users/${encodeURIComponent(target.id)}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ active: !target.active }) }); const i=items.findIndex(u=>u.id===updated.id); items[i]=updated; renderUsers(items); } catch(e){ alert(e.message); }
-    }));
-    list.querySelectorAll('[data-user-delete]').forEach(button => button.addEventListener('click', async () => {
-      const target = items.find(u => u.id === button.dataset.userDelete); if (!target || !confirm(`¿Eliminar el usuario “${target.username}”?`)) return;
-      try { await request(`/api/admin/users/${encodeURIComponent(target.id)}`, {method:'DELETE'}); renderUsers(items.filter(u=>u.id!==target.id)); } catch(e){ alert(e.message); }
-    }));
-  };
-  renderUsers(users);
-  userPanel?.querySelector('#createUserForm')?.addEventListener('submit', async event => {
-    event.preventDefault(); const form=event.currentTarget; const data=Object.fromEntries(new FormData(form));
-    try { const created=await request('/api/admin/users',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}); users.push(created); renderUsers(users); form.reset(); form.querySelector('[name="role"]').value='orders'; form.querySelector('[name="username"]').focus(); } catch(e) { alert(e.message); }
-  });
-  document.querySelector('#logout')?.addEventListener('click', async () => { try { await request('/api/logout',{method:'POST'}); } finally { renderLogin(); } });
-}
-
 async function renderAdminOrders() {
   const session = await request('/api/admin/session').catch(() => ({ authenticated: false }));
   if (!session.authenticated) return renderLogin();
   let orders = await request('/api/admin/orders').catch(() => []);
   const sectionNav = (session.role === 'orders' || session.role === 'store_manager')
     ? `<nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}/pedidos" class="admin-section-link active">PEDIDOS</a></nav>`
-    : `<nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}" class="admin-section-link">PÁGINA WEB</a><a href="${ADMIN_PATH}/usuarios" class="admin-section-link">USUARIOS</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link active">PEDIDOS</a></nav>`;
+    : `<nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}" class="admin-section-link">PÁGINA WEB</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link active">PEDIDOS</a><a href="${ADMIN_PATH}/usuarios" class="admin-section-link">USUARIOS</a></nav>`;
   app.innerHTML = `<main class="admin-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">${(session.role === 'orders' || session.role === 'store_manager') ? 'Gestión de pedidos' : 'Administración'}</h1><p class="admin-subtitle">${session.role === 'orders' ? 'Panel exclusivo para pedidos de YHORS STORE' : (session.role === 'store_manager' ? 'Jefe de tienda · pedidos y control operativo' : 'Gestión de YHORS STORE')}</p></div><div class="admin-top-actions"><button class="button secondary" id="ordersLogout">Cerrar sesión</button></div></div>${sectionNav}${ordersPanel(orders, session.role === 'admin' || session.role === 'store_manager')}</div></main>`;
   const drawOrders = () => {
     const list=document.querySelector('#adminOrdersList'); if(!list) return;
@@ -788,6 +749,155 @@ async function renderAdminOrders() {
 }
 
 
+
+function userRoleLabel(role) {
+  return role === 'admin' ? 'Administrador' : (role === 'store_manager' ? 'Jefe de tienda' : 'Ventas / Pedidos');
+}
+
+function usersPanel(users = []) {
+  const rows = users.map(user => `<article class="admin-user-card ${user.active ? '' : 'is-disabled'}">
+    <div class="admin-user-main">
+      <div class="admin-user-avatar">${escapeHTML((user.name || user.username || '?').slice(0,1).toUpperCase())}</div>
+      <div>
+        <strong>${escapeHTML(user.name || 'Sin nombre')}</strong>
+        <span>@${escapeHTML(user.username)}</span>
+        <small>${escapeHTML(userRoleLabel(user.role))} · ${user.active ? 'Activo' : 'Desactivado'}${user.system ? ' · Cuenta del sistema' : ''}</small>
+      </div>
+    </div>
+    <div class="admin-user-actions">
+      <button class="button secondary small" type="button" data-user-edit="${escapeHTML(user.id)}">Editar</button>
+      ${!user.system ? `<button class="button danger small" type="button" data-user-delete="${escapeHTML(user.id)}">Eliminar</button>` : ''}
+    </div>
+  </article>`).join('');
+
+  return `<section class="admin-panel users-panel" id="usersPanel">
+    <div class="section-heading">
+      <div><span class="eyebrow">Seguridad y acceso</span><h2>Usuarios</h2></div>
+      <p>Crea y administra las cuentas que pueden entrar al panel de YHORS.</p>
+    </div>
+    <div class="users-layout">
+      <form id="userForm" class="user-form">
+        <input type="hidden" id="userId" name="id" value="">
+        <div class="user-form-heading">
+          <strong id="userFormTitle">Crear usuario</strong>
+          <button class="button secondary small" id="userCancelEdit" type="button" hidden>Cancelar</button>
+        </div>
+        <div class="form-grid">
+          <div class="field full"><label for="userName">Nombre completo</label><input id="userName" name="name" maxlength="100" required placeholder="Ej. Juan Pérez"></div>
+          <div class="field"><label for="userUsername">Nombre de usuario</label><input id="userUsername" name="username" minlength="3" maxlength="40" pattern="[A-Za-z0-9._-]{3,40}" required placeholder="juan.ventas" autocomplete="off"><small class="field-help">Sin espacios. Usa letras, números, punto, guion o guion bajo.</small></div>
+          <div class="field"><label for="userPassword">Contraseña <span id="userPasswordHint"></span></label><input id="userPassword" name="password" type="password" minlength="8" maxlength="200" placeholder="Mínimo 8 caracteres" autocomplete="new-password"><small class="field-help">La contraseña se guarda cifrada mediante hash; nunca se muestra en la lista.</small></div>
+          <div class="field"><label for="userRole">Rol</label><select id="userRole" name="role"><option value="orders">Ventas / Pedidos</option><option value="store_manager">Jefe de tienda</option><option value="admin">Administrador</option></select></div>
+          <div class="field"><label for="userActive">Estado</label><select id="userActive" name="active"><option value="true">Activo</option><option value="false">Desactivado</option></select></div>
+        </div>
+        <div id="userMessage" class="message" hidden></div>
+        <div class="form-actions"><button class="button primary" id="userSubmit" type="submit">Crear usuario</button></div>
+      </form>
+      <div class="users-list-wrap">
+        <div class="users-list-head"><div><span class="eyebrow">Cuentas existentes</span><strong id="usersCount">${users.length} usuario(s)</strong></div></div>
+        <div id="adminUsersList">${rows || '<p class="backup-empty">No hay usuarios registrados.</p>'}</div>
+      </div>
+    </div>
+  </section>`;
+}
+
+async function renderAdminUsers() {
+  const session = await request('/api/admin/session').catch(() => ({ authenticated: false }));
+  if (!session.authenticated) return renderLogin();
+  if (session.role !== 'admin') return renderAdminOrders();
+
+  let users = await request('/api/admin/users').catch(() => []);
+  app.innerHTML = `<main class="admin-shell"><div class="admin-wrap">
+    <div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Administración</h1><p class="admin-subtitle">Control de usuarios y accesos</p></div><div class="admin-top-actions"><button class="button secondary" id="usersLogout">Cerrar sesión</button></div></div>
+    <nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}" class="admin-section-link">PÁGINA WEB</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link">PEDIDOS</a><a href="${ADMIN_PATH}/usuarios" class="admin-section-link active">USUARIOS</a></nav>
+    ${usersPanel(users)}
+  </div></main>`;
+
+  const form = document.querySelector('#userForm');
+  const message = document.querySelector('#userMessage');
+  const submit = document.querySelector('#userSubmit');
+  const cancel = document.querySelector('#userCancelEdit');
+
+  const resetForm = () => {
+    form.reset();
+    document.querySelector('#userId').value = '';
+    document.querySelector('#userRole').value = 'orders';
+    document.querySelector('#userActive').value = 'true';
+    document.querySelector('#userPassword').required = true;
+    document.querySelector('#userPasswordHint').textContent = '';
+    document.querySelector('#userFormTitle').textContent = 'Crear usuario';
+    submit.textContent = 'Crear usuario';
+    cancel.hidden = true;
+    message.hidden = true;
+    message.textContent = '';
+  };
+
+  const editUser = user => {
+    document.querySelector('#userId').value = user.id;
+    document.querySelector('#userName').value = user.name || '';
+    document.querySelector('#userUsername').value = user.username || '';
+    document.querySelector('#userUsername').disabled = Boolean(user.system);
+    document.querySelector('#userPassword').value = '';
+    document.querySelector('#userPassword').required = false;
+    document.querySelector('#userPasswordHint').textContent = '(dejar vacío para conservarla)';
+    document.querySelector('#userRole').value = user.role;
+    document.querySelector('#userActive').value = String(user.active);
+    document.querySelector('#userFormTitle').textContent = 'Editar usuario';
+    submit.textContent = 'Guardar cambios';
+    cancel.hidden = false;
+    message.hidden = true;
+    form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  document.querySelector('#adminUsersList')?.querySelectorAll('[data-user-edit]').forEach(button => button.addEventListener('click', () => {
+    const user = users.find(item => item.id === button.dataset.userEdit);
+    if (user) editUser(user);
+  }));
+
+  document.querySelector('#adminUsersList')?.querySelectorAll('[data-user-delete]').forEach(button => button.addEventListener('click', async () => {
+    const user = users.find(item => item.id === button.dataset.userDelete);
+    if (!user || !confirm(`¿Eliminar el usuario “${user.name}” (@${user.username})? Esta acción no se puede deshacer.`)) return;
+    try {
+      await request(`/api/admin/users/${user.id}`, { method: 'DELETE' });
+      users = users.filter(item => item.id !== user.id);
+      await renderAdminUsers();
+    } catch (error) { alert(error.message); }
+  }));
+
+  cancel?.addEventListener('click', resetForm);
+  document.querySelector('#usersLogout')?.addEventListener('click', async () => { await request('/api/logout', { method: 'POST' }); renderLogin(); });
+
+  form?.addEventListener('submit', async event => {
+    event.preventDefault();
+    const formData = new FormData(form);
+    const id = String(formData.get('id') || '');
+    const payload = {
+      name: String(formData.get('name') || ''),
+      username: String(formData.get('username') || ''),
+      password: String(formData.get('password') || ''),
+      role: String(formData.get('role') || 'orders'),
+      active: String(formData.get('active')) === 'true'
+    };
+    if (!id && !payload.password) {
+      message.hidden = false; message.className = 'message error'; message.textContent = 'La contraseña es obligatoria al crear un usuario.'; return;
+    }
+    submit.disabled = true;
+    message.hidden = true;
+    try {
+      const saved = await request(id ? `/api/admin/users/${id}` : '/api/admin/users', {
+        method: id ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (id) users = users.map(user => user.id === saved.id ? saved : user);
+      else users = [...users, saved];
+      await renderAdminUsers();
+    } catch (error) {
+      message.hidden = false; message.className = 'message error'; message.textContent = error.message;
+      submit.disabled = false;
+    }
+  });
+}
+
 function backupPanel(data = null) {
   const persistent = data?.storageMode === 'persistent';
   const backups = Array.isArray(data?.backups) ? data.backups : [];
@@ -851,24 +961,10 @@ function formatBackupDate(value) {
   return `${parts.day}-${parts.month}-${parts.year}-${parts.hour}${parts.minute}`;
 }
 
-function userManagementPanel(users) {
-  return `<section class="admin-panel user-management-panel" id="userManagementPanel">
-    <span class="eyebrow">Seguridad · V14</span><h2>Usuarios y accesos</h2>
-    <p class="admin-panel-copy">Crea cuentas adicionales sin guardarlas en el <code>.env</code>. Las contraseñas se almacenan únicamente como hash.</p>
-    <form id="createUserForm" class="form-grid user-create-form">
-      <div class="field"><label for="newUsername">Usuario</label><input id="newUsername" name="username" autocomplete="off" minlength="3" maxlength="80" pattern="[A-Za-z0-9._-]{3,80}" required></div>
-      <div class="field"><label for="newUserPassword">Contraseña</label><input id="newUserPassword" name="password" type="password" autocomplete="new-password" minlength="10" required></div>
-      <div class="field"><label for="newUserRole">Rol</label><select id="newUserRole" name="role"><option value="orders">Pedidos</option><option value="store_manager">Jefe de tienda</option><option value="admin">Administrador</option></select></div>
-      <div class="form-actions"><button class="button" type="submit">Crear usuario</button></div>
-    </form>
-    <div id="adminUsersList" class="admin-users-list"></div>
-  </section>`;
-}
-
 async function renderAdmin() {
-  const session = await request('/api/admin/session').catch(() => ({ authenticated: false })); if (!session.authenticated) return renderLogin(); if (session.role === 'orders' || session.role === 'store_manager') return renderAdminOrders();
+  const session = await request('/api/admin/session').catch(() => ({ authenticated: false })); if (!session.authenticated) return renderLogin(); if (session.role === 'orders') return renderAdminOrders();
   let products = await request('/api/admin/products').catch(() => []); let classifications = await request('/api/admin/classifications').catch(() => ({ brands: {}, productTypes: {} })); let settings = await request('/api/admin/storefront').catch(() => ({ heroProductIds: [], featuredProductIds: [] })); let editing = null;
-  const backupState = await request('/api/admin/backups').catch(() => ({ storageMode: 'local', backups: [], retention: 30 })); const users = await request('/api/admin/users').catch(() => []);
+  const backupState = await request('/api/admin/backups').catch(() => ({ storageMode: 'local', backups: [], retention: 30 }));
   app.innerHTML = `<main class="admin-shell"><aside class="admin-quick-nav" aria-label="Navegación rápida">
     <strong>YHORS</strong>
     <button type="button" data-admin-scroll="backupPanel">Backup</button>
@@ -876,7 +972,7 @@ async function renderAdmin() {
     <button type="button" data-admin-scroll="classificationPanel">Categorías</button>
     <button type="button" data-admin-scroll="productEditorPanel">Producto</button>
     <button type="button" data-admin-scroll="inventoryPanel">Inventario</button>
-  </aside><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Administración</h1></div><button class="button secondary" id="logout">Cerrar sesión</button></div><nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}" class="admin-section-link active">PÁGINA WEB</a><a href="${ADMIN_PATH}/usuarios" class="admin-section-link">USUARIOS</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link">PEDIDOS</a></nav>${backupPanel(backupState)}${selectionPanel(products, settings)}${classificationPanel(classifications)}<section class="admin-panel product-editor-panel" id="productEditorPanel"><span class="eyebrow">Catálogo</span><h2 id="formTitle">Agregar producto</h2><div id="formArea"></div></section><section class="admin-products" id="inventoryPanel"><div class="section-heading inventory-heading"><div><span class="eyebrow">Inventario</span><h2>Productos publicados (${products.length})</h2></div><p>Edita datos, imágenes, portada y destacados.</p></div><div class="inventory-toolbar"><label class="inventory-search"><span aria-hidden="true">⌕</span><input id="inventorySearch" type="search" placeholder="Buscar por nombre, SKU, marca o categoría…" autocomplete="off"><button id="clearInventorySearch" type="button" aria-label="Limpiar búsqueda">×</button></label><span class="inventory-count" id="inventoryCount">${products.length} productos</span></div><div id="adminProducts"></div></section></div></main>`;
+  </aside><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Administración</h1></div><button class="button secondary" id="logout">Cerrar sesión</button></div><nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}" class="admin-section-link active">PÁGINA WEB</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link">PEDIDOS</a><a href="${ADMIN_PATH}/usuarios" class="admin-section-link">USUARIOS</a></nav>${backupPanel(backupState)}${selectionPanel(products, settings)}${classificationPanel(classifications)}<section class="admin-panel product-editor-panel" id="productEditorPanel"><span class="eyebrow">Catálogo</span><h2 id="formTitle">Agregar producto</h2><div id="formArea"></div></section><section class="admin-products" id="inventoryPanel"><div class="section-heading inventory-heading"><div><span class="eyebrow">Inventario</span><h2>Productos publicados (${products.length})</h2></div><p>Edita datos, imágenes, portada y destacados.</p></div><div class="inventory-toolbar"><label class="inventory-search"><span aria-hidden="true">⌕</span><input id="inventorySearch" type="search" placeholder="Buscar por nombre, SKU, marca o categoría…" autocomplete="off"><button id="clearInventorySearch" type="button" aria-label="Limpiar búsqueda">×</button></label><span class="inventory-count" id="inventoryCount">${products.length} productos</span></div><div id="adminProducts"></div></section></div></main>`;
   const quickNav = document.querySelector('.admin-quick-nav');
   quickNav?.querySelectorAll('[data-admin-scroll]').forEach(button => button.addEventListener('click', () => {
     const target = document.getElementById(button.dataset.adminScroll);
@@ -1271,47 +1367,10 @@ async function renderAdmin() {
     quickTargets.forEach(item => observer.observe(item.target));
   }
 }
-function renderLogin(twoFactorMode = false) {
-  app.innerHTML = twoFactorMode
-    ? `<main class="login-page"><section class="login-card"><a class="brand" href="/">YHORS</a><span class="eyebrow">Verificación en dos pasos</span><h1>Confirma tu acceso</h1><p>Abre tu aplicación autenticadora e ingresa el código de 6 dígitos.</p><form id="twoFactorForm" class="form-grid"><div class="field full"><label for="twoFactorCode">Código 2FA</label><input id="twoFactorCode" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" minlength="6" required autofocus></div><div class="form-actions"><button class="button" type="submit">Verificar</button><button class="button secondary" type="button" id="backToLogin">Volver</button><span class="message" id="loginMessage"></span></div></form></section></main>`
-    : `<main class="login-page"><section class="login-card"><a class="brand" href="/">YHORS</a><span class="eyebrow">Panel privado</span><h1>Acceso a YHORS</h1><p>Ingresa con tu cuenta autorizada para continuar.</p><form id="loginForm" class="form-grid"><div class="field full"><label for="username">Usuario</label><input id="username" name="username" autocomplete="username" required></div><div class="field full"><label for="password">Contraseña</label><input id="password" name="password" type="password" autocomplete="current-password" required></div><div class="form-actions"><button class="button" type="submit">Iniciar sesión</button><span class="message" id="loginMessage"></span></div></form></section></main>`;
-
-  if (twoFactorMode) {
-    document.querySelector('#twoFactorForm').addEventListener('submit', async e => {
-      e.preventDefault();
-      const form = e.currentTarget;
-      const message = document.querySelector('#loginMessage');
-      try {
-        const result = await request('/api/login/2fa', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.fromEntries(new FormData(form))) });
-        const session = await request('/api/admin/session');
-        (session.role === 'orders' || session.role === 'store_manager') ? renderAdminOrders() : renderAdmin();
-      } catch (error) {
-        message.className = 'message error';
-        message.textContent = error.message;
-      }
-    });
-    document.querySelector('#backToLogin').addEventListener('click', () => renderLogin(false));
-    return;
-  }
-
-  document.querySelector('#loginForm').addEventListener('submit', async e => {
-    e.preventDefault();
-    const form = e.currentTarget;
-    const message = document.querySelector('#loginMessage');
-    try {
-      const result = await request('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.fromEntries(new FormData(form))) });
-      if (result.requiresTwoFactor) return renderLogin(true);
-      const session = await request('/api/admin/session');
-      (session.role === 'orders' || session.role === 'store_manager') ? renderAdminOrders() : renderAdmin();
-    } catch (error) {
-      message.className = 'message error';
-      message.textContent = error.message;
-    }
-  });
-}
+function renderLogin() { app.innerHTML = `<main class="login-page"><section class="login-card"><a class="brand" href="/">YHORS</a><span class="eyebrow">Panel privado</span><h1>Acceso a YHORS</h1><p>Ingresa con la cuenta de administración para actualizar el catálogo.</p><form id="loginForm" class="form-grid"><div class="field full"><label for="username">Usuario</label><input id="username" name="username" autocomplete="username" required></div><div class="field full"><label for="password">Contraseña</label><input id="password" name="password" type="password" autocomplete="current-password" required></div><div class="form-actions"><button class="button" type="submit">Iniciar sesión</button><span class="message" id="loginMessage"></span></div></form></section></main>`; document.querySelector('#loginForm').addEventListener('submit', async e => { e.preventDefault(); const form = e.currentTarget; const message = document.querySelector('#loginMessage'); try { await request('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.fromEntries(new FormData(form))) }); const session = await request('/api/admin/session'); (session.role === 'orders' || session.role === 'store_manager') ? renderAdminOrders() : renderAdmin(); } catch (error) { message.className = 'message error'; message.textContent = error.message; } }); }
 
 window.addEventListener('popstate', () => renderStore());
-if (window.location.pathname === ADMIN_PATH || window.location.pathname === `${ADMIN_PATH}/`) renderAdmin(); else if (window.location.pathname === `${ADMIN_PATH}/usuarios` || window.location.pathname === `${ADMIN_PATH}/usuarios/`) renderAdminUsers(); else if (window.location.pathname === `${ADMIN_PATH}/jefe-de-tienda` || window.location.pathname === `${ADMIN_PATH}/jefe-de-tienda/`) renderAdminOrders(); else if (window.location.pathname === `${ADMIN_PATH}/pedidos` || window.location.pathname === `${ADMIN_PATH}/pedidos/`) renderAdminOrders(); else if (window.location.pathname === '/pedido' || window.location.pathname === '/pedido/') checkoutPage(); else renderStore();
+if (window.location.pathname === ADMIN_PATH || window.location.pathname === `${ADMIN_PATH}/`) renderAdmin(); else if (window.location.pathname === `${ADMIN_PATH}/pedidos` || window.location.pathname === `${ADMIN_PATH}/pedidos/`) renderAdminOrders(); else if (window.location.pathname === `${ADMIN_PATH}/usuarios` || window.location.pathname === `${ADMIN_PATH}/usuarios/`) renderAdminUsers(); else if (window.location.pathname === '/pedido' || window.location.pathname === '/pedido/') checkoutPage(); else renderStore();
 
 document.addEventListener('change', e => { const file=e.target.closest('input[type=file][id^=\"imageFile\"]'); if(!file)return; const num=file.id==='imageFile'?1:Number(file.id.replace('imageFile','')); const preview=document.querySelector(`#productImagePreview${num}`); if(preview&&file.files?.[0]){const r=new FileReader();r.onload=()=>preview.src=r.result;r.readAsDataURL(file.files[0]);}});
 document.addEventListener('input', e => { const input=e.target.closest('input[type=url][id^=\"image\"]'); if(!input)return; const num=input.id==='image'?1:Number(input.id.replace('image','')); const preview=document.querySelector(`#productImagePreview${num}`); if(preview&&input.value.trim())preview.src=input.value.trim();});
