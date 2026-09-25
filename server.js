@@ -1618,22 +1618,6 @@ app.post('/api/passkey/login', async (req, res) => {
   } catch (error) { return res.status(401).json({ error: 'No se pudo verificar la Passkey.' }); }
 });
 
-app.put('/api/me/password', requireLogin, async (req, res) => {
-  const session = getSession(req); const users = readUsers(); const index = users.findIndex(item => item.id === session.accountId);
-  if (index < 0) return res.status(404).json({ error: 'Usuario no encontrado.' });
-  const currentPassword = String(req.body?.currentPassword || ''); const newPassword = String(req.body?.newPassword || '');
-  if (newPassword.length < 8 || newPassword.length > 200) return res.status(400).json({ error: 'La nueva contraseña debe tener al menos 8 caracteres.' });
-  if (!currentPassword) return res.status(400).json({ error: 'Ingresa tu contraseña actual.' });
-  const ok = await bcrypt.compare(currentPassword, users[index].passwordHash || '');
-  if (!ok) return res.status(401).json({ error: 'La contraseña actual no es correcta.' });
-  users[index].passwordHash = await bcrypt.hash(newPassword, 12); users[index].updatedAt = new Date().toISOString(); writeUsers(users);
-  const accountId = users[index].id;
-  destroySessionsForAccount(accountId);
-  const freshSession = makeSession(users[index].username, users[index].role, accountId);
-  setSessionCookie(res, freshSession);
-  return res.json({ ok: true, expiresAt: freshSession.expiresAt });
-});
-
 app.get('/api/me', (req, res) => {
   const session = getSession(req); if (!session) return res.status(401).json({ error: 'No autorizado.' });
   const user = readUsers().find(item => item.id === session.accountId); if (!user) return res.status(404).json({ error: 'Usuario no encontrado.' });

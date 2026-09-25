@@ -1527,3 +1527,12 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}.brand{letter-sp
 .login-attempts.locked{color:#9b352b;font-weight:750}
 .login-attempts.permanent{font-weight:800}
 #loginSubmit:disabled,#passkeyLogin:disabled{opacity:.55;cursor:not-allowed;transform:none}
+
+
+/* V14.5 · Mi cuenta solo lectura + login perfectamente centrado */
+.account-readonly .field input[disabled]{color:var(--ink);opacity:1;background:#faf9f6;cursor:default}
+.login-card .form-actions{grid-column:1/-1;width:100%;display:grid;grid-template-columns:minmax(0,360px);justify-content:center;justify-items:stretch;gap:12px;margin-top:22px}
+.login-card .form-actions .button{width:100%;min-height:58px;display:flex;align-items:center;justify-content:center;box-sizing:border-box;margin:0}
+.login-card .form-actions .message{width:100%;text-align:center;box-sizing:border-box}
+.login-card #passkeyLogin{min-height:58px}
+@media(max-width:560px){.login-card .form-actions{grid-template-columns:1fr}.login-card .form-actions .button{min-height:54px}}
