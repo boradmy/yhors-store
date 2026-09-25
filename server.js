@@ -52,7 +52,9 @@ const TWO_FACTOR_WINDOW = 1;
 const TWO_FACTOR_SECRET_KEY = crypto.createHash('sha256').update(`${SESSION_SECRET}|YHORS-V14-2FA`, 'utf8').digest();
 const LOGIN_LIMIT_WINDOW_MS = 15 * 60 * 1000;
 const LOGIN_LIMIT_MAX_ATTEMPTS = 5;
-const LOGIN_IP_LIMIT_MAX_ATTEMPTS = 30;
+const LOGIN_IP_LIMIT_MAX_ATTEMPTS = 100;
+const ACCOUNT_LOGIN_ATTEMPTS_BEFORE_LOCK = 4;
+const ACCOUNT_LOCKOUT_STAGES_MS = [3 * 60 * 1000, 5 * 60 * 1000, 10 * 60 * 1000, 15 * 60 * 1000];
 const loginAttempts = new Map();
 const pendingTwoFactor = new Map();
 const pendingWebAuthn = new Map();
@@ -183,8 +185,8 @@ function readSecurity() {
   try {
     const parsed = JSON.parse(fs.readFileSync(SECURITY_FILE, 'utf8'));
     return parsed && typeof parsed === 'object'
-      ? { twoFactor: parsed.twoFactor && typeof parsed.twoFactor === 'object' ? parsed.twoFactor : {}, passkeys: parsed.passkeys && typeof parsed.passkeys === 'object' ? parsed.passkeys : {}, passkeyPolicy: parsed.passkeyPolicy && typeof parsed.passkeyPolicy === 'object' ? parsed.passkeyPolicy : {} }
-      : { twoFactor: {}, passkeys: {}, passkeyPolicy: {} };
+      ? { twoFactor: parsed.twoFactor && typeof parsed.twoFactor === 'object' ? parsed.twoFactor : {}, passkeys: parsed.passkeys && typeof parsed.passkeys === 'object' ? parsed.passkeys : {}, passkeyPolicy: parsed.passkeyPolicy && typeof parsed.passkeyPolicy === 'object' ? parsed.passkeyPolicy : {}, loginProtection: parsed.loginProtection && typeof parsed.loginProtection === 'object' ? parsed.loginProtection : {} }
+      : { twoFactor: {}, passkeys: {}, passkeyPolicy: {}, loginProtection: {} };
   } catch {
     return { twoFactor: {}, passkeys: {}, passkeyPolicy: {} };
   }
@@ -197,7 +199,7 @@ function writeSecurity(value) {
 }
 
 function ensureSecurityFile() {
-  if (!fs.existsSync(SECURITY_FILE)) writeSecurity({ twoFactor: {}, passkeys: {}, passkeyPolicy: {} });
+  if (!fs.existsSync(SECURITY_FILE)) writeSecurity({ twoFactor: {}, passkeys: {}, passkeyPolicy: {}, loginProtection: {} });
 }
 
 function readPasskeyStore() {
@@ -391,6 +393,71 @@ function registerFailedAttempt(key) {
 function clearFailedAttempts(ip, username) {
   loginAttempts.delete(rateLimitKey(ip, username));
   loginAttempts.delete(`login-ip:${ip}`);
+}
+
+function loginProtectionRecord(accountId) {
+  const security = readSecurity();
+  const raw = security.loginProtection[String(accountId)];
+  if (!raw || typeof raw !== 'object') return { failures: 0, stage: 0, lockedUntil: 0, permanentlyLocked: false };
+  return {
+    failures: Math.max(0, Number.parseInt(raw.failures || 0, 10) || 0),
+    stage: Math.max(0, Number.parseInt(raw.stage || 0, 10) || 0),
+    lockedUntil: Math.max(0, Number.parseInt(raw.lockedUntil || 0, 10) || 0),
+    permanentlyLocked: raw.permanentlyLocked === true
+  };
+}
+
+function writeLoginProtection(accountId, record) {
+  const security = readSecurity();
+  if (!security.loginProtection || typeof security.loginProtection !== 'object') security.loginProtection = {};
+  security.loginProtection[String(accountId)] = { ...record, updatedAt: new Date().toISOString() };
+  writeSecurity(security);
+}
+
+function clearLoginProtection(accountId) {
+  const security = readSecurity();
+  if (security.loginProtection && Object.prototype.hasOwnProperty.call(security.loginProtection, String(accountId))) {
+    delete security.loginProtection[String(accountId)];
+    writeSecurity(security);
+  }
+}
+
+function loginProtectionStatus(accountId) {
+  const record = loginProtectionRecord(accountId);
+  const now = Date.now();
+  if (record.permanentlyLocked) return { locked: true, permanent: true, remainingSeconds: 0, failures: record.failures, stage: record.stage };
+  if (record.lockedUntil > now) return { locked: true, permanent: false, remainingSeconds: Math.ceil((record.lockedUntil - now) / 1000), failures: record.failures, stage: record.stage };
+  if (record.lockedUntil && record.lockedUntil <= now) {
+    record.lockedUntil = 0;
+    record.failures = 0;
+    writeLoginProtection(accountId, record);
+  }
+  return { locked: false, permanent: false, remainingSeconds: 0, failures: record.failures, stage: record.stage };
+}
+
+function registerAccountPasswordFailure(accountId) {
+  const record = loginProtectionRecord(accountId);
+  const now = Date.now();
+  if (record.permanentlyLocked) return loginProtectionStatus(accountId);
+  if (record.lockedUntil > now) return loginProtectionStatus(accountId);
+  if (record.lockedUntil && record.lockedUntil <= now) record.lockedUntil = 0;
+  if (record.failures < ACCOUNT_LOGIN_ATTEMPTS_BEFORE_LOCK) {
+    record.failures += 1;
+    writeLoginProtection(accountId, record);
+    return { locked: false, permanent: false, remainingSeconds: 0, failures: record.failures, stage: record.stage, attemptsRemaining: ACCOUNT_LOGIN_ATTEMPTS_BEFORE_LOCK - record.failures };
+  }
+  if (record.stage >= ACCOUNT_LOCKOUT_STAGES_MS.length) {
+    record.permanentlyLocked = true;
+    record.lockedUntil = 0;
+    writeLoginProtection(accountId, record);
+    return { locked: true, permanent: true, remainingSeconds: 0, failures: record.failures, stage: record.stage };
+  }
+  const duration = ACCOUNT_LOCKOUT_STAGES_MS[record.stage];
+  record.stage += 1;
+  record.failures = 0;
+  record.lockedUntil = now + duration;
+  writeLoginProtection(accountId, record);
+  return { locked: true, permanent: false, remainingSeconds: Math.ceil(duration / 1000), failures: 0, stage: record.stage };
 }
 
 function rateLimitResponse(res, resetAt) {
@@ -1618,6 +1685,19 @@ app.delete('/api/admin/users/:id/passkeys', requireAdmin, (req, res) => {
   const store = readPasskeyStore(); store.passkeys[user.id] = []; writePasskeyStore(store); destroySessionsForAccount(user.id); return res.json(publicUser(user));
 });
 
+app.post('/api/provider/reset-login-lock', (req, res) => {
+  const configuredToken = String(process.env.PROVIDER_RESET_TOKEN || '').trim();
+  const suppliedToken = String(req.get('x-provider-reset-token') || req.body?.providerToken || '').trim();
+  if (!configuredToken || configuredToken.length < 32 || !suppliedToken || Buffer.byteLength(suppliedToken) !== Buffer.byteLength(configuredToken) || !crypto.timingSafeEqual(Buffer.from(suppliedToken), Buffer.from(configuredToken))) {
+    return res.status(403).json({ error: 'No autorizado.' });
+  }
+  const username = normalizeUsername(req.body?.username);
+  const user = findUserByUsername(username);
+  if (!user) return res.status(404).json({ error: 'Usuario no encontrado.' });
+  clearLoginProtection(user.id);
+  return res.json({ ok: true, username: user.username });
+});
+
 app.post('/api/login', async (req, res) => {
   ensureUsers();
   const username = normalizeUsername(req.body?.username);
@@ -1628,12 +1708,20 @@ app.post('/api/login', async (req, res) => {
 
   const key = rateLimitKey(ip, username);
   const ipKey = `login-ip:${ip}`;
-  const usernameEntry = loginAttempts.get(key);
   const ipEntry = loginAttempts.get(ipKey);
-  if (isRateLimited(key, LOGIN_LIMIT_MAX_ATTEMPTS)) return rateLimitResponse(res, usernameEntry.resetAt);
+  // El bloqueo progresivo por cuenta controla los 4 intentos + escalamiento.
+  // El límite por IP sigue siendo una barrera adicional contra ataques distribuidos desde un mismo origen.
   if (isRateLimited(ipKey, LOGIN_IP_LIMIT_MAX_ATTEMPTS)) return rateLimitResponse(res, ipEntry.resetAt);
 
   const account = findUserByUsername(username);
+  if (account) {
+    const protection = loginProtectionStatus(account.id);
+    if (protection.locked) {
+      if (protection.permanent) return res.status(423).json({ error: 'Tu acceso está bloqueado. Indica a tu proveedor que restablezca la contraseña para recuperar el acceso.', permanentLock: true });
+      return res.status(423).json({ error: `Acceso bloqueado temporalmente. Inténtalo nuevamente en ${Math.ceil(protection.remainingSeconds / 60)} minuto(s).`, lockoutSeconds: protection.remainingSeconds, lockoutStage: protection.stage });
+    }
+  }
+
   let passwordMatches = false;
   if (account?.passwordHash) {
     try { passwordMatches = await bcrypt.compare(password, account.passwordHash); } catch { passwordMatches = false; }
@@ -1642,10 +1730,20 @@ app.post('/api/login', async (req, res) => {
   if (!account || !passwordMatches) {
     registerFailedAttempt(key);
     registerFailedAttempt(ipKey);
+    if (account) {
+      const protection = registerAccountPasswordFailure(account.id);
+      if (protection.permanent) return res.status(423).json({ error: 'Tu acceso ha sido bloqueado definitivamente por seguridad. Indica a tu proveedor que restablezca la contraseña.', permanentLock: true });
+      if (protection.locked) {
+        const minutes = Math.ceil(protection.remainingSeconds / 60);
+        return res.status(423).json({ error: `Demasiados intentos. Tu acceso se bloqueará durante ${minutes} minutos.`, lockoutSeconds: protection.remainingSeconds, lockoutStage: protection.stage });
+      }
+      return res.status(401).json({ error: 'Usuario o contraseña incorrectos.', attemptsRemaining: protection.attemptsRemaining, attemptsUsed: protection.failures, attemptsLimit: ACCOUNT_LOGIN_ATTEMPTS_BEFORE_LOCK });
+    }
     return res.status(401).json({ error: 'Usuario o contraseña incorrectos.' });
   }
 
   clearFailedAttempts(ip, username);
+  clearLoginProtection(account.id);
   const session = makeSession(account.username, account.role, account.id);
   res.cookie(SESSION_COOKIE, session.id, {
     httpOnly: true,

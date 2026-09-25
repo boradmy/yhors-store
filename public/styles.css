@@ -1520,3 +1520,10 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}.brand{letter-sp
 .account-menu a:hover,.account-menu button:hover{background:var(--paper-2)}
 .account-menu button{color:#8b2920}
 @media(max-width:800px){.account-menu{right:0}.account-menu-trigger{width:40px;height:40px}}
+
+/* V14.4 · protección de acceso y mensajes Passkey */
+.login-attempts{min-height:18px;margin-top:-4px;color:var(--muted);font-size:.72rem;text-align:center;line-height:1.4}
+.login-attempts.warning{color:#8f6b2f;font-weight:700}
+.login-attempts.locked{color:#9b352b;font-weight:750}
+.login-attempts.permanent{font-weight:800}
+#loginSubmit:disabled,#passkeyLogin:disabled{opacity:.55;cursor:not-allowed;transform:none}

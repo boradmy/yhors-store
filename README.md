@@ -198,3 +198,12 @@ Antes de hacer cambios grandes, también puedes pulsar **Crear respaldo ahora**.
 - Todos los roles tienen acceso a `Mi cuenta`, incluido `admin`.
 - `Mi cuenta` y `Cerrar sesión` están dentro del menú del icono de usuario.
 - Cambiar contraseña revoca las demás sesiones y conserva la sesión actual mediante una nueva sesión segura.
+
+## V14.4 · Protección de acceso
+
+- 4 intentos de contraseña por cuenta antes del primer bloqueo.
+- Bloqueos progresivos: 3, 5, 10 y 15 minutos.
+- Después del siguiente bloqueo, la cuenta queda bloqueada de forma permanente hasta que el proveedor restablezca el acceso.
+- El contador se conserva en `data/security.json` y no se pierde al reiniciar el servidor.
+- `PROVIDER_RESET_TOKEN` permite al proveedor restablecer un bloqueo definitivo mediante el endpoint interno de recuperación.
+- Cancelar una Passkey ya no muestra el `DOMException` técnico del navegador: se presenta un mensaje corto y amigable.

@@ -34,7 +34,7 @@ function productHref(product) { return `/producto/${encodeURIComponent(productSl
 async function request(url, options = {}) {
   const response = await fetch(url, { credentials: 'same-origin', ...options, headers: { ...(options.headers || {}) } });
   const json = response.status === 204 ? null : await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(json.error || 'No se pudo completar la operación.');
+  if (!response.ok) { const error = new Error(json.error || 'No se pudo completar la operación.'); error.status = response.status; error.data = json; throw error; }
   return json;
 }
 
@@ -135,9 +135,19 @@ async function nativeStartRegistration(options) {
 }
 async function nativeStartAuthentication(options) {
   if (!window.PublicKeyCredential || !navigator.credentials?.get) throw new Error('Este navegador no admite Passkeys/WebAuthn.');
-  const credential = await navigator.credentials.get({ publicKey: authenticationOptionsForBrowser(options) });
-  if (!credential) throw new Error('No se pudo completar la autenticación con Passkey.');
-  return serializeAuthenticationCredential(credential);
+  try {
+    const credential = await navigator.credentials.get({ publicKey: authenticationOptionsForBrowser(options) });
+    if (!credential) throw new Error('No se pudo completar la autenticación con Passkey.');
+    return serializeAuthenticationCredential(credential);
+  } catch (error) {
+    if (error?.name === 'NotAllowedError' || error?.name === 'AbortError' || error?.name === 'TimeoutError') {
+      const friendly = new Error('Inicio con Passkey cancelado. Puedes volver a intentarlo o usar tu contraseña.');
+      friendly.code = 'PASSKEY_CANCELLED';
+      throw friendly;
+    }
+    if (error?.name === 'SecurityError') throw new Error('Passkey no disponible en este dominio. Verifica que YHORS esté usando HTTPS y el dominio configurado.');
+    throw new Error('No se pudo completar el inicio con Passkey. Inténtalo nuevamente.');
+  }
 }
 function getCart() { try { return JSON.parse(localStorage.getItem('yhors-cart')) || []; } catch { return []; } }
 function setCart(cart) { localStorage.setItem('yhors-cart', JSON.stringify(cart)); }
@@ -1545,26 +1555,51 @@ function renderLogin(twoFactorMode = false) {
     return;
   }
 
-  app.innerHTML = `<main class="login-page"><section class="login-card"><a class="brand" href="/">YHORS</a><span class="eyebrow">Panel privado</span><h1>Acceso a YHORS</h1><p>Ingresa con tu cuenta autorizada.</p><form id="loginForm" class="form-grid"><div class="field full"><label for="username">Usuario</label><input id="username" name="username" autocomplete="username webauthn" required></div><div class="field full"><label for="password">Contraseña</label><input id="password" name="password" type="password" autocomplete="current-password" required></div><div class="form-actions"><button class="button" type="submit">Iniciar sesión</button><button class="button secondary" id="passkeyLogin" type="button">🔐 Iniciar con Passkey</button><span class="message" id="loginMessage"></span></div></form></section></main>`;
+  app.innerHTML = `<main class="login-page"><section class="login-card"><a class="brand" href="/">YHORS</a><span class="eyebrow">Panel privado</span><h1>Acceso a YHORS</h1><p>Ingresa con tu cuenta autorizada.</p><form id="loginForm" class="form-grid"><div class="field full"><label for="username">Usuario</label><input id="username" name="username" autocomplete="username webauthn" required></div><div class="field full"><label for="password">Contraseña</label><input id="password" name="password" type="password" autocomplete="current-password" required></div><div class="login-attempts" id="loginAttempts" aria-live="polite"></div><div class="form-actions"><button class="button" id="loginSubmit" type="submit">Iniciar sesión</button><button class="button secondary" id="passkeyLogin" type="button">🔐 Iniciar con Passkey</button><span class="message" id="loginMessage"></span></div></form></section></main>`;
+  let loginLockTimer = null;
+  const attemptsBox = document.querySelector('#loginAttempts');
+  const submitButton = document.querySelector('#loginSubmit');
+  const passkeyButton = document.querySelector('#passkeyLogin');
+  const message = document.querySelector('#loginMessage');
+  const setLockedUI = (seconds, permanent = false) => {
+    if (loginLockTimer) clearInterval(loginLockTimer);
+    if (permanent) {
+      submitButton.disabled = true; passkeyButton.disabled = true;
+      attemptsBox.textContent = 'Acceso bloqueado. Indica a tu proveedor que restablezca la contraseña.';
+      attemptsBox.className = 'login-attempts locked permanent';
+      return;
+    }
+    let remaining = Math.max(0, Number(seconds || 0));
+    const paint = () => {
+      const mins = Math.floor(remaining / 60); const secs = remaining % 60;
+      attemptsBox.textContent = `Acceso bloqueado por seguridad. Tiempo restante: ${mins}:${String(secs).padStart(2,'0')}`;
+      attemptsBox.className = 'login-attempts locked';
+      submitButton.disabled = true; passkeyButton.disabled = true;
+      if (remaining <= 0) { clearInterval(loginLockTimer); attemptsBox.textContent = 'Puedes volver a intentarlo.'; attemptsBox.className = 'login-attempts'; submitButton.disabled = false; passkeyButton.disabled = false; message.textContent = ''; }
+      remaining -= 1;
+    };
+    paint(); loginLockTimer = setInterval(paint, 1000);
+  };
   document.querySelector('#loginForm').addEventListener('submit', async e => {
     e.preventDefault();
-    const form = e.currentTarget;
-    const message = document.querySelector('#loginMessage');
     try {
-      const result = await request('/api/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(Object.fromEntries(new FormData(form)))
-      });
+      const result = await request('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.fromEntries(new FormData(e.currentTarget))) });
       if (result.requiresTwoFactor) return renderLogin(true);
       const session = await request('/api/admin/session');
       (session.role === 'orders' || session.role === 'store_manager') ? renderAdminOrders() : renderAdmin();
     } catch (error) {
       message.className = 'message error';
+      if (error.data?.permanentLock) { setLockedUI(0, true); message.textContent = error.message; return; }
+      if (error.data?.lockoutSeconds) { setLockedUI(error.data.lockoutSeconds); message.textContent = error.message; return; }
+      if (typeof error.data?.attemptsRemaining === 'number') {
+        const left = error.data.attemptsRemaining;
+        attemptsBox.textContent = left > 0 ? `Intentos restantes: ${left} de 4` : 'El próximo intento incorrecto bloqueará el acceso durante 3 minutos.';
+        attemptsBox.className = 'login-attempts warning';
+      }
       message.textContent = error.message;
     }
   });
-  document.querySelector('#passkeyLogin').addEventListener('click', async () => { const message=document.querySelector('#loginMessage'); try { await loginWithPasskey(); } catch (error) { message.className='message error'; message.textContent=error.message; } });
+  passkeyButton.addEventListener('click', async () => { try { await loginWithPasskey(); } catch (error) { message.className = error.code === 'PASSKEY_CANCELLED' ? 'message' : 'message error'; message.textContent = error.message; } });
 }
 
 window.addEventListener('popstate', () => renderStore());
