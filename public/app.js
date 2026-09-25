@@ -667,7 +667,7 @@ async function renderAdminOrders() {
   const sectionNav = (session.role === 'orders' || session.role === 'store_manager')
     ? `<nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}/pedidos" class="admin-section-link active">PEDIDOS</a></nav>`
     : `<nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}" class="admin-section-link">PÁGINA WEB</a><a href="${ADMIN_PATH}/usuarios" class="admin-section-link">USUARIOS</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link active">PEDIDOS</a></nav>`;
-  app.innerHTML = `<main class="admin-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">${(session.role === 'orders' || session.role === 'store_manager') ? 'Gestión de pedidos' : 'Administración'}</h1><p class="admin-subtitle">${session.role === 'orders' ? 'Panel exclusivo para pedidos de YHORS STORE' : (session.role === 'store_manager' ? 'Jefe de tienda · pedidos y control operativo' : 'Gestión de YHORS STORE')}</p></div><div class="admin-top-actions"><button class="button secondary" id="ordersLogout">Cerrar sesión</button></div></div>${sectionNav}${ordersPanel(orders, session.role === 'admin' || session.role === 'store_manager')}</div></main>`;
+  app.innerHTML = `<main class="admin-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">${(session.role === 'orders' || session.role === 'store_manager') ? 'Gestión de pedidos' : 'Administración'}</h1><p class="admin-subtitle">${session.role === 'orders' ? 'Panel exclusivo para pedidos de YHORS STORE' : (session.role === 'store_manager' ? 'Jefe de tienda · pedidos y control operativo' : 'Gestión de YHORS STORE')}</p></div><div class="admin-top-actions"><a class="button secondary" href="/mi-cuenta">Mi cuenta</a><button class="button secondary" id="ordersLogout">Cerrar sesión</button></div></div>${sectionNav}${ordersPanel(orders, session.role === 'admin' || session.role === 'store_manager')}</div></main>`;
   const drawOrders = () => {
     const list=document.querySelector('#adminOrdersList'); if(!list) return;
     const query=(document.querySelector('#ordersSearch')?.value||'').trim().toLowerCase();
@@ -766,7 +766,7 @@ function usersPanel(users = []) {
     </div>
     <div class="admin-user-actions">
       <button class="button secondary small" type="button" data-user-edit="${escapeHTML(user.id)}">Editar</button>
-      <button class="button secondary small" type="button" data-user-2fa="${escapeHTML(user.id)}">${user.twoFactorEnabled ? '2FA activo' : 'Configurar 2FA'}</button>
+      <button class="button secondary small" type="button" data-user-passkey="${escapeHTML(user.id)}">${user.passkeyAllowed ? 'Bloquear Passkey' : 'Permitir Passkey'}</button>${user.passkeyCount ? `<button class="button secondary small" type="button" data-user-passkey-revoke="${escapeHTML(user.id)}">Revocar (${user.passkeyCount})</button>` : ''}
       ${!user.system ? `<button class="button danger small" type="button" data-user-delete="${escapeHTML(user.id)}">Eliminar</button>` : ''}
     </div>
   </article>`).join('');
@@ -808,7 +808,7 @@ async function renderAdminUsers() {
 
   let users = await request('/api/admin/users').catch(() => []);
   app.innerHTML = `<main class="admin-shell"><div class="admin-wrap">
-    <div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Administración</h1><p class="admin-subtitle">Control de usuarios y accesos</p></div><div class="admin-top-actions"><button class="button secondary" id="usersLogout">Cerrar sesión</button></div></div>
+    <div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Administración</h1><p class="admin-subtitle">Control de usuarios y accesos</p></div><div class="admin-top-actions"><a class="button secondary" href="/mi-cuenta">Mi cuenta</a><button class="button secondary" id="usersLogout">Cerrar sesión</button></div></div>
     <nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}" class="admin-section-link">PÁGINA WEB</a><a href="${ADMIN_PATH}/usuarios" class="admin-section-link active">USUARIOS</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link">PEDIDOS</a></nav>
     ${usersPanel(users)}
   </div></main>`;
@@ -864,28 +864,20 @@ async function renderAdminUsers() {
     } catch (error) { alert(error.message); }
   }));
 
-  document.querySelector('#adminUsersList')?.querySelectorAll('[data-user-2fa]').forEach(button => button.addEventListener('click', async () => {
-    const user = users.find(item => item.id === button.dataset.user2fa);
-    if (!user) return;
+  document.querySelector('#adminUsersList')?.querySelectorAll('[data-user-passkey]').forEach(button => button.addEventListener('click', async () => {
+    const user = users.find(item => item.id === button.dataset.userPasskey); if (!user) return;
     try {
-      if (user.twoFactorEnabled) {
-        if (!confirm(`¿Desactivar 2FA para “${user.username}”? Esto reduce la protección de esa cuenta.`)) return;
-        await request(`/api/admin/users/${encodeURIComponent(user.id)}/2fa`, { method: 'DELETE' });
-        await renderAdminUsers();
-        return;
-      }
-      const setup = await request(`/api/admin/users/${encodeURIComponent(user.id)}/2fa/setup`, { method: 'POST' });
-      alert(`Configura el autenticador para ${user.username}.\n\nSecreto: ${setup.secret}\n\nURI de configuración:\n${setup.otpauthUri}\n\nDespués ingresa el código actual de 6 dígitos.`);
-      const code = prompt('Código 2FA de 6 dígitos:');
-      if (!code) return;
-      await request(`/api/admin/users/${encodeURIComponent(user.id)}/2fa/verify`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code })
-      });
+      const enabled = !user.passkeyAllowed;
+      if (!enabled && user.passkeyCount && !confirm(`¿Bloquear el inicio con Passkey para “${user.username}”? Las Passkeys registradas se conservarán, pero no podrán utilizarse.`)) return;
+      await request(`/api/admin/users/${encodeURIComponent(user.id)}/passkeys/policy`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled }) });
       await renderAdminUsers();
-      alert('2FA activado correctamente.');
     } catch (error) { alert(error.message); }
+  }));
+
+  document.querySelector('#adminUsersList')?.querySelectorAll('[data-user-passkey-revoke]').forEach(button => button.addEventListener('click', async () => {
+    const user = users.find(item => item.id === button.dataset.userPasskeyRevoke); if (!user) return;
+    if (!confirm(`¿Revocar todas las Passkeys de “${user.username}”? El usuario conservará su contraseña.`)) return;
+    try { await request(`/api/admin/users/${encodeURIComponent(user.id)}/passkeys`, { method: 'DELETE' }); await renderAdminUsers(); } catch (error) { alert(error.message); }
   }));
 
   cancel?.addEventListener('click', resetForm);
@@ -997,7 +989,7 @@ async function renderAdmin() {
     <button type="button" data-admin-scroll="classificationPanel">Categorías</button>
     <button type="button" data-admin-scroll="productEditorPanel">Producto</button>
     <button type="button" data-admin-scroll="inventoryPanel">Inventario</button>
-  </aside><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Administración</h1></div><button class="button secondary" id="logout">Cerrar sesión</button></div><nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}" class="admin-section-link active">PÁGINA WEB</a><a href="${ADMIN_PATH}/usuarios" class="admin-section-link">USUARIOS</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link">PEDIDOS</a></nav>${backupPanel(backupState)}${selectionPanel(products, settings)}${classificationPanel(classifications)}<section class="admin-panel product-editor-panel" id="productEditorPanel"><span class="eyebrow">Catálogo</span><h2 id="formTitle">Agregar producto</h2><div id="formArea"></div></section><section class="admin-products" id="inventoryPanel"><div class="section-heading inventory-heading"><div><span class="eyebrow">Inventario</span><h2>Productos publicados (${products.length})</h2></div><p>Edita datos, imágenes, portada y destacados.</p></div><div class="inventory-toolbar"><label class="inventory-search"><span aria-hidden="true">⌕</span><input id="inventorySearch" type="search" placeholder="Buscar por nombre, SKU, marca o categoría…" autocomplete="off"><button id="clearInventorySearch" type="button" aria-label="Limpiar búsqueda">×</button></label><span class="inventory-count" id="inventoryCount">${products.length} productos</span></div><div id="adminProducts"></div></section></div></main>`;
+  </aside><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Administración</h1></div><a class="button secondary" href="/mi-cuenta">Mi cuenta</a><button class="button secondary" id="logout">Cerrar sesión</button></div><nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}" class="admin-section-link active">PÁGINA WEB</a><a href="${ADMIN_PATH}/usuarios" class="admin-section-link">USUARIOS</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link">PEDIDOS</a></nav>${backupPanel(backupState)}${selectionPanel(products, settings)}${classificationPanel(classifications)}<section class="admin-panel product-editor-panel" id="productEditorPanel"><span class="eyebrow">Catálogo</span><h2 id="formTitle">Agregar producto</h2><div id="formArea"></div></section><section class="admin-products" id="inventoryPanel"><div class="section-heading inventory-heading"><div><span class="eyebrow">Inventario</span><h2>Productos publicados (${products.length})</h2></div><p>Edita datos, imágenes, portada y destacados.</p></div><div class="inventory-toolbar"><label class="inventory-search"><span aria-hidden="true">⌕</span><input id="inventorySearch" type="search" placeholder="Buscar por nombre, SKU, marca o categoría…" autocomplete="off"><button id="clearInventorySearch" type="button" aria-label="Limpiar búsqueda">×</button></label><span class="inventory-count" id="inventoryCount">${products.length} productos</span></div><div id="adminProducts"></div></section></div></main>`;
   const quickNav = document.querySelector('.admin-quick-nav');
   quickNav?.querySelectorAll('[data-admin-scroll]').forEach(button => button.addEventListener('click', () => {
     const target = document.getElementById(button.dataset.adminScroll);
@@ -1392,6 +1384,45 @@ async function renderAdmin() {
     quickTargets.forEach(item => observer.observe(item.target));
   }
 }
+async function registerMyPasskey() {
+  if (!window.SimpleWebAuthnBrowser) throw new Error('El módulo de Passkeys todavía no está disponible. Recarga la página.');
+  const options = await request('/api/me/passkeys/options');
+  const deviceName = prompt('Nombre para este dispositivo (ej. PC oficina):', 'Este dispositivo') || 'Este dispositivo';
+  const credential = await window.SimpleWebAuthnBrowser.startRegistration({ optionsJSON: options });
+  credential.deviceName = deviceName;
+  await request('/api/me/passkeys', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(credential) });
+  alert('Passkey registrada correctamente. Desde ahora puedes usar Windows Hello, huella, Face ID o el método compatible de tu dispositivo.');
+  await renderMyAccount();
+}
+
+async function loginWithPasskey() {
+  if (!window.SimpleWebAuthnBrowser) throw new Error('El módulo de Passkeys todavía no está disponible. Recarga la página.');
+  const options = await request('/api/passkey/options');
+  const assertion = await window.SimpleWebAuthnBrowser.startAuthentication({ optionsJSON: options });
+  const result = await request('/api/passkey/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(assertion) });
+  const session = await request('/api/admin/session');
+  if (session.role === 'orders' || session.role === 'store_manager') renderAdminOrders(); else renderAdmin();
+}
+
+async function renderMyAccount() {
+  const me = await request('/api/me').catch(() => null); if (!me) return renderLogin();
+  const passkeys = me.passkeys || [];
+  app.innerHTML = `<main class="admin-shell"><div class="admin-wrap">
+    <div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Mi cuenta</h1><p class="admin-subtitle">Datos y métodos de inicio de sesión</p></div><div class="admin-top-actions"><button class="button secondary" id="accountLogout">Cerrar sesión</button></div></div>
+    <section class="admin-panel users-panel"><div class="section-heading"><div><span class="eyebrow">Cuenta</span><h2>${escapeHTML(me.name)}</h2></div><p>@${escapeHTML(me.username)} · ${escapeHTML(userRoleLabel(me.role))}</p></div>
+      <div class="form-grid"><div class="field"><label>Nombre</label><input value="${escapeHTML(me.name)}" disabled></div><div class="field"><label>Usuario</label><input value="${escapeHTML(me.username)}" disabled></div></div>
+      <hr><div class="section-heading"><div><span class="eyebrow">Contraseña</span><h2>Cambiar contraseña</h2></div></div>
+      <form id="changePasswordForm" class="form-grid"><div class="field"><label>Contraseña actual</label><input name="currentPassword" type="password" autocomplete="current-password" required></div><div class="field"><label>Nueva contraseña</label><input name="newPassword" type="password" minlength="8" maxlength="200" autocomplete="new-password" required></div><div class="form-actions"><button class="button" type="submit">Actualizar contraseña</button><span class="message" id="passwordMessage"></span></div></form>
+      <hr><div class="section-heading"><div><span class="eyebrow">Inicio de sesión moderno</span><h2>Passkeys</h2></div><p>Windows Hello, huella, Face ID o el método seguro compatible con tu dispositivo.</p></div>
+      <div id="myPasskeys">${passkeys.length ? passkeys.map(pk => `<div class="admin-user-card"><div><strong>🔐 ${escapeHTML(pk.name || 'Passkey')}</strong><small>Registrada ${escapeHTML(new Date(pk.createdAt).toLocaleString())}${pk.lastUsedAt ? ` · Último uso ${escapeHTML(new Date(pk.lastUsedAt).toLocaleString())}` : ''}</small></div><button class="button danger small" data-delete-passkey="${escapeHTML(pk.id)}" type="button">Revocar</button></div>`).join('') : '<p class="backup-empty">No tienes Passkeys registradas.</p>'}</div>
+      <div class="form-actions"><button class="button primary" id="addPasskey" type="button">+ Registrar Passkey</button></div>
+    </section></div></main>`;
+  document.querySelector('#accountLogout').addEventListener('click', async () => { await request('/api/logout', { method: 'POST' }); renderLogin(); });
+  document.querySelector('#addPasskey').addEventListener('click', async () => { try { await registerMyPasskey(); } catch (e) { alert(e.message); } });
+  document.querySelectorAll('[data-delete-passkey]').forEach(btn => btn.addEventListener('click', async () => { if (!confirm('¿Revocar esta Passkey?')) return; try { await request(`/api/me/passkeys/${encodeURIComponent(btn.dataset.deletePasskey)}`, { method: 'DELETE' }); await renderMyAccount(); } catch (e) { alert(e.message); } }));
+  document.querySelector('#changePasswordForm').addEventListener('submit', async e => { e.preventDefault(); const message=document.querySelector('#passwordMessage'); try { await request('/api/me/password',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.fromEntries(new FormData(e.currentTarget)))}); message.className='message success'; message.textContent='Contraseña actualizada. Se cerraron las demás sesiones.'; e.currentTarget.reset(); } catch(err){ message.className='message error'; message.textContent=err.message; } });
+}
+
 function renderLogin(twoFactorMode = false) {
   if (twoFactorMode) {
     app.innerHTML = `<main class="login-page"><section class="login-card"><a class="brand" href="/">YHORS</a><span class="eyebrow">Verificación en dos pasos</span><h1>Confirma tu acceso</h1><p>Abre tu aplicación autenticadora e ingresa el código de 6 dígitos.</p><form id="twoFactorForm" class="form-grid"><div class="field full"><label for="twoFactorCode">Código 2FA</label><input id="twoFactorCode" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" minlength="6" required autofocus></div><div class="form-actions"><button class="button" type="submit">Verificar acceso</button><span class="message" id="loginMessage"></span></div></form></section></main>`;
@@ -1414,7 +1445,7 @@ function renderLogin(twoFactorMode = false) {
     return;
   }
 
-  app.innerHTML = `<main class="login-page"><section class="login-card"><a class="brand" href="/">YHORS</a><span class="eyebrow">Panel privado</span><h1>Acceso a YHORS</h1><p>Ingresa con tu cuenta autorizada para acceder al panel.</p><form id="loginForm" class="form-grid"><div class="field full"><label for="username">Usuario</label><input id="username" name="username" autocomplete="username" required></div><div class="field full"><label for="password">Contraseña</label><input id="password" name="password" type="password" autocomplete="current-password" required></div><div class="form-actions"><button class="button" type="submit">Iniciar sesión</button><span class="message" id="loginMessage"></span></div></form></section></main>`;
+  app.innerHTML = `<main class="login-page"><section class="login-card"><a class="brand" href="/">YHORS</a><span class="eyebrow">Panel privado</span><h1>Acceso a YHORS</h1><p>Ingresa con tu cuenta autorizada.</p><form id="loginForm" class="form-grid"><div class="field full"><label for="username">Usuario</label><input id="username" name="username" autocomplete="username webauthn" required></div><div class="field full"><label for="password">Contraseña</label><input id="password" name="password" type="password" autocomplete="current-password" required></div><div class="form-actions"><button class="button" type="submit">Iniciar sesión</button><button class="button secondary" id="passkeyLogin" type="button">🔐 Iniciar con Passkey</button><span class="message" id="loginMessage"></span></div></form></section></main>`;
   document.querySelector('#loginForm').addEventListener('submit', async e => {
     e.preventDefault();
     const form = e.currentTarget;
@@ -1433,10 +1464,11 @@ function renderLogin(twoFactorMode = false) {
       message.textContent = error.message;
     }
   });
+  document.querySelector('#passkeyLogin').addEventListener('click', async () => { const message=document.querySelector('#loginMessage'); try { await loginWithPasskey(); } catch (error) { message.className='message error'; message.textContent=error.message; } });
 }
 
 window.addEventListener('popstate', () => renderStore());
-if (window.location.pathname === ADMIN_PATH || window.location.pathname === `${ADMIN_PATH}/`) renderAdmin(); else if (window.location.pathname === `${ADMIN_PATH}/pedidos` || window.location.pathname === `${ADMIN_PATH}/pedidos/`) renderAdminOrders(); else if (window.location.pathname === `${ADMIN_PATH}/usuarios` || window.location.pathname === `${ADMIN_PATH}/usuarios/`) renderAdminUsers(); else if (window.location.pathname === '/pedido' || window.location.pathname === '/pedido/') checkoutPage(); else renderStore();
+if (window.location.pathname === ADMIN_PATH || window.location.pathname === `${ADMIN_PATH}/`) renderAdmin(); else if (window.location.pathname === `${ADMIN_PATH}/pedidos` || window.location.pathname === `${ADMIN_PATH}/pedidos/`) renderAdminOrders(); else if (window.location.pathname === `${ADMIN_PATH}/usuarios` || window.location.pathname === `${ADMIN_PATH}/usuarios/`) renderAdminUsers(); else if (window.location.pathname === '/mi-cuenta' || window.location.pathname === '/mi-cuenta/') renderMyAccount(); else if (window.location.pathname === '/pedido' || window.location.pathname === '/pedido/') checkoutPage(); else renderStore();
 
 document.addEventListener('change', e => { const file=e.target.closest('input[type=file][id^=\"imageFile\"]'); if(!file)return; const num=file.id==='imageFile'?1:Number(file.id.replace('imageFile','')); const preview=document.querySelector(`#productImagePreview${num}`); if(preview&&file.files?.[0]){const r=new FileReader();r.onload=()=>preview.src=r.result;r.readAsDataURL(file.files[0]);}});
 document.addEventListener('input', e => { const input=e.target.closest('input[type=url][id^=\"image\"]'); if(!input)return; const num=input.id==='image'?1:Number(input.id.replace('image','')); const preview=document.querySelector(`#productImagePreview${num}`); if(preview&&input.value.trim())preview.src=input.value.trim();});

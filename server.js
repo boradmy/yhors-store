@@ -9,6 +9,7 @@ const express = require('express');
 const cookieParser = require('cookie-parser');
 const multer = require('multer');
 const bcrypt = require('bcryptjs');
+const { generateRegistrationOptions, verifyRegistrationResponse, generateAuthenticationOptions, verifyAuthenticationResponse } = require('@simplewebauthn/server');
 
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
@@ -37,6 +38,9 @@ if (!SESSION_SECRET || SESSION_SECRET.length < 32) {
 const ADMIN_USER = process.env.ADMIN_USER || 'admin';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
 const ADMIN_PASSWORD_HASH = process.env.ADMIN_PASSWORD_HASH || '';
+const PUBLIC_BASE_URL = String(process.env.PUBLIC_BASE_URL || '').trim().replace(/\/$/, '');
+const WEBAUTHN_RP_ID = (() => { try { return new URL(PUBLIC_BASE_URL || 'http://localhost:3000').hostname; } catch { return 'localhost'; } })();
+const WEBAUTHN_ORIGIN = PUBLIC_BASE_URL || `http://localhost:${PORT}`;
 const COOKIE_SECURE = process.env.COOKIE_SECURE === 'true';
 
 const SECURITY_FILE = path.join(DATA_DIR, 'security.json');
@@ -51,6 +55,7 @@ const LOGIN_LIMIT_MAX_ATTEMPTS = 5;
 const LOGIN_IP_LIMIT_MAX_ATTEMPTS = 30;
 const loginAttempts = new Map();
 const pendingTwoFactor = new Map();
+const pendingWebAuthn = new Map();
 const SESSION_TTL_MS = Math.max(30 * 60 * 1000, Number.parseInt(process.env.SESSION_TTL_MINUTES || '720', 10) * 60 * 1000);
 const SESSION_COOKIE = 'yhors_session';
 const sessions = new Map();
@@ -178,10 +183,10 @@ function readSecurity() {
   try {
     const parsed = JSON.parse(fs.readFileSync(SECURITY_FILE, 'utf8'));
     return parsed && typeof parsed === 'object'
-      ? { twoFactor: parsed.twoFactor && typeof parsed.twoFactor === 'object' ? parsed.twoFactor : {} }
-      : { twoFactor: {} };
+      ? { twoFactor: parsed.twoFactor && typeof parsed.twoFactor === 'object' ? parsed.twoFactor : {}, passkeys: parsed.passkeys && typeof parsed.passkeys === 'object' ? parsed.passkeys : {}, passkeyPolicy: parsed.passkeyPolicy && typeof parsed.passkeyPolicy === 'object' ? parsed.passkeyPolicy : {} }
+      : { twoFactor: {}, passkeys: {}, passkeyPolicy: {} };
   } catch {
-    return { twoFactor: {} };
+    return { twoFactor: {}, passkeys: {}, passkeyPolicy: {} };
   }
 }
 
@@ -192,7 +197,31 @@ function writeSecurity(value) {
 }
 
 function ensureSecurityFile() {
-  if (!fs.existsSync(SECURITY_FILE)) writeSecurity({ twoFactor: {} });
+  if (!fs.existsSync(SECURITY_FILE)) writeSecurity({ twoFactor: {}, passkeys: {}, passkeyPolicy: {} });
+}
+
+function readPasskeyStore() {
+  const security = readSecurity();
+  return {
+    passkeys: security.passkeys && typeof security.passkeys === 'object' ? security.passkeys : {},
+    passkeyPolicy: security.passkeyPolicy && typeof security.passkeyPolicy === 'object' ? security.passkeyPolicy : {}
+  };
+}
+
+function writePasskeyStore(store) {
+  const security = readSecurity();
+  security.passkeys = store.passkeys || {};
+  security.passkeyPolicy = store.passkeyPolicy || {};
+  writeSecurity(security);
+}
+
+function accountPasskeys(accountId) { return readPasskeyStore().passkeys[String(accountId)] || []; }
+function passkeyAllowed(accountId) {
+  const store = readPasskeyStore();
+  return store.passkeyPolicy[String(accountId)] !== false;
+}
+function publicPasskeys(accountId) {
+  return accountPasskeys(accountId).map(item => ({ id: item.id, name: item.name, createdAt: item.createdAt, lastUsedAt: item.lastUsedAt || null, deviceType: item.deviceType || null, backedUp: Boolean(item.backedUp), transports: item.transports || [] }));
 }
 
 function base32Encode(buffer) {
@@ -443,6 +472,9 @@ function publicUser(user) {
     active: user.active !== false,
     system: Boolean(user.system),
     twoFactorEnabled: accountTwoFactorEnabled(user.id),
+    passkeyEnabled: passkeyAllowed(user.id) && accountPasskeys(user.id).length > 0,
+    passkeyAllowed: passkeyAllowed(user.id),
+    passkeyCount: accountPasskeys(user.id).length,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt
   };
@@ -1269,6 +1301,8 @@ setInterval(sessionCleanup, 10 * 60 * 1000).unref();
 
 function hasValidSession(req) { return Boolean(getSession(req)); }
 
+function requireLogin(req, res, next) { const session = getSession(req); if (!session) return res.status(401).json({ error: 'No autorizado.' }); req.yhorsSession = session; next(); }
+
 function requireAdmin(req, res, next) {
   const session = getSession(req);
   if (!session) return res.status(401).json({ error: 'No autorizado.' });
@@ -1441,6 +1475,145 @@ app.get('/api/storefront', (_, res) => {
 });
 app.get('/api/health', (_, res) => res.json({ ok: true }));
 
+function setSessionCookie(res, session) {
+  res.cookie(SESSION_COOKIE, session.id, { httpOnly: true, sameSite: 'strict', secure: COOKIE_SECURE, maxAge: SESSION_TTL_MS, path: '/' });
+}
+
+function createWebAuthnChallenge(kind, accountId = '') {
+  const token = crypto.randomBytes(32).toString('base64url');
+  pendingWebAuthn.set(token, { kind, accountId: accountId ? String(accountId) : '', expiresAt: Date.now() + 5 * 60 * 1000 });
+  return token;
+}
+
+function consumeWebAuthnChallenge(token, kind) {
+  const item = pendingWebAuthn.get(token);
+  pendingWebAuthn.delete(token);
+  if (!item || item.kind !== kind || item.expiresAt <= Date.now()) return null;
+  return item;
+}
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [token, item] of pendingWebAuthn) if (item.expiresAt <= now) pendingWebAuthn.delete(token);
+}, 60 * 1000).unref();
+
+app.get('/api/passkey/options', async (req, res) => {
+  const username = normalizeUsername(req.query?.username || '');
+  const account = username ? findUserByUsername(username) : null;
+  if (account && !passkeyAllowed(account.id)) return res.status(403).json({ error: 'El inicio con Passkey está desactivado para esta cuenta.' });
+  const credentials = account ? accountPasskeys(account.id) : [];
+  const options = await generateAuthenticationOptions({
+    rpID: WEBAUTHN_RP_ID,
+    userVerification: 'preferred',
+    allowCredentials: credentials.map(item => ({ id: item.id, transports: item.transports || [] }))
+  });
+  const token = createWebAuthnChallenge('login', account?.id || '');
+  res.cookie('yhors_webauthn_challenge', token, { httpOnly: true, sameSite: 'strict', secure: COOKIE_SECURE, maxAge: 5 * 60 * 1000, path: '/' });
+  pendingWebAuthn.get(token).options = options;
+  return res.json(options);
+});
+
+app.post('/api/passkey/login', async (req, res) => {
+  const token = req.cookies.yhors_webauthn_challenge;
+  const challenge = consumeWebAuthnChallenge(token, 'login');
+  res.clearCookie('yhors_webauthn_challenge', { httpOnly: true, sameSite: 'strict', secure: COOKIE_SECURE, path: '/' });
+  if (!challenge?.options) return res.status(401).json({ error: 'El desafío Passkey expiró. Inténtalo nuevamente.' });
+  const passkeyId = String(req.body?.id || '');
+  const users = readUsers();
+  let account = challenge.accountId ? users.find(u => u.id === challenge.accountId) : null;
+  let credential = null;
+  if (account) credential = accountPasskeys(account.id).find(item => item.id === passkeyId);
+  if (!credential && !account) {
+    for (const user of users) {
+      const found = accountPasskeys(user.id).find(item => item.id === passkeyId);
+      if (found) { account = user; credential = found; break; }
+    }
+  }
+  if (!account || account.active === false || !credential || !passkeyAllowed(account.id)) return res.status(401).json({ error: 'Passkey no reconocida o no autorizada.' });
+  try {
+    const verification = await verifyAuthenticationResponse({
+      response: req.body,
+      expectedChallenge: challenge.options.challenge,
+      expectedOrigin: WEBAUTHN_ORIGIN,
+      expectedRPID: WEBAUTHN_RP_ID,
+      requireUserVerification: true,
+      credential: { id: credential.id, publicKey: new Uint8Array(Buffer.from(credential.publicKey, 'base64url')), counter: credential.counter || 0, transports: credential.transports || [] }
+    });
+    if (!verification.verified) return res.status(401).json({ error: 'No se pudo verificar la Passkey.' });
+    const store = readPasskeyStore();
+    const list = store.passkeys[String(account.id)] || [];
+    const index = list.findIndex(item => item.id === credential.id);
+    if (index >= 0) { list[index].counter = verification.authenticationInfo.newCounter; list[index].lastUsedAt = new Date().toISOString(); store.passkeys[String(account.id)] = list; writePasskeyStore(store); }
+    clearFailedAttempts(clientIp(req), account.username);
+    const session = makeSession(account.username, account.role, account.id);
+    setSessionCookie(res, session);
+    return res.json({ ok: true, role: session.role, username: account.username, name: account.name, expiresAt: session.expiresAt });
+  } catch (error) { return res.status(401).json({ error: 'No se pudo verificar la Passkey.' }); }
+});
+
+app.put('/api/me/password', requireLogin, async (req, res) => {
+  const session = getSession(req); const users = readUsers(); const index = users.findIndex(item => item.id === session.accountId);
+  if (index < 0) return res.status(404).json({ error: 'Usuario no encontrado.' });
+  const currentPassword = String(req.body?.currentPassword || ''); const newPassword = String(req.body?.newPassword || '');
+  if (newPassword.length < 8 || newPassword.length > 200) return res.status(400).json({ error: 'La nueva contraseña debe tener al menos 8 caracteres.' });
+  if (!currentPassword) return res.status(400).json({ error: 'Ingresa tu contraseña actual.' });
+  const ok = await bcrypt.compare(currentPassword, users[index].passwordHash || '');
+  if (!ok) return res.status(401).json({ error: 'La contraseña actual no es correcta.' });
+  users[index].passwordHash = await bcrypt.hash(newPassword, 12); users[index].updatedAt = new Date().toISOString(); writeUsers(users); destroySessionsForAccount(users[index].id);
+  return res.json({ ok: true });
+});
+
+app.get('/api/me', (req, res) => {
+  const session = getSession(req); if (!session) return res.status(401).json({ error: 'No autorizado.' });
+  const user = readUsers().find(item => item.id === session.accountId); if (!user) return res.status(404).json({ error: 'Usuario no encontrado.' });
+  return res.json({ ...publicUser(user), passkeys: publicPasskeys(user.id) });
+});
+
+app.get('/api/me/passkeys/options', requireLogin, async (req, res) => {
+  const session = getSession(req); const user = readUsers().find(item => item.id === session.accountId);
+  if (!user || !passkeyAllowed(user.id)) return res.status(403).json({ error: 'El inicio con Passkey está desactivado para esta cuenta.' });
+  const options = await generateRegistrationOptions({
+    rpName: 'YHORS STORE', rpID: WEBAUTHN_RP_ID, userName: user.username, userID: new Uint8Array(Buffer.from(user.id)),
+    attestationType: 'none', supportedAlgorithmIDs: [-7, -257],
+    excludeCredentials: accountPasskeys(user.id).map(item => ({ id: item.id, transports: item.transports || [] })),
+    authenticatorSelection: { residentKey: 'preferred', userVerification: 'required', authenticatorAttachment: 'platform' }
+  });
+  const token = createWebAuthnChallenge('registration', user.id); pendingWebAuthn.get(token).options = options;
+  res.cookie('yhors_webauthn_challenge', token, { httpOnly: true, sameSite: 'strict', secure: COOKIE_SECURE, maxAge: 5 * 60 * 1000, path: '/' });
+  return res.json(options);
+});
+
+app.post('/api/me/passkeys', requireLogin, async (req, res) => {
+  const session = getSession(req); const user = readUsers().find(item => item.id === session.accountId); const token = req.cookies.yhors_webauthn_challenge;
+  const challenge = consumeWebAuthnChallenge(token, 'registration'); res.clearCookie('yhors_webauthn_challenge', { httpOnly: true, sameSite: 'strict', secure: COOKIE_SECURE, path: '/' });
+  if (!user || !challenge?.options || challenge.accountId !== user.id) return res.status(400).json({ error: 'El desafío Passkey expiró.' });
+  try {
+    const verification = await verifyRegistrationResponse({ response: req.body, expectedChallenge: challenge.options.challenge, expectedOrigin: WEBAUTHN_ORIGIN, expectedRPID: WEBAUTHN_RP_ID, supportedAlgorithmIDs: [-7, -257] });
+    if (!verification.verified) return res.status(400).json({ error: 'No se pudo verificar la Passkey.' });
+    const { credential, credentialDeviceType, credentialBackedUp } = verification.registrationInfo;
+    const store = readPasskeyStore(); const list = store.passkeys[user.id] || [];
+    list.push({ id: credential.id, publicKey: Buffer.from(credential.publicKey).toString('base64url'), counter: credential.counter, transports: credential.transports || [], deviceType: credentialDeviceType, backedUp: credentialBackedUp, name: String(req.body?.deviceName || 'Este dispositivo').slice(0, 80), createdAt: new Date().toISOString() });
+    store.passkeys[user.id] = list; store.passkeyPolicy[user.id] = true; writePasskeyStore(store);
+    return res.json({ ok: true, passkeys: publicPasskeys(user.id) });
+  } catch (error) { return res.status(400).json({ error: error.message || 'No se pudo registrar la Passkey.' }); }
+});
+
+app.delete('/api/me/passkeys/:id', requireLogin, (req, res) => {
+  const session = getSession(req); const store = readPasskeyStore(); const list = store.passkeys[session.accountId] || [];
+  if (list.length <= 1) return res.status(400).json({ error: 'Debes conservar al menos una Passkey o contraseña para mantener acceso a la cuenta.' });
+  store.passkeys[session.accountId] = list.filter(item => item.id !== req.params.id); writePasskeyStore(store); return res.json({ ok: true, passkeys: publicPasskeys(session.accountId) });
+});
+
+app.post('/api/admin/users/:id/passkeys/policy', requireAdmin, (req, res) => {
+  const users = readUsers(); const user = users.find(item => item.id === req.params.id); if (!user) return res.status(404).json({ error: 'Usuario no encontrado.' });
+  const store = readPasskeyStore(); store.passkeyPolicy[user.id] = req.body?.enabled !== false; writePasskeyStore(store); return res.json(publicUser(user));
+});
+
+app.delete('/api/admin/users/:id/passkeys', requireAdmin, (req, res) => {
+  const users = readUsers(); const user = users.find(item => item.id === req.params.id); if (!user) return res.status(404).json({ error: 'Usuario no encontrado.' });
+  const store = readPasskeyStore(); store.passkeys[user.id] = []; writePasskeyStore(store); destroySessionsForAccount(user.id); return res.json(publicUser(user));
+});
+
 app.post('/api/login', async (req, res) => {
   ensureUsers();
   const username = normalizeUsername(req.body?.username);
@@ -1466,24 +1639,6 @@ app.post('/api/login', async (req, res) => {
     registerFailedAttempt(key);
     registerFailedAttempt(ipKey);
     return res.status(401).json({ error: 'Usuario o contraseña incorrectos.' });
-  }
-
-  if (accountTwoFactorEnabled(account.id)) {
-    const challengeToken = crypto.randomBytes(32).toString('base64url');
-    pendingTwoFactor.set(challengeToken, {
-      accountId: account.id,
-      user: account.username,
-      role: account.role,
-      expiresAt: Date.now() + 5 * 60 * 1000
-    });
-    res.cookie('yhors_2fa_challenge', challengeToken, {
-      httpOnly: true,
-      sameSite: 'strict',
-      secure: COOKIE_SECURE,
-      maxAge: 5 * 60 * 1000,
-      path: '/'
-    });
-    return res.json({ ok: true, requiresTwoFactor: true, expiresInSeconds: 300 });
   }
 
   clearFailedAttempts(ip, username);
@@ -1577,7 +1732,7 @@ app.get('/api/admin/security', requireAdmin, (_, res) => res.json({
   ordersEncryptedAtRest: true,
   keySource: 'YHORS_DATA_KEY environment variable',
   version: 'V14.1',
-  twoFactor: 'TOTP',
+  passkeys: 'WebAuthn / Passkeys',
   serverSideSessions: true,
   loginRateLimit: true
 }));
