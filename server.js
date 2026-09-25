@@ -1978,7 +1978,7 @@ function decorateOrderAssignment(order) {
   return { ...order, assignedSellerName: seller?.name || null };
 }
 
-app.get('/api/admin/order-sellers', requireStoreManager, (_, res) => {
+app.get('/api/admin/order-sellers', requireStoreManagerOrAdmin, (_, res) => {
   const sellers = readUsers()
     .filter(user => user.active !== false && isSellerRole(user.role))
     .map(user => ({ id: user.id, name: user.name, username: user.username, role: 'vendedor' }));
@@ -2014,8 +2014,8 @@ app.put('/api/admin/orders/:id', requireOrdersAccess, (req, res) => {
     return res.status(403).json({ error: 'Este pedido no está asignado a tu usuario.' });
   }
 
-  if (hasAssignment && !isStoreManager(session.role)) {
-    return res.status(403).json({ error: 'Solo el Jefe de tienda puede asignar o cambiar el vendedor.' });
+  if (hasAssignment && !isStoreManager(session.role) && !isAdmin(session.role)) {
+    return res.status(403).json({ error: 'Solo el Jefe de tienda o un administrador puede asignar o cambiar el vendedor.' });
   }
 
   let normalizedStatus;

@@ -751,6 +751,41 @@ function ordersPanel(orders = [], canDelete = true) {
     <div id="adminOrdersList">${ordersListMarkup(orders, { canDelete })}</div>
   </section>`;
 }
+
+function showYhorsConfirm(title, message) {
+  return new Promise(resolve => {
+    const existing = document.querySelector('#yhorsConfirmModal');
+    if (existing) existing.remove();
+    const modal = document.createElement('div');
+    modal.id = 'yhorsConfirmModal';
+    modal.className = 'yhors-confirm-backdrop';
+    modal.innerHTML = `
+      <div class="yhors-confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="yhorsConfirmTitle">
+        <div class="yhors-confirm-icon">✓</div>
+        <h2 id="yhorsConfirmTitle">${escapeHTML(title)}</h2>
+        <p>${message}</p>
+        <div class="yhors-confirm-actions">
+          <button type="button" class="button secondary" data-confirm-cancel>Cancelar</button>
+          <button type="button" class="button primary" data-confirm-ok>Aceptar</button>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+    const cleanup = result => {
+      document.removeEventListener('keydown', onKey);
+      modal.remove();
+      resolve(result);
+    };
+    const onKey = event => {
+      if (event.key === 'Escape') cleanup(false);
+    };
+    modal.querySelector('[data-confirm-cancel]').addEventListener('click', () => cleanup(false));
+    modal.querySelector('[data-confirm-ok]').addEventListener('click', () => cleanup(true));
+    modal.addEventListener('click', event => { if (event.target === modal) cleanup(false); });
+    document.addEventListener('keydown', onKey);
+    requestAnimationFrame(() => modal.querySelector('[data-confirm-ok]')?.focus());
+  });
+}
+
 function ordersListMarkup(orders = [], options = {}) {
   const canDelete = options.canDelete === true;
   const canAssign = options.canAssign === true;
@@ -785,8 +820,8 @@ function ordersListMarkup(orders = [], options = {}) {
           : `<div class="order-assignment-readonly">${escapeHTML(sellerName(order))}</div>`}
       </div>
       <div class="admin-order-footer">
-        <button class="button success small" type="button" data-order-note-save="${escapeHTML(order.id)}" disabled>Guardar nota</button>
-        <button class="button edit-note small" type="button" data-order-note-edit="${escapeHTML(order.id)}">Editar</button>
+        <button class="button success small" type="button" data-order-note-save="${escapeHTML(order.id)}" disabled>Guardar cambios</button>
+        <button class="button edit-note small" type="button" data-order-note-edit="${escapeHTML(order.id)}">Editar nota</button>
         ${canDelete ? `<button class="button danger small" type="button" data-order-delete="${escapeHTML(order.id)}">Eliminar pedido</button>` : ''}
       </div>
     </div>
@@ -796,7 +831,7 @@ async function renderAdminOrders() {
   const session = await request('/api/admin/session').catch(() => ({ authenticated: false }));
   if (!session.authenticated) return renderLogin();
   let orders = await request('/api/admin/orders').catch(() => []);
-  const canAssign = session.role === 'store_manager';
+  const canAssign = session.role === 'store_manager' || session.role === 'admin';
   const canDelete = session.role === 'store_manager' || session.role === 'admin';
   let sellers = [];
   if (canAssign) sellers = await request('/api/admin/order-sellers').catch(() => []);
@@ -840,20 +875,14 @@ async function renderAdminOrders() {
       }
     }));
 
-    list.querySelectorAll('select[data-order-assignment]').forEach(select=>select.addEventListener('change',async()=>{
+    list.querySelectorAll('select[data-order-assignment]').forEach(select=>select.addEventListener('change',()=>{
       const id = select.dataset.orderAssignment;
-      const previous = orders.find(o=>o.id===id)?.assignedSellerId || '';
-      select.disabled = true;
-      try {
-        const updated = await request(`/api/admin/orders/${id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({assignedSellerId: select.value || null})});
-        orders=orders.map(o=>o.id===updated.id?updated:o);
-        select.value = updated.assignedSellerId || '';
-        select.disabled = false;
-      } catch(e) {
-        select.value = previous;
-        select.disabled = false;
-        alert(e.message);
-      }
+      const order = orders.find(o=>o.id===id);
+      const saveButton = list.querySelector(`[data-order-note-save="${id}"]`);
+      if (!order || !saveButton) return;
+      const original = order.assignedSellerId || '';
+      select.dataset.changed = String(select.value || '') !== String(original);
+      saveButton.disabled = !select.dataset.changed && !saveButton.dataset.noteChanged;
     }));
 
     list.querySelectorAll('[data-order-toggle]').forEach(button=>button.addEventListener('click',()=>{ const details=document.querySelector(`#orderDetails-${button.dataset.orderToggle}`); if(!details) return; const opening=details.hidden; details.hidden=!opening; button.setAttribute('aria-expanded',String(opening)); button.closest('.admin-order')?.classList.toggle('is-open',opening); }));
@@ -866,31 +895,68 @@ async function renderAdminOrders() {
       textarea.focus();
       button.disabled = true;
       button.textContent = 'Editando…';
+      saveButton.dataset.noteChanged = 'true';
       saveButton.disabled = false;
     }));
+
     list.querySelectorAll('[data-order-note-save]').forEach(button=>button.addEventListener('click',async()=>{
       const id=button.dataset.orderNoteSave;
       const textarea=list.querySelector(`[data-order-note="${id}"]`);
+      const assignment=list.querySelector(`[data-order-assignment="${id}"]`);
       const editButton=list.querySelector(`[data-order-note-edit="${id}"]`);
-      if(!textarea || textarea.disabled) return;
-      const original=button.textContent;
+      const order=orders.find(o=>o.id===id);
+      if(!order || !textarea) return;
+
+      const nextNote = textarea.value;
+      const nextSeller = assignment ? (assignment.value || null) : (order.assignedSellerId || null);
+      const noteChanged = nextNote !== (order.internalNote || '');
+      const assignmentChanged = String(nextSeller || '') !== String(order.assignedSellerId || '');
+      if (!noteChanged && !assignmentChanged) {
+        textarea.disabled = true;
+        button.disabled = true;
+        return;
+      }
+
+      const sellerLabel = assignment
+        ? (assignment.options[assignment.selectedIndex]?.textContent || 'Sin asignar').trim()
+        : (order.assignedSellerName || 'Sin asignar');
+      const detailParts = [];
+      if (noteChanged) detailParts.push('la nota interna');
+      if (assignmentChanged) detailParts.push(`el vendedor asignado a "${sellerLabel}"`);
+
+      const confirmed = await showYhorsConfirm(
+        '¿Seguro que quieres guardar este cambio?',
+        `Se actualizará ${detailParts.join(' y ')} del pedido #${escapeHTML(order.orderNumber)}.`
+      );
+      if (!confirmed) return;
+
+      const originalText=button.textContent;
       button.disabled=true;
       try {
-        const updated=await request(`/api/admin/orders/${id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({internalNote:textarea.value})});
+        const payload = {};
+        if (noteChanged) payload.internalNote = nextNote;
+        if (assignmentChanged && assignment) payload.assignedSellerId = nextSeller;
+        const updated=await request(`/api/admin/orders/${id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
         orders=orders.map(o=>o.id===updated.id?updated:o);
         textarea.value = updated.internalNote || '';
         textarea.disabled = true;
+        if (assignment) {
+          assignment.value = updated.assignedSellerId || '';
+          assignment.dataset.changed = 'false';
+        }
         if (editButton) {
           editButton.disabled = false;
-          editButton.textContent = 'Editar';
+          editButton.textContent = 'Editar nota';
         }
-        button.textContent='Nota guardada ✓';
-        setTimeout(()=>{button.textContent='Guardar nota';},1200);
+        delete button.dataset.noteChanged;
+        button.textContent='Cambios guardados ✓';
+        setTimeout(()=>{button.textContent='Guardar cambios'; button.disabled=true;},1400);
       } catch(e) {
         button.disabled=false;
         alert(e.message);
       }
     }));
+
     list.querySelectorAll('[data-order-delete]').forEach(button=>button.addEventListener('click',async()=>{
       const order=orders.find(o=>o.id===button.dataset.orderDelete); if(!order) return;
       if(!confirm(`¿Eliminar el pedido #${order.orderNumber}? Esta acción no se puede deshacer.`)) return;

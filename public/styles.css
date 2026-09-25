@@ -1550,3 +1550,27 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}.brand{letter-sp
   .account-back-button{min-height:40px;display:inline-flex;align-items:center}
   .order-assignment-head{display:grid;gap:3px}
 }
+
+
+.yhors-confirm-backdrop{
+  position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;
+  padding:20px;background:rgba(17,16,15,.58);backdrop-filter:blur(3px);
+}
+.yhors-confirm-dialog{
+  width:min(460px,calc(100vw - 32px));background:#fff;border:1px solid #ddd6ca;border-radius:20px;
+  box-shadow:0 24px 70px rgba(0,0,0,.25);padding:30px;text-align:center;animation:yhorsConfirmIn .16s ease-out;
+}
+.yhors-confirm-icon{
+  width:48px;height:48px;margin:0 auto 14px;border-radius:50%;display:grid;place-items:center;
+  background:#b28e4a;color:#fff;font-weight:800;font-size:22px;
+}
+.yhors-confirm-dialog h2{margin:0 0 10px;font-size:1.35rem;color:#171513}
+.yhors-confirm-dialog p{margin:0 auto;color:#6e675e;line-height:1.55;max-width:380px}
+.yhors-confirm-actions{display:flex;justify-content:center;gap:12px;margin-top:24px}
+.yhors-confirm-actions .button{min-width:120px}
+@keyframes yhorsConfirmIn{from{opacity:0;transform:translateY(8px) scale(.98)}to{opacity:1;transform:none}}
+@media (max-width:560px){
+  .yhors-confirm-dialog{padding:24px 20px;border-radius:16px}
+  .yhors-confirm-actions{flex-direction:column-reverse}
+  .yhors-confirm-actions .button{width:100%}
+}
