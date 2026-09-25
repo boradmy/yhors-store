@@ -660,13 +660,52 @@ function ordersListMarkup(orders = [], options = {}) {
     </div>
   </article>`).join('');
 }
+async function renderAdminUsers() {
+  const session = await request('/api/admin/session').catch(() => ({ authenticated: false }));
+  if (!session.authenticated) return renderLogin();
+  if (session.role !== 'admin') return renderAdminOrders();
+  const users = await request('/api/admin/users').catch(() => []);
+  app.innerHTML = `<main class="admin-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Administración</h1><p class="admin-subtitle">Control de usuarios y accesos</p></div><button class="button secondary" id="logout">Cerrar sesión</button></div><nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}" class="admin-section-link">PÁGINA WEB</a><a href="${ADMIN_PATH}/usuarios" class="admin-section-link active">USUARIOS</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link">PEDIDOS</a></nav>${userManagementPanel(users)}</div></main>`;
+  const userPanel = document.querySelector('#userManagementPanel');
+  const renderUsers = (items) => {
+    const list = userPanel?.querySelector('#adminUsersList');
+    if (!list) return;
+    list.innerHTML = items.map(user => `<article class="admin-user-row"><div><strong>${escapeHTML(user.username)}</strong><span>${user.role === 'admin' ? 'Administrador' : (user.role === 'store_manager' ? 'Jefe de tienda' : 'Pedidos')} · ${user.active ? 'Activo' : 'Desactivado'}${user.source === 'environment' ? ' · Cuenta inicial' : ''}</span></div><div class="admin-actions"><button class="button secondary small" data-user-2fa="${escapeHTML(user.id)}">${user.twoFactorEnabled ? '2FA activo' : 'Configurar 2FA'}</button>${user.source === 'environment' ? '' : `<button class="button secondary small" data-user-toggle="${escapeHTML(user.id)}">${user.active ? 'Desactivar' : 'Activar'}</button><button class="button danger small" data-user-delete="${escapeHTML(user.id)}">Eliminar</button>`}</div></article>`).join('') || '<div class="empty">No hay usuarios adicionales.</div>';
+    list.querySelectorAll('[data-user-2fa]').forEach(button => button.addEventListener('click', async () => {
+      const target = items.find(u => u.id === button.dataset.user2fa); if (!target) return;
+      try {
+        if (target.twoFactorEnabled) { if (!confirm(`¿Desactivar 2FA para “${target.username}”?`)) return; await request(`/api/admin/users/${encodeURIComponent(target.id)}/2fa`, { method: 'DELETE' }); target.twoFactorEnabled = false; renderUsers(items); return; }
+        const setup = await request(`/api/admin/users/${encodeURIComponent(target.id)}/2fa/setup`, { method: 'POST' });
+        alert(`Configura el autenticador para ${target.username}.\n\nSecreto: ${setup.secret}\n\nTambién puedes usar este URI otpauth si tu aplicación permite importarlo:\n${setup.otpauthUri}\n\nDespués pulsa Aceptar y escribe el código de 6 dígitos.`);
+        const code = prompt('Código 2FA de 6 dígitos:'); if (!code) return;
+        await request(`/api/admin/users/${encodeURIComponent(target.id)}/2fa/verify`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code }) });
+        target.twoFactorEnabled = true; renderUsers(items); alert('2FA activado correctamente.');
+      } catch (e) { alert(e.message); }
+    }));
+    list.querySelectorAll('[data-user-toggle]').forEach(button => button.addEventListener('click', async () => {
+      const target = items.find(u => u.id === button.dataset.userToggle); if (!target) return;
+      try { const updated = await request(`/api/admin/users/${encodeURIComponent(target.id)}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ active: !target.active }) }); const i=items.findIndex(u=>u.id===updated.id); items[i]=updated; renderUsers(items); } catch(e){ alert(e.message); }
+    }));
+    list.querySelectorAll('[data-user-delete]').forEach(button => button.addEventListener('click', async () => {
+      const target = items.find(u => u.id === button.dataset.userDelete); if (!target || !confirm(`¿Eliminar el usuario “${target.username}”?`)) return;
+      try { await request(`/api/admin/users/${encodeURIComponent(target.id)}`, {method:'DELETE'}); renderUsers(items.filter(u=>u.id!==target.id)); } catch(e){ alert(e.message); }
+    }));
+  };
+  renderUsers(users);
+  userPanel?.querySelector('#createUserForm')?.addEventListener('submit', async event => {
+    event.preventDefault(); const form=event.currentTarget; const data=Object.fromEntries(new FormData(form));
+    try { const created=await request('/api/admin/users',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}); users.push(created); renderUsers(users); form.reset(); form.querySelector('[name="role"]').value='orders'; form.querySelector('[name="username"]').focus(); } catch(e) { alert(e.message); }
+  });
+  document.querySelector('#logout')?.addEventListener('click', async () => { try { await request('/api/logout',{method:'POST'}); } finally { renderLogin(); } });
+}
+
 async function renderAdminOrders() {
   const session = await request('/api/admin/session').catch(() => ({ authenticated: false }));
   if (!session.authenticated) return renderLogin();
   let orders = await request('/api/admin/orders').catch(() => []);
   const sectionNav = (session.role === 'orders' || session.role === 'store_manager')
     ? `<nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}/pedidos" class="admin-section-link active">PEDIDOS</a></nav>`
-    : `<nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}" class="admin-section-link">PÁGINA WEB</a><a href="${ADMIN_PATH}/jefe-de-tienda" class="admin-section-link">JEFE DE TIENDA</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link active">PEDIDOS</a></nav>`;
+    : `<nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}" class="admin-section-link">PÁGINA WEB</a><a href="${ADMIN_PATH}/usuarios" class="admin-section-link">USUARIOS</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link active">PEDIDOS</a></nav>`;
   app.innerHTML = `<main class="admin-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">${(session.role === 'orders' || session.role === 'store_manager') ? 'Gestión de pedidos' : 'Administración'}</h1><p class="admin-subtitle">${session.role === 'orders' ? 'Panel exclusivo para pedidos de YHORS STORE' : (session.role === 'store_manager' ? 'Jefe de tienda · pedidos y control operativo' : 'Gestión de YHORS STORE')}</p></div><div class="admin-top-actions"><button class="button secondary" id="ordersLogout">Cerrar sesión</button></div></div>${sectionNav}${ordersPanel(orders, session.role === 'admin' || session.role === 'store_manager')}</div></main>`;
   const drawOrders = () => {
     const list=document.querySelector('#adminOrdersList'); if(!list) return;
@@ -837,60 +876,7 @@ async function renderAdmin() {
     <button type="button" data-admin-scroll="classificationPanel">Categorías</button>
     <button type="button" data-admin-scroll="productEditorPanel">Producto</button>
     <button type="button" data-admin-scroll="inventoryPanel">Inventario</button>
-  </aside><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Administración</h1></div><button class="button secondary" id="logout">Cerrar sesión</button></div><nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}" class="admin-section-link active">PÁGINA WEB</a><a href="${ADMIN_PATH}/jefe-de-tienda" class="admin-section-link">JEFE DE TIENDA</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link">PEDIDOS</a></nav>${userManagementPanel(users)}${backupPanel(backupState)}${selectionPanel(products, settings)}${classificationPanel(classifications)}<section class="admin-panel product-editor-panel" id="productEditorPanel"><span class="eyebrow">Catálogo</span><h2 id="formTitle">Agregar producto</h2><div id="formArea"></div></section><section class="admin-products" id="inventoryPanel"><div class="section-heading inventory-heading"><div><span class="eyebrow">Inventario</span><h2>Productos publicados (${products.length})</h2></div><p>Edita datos, imágenes, portada y destacados.</p></div><div class="inventory-toolbar"><label class="inventory-search"><span aria-hidden="true">⌕</span><input id="inventorySearch" type="search" placeholder="Buscar por nombre, SKU, marca o categoría…" autocomplete="off"><button id="clearInventorySearch" type="button" aria-label="Limpiar búsqueda">×</button></label><span class="inventory-count" id="inventoryCount">${products.length} productos</span></div><div id="adminProducts"></div></section></div></main>`;
-  const userPanel = document.querySelector('#userManagementPanel');
-  if (userPanel) {
-    const renderUsers = (items) => {
-      const list = userPanel.querySelector('#adminUsersList');
-      if (!list) return;
-      list.innerHTML = items.map(user => `<article class="admin-user-row">
-        <div><strong>${escapeHTML(user.username)}</strong><span>${user.role === 'admin' ? 'Administrador' : (user.role === 'store_manager' ? 'Jefe de tienda' : 'Pedidos')} · ${user.active ? 'Activo' : 'Desactivado'}${user.source === 'environment' ? ' · Cuenta inicial' : ''}</span></div>
-        <div class="admin-actions">
-          <button class="button secondary small" data-user-2fa="${escapeHTML(user.id)}">${user.twoFactorEnabled ? '2FA activo' : 'Configurar 2FA'}</button>
-          ${user.source === 'environment' ? '' : `<button class="button secondary small" data-user-toggle="${escapeHTML(user.id)}">${user.active ? 'Desactivar' : 'Activar'}</button><button class="button danger small" data-user-delete="${escapeHTML(user.id)}">Eliminar</button>`}
-        </div>
-      </article>`).join('') || '<div class="empty">No hay usuarios adicionales.</div>';
-      list.querySelectorAll('[data-user-2fa]').forEach(button => button.addEventListener('click', async () => {
-        const target = items.find(u => u.id === button.dataset.user2fa);
-        if (!target) return;
-        try {
-          if (target.twoFactorEnabled) {
-            if (!confirm(`¿Desactivar 2FA para “${target.username}”?`)) return;
-            await request(`/api/admin/users/${encodeURIComponent(target.id)}/2fa`, { method: 'DELETE' });
-            target.twoFactorEnabled = false;
-            renderUsers(items);
-            return;
-          }
-          const setup = await request(`/api/admin/users/${encodeURIComponent(target.id)}/2fa/setup`, { method: 'POST' });
-          alert(`Configura el autenticador para ${target.username}.\n\nSecreto: ${setup.secret}\n\nTambién puedes usar este URI otpauth si tu aplicación permite importarlo:\n${setup.otpauthUri}\n\nDespués pulsa Aceptar y escribe el código de 6 dígitos.`);
-          const code = prompt('Código 2FA de 6 dígitos:');
-          if (!code) return;
-          await request(`/api/admin/users/${encodeURIComponent(target.id)}/2fa/verify`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code }) });
-          target.twoFactorEnabled = true;
-          renderUsers(items);
-          alert('2FA activado correctamente.');
-        } catch (e) { alert(e.message); }
-      }));
-
-      list.querySelectorAll('[data-user-toggle]').forEach(button => button.addEventListener('click', async () => {
-        const target = items.find(u => u.id === button.dataset.userToggle); if (!target) return;
-        try { const updated = await request(`/api/admin/users/${encodeURIComponent(target.id)}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ active: !target.active }) }); const i=items.findIndex(u=>u.id===updated.id); items[i]=updated; renderUsers(items); } catch(e){ alert(e.message); }
-      }));
-      list.querySelectorAll('[data-user-delete]').forEach(button => button.addEventListener('click', async () => {
-        const target = items.find(u => u.id === button.dataset.userDelete); if (!target || !confirm(`¿Eliminar el usuario “${target.username}”?`)) return;
-        try { await request(`/api/admin/users/${encodeURIComponent(target.id)}`, {method:'DELETE'}); const next=items.filter(u=>u.id!==target.id); renderUsers(next); } catch(e){ alert(e.message); }
-      }));
-    };
-    renderUsers(users);
-    userPanel.querySelector('#createUserForm')?.addEventListener('submit', async event => {
-      event.preventDefault();
-      const form=event.currentTarget; const data=Object.fromEntries(new FormData(form));
-      try {
-        const created=await request('/api/admin/users',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
-        users.push(created); renderUsers(users); form.reset(); form.querySelector('[name="role"]').value='orders'; form.querySelector('[name="username"]').focus();
-      } catch(e) { alert(e.message); }
-    });
-  }
+  </aside><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Administración</h1></div><button class="button secondary" id="logout">Cerrar sesión</button></div><nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}" class="admin-section-link active">PÁGINA WEB</a><a href="${ADMIN_PATH}/usuarios" class="admin-section-link">USUARIOS</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link">PEDIDOS</a></nav>${backupPanel(backupState)}${selectionPanel(products, settings)}${classificationPanel(classifications)}<section class="admin-panel product-editor-panel" id="productEditorPanel"><span class="eyebrow">Catálogo</span><h2 id="formTitle">Agregar producto</h2><div id="formArea"></div></section><section class="admin-products" id="inventoryPanel"><div class="section-heading inventory-heading"><div><span class="eyebrow">Inventario</span><h2>Productos publicados (${products.length})</h2></div><p>Edita datos, imágenes, portada y destacados.</p></div><div class="inventory-toolbar"><label class="inventory-search"><span aria-hidden="true">⌕</span><input id="inventorySearch" type="search" placeholder="Buscar por nombre, SKU, marca o categoría…" autocomplete="off"><button id="clearInventorySearch" type="button" aria-label="Limpiar búsqueda">×</button></label><span class="inventory-count" id="inventoryCount">${products.length} productos</span></div><div id="adminProducts"></div></section></div></main>`;
   const quickNav = document.querySelector('.admin-quick-nav');
   quickNav?.querySelectorAll('[data-admin-scroll]').forEach(button => button.addEventListener('click', () => {
     const target = document.getElementById(button.dataset.adminScroll);
@@ -1325,7 +1311,7 @@ function renderLogin(twoFactorMode = false) {
 }
 
 window.addEventListener('popstate', () => renderStore());
-if (window.location.pathname === ADMIN_PATH || window.location.pathname === `${ADMIN_PATH}/`) renderAdmin(); else if (window.location.pathname === `${ADMIN_PATH}/jefe-de-tienda` || window.location.pathname === `${ADMIN_PATH}/jefe-de-tienda/`) renderAdminOrders(); else if (window.location.pathname === `${ADMIN_PATH}/pedidos` || window.location.pathname === `${ADMIN_PATH}/pedidos/`) renderAdminOrders(); else if (window.location.pathname === '/pedido' || window.location.pathname === '/pedido/') checkoutPage(); else renderStore();
+if (window.location.pathname === ADMIN_PATH || window.location.pathname === `${ADMIN_PATH}/`) renderAdmin(); else if (window.location.pathname === `${ADMIN_PATH}/usuarios` || window.location.pathname === `${ADMIN_PATH}/usuarios/`) renderAdminUsers(); else if (window.location.pathname === `${ADMIN_PATH}/jefe-de-tienda` || window.location.pathname === `${ADMIN_PATH}/jefe-de-tienda/`) renderAdminOrders(); else if (window.location.pathname === `${ADMIN_PATH}/pedidos` || window.location.pathname === `${ADMIN_PATH}/pedidos/`) renderAdminOrders(); else if (window.location.pathname === '/pedido' || window.location.pathname === '/pedido/') checkoutPage(); else renderStore();
 
 document.addEventListener('change', e => { const file=e.target.closest('input[type=file][id^=\"imageFile\"]'); if(!file)return; const num=file.id==='imageFile'?1:Number(file.id.replace('imageFile','')); const preview=document.querySelector(`#productImagePreview${num}`); if(preview&&file.files?.[0]){const r=new FileReader();r.onload=()=>preview.src=r.result;r.readAsDataURL(file.files[0]);}});
 document.addEventListener('input', e => { const input=e.target.closest('input[type=url][id^=\"image\"]'); if(!input)return; const num=input.id==='image'?1:Number(input.id.replace('image','')); const preview=document.querySelector(`#productImagePreview${num}`); if(preview&&input.value.trim())preview.src=input.value.trim();});
