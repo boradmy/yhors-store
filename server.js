@@ -3,6 +3,8 @@ require('dotenv').config();
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
+const { execFileSync } = require('child_process');
 const express = require('express');
 const cookieParser = require('cookie-parser');
 const multer = require('multer');
@@ -41,6 +43,7 @@ if (!YHORS_DATA_KEY_SECRET) {
   throw new Error('[YHORS V10] Falta YHORS_DATA_KEY. Configura una clave secreta de cifrado en .env (local) o en las variables de entorno de Render.');
 }
 const YHORS_DATA_KEY = crypto.createHash('sha256').update(YHORS_DATA_KEY_SECRET, 'utf8').digest();
+const YHORS_DATA_KEY_FINGERPRINT = crypto.createHash('sha256').update(YHORS_DATA_KEY).digest('hex').slice(0, 16);
 const ORDER_ENCRYPTION_PREFIX = 'YHORS1';
 const ENCRYPTED_ORDER_CUSTOMER_FIELDS = ['name', 'phone', 'cedula', 'email', 'city', 'address', 'mapsUrl', 'notes'];
 const ENCRYPTED_ORDER_TOP_LEVEL_FIELDS = ['internalNote'];
@@ -458,6 +461,20 @@ const upload = multer({
   fileFilter: (_, file, done) => done(null, /^image\/(jpeg|png|webp|gif)$/.test(file.mimetype))
 });
 
+const backupUploadStorage = multer.diskStorage({
+  destination: (_, __, done) => done(null, os.tmpdir()),
+  filename: (_, file, done) => done(null, `yhors-backup-${Date.now()}-${crypto.randomBytes(6).toString('hex')}.tar.gz`)
+});
+const backupUpload = multer({
+  storage: backupUploadStorage,
+  limits: { fileSize: 250 * 1024 * 1024 },
+  fileFilter: (_, file, done) => {
+    const name = String(file.originalname || '').toLowerCase();
+    if (/\.(tar\.gz|tgz)$/.test(name)) return done(null, true);
+    return done(new Error('Solo se aceptan respaldos .tar.gz o .tgz descargados desde YHORS.'));
+  }
+});
+
 
 function backupTimestamp(date = new Date()) {
   const pad = value => String(value).padStart(2, '0');
@@ -492,10 +509,11 @@ function createBackup(reason = 'manual', options = {}) {
 
   const manifest = {
     app: 'YHORS-STORE',
-    backupVersion: 1,
+    backupVersion: 2,
     createdAt: new Date().toISOString(),
     reason,
     storageMode: process.env.YHORS_STORAGE_DIR ? 'persistent-configured' : 'local-filesystem',
+    encryption: { algorithm: 'AES-256-GCM', keyFingerprint: YHORS_DATA_KEY_FINGERPRINT },
     files: {
       products: fs.existsSync(path.join(backupDataDir, 'products.json')) ? fs.statSync(path.join(backupDataDir, 'products.json')).size : 0,
       orders: fs.existsSync(path.join(backupDataDir, 'orders.json')) ? fs.statSync(path.join(backupDataDir, 'orders.json')).size : 0
@@ -565,26 +583,60 @@ function replaceDirectoryContents(sourceDir, targetDir) {
   copyDirectoryContents(sourceDir, targetDir);
 }
 
-function applyBackupDirectory(backupDir) {
-  validateBackupDirectory(backupDir);
-  const backupDataDir = path.join(backupDir, 'data');
-  const requiredFiles = ['products.json', 'storefront.json', 'classifications.json', 'orders.json'];
+function readBackupManifest(backupDir) {
+  const manifestPath = path.join(backupDir, 'manifest.json');
+  if (!fs.existsSync(manifestPath)) return null;
+  try {
+    return JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+  } catch {
+    throw new Error('El manifest.json del respaldo no es válido.');
+  }
+}
 
-  // Si el respaldo fuera anterior a V10, lo convertimos al cifrado antes de
-  // devolverlo a producción. Nunca se guarda un pedido descifrado en el destino.
-  const stagedOrders = path.join(backupDataDir, 'orders.json');
-  migrateOrdersFileToEncryption(stagedOrders);
+function prepareOrdersForCurrentKey(sourceOrdersFile) {
+  const parsed = JSON.parse(fs.readFileSync(sourceOrdersFile, 'utf8'));
+  if (!Array.isArray(parsed)) throw new Error('El archivo de pedidos del respaldo no contiene una lista válida.');
 
-  for (const fileName of requiredFiles) {
-    const source = path.join(backupDataDir, fileName);
-    const target = path.join(DATA_DIR, fileName);
-    const temporaryFile = `${target}.restore.tmp`;
-    fs.copyFileSync(source, temporaryFile);
-    fs.renameSync(temporaryFile, target);
+  // Los respaldos V10 ya cifrados deben poder descifrarse con la clave actual.
+  // Los respaldos anteriores a V10 se pueden migrar automáticamente al cifrado actual.
+  let readableOrders;
+  try {
+    readableOrders = parsed.map(decryptOrder);
+  } catch (error) {
+    throw new Error('Este respaldo contiene pedidos cifrados con otra YHORS_DATA_KEY. No se restauró para evitar dejar el sistema sin acceso a los pedidos actuales.');
   }
 
-  const backupUploadsDir = path.join(backupDir, 'uploads');
-  if (fs.existsSync(backupUploadsDir)) replaceDirectoryContents(backupUploadsDir, UPLOADS_DIR);
+  const temporaryFile = path.join(os.tmpdir(), `yhors-orders-restore-${Date.now()}-${crypto.randomBytes(5).toString('hex')}.json`);
+  fs.writeFileSync(temporaryFile, `${JSON.stringify(readableOrders.map(encryptOrder), null, 2)}\n`, 'utf8');
+  return temporaryFile;
+}
+
+function applyBackupDirectory(backupDir) {
+  validateBackupDirectory(backupDir);
+  const manifest = readBackupManifest(backupDir);
+  const manifestFingerprint = manifest?.encryption?.keyFingerprint;
+  if (manifestFingerprint && manifestFingerprint !== YHORS_DATA_KEY_FINGERPRINT) {
+    throw new Error('Este respaldo fue creado con otra YHORS_DATA_KEY. Usa la misma clave con la que fue generado o importa un respaldo compatible.');
+  }
+
+  const backupDataDir = path.join(backupDir, 'data');
+  const requiredFiles = ['products.json', 'storefront.json', 'classifications.json', 'orders.json'];
+  const preparedOrders = prepareOrdersForCurrentKey(path.join(backupDataDir, 'orders.json'));
+
+  try {
+    for (const fileName of requiredFiles) {
+      const source = fileName === 'orders.json' ? preparedOrders : path.join(backupDataDir, fileName);
+      const target = path.join(DATA_DIR, fileName);
+      const temporaryFile = `${target}.restore.tmp`;
+      fs.copyFileSync(source, temporaryFile);
+      fs.renameSync(temporaryFile, target);
+    }
+
+    const backupUploadsDir = path.join(backupDir, 'uploads');
+    if (fs.existsSync(backupUploadsDir)) replaceDirectoryContents(backupUploadsDir, UPLOADS_DIR);
+  } finally {
+    fs.rmSync(preparedOrders, { force: true });
+  }
 }
 
 function restoreBackup(name) {
@@ -606,6 +658,79 @@ function restoreBackup(name) {
       console.error('[YHORS] Falló también la recuperación del respaldo de seguridad:', rollbackError);
     }
     throw error;
+  }
+}
+
+function isSafeArchiveEntry(entryName) {
+  const normalized = String(entryName || '').replace(/\\/g, '/');
+  if (!normalized || normalized.startsWith('/') || /^[A-Za-z]:\//.test(normalized)) return false;
+  const parts = normalized.split('/').filter(Boolean);
+  return !parts.includes('..');
+}
+
+function locateExtractedBackup(rootDir) {
+  const candidates = [rootDir];
+  for (const entry of fs.readdirSync(rootDir, { withFileTypes: true })) {
+    if (entry.isDirectory()) candidates.push(path.join(rootDir, entry.name));
+  }
+  for (const candidate of candidates) {
+    if (fs.existsSync(path.join(candidate, 'manifest.json')) && fs.existsSync(path.join(candidate, 'data', 'orders.json'))) return candidate;
+  }
+  throw new Error('No encontré un respaldo YHORS válido dentro del archivo. Usa el archivo .tar.gz descargado desde YHORS.');
+}
+
+function importBackupArchive(archivePath) {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'yhors-backup-upload-'));
+  try {
+    let listing;
+    try {
+      listing = execFileSync('tar', ['-tzf', archivePath], { encoding: 'utf8', timeout: 120000, maxBuffer: 10 * 1024 * 1024 });
+    } catch {
+      throw new Error('El archivo no es un respaldo .tar.gz válido de YHORS.');
+    }
+    const entries = listing.split(/\r?\n/).map(item => item.trim()).filter(Boolean);
+    if (!entries.length || entries.some(entry => !isSafeArchiveEntry(entry))) {
+      throw new Error('El respaldo contiene rutas no válidas y fue rechazado por seguridad.');
+    }
+    execFileSync('tar', ['-xzf', archivePath, '-C', tempRoot, '--no-same-owner', '--no-same-permissions'], { stdio: 'ignore', timeout: 120000 });
+    const backupDir = locateExtractedBackup(tempRoot);
+    validateBackupDirectory(backupDir);
+    const manifest = readBackupManifest(backupDir);
+    if (manifest?.encryption?.keyFingerprint && manifest.encryption.keyFingerprint !== YHORS_DATA_KEY_FINGERPRINT) {
+      throw new Error('El respaldo fue creado con otra YHORS_DATA_KEY. No se restauró para proteger los pedidos actuales.');
+    }
+
+    // Validación previa: descifra y vuelve a cifrar en una ubicación temporal.
+    const preparedOrders = prepareOrdersForCurrentKey(path.join(backupDir, 'data', 'orders.json'));
+    fs.rmSync(preparedOrders, { force: true });
+
+    // Se importa al almacenamiento persistente con el nombre original, para que
+    // quede visible en la lista de backups y pueda descargarse nuevamente.
+    const originalName = path.basename(backupDir);
+    if (!isValidBackupName(originalName)) {
+      throw new Error('El nombre del respaldo no tiene el formato esperado de YHORS.');
+    }
+    const destination = path.join(BACKUPS_DIR, originalName);
+    if (fs.existsSync(destination)) {
+      throw new Error('Ese respaldo ya existe en YHORS. Cambia el archivo o elimina la copia anterior.');
+    }
+    fs.cpSync(backupDir, destination, { recursive: true });
+    pruneBackups([originalName]);
+
+    const safetyBackup = createBackup('antes-de-restaurar', { preserveNames: [originalName] });
+    try {
+      applyBackupDirectory(destination);
+      pruneBackups([originalName, safetyBackup.name]);
+    } catch (error) {
+      try { applyBackupDirectory(path.join(BACKUPS_DIR, safetyBackup.name)); } catch (rollbackError) {
+        console.error('[YHORS] Falló también la recuperación del respaldo de seguridad importado:', rollbackError);
+      }
+      throw error;
+    }
+    return { restored: originalName, safetyBackup };
+  } finally {
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+    fs.rmSync(archivePath, { force: true });
   }
 }
 
@@ -1080,6 +1205,18 @@ app.post('/api/admin/backups/:name/restore', requireAdmin, (req, res) => {
   }
 });
 
+app.post('/api/admin/backups/upload', requireAdmin, backupUpload.single('backup'), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'Selecciona un archivo .tar.gz o .tgz de YHORS.' });
+  try {
+    const result = importBackupArchive(req.file.path);
+    return res.json({ ok: true, ...result, message: 'Respaldo importado y restaurado correctamente.' });
+  } catch (error) {
+    if (req.file?.path) fs.rmSync(req.file.path, { force: true });
+    console.error('[YHORS] Error importando respaldo:', error);
+    return res.status(400).json({ error: error.message || 'No se pudo importar el respaldo.' });
+  }
+});
+
 app.delete('/api/admin/backups/:name', requireAdmin, (req, res) => {
   const name = String(req.params.name || '');
   if (!isValidBackupName(name)) {
@@ -1189,8 +1326,15 @@ app.delete('/api/admin/products/:id', requireAdmin, (req, res) => {
 app.use((_, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
 app.use((error, _, res, __) => {
-  if (error instanceof multer.MulterError) return res.status(400).json({ error: 'La imagen supera el límite de 5 MB.' });
-  if (error) return res.status(400).json({ error: 'No se pudo procesar la solicitud.' });
+  if (error instanceof multer.MulterError) {
+    if (error.field === 'backup') return res.status(400).json({ error: 'El respaldo supera el límite de 250 MB.' });
+    return res.status(400).json({ error: 'La imagen supera el límite de 5 MB.' });
+  }
+  if (error?.message?.includes('Solo se aceptan respaldos')) return res.status(400).json({ error: error.message });
+  if (error?.message?.includes('No se pudo descifrar la información del pedido')) {
+    return res.status(500).json({ error: 'No se pudo leer los pedidos porque YHORS_DATA_KEY no coincide con la clave con la que fueron cifrados. Verifica la clave de este entorno.' });
+  }
+  if (error) return res.status(400).json({ error: error.message || 'No se pudo procesar la solicitud.' });
 });
 
 app.listen(PORT, () => console.log(`YHORS disponible en http://localhost:${PORT}`));

@@ -1463,3 +1463,16 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}.brand{letter-sp
   .backup-row-actions{width:100%;justify-content:flex-start;overflow-x:auto;padding-bottom:1px}
   .backup-row-actions .button{flex:0 0 auto}
 }
+
+/* YHORS V10.1 — carga manual de respaldos */
+.backup-main-actions{align-items:center;flex-wrap:wrap}
+.backup-upload-help{margin-top:10px;font-size:.72rem;line-height:1.45;opacity:.62}
+.backup-upload-help strong{font-weight:800;color:var(--ink)}
+#uploadBackupButton{background:#fff;color:var(--ink);border-color:rgba(0,0,0,.14)}
+#uploadBackupButton:hover{background:var(--paper-2);border-color:rgba(181,138,67,.35)}
+#uploadBackupButton:disabled,#createBackup:disabled{opacity:.65;cursor:wait}
+@media(max-width:760px){
+  .backup-main-actions{align-items:stretch}
+  .backup-main-actions .button{width:100%}
+  .backup-last{width:100%}
+}

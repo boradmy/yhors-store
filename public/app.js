@@ -769,11 +769,14 @@ function backupPanel(data = null) {
       </div>
     </div>
     <div class="backup-panel-body">
-      <p class="admin-help">Los respaldos protegen productos, pedidos, clasificaciones, portada y fotografías. Se conserva un máximo de ${escapeHTML(data?.retention || 30)} respaldos.</p>
-      <div class="backup-actions">
+      <p class="admin-help">Los respaldos protegen productos, pedidos, clasificaciones, portada y fotografías. Se conserva un máximo de ${escapeHTML(data?.retention || 30)} respaldos. Puedes descargar un respaldo o subir uno anterior para restaurarlo.</p>
+      <div class="backup-actions backup-main-actions">
         <button class="button" type="button" id="createBackup">Crear respaldo ahora</button>
+        <button class="button secondary" type="button" id="uploadBackupButton">Subir respaldo</button>
+        <input id="backupUploadInput" type="file" accept=".tar.gz,.tgz,application/gzip" hidden>
         <span class="backup-last" id="backupLast">${backups[0] ? `Último respaldo: ${formatBackupDate(backups[0].createdAt)}` : 'Todavía no hay respaldos.'}</span>
       </div>
+      <div class="backup-upload-help">Acepta archivos <strong>.tar.gz</strong> o <strong>.tgz</strong> descargados desde YHORS. Al subirlo, se crea primero un respaldo de seguridad y luego se restaura el archivo.</div>
       <div class="backup-list" id="backupList">
         ${backups.length ? backups.map((item, index) => {
           const isNewest = index === 0;
@@ -791,7 +794,6 @@ function backupPanel(data = null) {
             </div>
             <div class="backup-row-actions">
               <button class="button secondary small" type="button" data-backup-download="${escapeHTML(item.name)}">Descargar</button>
-              <button class="button restore small" type="button" data-backup-restore="${escapeHTML(item.name)}">Restaurar</button>
               <button class="button danger small" type="button" data-backup-delete="${escapeHTML(item.name)}">Eliminar</button>
             </div>
           </div>`;
@@ -1162,25 +1164,31 @@ async function renderAdmin() {
         window.location.href = `/api/admin/backups/${encodeURIComponent(name)}/download`;
       });
     });
-    document.querySelectorAll('[data-backup-restore]').forEach(button => {
-      button.addEventListener('click', async () => {
-        const name = button.dataset.backupRestore;
-        const row = button.closest('.backup-row');
-        const label = row?.querySelector('.backup-row-title strong')?.textContent || 'este backup';
-        const date = row?.querySelector('.backup-row-info small b')?.textContent || '';
-        const confirmed = confirm(`¿Restaurar ${label}${date ? ` del ${date}` : ''}?\n\nSe reemplazarán los datos actuales de YHORS por los de este respaldo. Antes de restaurar, el sistema creará automáticamente un respaldo de seguridad del estado actual.\n\n¿Deseas continuar?`);
-        if (!confirmed) return;
-        button.disabled = true;
-        try {
-          const result = await request(`/api/admin/backups/${encodeURIComponent(name)}/restore`, { method: 'POST' });
-          await refreshBackups();
-          alert(`Restauración completada.\n\nSe creó el respaldo de seguridad ${result.safetyBackup?.name || 'antes de restaurar'} por si necesitas volver al estado anterior.`);
-        } catch (e) {
-          button.disabled = false;
-          alert(e.message);
-        }
-      });
+    const uploadButton = document.querySelector('#uploadBackupButton');
+    const uploadInput = document.querySelector('#backupUploadInput');
+    uploadButton?.addEventListener('click', () => uploadInput?.click());
+    uploadInput?.addEventListener('change', async () => {
+      const file = uploadInput.files?.[0];
+      if (!file) return;
+      const confirmed = confirm(`¿Subir y restaurar "${file.name}"?\n\nSe reemplazarán los datos actuales de YHORS por los del respaldo. Antes de hacerlo, el sistema creará automáticamente un respaldo de seguridad del estado actual.\n\nSi el archivo fue creado con otra YHORS_DATA_KEY, la restauración será rechazada para proteger tus pedidos.\n\n¿Deseas continuar?`);
+      if (!confirmed) { uploadInput.value = ''; return; }
+      uploadButton.disabled = true;
+      uploadButton.textContent = 'Subiendo y restaurando…';
+      try {
+        const formData = new FormData();
+        formData.append('backup', file);
+        const result = await request('/api/admin/backups/upload', { method: 'POST', body: formData });
+        await refreshBackups();
+        alert(`Respaldo restaurado correctamente.\n\nSe creó el respaldo de seguridad ${result.safetyBackup?.name || 'antes de restaurar'} por si necesitas volver al estado anterior.`);
+      } catch (e) {
+        alert(e.message);
+      } finally {
+        uploadInput.value = '';
+        uploadButton.disabled = false;
+        uploadButton.textContent = 'Subir respaldo';
+      }
     });
+
     document.querySelectorAll('[data-backup-delete]').forEach(button => {
       button.addEventListener('click', async () => {
         const name = button.dataset.backupDelete;
