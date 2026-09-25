@@ -906,7 +906,7 @@ async function renderAdminOrders() {
 
   const sectionNav = (session.role === 'vendedor' || session.role === 'store_manager')
     ? `<nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}/pedidos" class="admin-section-link active">PEDIDOS</a></nav>`
-    : `<nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}" class="admin-section-link">PÁGINA WEB</a><a href="${ADMIN_PATH}/usuarios" class="admin-section-link">USUARIOS</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link active">PEDIDOS</a></nav>`;
+    : `<nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}" class="admin-section-link">PÁGINA WEB</a><a href="${ADMIN_PATH}/usuarios" class="admin-section-link">USUARIOS</a><a href="${ADMIN_PATH}/inventario" class="admin-section-link">INVENTARIO</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link active">PEDIDOS</a></nav>`;
   const title = session.role === 'vendedor' ? 'Mis pedidos asignados' : 'Gestión de pedidos';
   const subtitle = session.role === 'store_manager' ? 'Jefe de tienda · pedidos, asignaciones y control operativo' : (session.role === 'vendedor' ? 'Pedidos asignados a tu usuario · consulta y gestión operativa' : 'Gestión de YHORS STORE');
   app.innerHTML = `<main class="admin-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">${title}</h1><p class="admin-subtitle">${subtitle}</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>${sectionNav}${ordersPanel(orders, canDelete)}</div></main>`;
@@ -1301,42 +1301,69 @@ function showSaveSuccess(messageElement, text) {
 function inventoryPageMarkup(products = []) {
   const rows = products.length ? products.map(product => {
     const images = productImages(product);
-    const imageValues = Array.from({length:4}, (_,i) => images[i] || '');
     const profit = Number(product.salePrice ?? product.price ?? 0) - Number(product.purchasePrice ?? 0);
     const profitClass = profit >= 0 ? 'profit-positive' : 'profit-negative';
     const profitLabel = profit >= 0 ? 'Ganancia' : 'Pérdida';
-    const categoryOptions = Object.entries(categories).map(([key,label]) => `<option value="${escapeHTML(key)}" ${product.category===key?'selected':''}>${escapeHTML(label)}</option>`).join('');
-    const thumbs = images.slice(0, 4).map((src, index) => `<img src="${escapeHTML(src)}" alt="${escapeHTML(product.name)} imagen ${index + 1}" data-fallback>`).join('');
-    return `<article class="inventory-record" data-inventory-id="${escapeHTML(product.id)}">
-      <div class="inventory-record-media"><img class="inventory-main-image" src="${escapeHTML(images[0] || placeholder)}" alt="${escapeHTML(product.name)}" data-fallback><div class="inventory-thumbs">${thumbs}</div></div>
+    const isCosplay = product.category === 'cosplay';
+    const rentalValue = product.rentalPrice ?? '';
+    return `<article class="inventory-record inventory-record-compact" data-inventory-id="${escapeHTML(product.id)}">
+      <div class="inventory-record-media">
+        <img class="inventory-main-image" src="${escapeHTML(images[0] || placeholder)}" alt="${escapeHTML(product.name)}" data-fallback>
+        <div class="inventory-thumbs">${images.slice(0,4).map((src,index)=>`<img src="${escapeHTML(src)}" alt="${escapeHTML(product.name)} imagen ${index+1}" data-fallback>`).join('')}</div>
+      </div>
       <div class="inventory-record-info">
-        <div class="inventory-record-title"><div><span class="eyebrow">${escapeHTML(categories[product.category] || product.category || 'Producto')}</span><h3>${escapeHTML(product.name)}</h3></div><div class="inventory-stock-wrap"><strong class="inventory-stock-badge" data-stock-badge>${Number(product.stock || 0)} en stock</strong><strong class="inventory-profit-badge ${profitClass}" data-profit-badge>${profitLabel}: ${money(profit)}</strong></div></div>
-        <div class="inventory-full-edit-grid">
-          <label><span>Nombre</span><input type="text" value="${escapeHTML(product.name || '')}" data-field="name" disabled></label>
-          <label><span>SKU</span><input type="text" value="${escapeHTML(product.sku || '')}" data-field="sku" disabled></label>
-          <label><span>Marca</span><input type="text" value="${escapeHTML(product.brand || '')}" data-field="brand" disabled></label>
-          <label><span>Tipo</span><input type="text" value="${escapeHTML(product.productType || '')}" data-field="productType" disabled></label>
-          <label><span>Categoría</span><select data-field="category" disabled>${categoryOptions}</select></label>
+        <div class="inventory-record-title">
+          <div>
+            <span class="eyebrow">${escapeHTML(categories[product.category] || product.category || 'Producto')}</span>
+            <h3>${escapeHTML(product.name)}</h3>
+          </div>
+          <div class="inventory-stock-wrap">
+            <strong class="inventory-stock-badge">${Number(product.stock || 0)} en stock</strong>
+            <strong class="inventory-profit-badge ${profitClass}" data-profit-badge>${profitLabel}: ${money(Math.abs(profit))}</strong>
+          </div>
+        </div>
+
+        <div class="inventory-record-meta">
+          <div><span>SKU</span><strong>${escapeHTML(product.sku || '—')}</strong></div>
+          <div><span>MARCA</span><strong>${escapeHTML(product.brand || '—')}</strong></div>
+          <div><span>TIPO</span><strong>${escapeHTML(product.productType || '—')}</strong></div>
+        </div>
+
+        <div class="inventory-edit-fields">
           <label><span>Precio de compra</span><div class="inventory-input-wrap"><span>$</span><input type="number" min="0" step="0.01" value="${escapeHTML(product.purchasePrice ?? 0)}" data-field="purchasePrice" disabled></div></label>
           <label><span>Precio de venta</span><div class="inventory-input-wrap"><span>$</span><input type="number" min="0" step="0.01" value="${escapeHTML(product.salePrice ?? product.price ?? 0)}" data-field="salePrice" disabled></div></label>
-          <label><span>Precio de alquiler / día</span><div class="inventory-input-wrap"><span>$</span><input type="number" min="0" step="0.01" value="${escapeHTML(product.rentalPrice ?? '')}" data-field="rentalPrice" disabled></div></label>
           <label><span>Stock disponible</span><input type="number" min="0" step="1" value="${escapeHTML(product.stock ?? 0)}" data-field="stock" disabled></label>
-          <label class="inventory-field-wide"><span>Imagen principal</span><input type="url" value="${escapeHTML(imageValues[0])}" data-field="image" disabled></label>
-          <label class="inventory-field-wide"><span>Imagen 2</span><input type="url" value="${escapeHTML(imageValues[1])}" data-image-index="1" disabled></label>
-          <label class="inventory-field-wide"><span>Imagen 3</span><input type="url" value="${escapeHTML(imageValues[2])}" data-image-index="2" disabled></label>
-          <label class="inventory-field-wide"><span>Imagen 4</span><input type="url" value="${escapeHTML(imageValues[3])}" data-image-index="3" disabled></label>
-          <label class="inventory-field-wide"><span>Descripción</span><textarea rows="4" data-field="description" disabled>${escapeHTML(product.description || '')}</textarea></label>
-          <label class="inventory-check"><input type="checkbox" data-field="featured" ${product.featured?'checked':''} disabled><span>Producto destacado</span></label>
-          <label class="inventory-check"><input type="checkbox" data-field="hero" ${product.hero?'checked':''} disabled><span>Producto de portada</span></label>
-          <label><span>Orden de portada</span><input type="number" min="0" max="999" step="1" value="${escapeHTML(product.heroOrder ?? 0)}" data-field="heroOrder" disabled></label>
+          ${isCosplay ? `<label><span>Precio de alquiler / día</span><div class="inventory-input-wrap"><span>$</span><input type="number" min="0" step="0.01" value="${escapeHTML(rentalValue)}" data-field="rentalPrice" disabled></div></label>` : ''}
         </div>
-        <div class="inventory-record-actions"><button class="button secondary small" type="button" data-inventory-edit>Editar</button><button class="button primary small" type="button" data-inventory-save disabled>Guardar cambios</button><button class="button secondary small" type="button" data-inventory-cancel disabled>Cancelar</button><span class="message" data-inventory-message></span></div>
+
+        <div class="inventory-record-actions">
+          <button class="button secondary small" type="button" data-inventory-edit>Editar</button>
+          <button class="button primary small" type="button" data-inventory-save disabled>Guardar cambios</button>
+          <button class="button secondary small" type="button" data-inventory-cancel disabled>Cancelar</button>
+          <span class="message" data-inventory-message></span>
+        </div>
       </div>
     </article>`;
   }).join('') : '<div class="empty">No hay productos registrados.</div>';
-  return `<main class="admin-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Inventario</h1><p class="admin-subtitle">Control completo de productos, costos, precios y existencias</p></div><div class="admin-top-actions">${accountMenu(window.__yhorsSession || {})}</div></div>
-    <nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}" class="admin-section-link">PÁGINA WEB</a><a href="${ADMIN_PATH}/usuarios" class="admin-section-link">USUARIOS</a><a href="${ADMIN_PATH}/inventario" class="admin-section-link active">INVENTARIO</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link">PEDIDOS</a></nav>
-    <section class="admin-panel inventory-page-panel"><div class="section-heading"><div><span class="eyebrow">Control de existencias</span><h2>Inventario de productos</h2></div><p>Desde aquí puedes editar toda la ficha del producto. Los cambios se confirman antes de guardarse.</p></div><div class="inventory-toolbar"><label class="inventory-search"><span aria-hidden="true">⌕</span><input id="inventoryPageSearch" type="search" placeholder="Buscar por nombre, SKU, marca o categoría…" autocomplete="off"><button id="clearInventoryPageSearch" type="button" aria-label="Limpiar búsqueda">×</button></label><label class="inventory-filter"><span>Categoría</span><select id="inventoryPageCategoryFilter"><option value="">Todas las categorías</option><option value="elegant">Elegante</option><option value="sports">Deportes</option><option value="tech">Tech</option><option value="cosplay">Cosplay</option><option value="pets">Mascotas</option><option value="details">Detalles</option><option value="collectibles">Coleccionables</option></select></label><span class="inventory-count" id="inventoryPageCount">${products.length} productos</span></div><div id="inventoryPageList">${rows}</div></section></div></main>`;
+
+  return `<main class="admin-shell"><div class="admin-wrap">
+    <div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Inventario</h1><p class="admin-subtitle">Control de costos, precios y existencias</p></div><div class="admin-top-actions">${accountMenu(window.__yhorsSession || {})}</div></div>
+    <nav class="admin-section-nav" aria-label="Secciones de administración">
+      <a href="${ADMIN_PATH}" class="admin-section-link">PÁGINA WEB</a>
+      <a href="${ADMIN_PATH}/usuarios" class="admin-section-link">USUARIOS</a>
+      <a href="${ADMIN_PATH}/inventario" class="admin-section-link active">INVENTARIO</a>
+      <a href="${ADMIN_PATH}/pedidos" class="admin-section-link">PEDIDOS</a>
+    </nav>
+    <section class="admin-panel inventory-page-panel">
+      <div class="section-heading"><div><span class="eyebrow">Control de existencias</span><h2>Inventario de productos</h2></div><p>La ficha del producto permanece limpia; aquí solo se editan los datos de inventario.</p></div>
+      <div class="inventory-toolbar">
+        <label class="inventory-search"><span aria-hidden="true">⌕</span><input id="inventoryPageSearch" type="search" placeholder="Buscar por nombre, SKU, marca o categoría…" autocomplete="off"><button id="clearInventoryPageSearch" type="button" aria-label="Limpiar búsqueda">×</button></label>
+        <label class="inventory-filter"><span>Categoría</span><select id="inventoryPageCategoryFilter"><option value="">Todas las categorías</option><option value="elegant">Elegante</option><option value="sports">Deportes</option><option value="tech">Tech</option><option value="cosplay">Cosplay</option><option value="pets">Mascotas</option><option value="details">Detalles</option><option value="collectibles">Coleccionables</option></select></label>
+        <span class="inventory-count" id="inventoryPageCount">${products.length} productos</span>
+      </div>
+      <div id="inventoryPageList">${rows}</div>
+    </section>
+  </div></main>`;
 }
 
 async function renderAdminInventory() {
@@ -1398,7 +1425,9 @@ async function renderAdminInventory() {
         const purchasePrice = Number(get('purchasePrice')?.value);
         const salePrice = Number(get('salePrice')?.value);
         const rentalRaw = get('rentalPrice')?.value;
-        const rentalPrice = rentalRaw === '' ? null : Number(rentalRaw);
+        const rentalPrice = product.category === 'cosplay'
+          ? (rentalRaw === '' || rentalRaw == null ? null : Number(rentalRaw))
+          : null;
         const stock = Number(get('stock')?.value);
         const description = get('description')?.value || '';
         const image = get('image')?.value.trim() || '';

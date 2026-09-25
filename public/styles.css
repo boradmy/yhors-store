@@ -1627,3 +1627,50 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}.brand{letter-sp
 .detail-availability.out::before{content:'×'}
 @media(max-width:800px){.inventory-full-edit-grid{grid-template-columns:1fr 1fr}.inventory-field-wide{grid-column:span 2}.inventory-stock-wrap{justify-content:flex-start}}
 @media(max-width:600px){.inventory-full-edit-grid{grid-template-columns:1fr}.inventory-field-wide{grid-column:span 1}.inventory-stock-wrap{display:grid;grid-template-columns:1fr 1fr;width:100%}.inventory-profit-badge,.inventory-stock-badge{width:100%;box-sizing:border-box;text-align:center}}
+
+
+/* V14.14 — inventario compacto */
+.inventory-record-compact .inventory-record-meta {
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:12px;
+  margin:14px 0;
+}
+.inventory-record-compact .inventory-record-meta > div {
+  padding:10px 12px;
+  border:1px solid rgba(0,0,0,.10);
+  border-radius:10px;
+  background:#faf9f6;
+}
+.inventory-record-compact .inventory-record-meta span,
+.inventory-record-compact .inventory-edit-fields label > span {
+  display:block;
+  font-size:.72rem;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+  opacity:.65;
+  margin-bottom:5px;
+}
+.inventory-record-compact .inventory-record-meta strong {
+  display:block;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.inventory-record-compact .inventory-edit-fields {
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:12px;
+}
+.inventory-record-compact .inventory-edit-fields label {
+  min-width:0;
+}
+.inventory-record-compact .inventory-edit-fields input {
+  width:100%;
+}
+@media (max-width: 850px) {
+  .inventory-record-compact .inventory-record-meta,
+  .inventory-record-compact .inventory-edit-fields {
+    grid-template-columns:1fr;
+  }
+}
