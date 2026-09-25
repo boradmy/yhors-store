@@ -1306,19 +1306,25 @@ function validateOrder(input) {
     const quantity = Math.max(1, Math.min(99, Number.parseInt(requested.quantity, 10) || 0));
     if (!product || !quantity) return { error: 'Uno de los productos del carrito ya no está disponible.' };
     const purchaseMode = requested.purchaseMode === 'rental' ? 'rental' : 'purchase';
+    const rentalDays = purchaseMode === 'rental' ? Number.parseInt(requested.rentalDays, 10) : null;
+    if (purchaseMode === 'rental' && (!Number.isInteger(rentalDays) || rentalDays < 1 || rentalDays > 10)) {
+      return { error: `Selecciona entre 1 y 10 días de alquiler para “${product.name}”.` };
+    }
     const price = purchaseMode === 'rental' ? Number(product.rentalPrice) : Number(product.salePrice ?? product.price);
     if (!Number.isFinite(price) || price < 0 || (purchaseMode === 'rental' && product.rentalPrice === null)) {
       return { error: `El producto “${product.name}” no tiene un precio válido.` };
     }
+    const durationMultiplier = purchaseMode === 'rental' ? rentalDays : 1;
     items.push({
       productId: product.id,
       sku: product.sku || '',
       name: product.name,
       category: product.category,
       purchaseMode,
+      rentalDays,
       quantity,
       unitPrice: Math.round(price * 100) / 100,
-      subtotal: Math.round(price * quantity * 100) / 100
+      subtotal: Math.round(price * quantity * durationMultiplier * 100) / 100
     });
   }
   const subtotal = Math.round(items.reduce((sum, item) => sum + item.subtotal, 0) * 100) / 100;
@@ -1429,9 +1435,10 @@ async function sendOrderConfirmationEmail(order) {
   const email = order?.customer?.email;
   if (!email) return { sent: false, reason: 'no-customer-email' };
 
-  const itemsHtml = (order.items || []).map(item =>
-    `<tr><td style="padding:8px 0">${escapeEmailHtml(item.quantity)}× ${escapeEmailHtml(item.name)}<br><small>SKU: ${escapeEmailHtml(item.sku || '—')}</small></td><td style="padding:8px 0;text-align:right">$${Number(item.subtotal || 0).toFixed(2)}</td></tr>`
-  ).join('');
+  const itemsHtml = (order.items || []).map(item => {
+    const rentalText = item.purchaseMode === 'rental' ? ` · Alquiler · ${Number(item.rentalDays || 1)} día${Number(item.rentalDays || 1) === 1 ? '' : 's'} · $${Number(item.unitPrice || 0).toFixed(2)}/día` : '';
+    return `<tr><td style="padding:8px 0">${escapeEmailHtml(item.quantity)}× ${escapeEmailHtml(item.name)}<br><small>SKU: ${escapeEmailHtml(item.sku || '—')}${escapeEmailHtml(rentalText)}</small></td><td style="padding:8px 0;text-align:right">$${Number(item.subtotal || 0).toFixed(2)}</td></tr>`;
+  }).join('');
   const mapsHtml = order.customer.mapsUrl ? `<p><strong>Ubicación:</strong> <a href="${escapeEmailHtml(order.customer.mapsUrl)}">Abrir en Google Maps</a></p>` : '';
   const html = `<div style="font-family:Arial,sans-serif;max-width:620px;margin:auto;color:#222">
     <h1 style="margin-bottom:4px">YHORS STORE</h1>
@@ -1545,6 +1552,8 @@ function validateProduct(input, current = {}, allProducts = []) {
   return { product: {
     ...current, name, description, category, brand, productType, sku,
     salePrice: Math.round(salePrice * 100) / 100,
+    purchasePrice: Number.isFinite(Number(current.purchasePrice)) ? Math.max(0, Math.round(Number(current.purchasePrice) * 100) / 100) : 0,
+    stock: Number.isInteger(Number(current.stock)) && Number(current.stock) >= 0 ? Number(current.stock) : 0,
     rentalPrice: category === 'cosplay' ? Math.round(rentalPrice * 100) / 100 : null,
     price: Math.round(salePrice * 100) / 100,
     image: finalImages[0] || '', images: finalImages,
@@ -1564,7 +1573,18 @@ function normalizeProduct(product) {
   const images = Array.isArray(product.images) && product.images.length
     ? product.images.filter(Boolean)
     : (product.image ? [product.image] : []);
-  return { ...product, sku: normalizeSku(product.sku) || makeUniqueSku('', product, [], product.id), image: product.image || images[0] || '', images };
+  const purchasePrice = Number(product.purchasePrice);
+  const stock = Number(product.stock);
+  return {
+    ...product,
+    sku: normalizeSku(product.sku) || makeUniqueSku('', product, [], product.id),
+    image: product.image || images[0] || '',
+    images,
+    purchasePrice: Number.isFinite(purchasePrice) && purchasePrice >= 0 ? Math.round(purchasePrice * 100) / 100 : 0,
+    salePrice: Number.isFinite(Number(product.salePrice ?? product.price)) && Number(product.salePrice ?? product.price) >= 0 ? Math.round(Number(product.salePrice ?? product.price) * 100) / 100 : 0,
+    price: Number.isFinite(Number(product.salePrice ?? product.price)) && Number(product.salePrice ?? product.price) >= 0 ? Math.round(Number(product.salePrice ?? product.price) * 100) / 100 : 0,
+    stock: Number.isInteger(stock) && stock >= 0 ? stock : 0
+  };
 }
 
 app.get('/api/products', (_, res) => res.json(readProducts().map(normalizeProduct)));
@@ -2140,6 +2160,31 @@ app.get('/api/admin/backups/:name/download', requireAdmin, (req, res) => {
 });
 
 app.get('/api/admin/products', requireAdmin, (_, res) => res.json(readProducts().map(normalizeProduct)));
+
+app.put('/api/admin/inventory/:id', requireAdmin, (req, res) => {
+  const products = readProducts();
+  const index = products.findIndex(product => product.id === req.params.id);
+  if (index < 0) return res.status(404).json({ error: 'Producto no encontrado.' });
+  const previous = normalizeProduct(products[index]);
+  const purchaseRaw = req.body?.purchasePrice;
+  const stockRaw = req.body?.stock;
+  const purchasePrice = purchaseRaw === '' || purchaseRaw === null || purchaseRaw === undefined ? 0 : Number(purchaseRaw);
+  const stock = stockRaw === '' || stockRaw === null || stockRaw === undefined ? 0 : Number(stockRaw);
+  const salePrice = Number(req.body?.salePrice ?? previous.salePrice ?? previous.price);
+  if (!Number.isFinite(purchasePrice) || purchasePrice < 0 || purchasePrice > 100000000) return res.status(400).json({ error: 'El precio de compra no es válido.' });
+  if (!Number.isInteger(stock) || stock < 0 || stock > 100000000) return res.status(400).json({ error: 'El stock debe ser un número entero igual o mayor que 0.' });
+  if (!Number.isFinite(salePrice) || salePrice < 0 || salePrice > 100000000) return res.status(400).json({ error: 'El precio de venta no es válido.' });
+  products[index] = normalizeProduct({
+    ...products[index],
+    purchasePrice: Math.round(purchasePrice * 100) / 100,
+    salePrice: Math.round(salePrice * 100) / 100,
+    price: Math.round(salePrice * 100) / 100,
+    stock,
+    updatedAt: new Date().toISOString()
+  });
+  writeProducts(products);
+  return res.json(products[index]);
+});
 app.get('/api/admin/storefront', requireAdmin, (_, res) => res.json(readStorefront()));
 app.get('/api/admin/classifications', requireAdmin, (_, res) => res.json(readClassifications()));
 app.put('/api/admin/classifications', requireAdmin, (req, res) => res.json(writeClassifications(req.body || {})));

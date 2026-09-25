@@ -1574,3 +1574,17 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}.brand{letter-sp
   .yhors-confirm-actions{flex-direction:column-reverse}
   .yhors-confirm-actions .button{width:100%}
 }
+
+/* V14.9 - Inventario dedicado */
+.inventory-page-panel{margin-top:0}.inventory-record{display:grid;grid-template-columns:150px minmax(0,1fr);gap:20px;padding:20px 0;border-top:1px solid var(--line)}.inventory-record:first-child{border-top:0}.inventory-record-media{display:grid;gap:8px;align-content:start}.inventory-main-image{width:150px;height:150px;object-fit:cover;border-radius:9px;background:#e8e5de;border:1px solid var(--line)}.inventory-thumbs{display:flex;gap:5px;flex-wrap:wrap}.inventory-thumbs img{width:31px;height:31px;object-fit:cover;border-radius:4px;border:1px solid var(--line);background:#eee}.inventory-record-info{min-width:0}.inventory-record-title{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}.inventory-record-title h3{margin:4px 0 0;font-size:1.15rem}.inventory-stock-badge{font-size:.75rem;padding:7px 10px;border-radius:999px;background:#f1ede5;color:#5c4a2d;white-space:nowrap}.inventory-read-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:16px 0}.inventory-read-grid>div{display:grid;gap:4px;padding:10px;border:1px solid var(--line);border-radius:7px;background:#fbfaf7}.inventory-read-grid span{font-size:.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}.inventory-read-grid strong{font-size:.82rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.inventory-edit-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.inventory-edit-grid label{display:grid;gap:6px;font-size:.75rem;font-weight:800}.inventory-input-wrap{display:flex;align-items:center;border:1px solid #cfcac0;border-radius:6px;background:#fff;overflow:hidden}.inventory-input-wrap>span{padding-left:10px;color:var(--muted)}.inventory-edit-grid input{width:100%;padding:10px;border:0;outline:0;background:transparent}.inventory-edit-grid input:disabled{background:#f6f3ed;color:#666;cursor:not-allowed}.inventory-record-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:14px}.inventory-record-actions .message{margin-left:4px}.inventory-record.is-editing{background:#fcfbf8;border-radius:9px;padding:20px;margin:0 -8px}.inventory-record.is-editing .inventory-stock-badge{background:#e9dfcc;color:#4d3a1f}
+@media(max-width:800px){.inventory-record{grid-template-columns:1fr}.inventory-main-image{width:120px;height:120px}.inventory-read-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.inventory-edit-grid{grid-template-columns:1fr}.inventory-record-title{flex-direction:column;gap:8px}}
+@media(max-width:600px){.admin-section-nav{overflow-x:auto;width:100%;justify-content:flex-start}.admin-section-link{flex:0 0 auto}.inventory-record-actions .button{width:100%}}
+
+
+.rental-days-picker{margin-top:16px;padding:14px 16px;border:1px solid var(--line,#ddd);border-radius:12px;background:var(--surface-soft,#faf9f6);display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.rental-days-picker label{font-weight:700}
+.rental-days-picker select,.cart-rental-days select{border:1px solid #cfc9bd;border-radius:8px;padding:9px 12px;background:#fff;font:inherit}
+.rental-days-picker .field-help{width:100%;margin:0}
+.cart-rental-days{display:flex;align-items:center;gap:8px;margin:8px 0;font-size:.9rem;font-weight:600}
+.cart-rental-days select{padding:6px 9px}
+.cart-line-price small{font-size:.72em;color:#777;font-weight:500}

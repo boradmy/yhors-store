@@ -159,8 +159,22 @@ async function nativeStartAuthentication(options) {
     throw new Error('No se pudo completar el inicio con Passkey. Inténtalo nuevamente.');
   }
 }
-function getCart() { try { return JSON.parse(localStorage.getItem('yhors-cart')) || []; } catch { return []; } }
+function getCart() {
+  try {
+    const cart = JSON.parse(localStorage.getItem('yhors-cart')) || [];
+    return Array.isArray(cart) ? cart.map(line => ({
+      ...line,
+      rentalDays: line.purchaseMode === 'rental' ? Math.max(1, Math.min(10, Number.parseInt(line.rentalDays, 10) || 1)) : null
+    })) : [];
+  } catch { return []; }
+}
 function setCart(cart) { localStorage.setItem('yhors-cart', JSON.stringify(cart)); }
+function rentalDaysValue(value) { return Math.max(1, Math.min(10, Number.parseInt(value, 10) || 1)); }
+function cartLineTotal(line) {
+  const unit = Number(line.price || 0);
+  const days = line.purchaseMode === 'rental' ? rentalDaysValue(line.rentalDays) : 1;
+  return Math.round(unit * Number(line.quantity || 0) * days * 100) / 100;
+}
 
 function currentCategoryFromPath() {
   const match = location.pathname.match(/^\/categoria\/([^/]+)\/?$/);
@@ -344,18 +358,29 @@ function wireCart(products, storefront) {
   const updateCartCount = () => { if (count) count.textContent = cart.reduce((sum, line) => sum + Number(line.quantity || 0), 0); };
   const drawCart = () => {
     if (!area) return;
-    area.innerHTML = cart.length ? cart.map(line => `<div class="cart-item"><img data-fallback src="${escapeHTML(productImages(line)[0])}" alt=""><div class="cart-item-main"><h4>${escapeHTML(line.name)}</h4>${line.purchaseMode ? `<span class="cart-mode">${line.purchaseMode === 'rental' ? 'Alquiler' : 'Compra'}</span>` : ''}<p class="cart-line-price">${money(line.price)}</p><div class="quantity-control"><button type="button" data-qty="${escapeHTML(line.id)}" data-change="-1">−</button><input type="number" min="1" value="${Number(line.quantity) || 1}" data-input="${escapeHTML(line.id)}"><button type="button" data-qty="${escapeHTML(line.id)}" data-change="1">+</button></div></div><button class="remove" data-remove="${escapeHTML(line.id)}">Quitar</button></div>`).join('') : '<div class="empty cart-empty">Tu carrito está vacío.<br><small>Agrega algo que te guste.</small></div>';
-    const total = cart.reduce((sum, line) => sum + Number(line.price) * Number(line.quantity), 0); document.querySelector('#cartTotal').textContent = money(total); wireImageFallback(area);
+    area.innerHTML = cart.length ? cart.map(line => {
+      const isRental = line.purchaseMode === 'rental';
+      const days = isRental ? rentalDaysValue(line.rentalDays) : 1;
+      return `<div class="cart-item"><img data-fallback src="${escapeHTML(productImages(line)[0])}" alt=""><div class="cart-item-main"><h4>${escapeHTML(line.name)}</h4>${line.purchaseMode ? `<span class="cart-mode">${isRental ? `Alquiler · ${days} día${days === 1 ? '' : 's'}` : 'Compra'}</span>` : ''}${isRental ? `<label class="cart-rental-days">Días de alquiler<select data-rental-days="${escapeHTML(line.id)}">${Array.from({length:10},(_,i)=>i+1).map(day => `<option value="${day}" ${day === days ? 'selected' : ''}>${day} día${day === 1 ? '' : 's'}</option>`).join('')}</select></label>` : ''}<p class="cart-line-price">${money(Number(line.price) * (isRental ? days : 1))}${isRental ? ' <small>/ día × duración</small>' : ''}</p><div class="quantity-control"><button type="button" data-qty="${escapeHTML(line.id)}" data-change="-1">−</button><input type="number" min="1" value="${Number(line.quantity) || 1}" data-input="${escapeHTML(line.id)}"><button type="button" data-qty="${escapeHTML(line.id)}" data-change="1">+</button></div></div><button class="remove" data-remove="${escapeHTML(line.id)}">Quitar</button></div>`;
+    }).join('') : '<div class="empty cart-empty">Tu carrito está vacío.<br><small>Agrega algo que te guste.</small></div>';
+    const total = cart.reduce((sum, line) => sum + cartLineTotal(line), 0);
+    const totalEl = document.querySelector('#cartTotal'); if (totalEl) totalEl.textContent = money(total);
+    wireImageFallback(area);
+    area.querySelectorAll('[data-rental-days]').forEach(select => select.addEventListener('change', () => {
+      const line = cart.find(item => item.id === select.dataset.rentalDays); if (!line) return;
+      line.rentalDays = rentalDaysValue(select.value); setCart(cart); drawCart();
+    }));
     area.querySelectorAll('[data-qty]').forEach(btn => btn.addEventListener('click', () => { const line = cart.find(item => item.id === btn.dataset.qty); if (!line) return; line.quantity = Math.max(1, Number(line.quantity) + Number(btn.dataset.change)); setCart(cart); updateCartCount(); drawCart(); }));
     area.querySelectorAll('[data-input]').forEach(input => input.addEventListener('change', () => { const line = cart.find(item => item.id === input.dataset.input); if (!line) return; line.quantity = Math.max(1, parseInt(input.value || '1', 10)); setCart(cart); updateCartCount(); drawCart(); }));
     area.querySelectorAll('[data-remove]').forEach(btn => btn.addEventListener('click', () => { cart = cart.filter(line => line.id !== btn.dataset.remove); setCart(cart); updateCartCount(); drawCart(); }));
   };
-  const addToCart = (product, button, purchaseMode = 'purchase') => {
+  const addToCart = (product, button, purchaseMode = 'purchase', rentalDays = 1) => {
+    const days = purchaseMode === 'rental' ? rentalDaysValue(rentalDays) : null;
     const price = purchaseMode === 'rental' ? Number(product.rentalPrice) : (product.category === 'cosplay' && Number.isFinite(Number(product.salePrice)) ? Number(product.salePrice) : Number(product.price));
-    const cartKey = `${product.id}::${purchaseMode}`;
+    const cartKey = `${product.id}::${purchaseMode}::${days || ''}`;
     const existing = cart.find(item => (item.cartKey || item.id) === cartKey);
     if (existing) existing.quantity += 1;
-    else cart.push({ ...product, id: cartKey, productId: product.id, price, purchaseMode, quantity: 1 });
+    else cart.push({ ...product, id: cartKey, cartKey, productId: product.id, price, purchaseMode, rentalDays: days, quantity: 1 });
     setCart(cart); updateCartCount(); drawCart();
     button.disabled = true; const original = button.innerHTML; button.innerHTML = '<span class="spinner"></span><span>Añadiendo</span>'; setTimeout(() => { button.innerHTML = '<span class="check">✓</span><span>Añadido</span>'; button.classList.add('added'); setTimeout(() => { button.innerHTML = original; button.classList.remove('added'); button.disabled = false; }, 850); }, 420);
   };
@@ -377,7 +402,7 @@ function wireCart(products, storefront) {
 
 function checkoutPage() {
   let cart = getCart();
-  const subtotal = () => cart.reduce((sum, line) => sum + Number(line.price || 0) * Number(line.quantity || 0), 0);
+  const subtotal = () => cart.reduce((sum, line) => sum + cartLineTotal(line), 0);
   const shipping = { office: 0, local: 3, courier: 5 };
   const labels = {
     office: { title: 'Retiro en oficina', text: 'Retira tu pedido directamente en la oficina YHORS.', price: 0 },
@@ -409,7 +434,7 @@ function checkoutPage() {
           <div class="form-actions full"><button class="button" type="submit">Confirmar pedido <span>→</span></button><span class="message" id="fullCheckoutMessage"></span></div>
         </form>
       </section>
-      <aside class="checkout-card order-review"><span class="eyebrow">Resumen</span><h2>Tu pedido</h2><div id="fullOrderItems">${cart.map(line=>`<div class="checkout-item"><div><strong>${escapeHTML(line.quantity)}× ${escapeHTML(line.name || 'Producto')}</strong><small>SKU: ${escapeHTML(line.sku || '—')}</small></div><strong>${money(Number(line.price)*Number(line.quantity))}</strong></div>`).join('')}</div>
+      <aside class="checkout-card order-review"><span class="eyebrow">Resumen</span><h2>Tu pedido</h2><div id="fullOrderItems">${cart.map(line=>{ const isRental=line.purchaseMode==='rental'; const days=isRental?rentalDaysValue(line.rentalDays):1; return `<div class="checkout-item"><div><strong>${escapeHTML(line.quantity)}× ${escapeHTML(line.name || 'Producto')}</strong><small>SKU: ${escapeHTML(line.sku || '—')}${isRental ? ` · Alquiler · ${days} día${days===1?'':'s'}` : ''}</small></div><strong>${money(cartLineTotal(line))}</strong></div>`; }).join('')}</div>
         <div class="checkout-totals"><div><span>Subtotal</span><strong id="fullSubtotal">${money(subtotal())}</strong></div><div><span>Envío</span><strong id="fullShipping">Sin costo</strong></div><div class="checkout-grand"><span>Total</span><strong id="fullTotal">${money(subtotal())}</strong></div></div>
       </aside>
     </div>
@@ -439,7 +464,7 @@ function checkoutPage() {
     submit.disabled=true; message.className='message'; message.textContent='Registrando pedido…';
     try {
       const data=Object.fromEntries(new FormData(form).entries());
-      const payload={customer:{name:data.name,phone:data.phone,cedula:data.cedula,email:data.email,city:data.city,address:data.address,mapsUrl:data.mapsUrl,notes:data.notes},deliveryMethod:data.deliveryMethod,items:cart.map(line=>({productId:line.productId||line.id,quantity:Number(line.quantity),purchaseMode:line.purchaseMode||'purchase'}))};
+      const payload={customer:{name:data.name,phone:data.phone,cedula:data.cedula,email:data.email,city:data.city,address:data.address,mapsUrl:data.mapsUrl,notes:data.notes},deliveryMethod:data.deliveryMethod,items:cart.map(line=>({productId:line.productId||line.id,quantity:Number(line.quantity),purchaseMode:line.purchaseMode||'purchase',rentalDays:line.purchaseMode==='rental'?rentalDaysValue(line.rentalDays):null}))};
       const result=await request('/api/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
       localStorage.removeItem('yhors-cart'); cart=[];
       app.innerHTML=`<main class="checkout-page"><div class="checkout-success-page"><span class="success-mark">✓</span><span class="eyebrow">Pedido recibido</span><h1>#${escapeHTML(result.orderNumber)}</h1><p>Tu pedido fue registrado correctamente.</p><div class="success-total">Total del pedido: <strong>${money(result.total)}</strong></div><p class="success-note">Guarda tu número de pedido para futuras consultas.</p><a class="button" href="/">Volver a YHORS STORE <span>→</span></a></div></main>`;
@@ -629,12 +654,20 @@ async function renderCategoryPage(categoryKey) {
 
 async function renderProductDetail(product, products, storefront) {
   const images = productImages(product); updateSeoMeta({ title: `${product.name} | YHORS-STORE`, description: String(product.description || `${product.name} disponible en YHORS-STORE.`).replace(/\s+/g, ' ').slice(0, 155), canonical: `${location.origin}${productHref(product)}`, image: images[0] && (images[0].startsWith('http') ? images[0] : `${location.origin}${images[0]}`) }); let selected = 0; const isCosplay = product.category === 'cosplay'; const hasRental = isCosplay && Number.isFinite(Number(product.rentalPrice));
-  const modeOptions = hasRental ? `<div class="purchase-choice"><span class="choice-label">¿Cómo quieres obtenerlo?</span><div class="purchase-options" role="radiogroup" aria-label="Modalidad"><button type="button" class="purchase-option active" data-purchase-mode="purchase"><strong>Comprar</strong><span>${productPriceLabel(product)}</span></button><button type="button" class="purchase-option" data-purchase-mode="rental"><strong>Alquilar</strong><span>${money(product.rentalPrice)}</span></button></div></div>` : '';
+  const modeOptions = hasRental ? `<div class="purchase-choice"><span class="choice-label">¿Cómo quieres obtenerlo?</span><div class="purchase-options" role="radiogroup" aria-label="Modalidad"><button type="button" class="purchase-option active" data-purchase-mode="purchase"><strong>Comprar</strong><span>${productPriceLabel(product)}</span></button><button type="button" class="purchase-option" data-purchase-mode="rental"><strong>Alquilar</strong><span>${money(product.rentalPrice)} / día</span></button></div><div class="rental-days-picker hidden" id="rentalDaysPicker"><label for="rentalDays">Días de alquiler</label><select id="rentalDays" name="rentalDays">${Array.from({length:10},(_,i)=>i+1).map(day=>`<option value="${day}" ${day===1?'selected':''}>${day} día${day===1?'':'s'}</option>`).join('')}</select><small class="field-help">Selecciona de 1 a 10 días.</small></div></div>` : '';
   app.innerHTML = `${renderHeader(product.category)}<main class="product-detail-page"><div class="breadcrumbs"><a href="${categoryHref(product.category)}">${escapeHTML(categories[product.category])}</a><span>/</span><strong>${escapeHTML(product.name)}</strong></div><section class="detail-layout"><div class="detail-gallery"><div class="detail-main-image"><img id="detailMainImage" data-fallback src="${escapeHTML(images[0])}" alt="${escapeHTML(product.name)}"></div>${images.length > 1 ? `<div class="thumbnail-row">${images.map((image, index) => `<button class="thumb ${index === 0 ? 'active' : ''}" data-image-index="${index}"><img data-fallback src="${escapeHTML(image)}" alt="Imagen ${index + 1}"></button>`).join('')}</div>` : ''}</div><div class="detail-copy"><span class="eyebrow">${escapeHTML(categories[product.category])}</span><h1>${escapeHTML(product.name)}</h1><div class="detail-price" id="detailPrice">${productPriceLabel(product)}</div><div class="detail-sku" aria-label="SKU de YHORS"><span class="detail-sku-icon">⌑</span><span>SKU: <strong>${escapeHTML(product.sku || '—')}</strong></span></div><div class="detail-divider"></div>${modeOptions}<h3>Descripción</h3><div class="detail-description">${escapeHTML(product.description).replace(/\n/g, '<br>')}</div><div class="detail-buy"><button class="add detail-add" id="detailAdd"><span>${hasRental ? 'Añadir al carrito' : 'Añadir al carrito'}</span><span>+</span></button><a class="button secondary back-button" href="${categoryHref(product.category)}">← Volver a ${escapeHTML(categories[product.category])}</a></div><div class="detail-note"><span>✓</span>${hasRental ? 'Elige comprar o alquilar antes de añadirlo al carrito.' : 'Compra directa y atención personal.'}</div></div></section></main>${renderFooter()}${cartMarkup()}`;
   wireMobileMenu(); wireSearch(); wireImageFallback(document.querySelector('.product-detail-page')); document.querySelectorAll('[data-image-index]').forEach(button => button.addEventListener('click', () => { selected = Number(button.dataset.imageIndex); document.querySelector('#detailMainImage').src = images[selected]; document.querySelectorAll('.thumb').forEach(item => item.classList.remove('active')); button.classList.add('active'); }));
   const cart = wireCart(products, storefront); let purchaseMode = 'purchase';
-  document.querySelectorAll('[data-purchase-mode]').forEach(button => button.addEventListener('click', () => { purchaseMode = button.dataset.purchaseMode; document.querySelectorAll('[data-purchase-mode]').forEach(item => item.classList.toggle('active', item === button)); document.querySelector('#detailPrice').firstChild.textContent = purchaseMode === 'rental' ? money(product.rentalPrice) : productPriceLabel(product); }));
-  document.querySelector('#detailAdd').addEventListener('click', e => cart.addToCart(product, e.currentTarget, hasRental ? purchaseMode : 'purchase'));
+  document.querySelectorAll('[data-purchase-mode]').forEach(button => button.addEventListener('click', () => {
+    purchaseMode = button.dataset.purchaseMode;
+    document.querySelectorAll('[data-purchase-mode]').forEach(item => item.classList.toggle('active', item === button));
+    document.querySelector('#detailPrice').firstChild.textContent = purchaseMode === 'rental' ? money(product.rentalPrice) : productPriceLabel(product);
+    document.querySelector('#rentalDaysPicker')?.classList.toggle('hidden', purchaseMode !== 'rental');
+  }));
+  document.querySelector('#detailAdd').addEventListener('click', e => {
+    const rentalDays = purchaseMode === 'rental' ? rentalDaysValue(document.querySelector('#rentalDays')?.value) : 1;
+    cart.addToCart(product, e.currentTarget, hasRental ? purchaseMode : 'purchase', rentalDays);
+  });
 }
 
 async function renderStore() {
@@ -664,7 +697,7 @@ function productForm(product = {}, classifications = {}) {
     <div class="field"><label for="brand">Marca</label><select id="brand" name="brand" ${lock}><option value="">Sin marca</option>${brands.map(v => `<option value="${escapeHTML(v)}" ${product.brand === v ? 'selected' : ''}>${escapeHTML(v)}</option>`).join('')}</select></div>
     <div class="field"><label for="productType">Tipo de producto</label><select id="productType" name="productType" ${lock}><option value="">Sin clasificación</option>${types.map(v => `<option value="${escapeHTML(v)}" ${product.productType === v ? 'selected' : ''}>${escapeHTML(v)}</option>`).join('')}</select></div>
     <div class="field"><label for="salePrice">Precio de venta (USD)</label><input id="salePrice" name="salePrice" required min="0" step="0.01" type="number" ${lock} value="${escapeHTML(product.salePrice ?? product.price ?? '')}"></div>
-    <div class="field ${isCosplay ? '' : 'hidden'}"><label for="rentalPrice">Precio de alquiler (USD)</label><input id="rentalPrice" name="rentalPrice" ${isCosplay ? 'required' : ''} ${lock} min="0" step="0.01" type="number" value="${escapeHTML(product.rentalPrice ?? '')}"><small class="field-help">Disponible para productos de Cosplay.</small></div>
+    <div class="field ${isCosplay ? '' : 'hidden'}"><label for="rentalPrice">Precio de alquiler por día (USD)</label><input id="rentalPrice" name="rentalPrice" ${isCosplay ? 'required' : ''} ${lock} min="0" step="0.01" type="number" value="${escapeHTML(product.rentalPrice ?? '')}"><small class="field-help">Disponible para productos de Cosplay. Este valor se cobra por cada día de alquiler.</small></div>
     <div class="field full"><span class="eyebrow image-section-label">Fotos del producto</span><small class="field-help">Puedes subir cada foto desde tu equipo o pegar directamente su URL.</small></div>
     ${[0,1,2,3].map((index) => {
       const num=index+1, id=index===0?'image':'image'+num, fileId=index===0?'imageFile':'imageFile'+num, label=index===0?'FOTO PRINCIPAL':'FOTO '+num, urlLabel=index===0?'URL de imagen principal':'Imagen adicional '+num+' · URL', currentImage=images[index] || (index===0 ? product.image || '' : ''), previewId=`productImagePreview${num}`;
@@ -807,7 +840,7 @@ function ordersListMarkup(orders = [], options = {}) {
     <div class="admin-order-details" id="orderDetails-${escapeHTML(order.id)}" hidden>
       <div class="admin-order-head"><div><span class="eyebrow">${escapeHTML(date(order.createdAt))}</span><h3>#${escapeHTML(order.orderNumber)}</h3><strong>${escapeHTML(order.customer?.name || 'Cliente')}</strong></div><div class="order-status-wrap"><label>Estado</label><select class="status-select-${statusClass(order.status || 'Pendiente')}" data-order-status="${escapeHTML(order.id)}" disabled>${statuses.map(s => `<option ${s === order.status ? 'selected' : ''} value="${escapeHTML(s)}">${escapeHTML(s)}</option>`).join('')}</select></div></div>
       <div class="admin-order-grid"><div><span class="order-label">Contacto</span><p>${escapeHTML(order.customer?.phone || '—')}${order.customer?.email ? `<br>${escapeHTML(order.customer.email)}` : ''}<br><strong>Cédula / RUC:</strong> ${escapeHTML(order.customer?.cedula || '—')}</p></div><div><span class="order-label">Entrega</span><p><strong>${escapeHTML(order.delivery?.label || '—')}</strong><br>${escapeHTML(order.customer?.city || '—')}${order.customer?.address ? ` · ${escapeHTML(order.customer.address)}` : ''}${order.customer?.mapsUrl ? `<br><a href="${escapeHTML(order.customer.mapsUrl)}" target="_blank" rel="noopener">📍 Abrir ubicación en Google Maps</a>` : ''}</p></div><div><span class="order-label">Total</span><p class="order-total">${money(order.total)}</p><small>Subtotal ${money(order.subtotal ?? order.total)} · Envío ${money(order.shippingCost ?? 0)}</small></div></div>
-      <div class="admin-order-items">${(order.items || []).map(item => `<div class="admin-order-item"><span><strong>${escapeHTML(item.quantity)}×</strong> ${escapeHTML(item.name)} <small>SKU: ${escapeHTML(item.sku || '—')} · ${item.purchaseMode === 'rental' ? 'Alquiler' : 'Compra'}</small></span><strong>${money(item.subtotal)}</strong></div>`).join('')}</div>
+      <div class="admin-order-items">${(order.items || []).map(item => { const isRental=item.purchaseMode==='rental'; const days=Number(item.rentalDays||1); return `<div class="admin-order-item"><span><strong>${escapeHTML(item.quantity)}×</strong> ${escapeHTML(item.name)} <small>SKU: ${escapeHTML(item.sku || '—')} · ${isRental ? `Alquiler · ${days} día${days===1?'':'s'} · ${money(item.unitPrice)}/día` : 'Compra'}</small></span><strong>${money(item.subtotal)}</strong></div>`; }).join('')}</div>
       ${order.customer?.notes ? `<div class="order-notes"><span>Nota</span><p>${escapeHTML(order.customer.notes)}</p></div>` : ''}
       <div class="admin-order-internal-note">
         <label for="internalNote-${escapeHTML(order.id)}">Nota interna</label>
@@ -1043,7 +1076,7 @@ async function renderAdminUsers() {
   let users = await request('/api/admin/users').catch(() => []);
   app.innerHTML = `<main class="admin-shell"><div class="admin-wrap">
     <div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Administración</h1><p class="admin-subtitle">Control de usuarios y accesos</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>
-    <nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}" class="admin-section-link">PÁGINA WEB</a><a href="${ADMIN_PATH}/usuarios" class="admin-section-link active">USUARIOS</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link">PEDIDOS</a></nav>
+    <nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}" class="admin-section-link">PÁGINA WEB</a><a href="${ADMIN_PATH}/usuarios" class="admin-section-link active">USUARIOS</a><a href="${ADMIN_PATH}/inventario" class="admin-section-link">INVENTARIO</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link">PEDIDOS</a></nav>
     ${usersPanel(users)}
   </div></main>`;
 
@@ -1131,6 +1164,8 @@ async function renderAdminUsers() {
     if (!id && !payload.password) {
       message.hidden = false; message.className = 'message error'; message.textContent = 'La contraseña es obligatoria al crear un usuario.'; return;
     }
+    const confirmed = await showYhorsConfirm('¿Seguro que quieres guardar este cambio?', id ? 'Se actualizarán los datos y permisos de esta cuenta.' : 'Se creará la nueva cuenta de usuario.');
+    if (!confirmed) return;
     submit.disabled = true;
     message.hidden = true;
     try {
@@ -1212,6 +1247,104 @@ function formatBackupDate(value) {
   return `${parts.day}-${parts.month}-${parts.year}-${parts.hour}${parts.minute}`;
 }
 
+
+function inventoryPageMarkup(products = []) {
+  const rows = products.length ? products.map(product => {
+    const images = productImages(product);
+    const thumbs = images.slice(0, 4).map((src, index) => `<img src="${escapeHTML(src)}" alt="${escapeHTML(product.name)} imagen ${index + 1}" data-fallback>`).join('');
+    return `<article class="inventory-record" data-inventory-id="${escapeHTML(product.id)}">
+      <div class="inventory-record-media"><img class="inventory-main-image" src="${escapeHTML(images[0] || placeholder)}" alt="${escapeHTML(product.name)}" data-fallback><div class="inventory-thumbs">${thumbs}</div></div>
+      <div class="inventory-record-info">
+        <div class="inventory-record-title"><div><span class="eyebrow">${escapeHTML(categories[product.category] || product.category || 'Producto')}</span><h3>${escapeHTML(product.name)}</h3></div><strong class="inventory-stock-badge" data-stock-badge>${Number(product.stock || 0)} en stock</strong></div>
+        <div class="inventory-read-grid">
+          <div><span>SKU</span><strong>${escapeHTML(product.sku || '—')}</strong></div>
+          <div><span>Marca</span><strong>${escapeHTML(product.brand || '—')}</strong></div>
+          <div><span>Tipo</span><strong>${escapeHTML(product.productType || '—')}</strong></div>
+          <div><span>Imágenes</span><strong>${images.length}</strong></div>
+        </div>
+        <div class="inventory-edit-grid">
+          <label><span>Precio de compra</span><div class="inventory-input-wrap"><span>$</span><input type="number" min="0" step="0.01" value="${escapeHTML(product.purchasePrice ?? 0)}" data-inventory-purchase disabled></div></label>
+          <label><span>Precio de venta</span><div class="inventory-input-wrap"><span>$</span><input type="number" min="0" step="0.01" value="${escapeHTML(product.salePrice ?? product.price ?? 0)}" data-inventory-sale disabled></div></label>
+          <label><span>Stock disponible</span><input type="number" min="0" step="1" value="${escapeHTML(product.stock ?? 0)}" data-inventory-stock disabled></label>
+        </div>
+        <div class="inventory-record-actions"><button class="button secondary small" type="button" data-inventory-edit>Editar</button><button class="button primary small" type="button" data-inventory-save disabled>Guardar cambios</button><button class="button secondary small" type="button" data-inventory-cancel disabled>Cancelar</button><span class="message" data-inventory-message></span></div>
+      </div>
+    </article>`;
+  }).join('') : '<div class="empty">No hay productos registrados.</div>';
+  return `<main class="admin-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Inventario</h1><p class="admin-subtitle">Control de costos, precios y existencias</p></div><div class="admin-top-actions">${accountMenu(window.__yhorsSession || {})}</div></div>
+    <nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}" class="admin-section-link">PÁGINA WEB</a><a href="${ADMIN_PATH}/usuarios" class="admin-section-link">USUARIOS</a><a href="${ADMIN_PATH}/inventario" class="admin-section-link active">INVENTARIO</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link">PEDIDOS</a></nav>
+    <section class="admin-panel inventory-page-panel"><div class="section-heading"><div><span class="eyebrow">Control de existencias</span><h2>Inventario de productos</h2></div><p>Los datos del catálogo se muestran aquí y puedes actualizar precio de compra, precio de venta y stock disponible.</p></div><div class="inventory-toolbar"><label class="inventory-search"><span aria-hidden="true">⌕</span><input id="inventoryPageSearch" type="search" placeholder="Buscar por nombre, SKU, marca o categoría…" autocomplete="off"><button id="clearInventoryPageSearch" type="button" aria-label="Limpiar búsqueda">×</button></label><span class="inventory-count" id="inventoryPageCount">${products.length} productos</span></div><div id="inventoryPageList">${rows}</div></section></div></main>`;
+}
+
+async function renderAdminInventory() {
+  const session = await request('/api/admin/session').catch(() => ({ authenticated: false }));
+  if (!session.authenticated) return renderLogin();
+  if (session.role !== 'admin') return renderAdminOrders();
+  window.__yhorsSession = session;
+  let products = await request('/api/admin/products').catch(() => []);
+  const draw = () => {
+    const query = (document.querySelector('#inventoryPageSearch')?.value || '').trim().toLowerCase();
+    const matches = products.filter(p => !query || [p.name, p.sku, p.brand, p.productType, p.category, categories[p.category]].filter(Boolean).some(v => String(v).toLowerCase().includes(query)));
+    const count = document.querySelector('#inventoryPageCount');
+    if (count) count.textContent = query ? `${matches.length} de ${products.length} productos` : `${products.length} productos`;
+    const list = document.querySelector('#inventoryPageList');
+    if (!list) return;
+    list.innerHTML = inventoryPageMarkup(matches).match(/<div id="inventoryPageList">([\s\S]*)<\/div><\/section><\/div><\/main>$/)?.[1] || '<div class="empty">No hay productos.</div>';
+    wireImageFallback(list);
+    list.querySelectorAll('[data-inventory-edit]').forEach(button => button.addEventListener('click', () => {
+      const record = button.closest('.inventory-record'); if (!record) return;
+      record.classList.add('is-editing');
+      record.querySelectorAll('[data-inventory-purchase],[data-inventory-sale],[data-inventory-stock]').forEach(input => input.disabled = false);
+      record.querySelector('[data-inventory-edit]').disabled = true;
+      record.querySelector('[data-inventory-save]').disabled = false;
+      record.querySelector('[data-inventory-cancel]').disabled = false;
+      record.querySelector('[data-inventory-message]').textContent = '';
+    }));
+    list.querySelectorAll('[data-inventory-cancel]').forEach(button => button.addEventListener('click', () => {
+      const record = button.closest('.inventory-record'); const product = products.find(p => p.id === record?.dataset.inventoryId); if (!record || !product) return;
+      record.querySelector('[data-inventory-purchase]').value = product.purchasePrice ?? 0;
+      record.querySelector('[data-inventory-sale]').value = product.salePrice ?? product.price ?? 0;
+      record.querySelector('[data-inventory-stock]').value = product.stock ?? 0;
+      record.classList.remove('is-editing');
+      record.querySelectorAll('[data-inventory-purchase],[data-inventory-sale],[data-inventory-stock]').forEach(input => input.disabled = true);
+      record.querySelector('[data-inventory-edit]').disabled = false;
+      record.querySelector('[data-inventory-save]').disabled = true;
+      record.querySelector('[data-inventory-cancel]').disabled = true;
+      record.querySelector('[data-inventory-message]').textContent = '';
+    }));
+    list.querySelectorAll('[data-inventory-save]').forEach(button => button.addEventListener('click', async () => {
+      const record = button.closest('.inventory-record'); const product = products.find(p => p.id === record?.dataset.inventoryId); if (!record || !product) return;
+      const purchase = Number(record.querySelector('[data-inventory-purchase]')?.value);
+      const sale = Number(record.querySelector('[data-inventory-sale]')?.value);
+      const stock = Number(record.querySelector('[data-inventory-stock]')?.value);
+      const confirmed = await showYhorsConfirm('¿Seguro que quieres guardar este cambio?', `Se actualizarán el precio de compra, precio de venta y stock de <strong>${escapeHTML(product.name)}</strong>.`);
+      if (!confirmed) return;
+      if (!Number.isFinite(purchase) || purchase < 0 || !Number.isFinite(sale) || sale < 0 || !Number.isInteger(stock) || stock < 0) {
+        const msg = record.querySelector('[data-inventory-message]'); msg.className='message error'; msg.textContent='Revisa precios y stock antes de guardar.'; return;
+      }
+      button.disabled = true;
+      try {
+        const updated = await request(`/api/admin/inventory/${encodeURIComponent(product.id)}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ purchasePrice: purchase, salePrice: sale, stock }) });
+        products = products.map(p => p.id === updated.id ? updated : p);
+        record.querySelector('[data-inventory-purchase]').value = updated.purchasePrice ?? 0;
+        record.querySelector('[data-inventory-sale]').value = updated.salePrice ?? updated.price ?? 0;
+        record.querySelector('[data-inventory-stock]').value = updated.stock ?? 0;
+        record.querySelector('[data-stock-badge]').textContent = `${Number(updated.stock || 0)} en stock`;
+        record.classList.remove('is-editing');
+        record.querySelectorAll('[data-inventory-purchase],[data-inventory-sale],[data-inventory-stock]').forEach(input => input.disabled = true);
+        record.querySelector('[data-inventory-edit]').disabled = false;
+        record.querySelector('[data-inventory-cancel]').disabled = true;
+        const msg = record.querySelector('[data-inventory-message]'); showSaveSuccess(msg, 'Cambios guardados correctamente.');
+      } catch (e) { button.disabled = false; const msg = record.querySelector('[data-inventory-message]'); msg.className='message error'; msg.textContent=e.message; }
+    }));
+  };
+  app.innerHTML = inventoryPageMarkup(products);
+  wireAccountMenu();
+  draw();
+  document.querySelector('#inventoryPageSearch')?.addEventListener('input', draw);
+  document.querySelector('#clearInventoryPageSearch')?.addEventListener('click', () => { const input=document.querySelector('#inventoryPageSearch'); if(input){input.value='';input.focus();draw();} });
+}
+
 async function renderAdmin() {
   const session = await request('/api/admin/session').catch(() => ({ authenticated: false })); if (!session.authenticated) return renderLogin(); if (isSellerRole(session.role) || session.role === 'store_manager') return renderAdminOrders();
   let products = await request('/api/admin/products').catch(() => []); let classifications = await request('/api/admin/classifications').catch(() => ({ brands: {}, productTypes: {} })); let settings = await request('/api/admin/storefront').catch(() => ({ heroProductIds: [], featuredProductIds: [] })); let editing = null;
@@ -1223,7 +1356,7 @@ async function renderAdmin() {
     <button type="button" data-admin-scroll="classificationPanel">Categorías</button>
     <button type="button" data-admin-scroll="productEditorPanel">Producto</button>
     <button type="button" data-admin-scroll="inventoryPanel">Inventario</button>
-  </aside><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Administración</h1></div><div class="admin-top-actions">${accountMenu(session)}</div></div><nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}" class="admin-section-link active">PÁGINA WEB</a><a href="${ADMIN_PATH}/usuarios" class="admin-section-link">USUARIOS</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link">PEDIDOS</a></nav>${backupPanel(backupState)}${selectionPanel(products, settings)}${classificationPanel(classifications)}<section class="admin-panel product-editor-panel" id="productEditorPanel"><span class="eyebrow">Catálogo</span><h2 id="formTitle">Agregar producto</h2><div id="formArea"></div></section><section class="admin-products" id="inventoryPanel"><div class="section-heading inventory-heading"><div><span class="eyebrow">Inventario</span><h2>Productos publicados (${products.length})</h2></div><p>Edita datos, imágenes, portada y destacados.</p></div><div class="inventory-toolbar"><label class="inventory-search"><span aria-hidden="true">⌕</span><input id="inventorySearch" type="search" placeholder="Buscar por nombre, SKU, marca o categoría…" autocomplete="off"><button id="clearInventorySearch" type="button" aria-label="Limpiar búsqueda">×</button></label><span class="inventory-count" id="inventoryCount">${products.length} productos</span></div><div id="adminProducts"></div></section></div></main>`;
+  </aside><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Administración</h1></div><div class="admin-top-actions">${accountMenu(session)}</div></div><nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}" class="admin-section-link active">PÁGINA WEB</a><a href="${ADMIN_PATH}/usuarios" class="admin-section-link">USUARIOS</a><a href="${ADMIN_PATH}/inventario" class="admin-section-link">INVENTARIO</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link">PEDIDOS</a></nav>${backupPanel(backupState)}${selectionPanel(products, settings)}${classificationPanel(classifications)}<section class="admin-panel product-editor-panel" id="productEditorPanel"><span class="eyebrow">Catálogo</span><h2 id="formTitle">Agregar producto</h2><div id="formArea"></div></section><section class="admin-products" id="inventoryPanel"><div class="section-heading inventory-heading"><div><span class="eyebrow">Inventario</span><h2>Productos publicados (${products.length})</h2></div><p>Edita datos, imágenes, portada y destacados.</p></div><div class="inventory-toolbar"><label class="inventory-search"><span aria-hidden="true">⌕</span><input id="inventorySearch" type="search" placeholder="Buscar por nombre, SKU, marca o categoría…" autocomplete="off"><button id="clearInventorySearch" type="button" aria-label="Limpiar búsqueda">×</button></label><span class="inventory-count" id="inventoryCount">${products.length} productos</span></div><div id="adminProducts"></div></section></div></main>`;
   const quickNav = document.querySelector('.admin-quick-nav');
   quickNav?.querySelectorAll('[data-admin-scroll]').forEach(button => button.addEventListener('click', () => {
     const target = document.getElementById(button.dataset.adminScroll);
@@ -1245,7 +1378,7 @@ async function renderAdmin() {
     listArea.innerHTML = matches.length ? categoryKeys.map(key => {
       const group = matches.filter(p => p.category === key);
       if (!group.length) return '';
-      return `<section class="admin-category-group"><div class="admin-category-heading"><span class="eyebrow">Universo</span><h3>${escapeHTML(categories[key])} <small>${group.length}</small></h3></div>${group.map(p => `<article class="admin-product"><img data-fallback src="${escapeHTML(productImages(p)[0])}" alt=""><div><h3>${escapeHTML(p.name)} ${p.featured ? '<span class="featured-star">★ Destacado</span>' : ''} ${p.hero ? '<span class="hero-tag">◆ Portada</span>' : ''}</h3><p><strong class="admin-sku">SKU: ${escapeHTML(p.sku || '—')}</strong> · ${escapeHTML(categories[p.category] || p.category)}${productMeta(p) ? ` · ${escapeHTML(productMeta(p))}` : ''} · Venta ${productPriceLabel(p)}${p.category === 'cosplay' && p.rentalPrice !== null && p.rentalPrice !== undefined && p.rentalPrice !== '' ? ` · Alquiler ${money(p.rentalPrice)}` : ''} · ${productImages(p).length} imagen(es)</p></div><div class="admin-actions"><button class="button secondary small yhors-edit-note" data-edit="${escapeHTML(p.id)}">Editar</button><button class="button danger small" data-delete="${escapeHTML(p.id)}">Eliminar</button></div></article>`).join('')}</section>`;
+      return `<section class="admin-category-group"><div class="admin-category-heading"><span class="eyebrow">Universo</span><h3>${escapeHTML(categories[key])} <small>${group.length}</small></h3></div>${group.map(p => `<article class="admin-product"><img data-fallback src="${escapeHTML(productImages(p)[0])}" alt=""><div><h3>${escapeHTML(p.name)} ${p.featured ? '<span class="featured-star">★ Destacado</span>' : ''} ${p.hero ? '<span class="hero-tag">◆ Portada</span>' : ''}</h3><p><strong class="admin-sku">SKU: ${escapeHTML(p.sku || '—')}</strong> · ${escapeHTML(categories[p.category] || p.category)}${productMeta(p) ? ` · ${escapeHTML(productMeta(p))}` : ''} · Venta ${productPriceLabel(p)}${p.category === 'cosplay' && p.rentalPrice !== null && p.rentalPrice !== undefined && p.rentalPrice !== '' ? ` · Alquiler ${money(p.rentalPrice)} / día` : ''} · ${productImages(p).length} imagen(es)</p></div><div class="admin-actions"><button class="button secondary small yhors-edit-note" data-edit="${escapeHTML(p.id)}">Editar</button><button class="button danger small" data-delete="${escapeHTML(p.id)}">Eliminar</button></div></article>`).join('')}</section>`;
     }).join('') : `<div class="empty">${query ? 'No encontramos productos con esa búsqueda.' : 'No hay productos aún.'}</div>`;
     wireImageFallback(listArea);
     listArea.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', () => { editing = products.find(p => p.id === b.dataset.edit); drawForm(); requestAnimationFrame(() => document.querySelector('#productEditorPanel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })); }));
@@ -1411,6 +1544,8 @@ async function renderAdmin() {
       const featuredOrdered = sortByOrder(featuredChecked, 'featured');
       const heroProductIds = heroOrdered.map(item => item.id);
       const featuredProductIds = featuredOrdered.map(item => item.id);
+      const confirmed = await showYhorsConfirm('¿Seguro que quieres guardar este cambio?', 'Se actualizarán la portada y los productos destacados de la página web.');
+      if (!confirmed) return;
       try {
         await request('/api/admin/storefront', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ heroProductIds, featuredProductIds }) });
         settings = { heroProductIds, featuredProductIds };
@@ -1444,7 +1579,13 @@ async function renderAdmin() {
     render('#brandLists', classifications.brands, 'brands'); render('#typeLists', classifications.productTypes, 'productTypes');
   }
   async function saveClassifications() {
-    try { classifications = await request('/api/admin/classifications', { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(classifications) }); renderClassifications(); drawForm(); document.querySelector('#classificationMessage').textContent='✓ Clasificaciones guardadas.'; }
+    const confirmed = await showYhorsConfirm('¿Seguro que quieres guardar este cambio?', 'Se actualizarán las clasificaciones del catálogo.');
+    if (!confirmed) {
+      classifications = await request('/api/admin/classifications').catch(() => classifications);
+      renderClassifications(); drawForm();
+      return false;
+    }
+    try { classifications = await request('/api/admin/classifications', { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(classifications) }); renderClassifications(); drawForm(); document.querySelector('#classificationMessage').textContent='✓ Clasificaciones guardadas.'; return true; }
     catch(e) { const m=document.querySelector('#classificationMessage'); m.className='message error'; m.textContent=e.message; }
   }
   function bindClassificationEvents() {
@@ -1499,6 +1640,8 @@ async function renderAdmin() {
     document.querySelector('#productForm').addEventListener('submit', async event => {
       event.preventDefault(); const form = event.currentTarget; const submit = form.querySelector('[type="submit"]'); const message = document.querySelector('#formMessage');
       if (!form.elements.category.value) { message.className='message error'; message.textContent='Selecciona una categoría antes de guardar el producto.'; form.elements.category.focus(); return; }
+      const confirmed = await showYhorsConfirm('¿Seguro que quieres guardar este cambio?', editing ? `Se actualizará el producto <strong>${escapeHTML(editing.name)}</strong>.` : 'Se creará este nuevo producto en el catálogo.');
+      if (!confirmed) return;
       submit.disabled = true; message.textContent = 'Guardando…';
       try {
         const data = Object.fromEntries(new FormData(form).entries()); delete data.heroOrder; data.featured = form.elements.featured.checked; data.hero = form.elements.hero.checked; data.price = data.salePrice; data.images = [data.image, data.image2, data.image3, data.image4].filter(Boolean);
@@ -1737,7 +1880,7 @@ function renderLogin(twoFactorMode = false) {
 }
 
 window.addEventListener('popstate', () => renderStore());
-if (window.location.pathname === ADMIN_PATH || window.location.pathname === `${ADMIN_PATH}/`) renderAdmin(); else if (window.location.pathname === `${ADMIN_PATH}/pedidos` || window.location.pathname === `${ADMIN_PATH}/pedidos/`) renderAdminOrders(); else if (window.location.pathname === `${ADMIN_PATH}/usuarios` || window.location.pathname === `${ADMIN_PATH}/usuarios/`) renderAdminUsers(); else if (window.location.pathname === '/mi-cuenta' || window.location.pathname === '/mi-cuenta/') renderMyAccount(); else if (window.location.pathname === '/pedido' || window.location.pathname === '/pedido/') checkoutPage(); else renderStore();
+if (window.location.pathname === ADMIN_PATH || window.location.pathname === `${ADMIN_PATH}/`) renderAdmin(); else if (window.location.pathname === `${ADMIN_PATH}/pedidos` || window.location.pathname === `${ADMIN_PATH}/pedidos/`) renderAdminOrders(); else if (window.location.pathname === `${ADMIN_PATH}/usuarios` || window.location.pathname === `${ADMIN_PATH}/usuarios/`) renderAdminUsers(); else if (window.location.pathname === `${ADMIN_PATH}/inventario` || window.location.pathname === `${ADMIN_PATH}/inventario/`) renderAdminInventory(); else if (window.location.pathname === '/mi-cuenta' || window.location.pathname === '/mi-cuenta/') renderMyAccount(); else if (window.location.pathname === '/pedido' || window.location.pathname === '/pedido/') checkoutPage(); else renderStore();
 
 document.addEventListener('change', e => { const file=e.target.closest('input[type=file][id^=\"imageFile\"]'); if(!file)return; const num=file.id==='imageFile'?1:Number(file.id.replace('imageFile','')); const preview=document.querySelector(`#productImagePreview${num}`); if(preview&&file.files?.[0]){const r=new FileReader();r.onload=()=>preview.src=r.result;r.readAsDataURL(file.files[0]);}});
 document.addEventListener('input', e => { const input=e.target.closest('input[type=url][id^=\"image\"]'); if(!input)return; const num=input.id==='image'?1:Number(input.id.replace('image','')); const preview=document.querySelector(`#productImagePreview${num}`); if(preview&&input.value.trim())preview.src=input.value.trim();});
