@@ -41,7 +41,7 @@ const ADMIN_PASSWORD_HASH = process.env.ADMIN_PASSWORD_HASH || '';
 const COOKIE_SECURE = process.env.COOKIE_SECURE === 'true';
 
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
-const USER_ROLES = new Set(['admin', 'orders']);
+const USER_ROLES = new Set(['admin', 'orders', 'store_manager']);
 
 // V14: autenticación reforzada con TOTP (compatible con Google Authenticator,
 // Microsoft Authenticator, Authy y otras apps que soporten RFC 6238).
@@ -1748,7 +1748,7 @@ app.put('/api/admin/orders/:id', requireOrdersAccess, (req, res) => {
   return res.json(updated);
 });
 
-app.delete('/api/admin/orders/:id', requireAdmin, (req, res) => {
+app.delete('/api/admin/orders/:id', requireOrdersAccess, (req, res) => {
   const orders = readOrders();
   const order = orders.find(item => item.id === req.params.id);
   if (!order) return res.status(404).json({ error: 'Pedido no encontrado.' });

@@ -664,10 +664,10 @@ async function renderAdminOrders() {
   const session = await request('/api/admin/session').catch(() => ({ authenticated: false }));
   if (!session.authenticated) return renderLogin();
   let orders = await request('/api/admin/orders').catch(() => []);
-  const sectionNav = session.role === 'orders'
+  const sectionNav = (session.role === 'orders' || session.role === 'store_manager')
     ? `<nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}/pedidos" class="admin-section-link active">PEDIDOS</a></nav>`
-    : `<nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}" class="admin-section-link">PÁGINA WEB</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link active">PEDIDOS</a></nav>`;
-  app.innerHTML = `<main class="admin-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">${session.role === 'orders' ? 'Gestión de pedidos' : 'Administración'}</h1><p class="admin-subtitle">${session.role === 'orders' ? 'Panel exclusivo para pedidos de YHORS STORE' : 'Gestión de YHORS STORE'}</p></div><div class="admin-top-actions"><button class="button secondary" id="ordersLogout">Cerrar sesión</button></div></div>${sectionNav}${ordersPanel(orders, session.role === 'admin')}</div></main>`;
+    : `<nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}" class="admin-section-link">PÁGINA WEB</a><a href="${ADMIN_PATH}/jefe-de-tienda" class="admin-section-link">JEFE DE TIENDA</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link active">PEDIDOS</a></nav>`;
+  app.innerHTML = `<main class="admin-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">${(session.role === 'orders' || session.role === 'store_manager') ? 'Gestión de pedidos' : 'Administración'}</h1><p class="admin-subtitle">${session.role === 'orders' ? 'Panel exclusivo para pedidos de YHORS STORE' : (session.role === 'store_manager' ? 'Jefe de tienda · pedidos y control operativo' : 'Gestión de YHORS STORE')}</p></div><div class="admin-top-actions"><button class="button secondary" id="ordersLogout">Cerrar sesión</button></div></div>${sectionNav}${ordersPanel(orders, session.role === 'admin' || session.role === 'store_manager')}</div></main>`;
   const drawOrders = () => {
     const list=document.querySelector('#adminOrdersList'); if(!list) return;
     const query=(document.querySelector('#ordersSearch')?.value||'').trim().toLowerCase();
@@ -819,7 +819,7 @@ function userManagementPanel(users) {
     <form id="createUserForm" class="form-grid user-create-form">
       <div class="field"><label for="newUsername">Usuario</label><input id="newUsername" name="username" autocomplete="off" minlength="3" maxlength="80" pattern="[A-Za-z0-9._-]{3,80}" required></div>
       <div class="field"><label for="newUserPassword">Contraseña</label><input id="newUserPassword" name="password" type="password" autocomplete="new-password" minlength="10" required></div>
-      <div class="field"><label for="newUserRole">Rol</label><select id="newUserRole" name="role"><option value="orders">Pedidos</option><option value="admin">Administrador</option></select></div>
+      <div class="field"><label for="newUserRole">Rol</label><select id="newUserRole" name="role"><option value="orders">Pedidos</option><option value="store_manager">Jefe de tienda</option><option value="admin">Administrador</option></select></div>
       <div class="form-actions"><button class="button" type="submit">Crear usuario</button></div>
     </form>
     <div id="adminUsersList" class="admin-users-list"></div>
@@ -827,7 +827,7 @@ function userManagementPanel(users) {
 }
 
 async function renderAdmin() {
-  const session = await request('/api/admin/session').catch(() => ({ authenticated: false })); if (!session.authenticated) return renderLogin(); if (session.role === 'orders') return renderAdminOrders();
+  const session = await request('/api/admin/session').catch(() => ({ authenticated: false })); if (!session.authenticated) return renderLogin(); if (session.role === 'orders' || session.role === 'store_manager') return renderAdminOrders();
   let products = await request('/api/admin/products').catch(() => []); let classifications = await request('/api/admin/classifications').catch(() => ({ brands: {}, productTypes: {} })); let settings = await request('/api/admin/storefront').catch(() => ({ heroProductIds: [], featuredProductIds: [] })); let editing = null;
   const backupState = await request('/api/admin/backups').catch(() => ({ storageMode: 'local', backups: [], retention: 30 })); const users = await request('/api/admin/users').catch(() => []);
   app.innerHTML = `<main class="admin-shell"><aside class="admin-quick-nav" aria-label="Navegación rápida">
@@ -837,14 +837,14 @@ async function renderAdmin() {
     <button type="button" data-admin-scroll="classificationPanel">Categorías</button>
     <button type="button" data-admin-scroll="productEditorPanel">Producto</button>
     <button type="button" data-admin-scroll="inventoryPanel">Inventario</button>
-  </aside><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Administración</h1></div><button class="button secondary" id="logout">Cerrar sesión</button></div><nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}" class="admin-section-link active">PÁGINA WEB</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link">PEDIDOS</a></nav>${userManagementPanel(users)}${backupPanel(backupState)}${selectionPanel(products, settings)}${classificationPanel(classifications)}<section class="admin-panel product-editor-panel" id="productEditorPanel"><span class="eyebrow">Catálogo</span><h2 id="formTitle">Agregar producto</h2><div id="formArea"></div></section><section class="admin-products" id="inventoryPanel"><div class="section-heading inventory-heading"><div><span class="eyebrow">Inventario</span><h2>Productos publicados (${products.length})</h2></div><p>Edita datos, imágenes, portada y destacados.</p></div><div class="inventory-toolbar"><label class="inventory-search"><span aria-hidden="true">⌕</span><input id="inventorySearch" type="search" placeholder="Buscar por nombre, SKU, marca o categoría…" autocomplete="off"><button id="clearInventorySearch" type="button" aria-label="Limpiar búsqueda">×</button></label><span class="inventory-count" id="inventoryCount">${products.length} productos</span></div><div id="adminProducts"></div></section></div></main>`;
+  </aside><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Administración</h1></div><button class="button secondary" id="logout">Cerrar sesión</button></div><nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}" class="admin-section-link active">PÁGINA WEB</a><a href="${ADMIN_PATH}/jefe-de-tienda" class="admin-section-link">JEFE DE TIENDA</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link">PEDIDOS</a></nav>${userManagementPanel(users)}${backupPanel(backupState)}${selectionPanel(products, settings)}${classificationPanel(classifications)}<section class="admin-panel product-editor-panel" id="productEditorPanel"><span class="eyebrow">Catálogo</span><h2 id="formTitle">Agregar producto</h2><div id="formArea"></div></section><section class="admin-products" id="inventoryPanel"><div class="section-heading inventory-heading"><div><span class="eyebrow">Inventario</span><h2>Productos publicados (${products.length})</h2></div><p>Edita datos, imágenes, portada y destacados.</p></div><div class="inventory-toolbar"><label class="inventory-search"><span aria-hidden="true">⌕</span><input id="inventorySearch" type="search" placeholder="Buscar por nombre, SKU, marca o categoría…" autocomplete="off"><button id="clearInventorySearch" type="button" aria-label="Limpiar búsqueda">×</button></label><span class="inventory-count" id="inventoryCount">${products.length} productos</span></div><div id="adminProducts"></div></section></div></main>`;
   const userPanel = document.querySelector('#userManagementPanel');
   if (userPanel) {
     const renderUsers = (items) => {
       const list = userPanel.querySelector('#adminUsersList');
       if (!list) return;
       list.innerHTML = items.map(user => `<article class="admin-user-row">
-        <div><strong>${escapeHTML(user.username)}</strong><span>${user.role === 'admin' ? 'Administrador' : 'Pedidos'} · ${user.active ? 'Activo' : 'Desactivado'}${user.source === 'environment' ? ' · Cuenta inicial' : ''}</span></div>
+        <div><strong>${escapeHTML(user.username)}</strong><span>${user.role === 'admin' ? 'Administrador' : (user.role === 'store_manager' ? 'Jefe de tienda' : 'Pedidos')} · ${user.active ? 'Activo' : 'Desactivado'}${user.source === 'environment' ? ' · Cuenta inicial' : ''}</span></div>
         <div class="admin-actions">
           <button class="button secondary small" data-user-2fa="${escapeHTML(user.id)}">${user.twoFactorEnabled ? '2FA activo' : 'Configurar 2FA'}</button>
           ${user.source === 'environment' ? '' : `<button class="button secondary small" data-user-toggle="${escapeHTML(user.id)}">${user.active ? 'Desactivar' : 'Activar'}</button><button class="button danger small" data-user-delete="${escapeHTML(user.id)}">Eliminar</button>`}
@@ -1298,7 +1298,7 @@ function renderLogin(twoFactorMode = false) {
       try {
         const result = await request('/api/login/2fa', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.fromEntries(new FormData(form))) });
         const session = await request('/api/admin/session');
-        session.role === 'orders' ? renderAdminOrders() : renderAdmin();
+        (session.role === 'orders' || session.role === 'store_manager') ? renderAdminOrders() : renderAdmin();
       } catch (error) {
         message.className = 'message error';
         message.textContent = error.message;
@@ -1316,7 +1316,7 @@ function renderLogin(twoFactorMode = false) {
       const result = await request('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.fromEntries(new FormData(form))) });
       if (result.requiresTwoFactor) return renderLogin(true);
       const session = await request('/api/admin/session');
-      session.role === 'orders' ? renderAdminOrders() : renderAdmin();
+      (session.role === 'orders' || session.role === 'store_manager') ? renderAdminOrders() : renderAdmin();
     } catch (error) {
       message.className = 'message error';
       message.textContent = error.message;
@@ -1325,7 +1325,7 @@ function renderLogin(twoFactorMode = false) {
 }
 
 window.addEventListener('popstate', () => renderStore());
-if (window.location.pathname === ADMIN_PATH || window.location.pathname === `${ADMIN_PATH}/`) renderAdmin(); else if (window.location.pathname === `${ADMIN_PATH}/pedidos` || window.location.pathname === `${ADMIN_PATH}/pedidos/`) renderAdminOrders(); else if (window.location.pathname === '/pedido' || window.location.pathname === '/pedido/') checkoutPage(); else renderStore();
+if (window.location.pathname === ADMIN_PATH || window.location.pathname === `${ADMIN_PATH}/`) renderAdmin(); else if (window.location.pathname === `${ADMIN_PATH}/jefe-de-tienda` || window.location.pathname === `${ADMIN_PATH}/jefe-de-tienda/`) renderAdminOrders(); else if (window.location.pathname === `${ADMIN_PATH}/pedidos` || window.location.pathname === `${ADMIN_PATH}/pedidos/`) renderAdminOrders(); else if (window.location.pathname === '/pedido' || window.location.pathname === '/pedido/') checkoutPage(); else renderStore();
 
 document.addEventListener('change', e => { const file=e.target.closest('input[type=file][id^=\"imageFile\"]'); if(!file)return; const num=file.id==='imageFile'?1:Number(file.id.replace('imageFile','')); const preview=document.querySelector(`#productImagePreview${num}`); if(preview&&file.files?.[0]){const r=new FileReader();r.onload=()=>preview.src=r.result;r.readAsDataURL(file.files[0]);}});
 document.addEventListener('input', e => { const input=e.target.closest('input[type=url][id^=\"image\"]'); if(!input)return; const num=input.id==='image'?1:Number(input.id.replace('image','')); const preview=document.querySelector(`#productImagePreview${num}`); if(preview&&input.value.trim())preview.src=input.value.trim();});
