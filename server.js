@@ -34,6 +34,119 @@ const ORDERS_USER = process.env.ORDERS_USER || 'pedidos';
 const ORDERS_PASSWORD = process.env.ORDERS_PASSWORD || 'CAMBIA-ESTA-CONTRASENA-DE-PEDIDOS';
 const COOKIE_SECURE = process.env.COOKIE_SECURE === 'true';
 
+// V10: cifrado de datos personales de pedidos en reposo.
+// La clave NUNCA se guarda en el repositorio ni dentro de orders.json.
+const YHORS_DATA_KEY_SECRET = String(process.env.YHORS_DATA_KEY || '').trim();
+if (!YHORS_DATA_KEY_SECRET) {
+  throw new Error('[YHORS V10] Falta YHORS_DATA_KEY. Configura una clave secreta de cifrado en .env (local) o en las variables de entorno de Render.');
+}
+const YHORS_DATA_KEY = crypto.createHash('sha256').update(YHORS_DATA_KEY_SECRET, 'utf8').digest();
+const ORDER_ENCRYPTION_PREFIX = 'YHORS1';
+const ENCRYPTED_ORDER_CUSTOMER_FIELDS = ['name', 'phone', 'cedula', 'email', 'city', 'address', 'mapsUrl', 'notes'];
+const ENCRYPTED_ORDER_TOP_LEVEL_FIELDS = ['internalNote'];
+
+function isEncryptedValue(value) {
+  return typeof value === 'string' && value.startsWith(`${ORDER_ENCRYPTION_PREFIX}.`);
+}
+
+function encodeBase64Url(buffer) {
+  return Buffer.from(buffer).toString('base64url');
+}
+
+function decodeBase64Url(value) {
+  return Buffer.from(String(value), 'base64url');
+}
+
+function encryptOrderValue(value) {
+  if (value === null || value === undefined || value === '') return value ?? '';
+  if (isEncryptedValue(value)) return value;
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', YHORS_DATA_KEY, iv);
+  const ciphertext = Buffer.concat([cipher.update(String(value), 'utf8'), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return `${ORDER_ENCRYPTION_PREFIX}.${encodeBase64Url(iv)}.${encodeBase64Url(tag)}.${encodeBase64Url(ciphertext)}`;
+}
+
+function decryptOrderValue(value) {
+  if (value === null || value === undefined || value === '') return value ?? '';
+  if (!isEncryptedValue(value)) return value;
+  const parts = String(value).split('.');
+  if (parts.length !== 4) throw new Error('Dato de pedido cifrado con formato inválido.');
+  const [, ivEncoded, tagEncoded, ciphertextEncoded] = parts;
+  try {
+    const decipher = crypto.createDecipheriv('aes-256-gcm', YHORS_DATA_KEY, decodeBase64Url(ivEncoded));
+    decipher.setAuthTag(decodeBase64Url(tagEncoded));
+    return Buffer.concat([decipher.update(decodeBase64Url(ciphertextEncoded)), decipher.final()]).toString('utf8');
+  } catch {
+    throw new Error('No se pudo descifrar la información del pedido. Verifica YHORS_DATA_KEY.');
+  }
+}
+
+function encryptOrder(order) {
+  const protectedOrder = { ...order };
+  const customer = { ...(order?.customer || {}) };
+  for (const field of ENCRYPTED_ORDER_CUSTOMER_FIELDS) {
+    if (Object.prototype.hasOwnProperty.call(customer, field)) customer[field] = encryptOrderValue(customer[field]);
+  }
+  protectedOrder.customer = customer;
+  for (const field of ENCRYPTED_ORDER_TOP_LEVEL_FIELDS) {
+    if (Object.prototype.hasOwnProperty.call(protectedOrder, field)) protectedOrder[field] = encryptOrderValue(protectedOrder[field]);
+  }
+  return protectedOrder;
+}
+
+function decryptOrder(order) {
+  const readableOrder = { ...order };
+  const customer = { ...(order?.customer || {}) };
+  for (const field of ENCRYPTED_ORDER_CUSTOMER_FIELDS) {
+    if (Object.prototype.hasOwnProperty.call(customer, field)) customer[field] = decryptOrderValue(customer[field]);
+  }
+  readableOrder.customer = customer;
+  for (const field of ENCRYPTED_ORDER_TOP_LEVEL_FIELDS) {
+    if (Object.prototype.hasOwnProperty.call(readableOrder, field)) readableOrder[field] = decryptOrderValue(readableOrder[field]);
+  }
+  return readableOrder;
+}
+
+function ordersNeedEncryption(orders) {
+  return orders.some(order => ENCRYPTED_ORDER_CUSTOMER_FIELDS.some(field => Object.prototype.hasOwnProperty.call(order?.customer || {}, field) && order.customer[field] && !isEncryptedValue(order.customer[field]))
+    || ENCRYPTED_ORDER_TOP_LEVEL_FIELDS.some(field => Object.prototype.hasOwnProperty.call(order, field) && order[field] && !isEncryptedValue(order[field])));
+}
+
+function writeProtectedOrdersDirect(ordersFile, orders) {
+  const temporaryFile = `${ordersFile}.v10.tmp`;
+  fs.writeFileSync(temporaryFile, `${JSON.stringify(orders.map(encryptOrder), null, 2)}\n`, 'utf8');
+  fs.renameSync(temporaryFile, ordersFile);
+}
+
+function migrateOrdersFileToEncryption(ordersFile) {
+  if (!fs.existsSync(ordersFile)) return false;
+  try {
+    const parsed = JSON.parse(fs.readFileSync(ordersFile, 'utf8'));
+    if (!Array.isArray(parsed) || !ordersNeedEncryption(parsed)) return false;
+    writeProtectedOrdersDirect(ordersFile, parsed);
+    return true;
+  } catch (error) {
+    throw new Error(`[YHORS V10] No se pudo migrar ${ordersFile} al cifrado: ${error.message}`);
+  }
+}
+
+function migrateAllOrderStorageToEncryption() {
+  // Migra el archivo principal sin crear antes un backup en texto plano.
+  const migratedMain = migrateOrdersFileToEncryption(ORDERS_FILE);
+  let migratedBackups = 0;
+  if (fs.existsSync(BACKUPS_DIR)) {
+    for (const entry of fs.readdirSync(BACKUPS_DIR, { withFileTypes: true })) {
+      if (!entry.isDirectory() || !/^YHORS-\d{8}-\d{6}Z-[a-f0-9]{6}$/.test(entry.name)) continue;
+      const backupOrdersFile = path.join(BACKUPS_DIR, entry.name, 'data', 'orders.json');
+      if (migrateOrdersFileToEncryption(backupOrdersFile)) migratedBackups += 1;
+    }
+  }
+  if (migratedMain || migratedBackups) {
+    console.log(`[YHORS V10] Cifrado activado. Pedidos migrados: principal=${migratedMain ? 'sí' : 'no'}, backups=${migratedBackups}.`);
+  }
+}
+
 function ensureStorage() {
   fs.mkdirSync(DATA_DIR, { recursive: true });
   fs.mkdirSync(UPLOADS_DIR, { recursive: true });
@@ -65,6 +178,7 @@ function ensureStorage() {
   }
 }
 ensureStorage();
+migrateAllOrderStorageToEncryption();
 setTimeout(() => maybeAutoBackup(), 1500);
 
 app.disable('x-powered-by');
@@ -490,18 +604,17 @@ function writeProducts(products) {
 }
 
 function readOrders() {
-  try {
-    const parsed = JSON.parse(fs.readFileSync(ORDERS_FILE, 'utf8'));
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
+  const raw = fs.readFileSync(ORDERS_FILE, 'utf8');
+  const parsed = JSON.parse(raw);
+  if (!Array.isArray(parsed)) throw new Error('El archivo de pedidos no contiene una lista válida.');
+  return parsed.map(decryptOrder);
 }
 
 function writeOrders(orders) {
   maybeAutoBackup();
   const temporaryFile = `${ORDERS_FILE}.tmp`;
-  fs.writeFileSync(temporaryFile, `${JSON.stringify(orders, null, 2)}\n`, 'utf8');
+  const protectedOrders = orders.map(encryptOrder);
+  fs.writeFileSync(temporaryFile, `${JSON.stringify(protectedOrders, null, 2)}\n`, 'utf8');
   fs.renameSync(temporaryFile, ORDERS_FILE);
 }
 
@@ -821,6 +934,7 @@ app.post('/api/orders', async (req, res) => {
 });
 
 app.get('/api/admin/session', (req, res) => { const session = getSession(req); return res.json({ authenticated: Boolean(session), username: session?.user || null, role: session?.role || null }); });
+app.get('/api/admin/security', requireAdmin, (_, res) => res.json({ dataEncryption: 'AES-256-GCM', ordersEncryptedAtRest: true, keySource: 'YHORS_DATA_KEY environment variable', version: 'V10' }));
 
 app.get('/api/admin/orders', requireOrdersAccess, (_, res) => res.json(readOrders()));
 app.put('/api/admin/orders/:id', requireOrdersAccess, (req, res) => {

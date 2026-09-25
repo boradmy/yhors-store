@@ -4,3 +4,5 @@ uploads/*
 !uploads/.gitkeep
 
 data/backups/
+.env.*
+!.env.example

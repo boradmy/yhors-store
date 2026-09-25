@@ -13,7 +13,7 @@ Tienda ligera para publicar en un hosting con Node.js. No lleva React, compilaci
 - Pedidos persistentes con numeración `YH-0001`, `YH-0002`, etc.
 - Panel administrativo de pedidos independiente, con filtros por fecha/estado/búsqueda, tarjetas compactas desplegables y eliminación de pedidos de prueba. Estados: Pendiente, Confirmado, Preparando, Enviado, Entregado y Cancelado.
 - WhatsApp queda como canal opcional de atención, no como sistema principal de pedidos.
-- Cabeceras de seguridad, cookie de sesión HTTP-only y validación del lado del servidor.
+- Cabeceras de seguridad, cookie de sesión HTTP-only, validación del lado del servidor y cifrado AES-256-GCM de datos personales de pedidos.
 
 ## Arranque local
 
@@ -44,6 +44,19 @@ Para recibir pedidos, agrega el número internacional de WhatsApp sin `+` ni esp
 - Los cuatro productos iniciales son ejemplos. Entra al panel, edítalos o elimínalos y carga tus fotos reales.
 - El hosting no debe servirse como sitio estático; requiere ejecutar `server.js` para que el acceso, la carga de fotos y los cambios sean reales.
 
+
+## Seguridad de datos — V10
+
+- Los datos personales de los pedidos se almacenan cifrados con AES-256-GCM.
+- La clave se toma exclusivamente de `YHORS_DATA_KEY`.
+- Los backups contienen el archivo de pedidos ya cifrado.
+- Al iniciar V10, los pedidos antiguos y los `orders.json` de backups existentes se migran automáticamente.
+- Si `YHORS_DATA_KEY` no está configurada, el servidor se detiene para evitar almacenar información sensible en texto plano.
+- **Nunca publiques `.env` ni `YHORS_DATA_KEY`.**
+
+Para local, copia `.env.example` como `.env` y configura una clave propia. Para Render, agrega `YHORS_DATA_KEY` en Environment.
+
+Consulta `SECURITY_V10.md` para el detalle técnico.
 
 ## Mejoras de esta versión
 - Homepage con estética YHORS más elegante: negro, crema y dorado, mejor jerarquía visual y tarjetas refinadas.

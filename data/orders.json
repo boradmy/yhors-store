@@ -6,13 +6,13 @@
     "createdAt": "2026-09-24T18:33:51.891Z",
     "updatedAt": "2026-09-24T22:43:49.209Z",
     "customer": {
-      "name": "PEPIDO",
-      "phone": "0958609277",
-      "email": "boradmy@gmail.com",
-      "city": "quito",
+      "name": "YHORS1.TASQu5iJX9WKQ1S7.cgiuo2gh3XDleQxi2z6eiw.9Uon9WZL",
+      "phone": "YHORS1.QFO02EPGqDzACL_k.jUxeLqAXQQaVNGRHHBaZEA.0mPd2DkZRl_44w",
+      "email": "YHORS1.SVCa55MeY9yRXNGQ.axi7Gn0XhKOZPzXgRA64Uw.zBLQDspFVQyRd0Tj_O-z9T0",
+      "city": "YHORS1.xA76UGL3d8ookY8E.1rPSaF5mTBt0fCDeExckbw.EjhUVFk",
       "address": "",
       "mapsUrl": "",
-      "notes": "nada"
+      "notes": "YHORS1.rX7tfrNyq7fmFuGs.04bHxlIVc0D2G9K1nFfypQ.l7MgnA"
     },
     "delivery": {
       "method": "office",
@@ -44,7 +44,7 @@
     "subtotal": 679.99,
     "shippingCost": 0,
     "total": 679.99,
-    "internalNote": "listo enviado producto despachado OK"
+    "internalNote": "YHORS1.Jaz07E5YNnLIppVg.rso5g8DoPwSMUGAosOUL0g.EoXtTgkVrkUr4_NjQKV3QKQ7NfTQ4dOenzFuijctTiKtzIZt"
   },
   {
     "id": "d88112c0-18c3-42c4-8006-fc9b1d193986",
@@ -53,10 +53,10 @@
     "createdAt": "2026-09-24T18:14:39.812Z",
     "updatedAt": "2026-09-24T19:19:00.309Z",
     "customer": {
-      "name": "Boris",
-      "phone": "0958609277",
-      "email": "boradmy@gmail.com",
-      "city": "Quito",
+      "name": "YHORS1.VLNdPUdLC0SNTqxM.L7yixMkW6CB4gwK1vdasNw.UHJrVZE",
+      "phone": "YHORS1.xLwSmFDA6I_emUD4.n4yREPkXeJ2zSMRBQZe0vg.b-AORr07tIee9A",
+      "email": "YHORS1.xoYE2TKI5ZlrOvWw.TVT5-3VZ6-LkD-_FsuXdMA.b9bBiMvpYBWD3UmkfPWIyOk",
+      "city": "YHORS1.d6R_udXr4sbykIaM.SpMe_H8nmtvv0c-7YTyWAg.YZA88zM",
       "address": "",
       "mapsUrl": "",
       "notes": ""
