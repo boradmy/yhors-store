@@ -1536,3 +1536,17 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}.brand{letter-sp
 .login-card .form-actions .message{width:100%;text-align:center;box-sizing:border-box}
 .login-card #passkeyLogin{min-height:58px}
 @media(max-width:560px){.login-card .form-actions{grid-template-columns:1fr}.login-card .form-actions .button{min-height:54px}}
+
+/* V14.6 · asignación de vendedores y navegación de cuenta */
+.account-page-actions{align-items:center}
+.account-back-button{white-space:nowrap;text-decoration:none}
+.order-assignment{margin-top:18px;padding:15px 0;border-top:1px solid var(--line);display:grid;gap:8px}
+.order-assignment-head{display:flex;align-items:baseline;justify-content:space-between;gap:15px}
+.order-assignment-head small{color:var(--muted);font-size:.72rem}
+.order-assignment-select,.order-assignment-readonly{width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid var(--line);border-radius:8px;background:#fff;font:inherit}
+.order-assignment-readonly{background:#faf9f6;color:var(--ink);font-weight:700}
+@media(max-width:700px){
+  .account-page-actions{width:100%;justify-content:flex-start}
+  .account-back-button{min-height:40px;display:inline-flex;align-items:center}
+  .order-assignment-head{display:grid;gap:3px}
+}

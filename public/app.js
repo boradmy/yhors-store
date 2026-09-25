@@ -129,9 +129,19 @@ function serializeAuthenticationCredential(credential) {
 }
 async function nativeStartRegistration(options) {
   if (!window.PublicKeyCredential || !navigator.credentials?.create) throw new Error('Este navegador no admite Passkeys/WebAuthn.');
-  const credential = await navigator.credentials.create({ publicKey: registrationOptionsForBrowser(options) });
-  if (!credential) throw new Error('No se pudo crear la Passkey.');
-  return serializeRegistrationCredential(credential);
+  try {
+    const credential = await navigator.credentials.create({ publicKey: registrationOptionsForBrowser(options) });
+    if (!credential) throw new Error('No se pudo crear la Passkey.');
+    return serializeRegistrationCredential(credential);
+  } catch (error) {
+    if (error?.name === 'NotAllowedError' || error?.name === 'AbortError' || error?.name === 'TimeoutError') {
+      const friendly = new Error('Registro de Passkey cancelado. Puedes volver a intentarlo cuando quieras.');
+      friendly.code = 'PASSKEY_CANCELLED';
+      throw friendly;
+    }
+    if (error?.name === 'SecurityError') throw new Error('Passkey no disponible en este dominio. Verifica que YHORS esté usando HTTPS y el dominio configurado.');
+    throw new Error('No se pudo registrar la Passkey. Inténtalo nuevamente.');
+  }
 }
 async function nativeStartAuthentication(options) {
   if (!window.PublicKeyCredential || !navigator.credentials?.get) throw new Error('Este navegador no admite Passkeys/WebAuthn.');
@@ -742,10 +752,14 @@ function ordersPanel(orders = [], canDelete = true) {
   </section>`;
 }
 function ordersListMarkup(orders = [], options = {}) {
-  const canDelete = options.canDelete !== false;
+  const canDelete = options.canDelete === true;
+  const canAssign = options.canAssign === true;
+  const sellers = Array.isArray(options.sellers) ? options.sellers : [];
+  const currentRole = options.role || '';
   const date = value => { const d = new Date(value); return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString('es-EC', { dateStyle: 'medium', timeStyle: 'short' }); };
   const shortDate = value => { const d = new Date(value); return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString('es-EC', { day:'2-digit', month:'short', year:'numeric' }); };
   const statuses = ['Pendiente', 'Confirmado', 'Preparando', 'Enviado', 'Entregado', 'Cancelado'];
+  const sellerName = order => sellers.find(s => s.id === order.assignedSellerId)?.name || order.assignedSellerName || 'Sin asignar';
   if (!orders.length) return '<div class="empty">No hay pedidos que coincidan con los filtros.</div>';
   return orders.map(order => `<article class="admin-order admin-order-compact" data-order-search="${escapeHTML(`${order.orderNumber} ${order.customer?.name || ''} ${order.customer?.cedula || ''} ${order.customer?.phone || ''} ${order.customer?.email || ''} ${(order.items || []).map(i => `${i.sku} ${i.name}`).join(' ')}`.toLowerCase())}" data-order-status="${escapeHTML(order.status || '')}" data-order-date="${escapeHTML(String(order.createdAt || '').slice(0,10))}">
     <button type="button" class="admin-order-summary" data-order-toggle="${escapeHTML(order.id)}" aria-expanded="false">
@@ -764,6 +778,12 @@ function ordersListMarkup(orders = [], options = {}) {
         <label for="internalNote-${escapeHTML(order.id)}">Nota interna</label>
         <textarea id="internalNote-${escapeHTML(order.id)}" data-order-note="${escapeHTML(order.id)}" rows="3" maxlength="5000" placeholder="Escribe aquí cualquier comentario interno sobre este pedido…" disabled>${escapeHTML(order.internalNote || '')}</textarea>
       </div>
+      <div class="order-assignment">
+        <div class="order-assignment-head"><span class="order-label">Asignado a</span><small>${isSellerRole(currentRole) ? 'Vendedor asignado a este pedido' : 'Vendedor responsable'}</small></div>
+        ${canAssign
+          ? `<select class="order-assignment-select" data-order-assignment="${escapeHTML(order.id)}"><option value="">Sin asignar</option>${sellers.map(s => `<option value="${escapeHTML(s.id)}" ${s.id === order.assignedSellerId ? 'selected' : ''}>${escapeHTML(s.name)} · @${escapeHTML(s.username)}</option>`).join('')}</select>`
+          : `<div class="order-assignment-readonly">${escapeHTML(sellerName(order))}</div>`}
+      </div>
       <div class="admin-order-footer">
         <button class="button success small" type="button" data-order-note-save="${escapeHTML(order.id)}" disabled>Guardar nota</button>
         <button class="button edit-note small" type="button" data-order-note-edit="${escapeHTML(order.id)}">Editar</button>
@@ -776,10 +796,18 @@ async function renderAdminOrders() {
   const session = await request('/api/admin/session').catch(() => ({ authenticated: false }));
   if (!session.authenticated) return renderLogin();
   let orders = await request('/api/admin/orders').catch(() => []);
-  const sectionNav = (session.role === 'orders' || session.role === 'store_manager')
+  const canAssign = session.role === 'store_manager';
+  const canDelete = session.role === 'store_manager' || session.role === 'admin';
+  let sellers = [];
+  if (canAssign) sellers = await request('/api/admin/order-sellers').catch(() => []);
+
+  const sectionNav = (session.role === 'vendedor')
     ? `<nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}/pedidos" class="admin-section-link active">PEDIDOS</a></nav>`
     : `<nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}" class="admin-section-link">PÁGINA WEB</a><a href="${ADMIN_PATH}/usuarios" class="admin-section-link">USUARIOS</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link active">PEDIDOS</a></nav>`;
-  app.innerHTML = `<main class="admin-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">${(session.role === 'orders' || session.role === 'store_manager') ? 'Gestión de pedidos' : 'Administración'}</h1><p class="admin-subtitle">${session.role === 'orders' ? 'Panel exclusivo para pedidos de YHORS STORE' : (session.role === 'store_manager' ? 'Jefe de tienda · pedidos y control operativo' : 'Gestión de YHORS STORE')}</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>${sectionNav}${ordersPanel(orders, session.role === 'admin' || session.role === 'store_manager')}</div></main>`;
+  const title = session.role === 'vendedor' ? 'Mis pedidos asignados' : 'Gestión de pedidos';
+  const subtitle = session.role === 'store_manager' ? 'Jefe de tienda · pedidos, asignaciones y control operativo' : (session.role === 'vendedor' ? 'Pedidos asignados a tu usuario · consulta y gestión operativa' : 'Gestión de YHORS STORE');
+  app.innerHTML = `<main class="admin-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">${title}</h1><p class="admin-subtitle">${subtitle}</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>${sectionNav}${ordersPanel(orders, canDelete)}</div></main>`;
+
   const drawOrders = () => {
     const list=document.querySelector('#adminOrdersList'); if(!list) return;
     const query=(document.querySelector('#ordersSearch')?.value||'').trim().toLowerCase();
@@ -787,7 +815,8 @@ async function renderAdminOrders() {
     const dateFilter=(document.querySelector('#ordersDateFilter')?.value||'');
     const orderLocalDate = value => { const d=new Date(value); if(Number.isNaN(d.getTime())) return ''; return d.toLocaleDateString('en-CA',{timeZone:'America/Guayaquil'}); };
     const filtered=orders.filter(order=>(!dateFilter||orderLocalDate(order.createdAt)===dateFilter)&&(!status||order.status===status)&&(!query||`${order.orderNumber} ${order.customer?.name||''} ${order.customer?.cedula||''} ${order.customer?.phone||''} ${order.customer?.email||''} ${(order.items||[]).map(i=>`${i.sku} ${i.name}`).join(' ')}`.toLowerCase().includes(query)));
-    list.innerHTML=ordersListMarkup(filtered, { canDelete: session.role === 'admin' });
+    list.innerHTML=ordersListMarkup(filtered, { canDelete, canAssign, sellers, role: session.role });
+
     list.querySelectorAll('select[data-order-status]').forEach(select=>select.addEventListener('change',async()=>{
       const id = select.dataset.orderStatus;
       const newStatus = String(select.value || '').trim();
@@ -796,7 +825,6 @@ async function renderAdminOrders() {
       try {
         const updated = await request(`/api/admin/orders/${id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:newStatus})});
         orders=orders.map(o=>o.id===updated.id?updated:o);
-        // No redibujar toda la lista: así no se cierra el pedido ni se pierde la nota escrita.
         const card = select.closest('.admin-order');
         const badge = card?.querySelector('.order-summary-status');
         if (badge) {
@@ -811,6 +839,23 @@ async function renderAdminOrders() {
         alert(e.message);
       }
     }));
+
+    list.querySelectorAll('select[data-order-assignment]').forEach(select=>select.addEventListener('change',async()=>{
+      const id = select.dataset.orderAssignment;
+      const previous = orders.find(o=>o.id===id)?.assignedSellerId || '';
+      select.disabled = true;
+      try {
+        const updated = await request(`/api/admin/orders/${id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({assignedSellerId: select.value || null})});
+        orders=orders.map(o=>o.id===updated.id?updated:o);
+        select.value = updated.assignedSellerId || '';
+        select.disabled = false;
+      } catch(e) {
+        select.value = previous;
+        select.disabled = false;
+        alert(e.message);
+      }
+    }));
+
     list.querySelectorAll('[data-order-toggle]').forEach(button=>button.addEventListener('click',()=>{ const details=document.querySelector(`#orderDetails-${button.dataset.orderToggle}`); if(!details) return; const opening=details.hidden; details.hidden=!opening; button.setAttribute('aria-expanded',String(opening)); button.closest('.admin-order')?.classList.toggle('is-open',opening); }));
     list.querySelectorAll('[data-order-note-edit]').forEach(button => button.addEventListener('click', () => {
       const id = button.dataset.orderNoteEdit;
@@ -846,7 +891,7 @@ async function renderAdminOrders() {
         alert(e.message);
       }
     }));
-     list.querySelectorAll('[data-order-delete]').forEach(button=>button.addEventListener('click',async()=>{
+    list.querySelectorAll('[data-order-delete]').forEach(button=>button.addEventListener('click',async()=>{
       const order=orders.find(o=>o.id===button.dataset.orderDelete); if(!order) return;
       if(!confirm(`¿Eliminar el pedido #${order.orderNumber}? Esta acción no se puede deshacer.`)) return;
       try { await request(`/api/admin/orders/${order.id}`,{method:'DELETE'}); orders=orders.filter(o=>o.id!==order.id); drawOrders(); } catch(e){alert(e.message);}
@@ -854,16 +899,22 @@ async function renderAdminOrders() {
   };
   document.querySelector('#ordersSearch')?.addEventListener('input',drawOrders);
   document.querySelector('#ordersStatusFilter')?.addEventListener('change',drawOrders);
-   document.querySelector('#ordersDateFilter')?.addEventListener('change',drawOrders);
-   document.querySelector('#clearOrdersDate')?.addEventListener('click',()=>{ const input=document.querySelector('#ordersDateFilter'); if(input){input.value='';drawOrders();} });
+  document.querySelector('#ordersDateFilter')?.addEventListener('change',drawOrders);
+  document.querySelector('#clearOrdersDate')?.addEventListener('click',()=>{ const input=document.querySelector('#ordersDateFilter'); if(input){input.value='';drawOrders();} });
   wireAccountMenu();
   drawOrders();
 }
 
 
-
 function userRoleLabel(role) {
-  return role === 'admin' ? 'Administrador' : (role === 'store_manager' ? 'Jefe de tienda' : 'Ventas / Pedidos');
+  const normalized = String(role || '').toLowerCase() === 'orders' ? 'vendedor' : String(role || '').toLowerCase();
+  return normalized === 'admin' ? 'Administrador' : (normalized === 'store_manager' ? 'Jefe de tienda' : 'Vendedor');
+}
+function isSellerRole(role) {
+  return String(role || '').toLowerCase() === 'vendedor' || String(role || '').toLowerCase() === 'orders';
+}
+function orderBackHref(role) {
+  return isSellerRole(role) || role === 'store_manager' ? `${ADMIN_PATH}/pedidos` : ADMIN_PATH;
 }
 
 function usersPanel(users = []) {
@@ -899,7 +950,7 @@ function usersPanel(users = []) {
           <div class="field full"><label for="userName">Nombre completo</label><input id="userName" name="name" maxlength="100" required placeholder="Ej. Juan Pérez"></div>
           <div class="field"><label for="userUsername">Nombre de usuario</label><input id="userUsername" name="username" minlength="3" maxlength="40" pattern="[A-Za-z0-9._-]{3,40}" required placeholder="juan.ventas" autocomplete="off"><small class="field-help">Sin espacios. Usa letras, números, punto, guion o guion bajo.</small></div>
           <div class="field"><label for="userPassword">Contraseña <span id="userPasswordHint"></span></label><input id="userPassword" name="password" type="password" minlength="8" maxlength="200" placeholder="Mínimo 8 caracteres" autocomplete="new-password"><small class="field-help">La contraseña se guarda cifrada mediante hash; nunca se muestra en la lista.</small></div>
-          <div class="field"><label for="userRole">Rol</label><select id="userRole" name="role"><option value="orders">Ventas / Pedidos</option><option value="store_manager">Jefe de tienda</option><option value="admin">Administrador</option></select></div>
+          <div class="field"><label for="userRole">Rol</label><select id="userRole" name="role"><option value="vendedor">Vendedor</option><option value="store_manager">Jefe de tienda</option><option value="admin">Administrador</option></select></div>
           <div class="field"><label for="userActive">Estado</label><select id="userActive" name="active"><option value="true">Activo</option><option value="false">Desactivado</option></select></div>
         </div>
         <div id="userMessage" class="message" hidden></div>
@@ -933,7 +984,7 @@ async function renderAdminUsers() {
   const resetForm = () => {
     form.reset();
     document.querySelector('#userId').value = '';
-    document.querySelector('#userRole').value = 'orders';
+    document.querySelector('#userRole').value = 'vendedor';
     document.querySelector('#userActive').value = 'true';
     document.querySelector('#userPassword').required = true;
     document.querySelector('#userPasswordHint').textContent = '';
@@ -1091,7 +1142,7 @@ function formatBackupDate(value) {
 }
 
 async function renderAdmin() {
-  const session = await request('/api/admin/session').catch(() => ({ authenticated: false })); if (!session.authenticated) return renderLogin(); if (session.role === 'orders') return renderAdminOrders();
+  const session = await request('/api/admin/session').catch(() => ({ authenticated: false })); if (!session.authenticated) return renderLogin(); if (isSellerRole(session.role)) return renderAdminOrders();
   let products = await request('/api/admin/products').catch(() => []); let classifications = await request('/api/admin/classifications').catch(() => ({ brands: {}, productTypes: {} })); let settings = await request('/api/admin/storefront').catch(() => ({ heroProductIds: [], featuredProductIds: [] })); let editing = null;
   const backupState = await request('/api/admin/backups').catch(() => ({ storageMode: 'local', backups: [], retention: 30 }));
   app.innerHTML = `<main class="admin-shell"><aside class="admin-quick-nav" aria-label="Navegación rápida">
@@ -1502,8 +1553,7 @@ async function registerMyPasskey() {
   const deviceName = prompt('Nombre para este dispositivo (opcional):', 'Este dispositivo') || 'Este dispositivo';
   credential.deviceName = deviceName.slice(0, 80);
   await request('/api/me/passkeys', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(credential) });
-  alert('Passkey registrada correctamente. Ahora puedes usar Windows Hello, huella, Face ID o el método compatible de tu dispositivo.');
-  await renderMyAccount();
+  return { ok: true };
 }
 
 async function loginWithPasskey() {
@@ -1511,22 +1561,38 @@ async function loginWithPasskey() {
   const assertion = await nativeStartAuthentication(options);
   await request('/api/passkey/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(assertion) });
   const session = await request('/api/admin/session');
-  if (session.role === 'orders' || session.role === 'store_manager') renderAdminOrders(); else renderAdmin();
+  if (isSellerRole(session.role) || session.role === 'store_manager') renderAdminOrders(); else renderAdmin();
 }
 
 async function renderMyAccount() {
   const me = await request('/api/me').catch(() => null); if (!me) return renderLogin();
   const passkeys = me.passkeys || [];
   app.innerHTML = `<main class="admin-shell"><div class="admin-wrap">
-    <div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Mi cuenta</h1><p class="admin-subtitle">Datos y métodos de inicio de sesión</p></div><div class="admin-top-actions">${accountMenu(me)}</div></div>
+    <div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Mi cuenta</h1><p class="admin-subtitle">Datos y métodos de inicio de sesión</p></div><div class="admin-top-actions account-page-actions"><a class="button secondary small account-back-button" href="${orderBackHref(me.role)}">← Volver</a>${accountMenu(me)}</div></div>
     <section class="admin-panel users-panel"><div class="section-heading"><div><span class="eyebrow">Cuenta</span><h2>${escapeHTML(me.name)}</h2></div><p>@${escapeHTML(me.username)} · ${escapeHTML(userRoleLabel(me.role))}</p></div>
       <div class="form-grid account-readonly"><div class="field"><label>Nombre</label><input value="${escapeHTML(me.name)}" disabled></div><div class="field"><label>Usuario</label><input value="${escapeHTML(me.username)}" disabled></div><div class="field"><label>Rol</label><input value="${escapeHTML(userRoleLabel(me.role))}" disabled></div><div class="field"><label>Estado</label><input value="Activo" disabled></div></div>
       <hr><div class="section-heading"><div><span class="eyebrow">Inicio de sesión moderno</span><h2>Passkeys</h2></div><p>Windows Hello, huella, Face ID o el método seguro compatible con tu dispositivo.</p></div>
       <div id="myPasskeys">${passkeys.length ? passkeys.map(pk => `<div class="admin-user-card"><div><strong>🔐 ${escapeHTML(pk.name || 'Passkey')}</strong><small>Registrada ${escapeHTML(new Date(pk.createdAt).toLocaleString())}${pk.lastUsedAt ? ` · Último uso ${escapeHTML(new Date(pk.lastUsedAt).toLocaleString())}` : ''}</small></div><button class="button danger small" data-delete-passkey="${escapeHTML(pk.id)}" type="button">Revocar</button></div>`).join('') : '<p class="backup-empty">No tienes Passkeys registradas.</p>'}</div>
-      <div class="form-actions"><button class="button primary" id="addPasskey" type="button" ${me.passkeyAllowed ? '' : 'disabled'}>+ Registrar Passkey</button><span class="message">${me.passkeyAllowed ? 'Permitido en esta cuenta.' : 'El administrador ha bloqueado el inicio con Passkey para esta cuenta.'}</span></div>
+      <div class="form-actions"><button class="button primary" id="addPasskey" type="button" ${me.passkeyAllowed ? '' : 'disabled'}>+ Registrar Passkey</button><span class="message" id="passkeyMessage">${me.passkeyAllowed ? 'Permitido en esta cuenta.' : 'El administrador ha bloqueado el inicio con Passkey para esta cuenta.'}</span></div>
     </section></div></main>`;
   wireAccountMenu();
-  document.querySelector('#addPasskey').addEventListener('click', async () => { try { await registerMyPasskey(); } catch (e) { alert(e.message); } });
+  document.querySelector('#addPasskey').addEventListener('click', async () => {
+    const button = document.querySelector('#addPasskey');
+    const message = document.querySelector('#passkeyMessage');
+    button.disabled = true;
+    message.className = 'message';
+    message.textContent = 'Esperando la confirmación de tu dispositivo…';
+    try {
+      await registerMyPasskey();
+      message.className = 'message success';
+      message.textContent = '✓ Passkey registrada correctamente.';
+      setTimeout(() => renderMyAccount(), 700);
+    } catch (e) {
+      message.className = e.code === 'PASSKEY_CANCELLED' ? 'message' : 'message error';
+      message.textContent = e.message;
+      button.disabled = !me.passkeyAllowed;
+    }
+  });
   document.querySelectorAll('[data-delete-passkey]').forEach(btn => btn.addEventListener('click', async () => { if (!confirm('¿Revocar esta Passkey?')) return; try { await request(`/api/me/passkeys/${encodeURIComponent(btn.dataset.deletePasskey)}`, { method: 'DELETE' }); await renderMyAccount(); } catch (e) { alert(e.message); } }));
 }
 
@@ -1543,7 +1609,7 @@ function renderLogin(twoFactorMode = false) {
           body: JSON.stringify(Object.fromEntries(new FormData(e.currentTarget)))
         });
         const session = await request('/api/admin/session');
-        (session.role === 'orders' || session.role === 'store_manager') ? renderAdminOrders() : renderAdmin();
+        (isSellerRole(session.role) || session.role === 'store_manager') ? renderAdminOrders() : renderAdmin();
       } catch (error) {
         message.className = 'message error';
         message.textContent = error.message;
@@ -1583,7 +1649,7 @@ function renderLogin(twoFactorMode = false) {
       const result = await request('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.fromEntries(new FormData(e.currentTarget))) });
       if (result.requiresTwoFactor) return renderLogin(true);
       const session = await request('/api/admin/session');
-      (session.role === 'orders' || session.role === 'store_manager') ? renderAdminOrders() : renderAdmin();
+      (isSellerRole(session.role) || session.role === 'store_manager') ? renderAdminOrders() : renderAdmin();
     } catch (error) {
       message.className = 'message error';
       if (error.data?.permanentLock) { setLockedUI(0, true); message.textContent = error.message; return; }

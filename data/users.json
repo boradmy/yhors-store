@@ -15,7 +15,7 @@
     "name": "Maria la del Barrio",
     "username": "maribar",
     "passwordHash": "$2a$12$52X77b7t8uQ8EzGlT1xaKe5FVyvyh89kxMMOK2Hf7VGEhHfOxofQa",
-    "role": "orders",
+    "role": "vendedor",
     "active": true,
     "system": false,
     "createdAt": "2026-09-25T14:54:18.492Z",

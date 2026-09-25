@@ -177,7 +177,21 @@ function migrateAllOrderStorageToEncryption() {
 }
 
 
-const USER_ROLES = new Set(['admin', 'orders', 'store_manager']);
+const USER_ROLES = new Set(['admin', 'vendedor', 'store_manager']);
+const LEGACY_SELLER_ROLE = 'orders';
+function normalizeRole(role) {
+  const value = String(role || '').trim().toLowerCase();
+  return value === LEGACY_SELLER_ROLE ? 'vendedor' : value;
+}
+function isSellerRole(role) {
+  return normalizeRole(role) === 'vendedor';
+}
+function isStoreManager(role) {
+  return normalizeRole(role) === 'store_manager';
+}
+function isAdmin(role) {
+  return normalizeRole(role) === 'admin';
+}
 
 
 function readSecurity() {
@@ -513,11 +527,12 @@ function ensureUserSeed(users, username, name, password, role) {
 function ensureUsers() {
   let users = readUsers();
   const before = JSON.stringify(users);
+  users = users.map(user => ({ ...user, role: normalizeRole(user.role) }));
   users = ensureUserSeed(users, ADMIN_USER, 'Administrador principal', ADMIN_PASSWORD, 'admin');
 
   // Migración: elimina la antigua cuenta del sistema "ventas" / "Ventas / Pedidos".
   // Ya no se vuelve a crear desde variables de entorno.
-  users = users.filter(user => !(user.system && user.username === 'ventas' && user.role === 'orders'));
+  users = users.filter(user => !(user.system && user.username === 'ventas' && isSellerRole(user.role)));
 
   // Si el archivo ya existía con una cuenta del sistema, mantenemos sus datos.
   // La sincronización con .env solo ocurre cuando esa cuenta todavía no existe.
@@ -535,7 +550,7 @@ function publicUser(user) {
     id: user.id,
     name: user.name,
     username: user.username,
-    role: user.role,
+    role: normalizeRole(user.role),
     active: user.active !== false,
     system: Boolean(user.system),
     twoFactorEnabled: accountTwoFactorEnabled(user.id),
@@ -551,7 +566,7 @@ function validateNewUser(input, users, currentId = '') {
   const name = normalizeUserName(input?.name);
   const username = normalizeUsername(input?.username);
   const password = String(input?.password || '');
-  const role = String(input?.role || 'orders').trim().toLowerCase();
+  const role = normalizeRole(input?.role || 'vendedor');
   const active = input?.active !== false;
 
   if (name.length < 2) return { error: 'Ingresa el nombre del usuario.' };
@@ -1234,7 +1249,10 @@ function readOrders() {
   const raw = fs.readFileSync(ORDERS_FILE, 'utf8');
   const parsed = JSON.parse(raw);
   if (!Array.isArray(parsed)) throw new Error('El archivo de pedidos no contiene una lista válida.');
-  return parsed.map(decryptOrder);
+  return parsed.map(decryptOrder).map(order => ({
+    ...order,
+    assignedSellerId: typeof order.assignedSellerId === 'string' && order.assignedSellerId ? order.assignedSellerId : null
+  }));
 }
 
 function writeOrders(orders) {
@@ -1373,13 +1391,28 @@ function requireLogin(req, res, next) { const session = getSession(req); if (!se
 function requireAdmin(req, res, next) {
   const session = getSession(req);
   if (!session) return res.status(401).json({ error: 'No autorizado.' });
-  if (session.role !== 'admin') return res.status(403).json({ error: 'Esta cuenta solo tiene acceso a Gestión de pedidos.' });
+  if (!isAdmin(session.role)) return res.status(403).json({ error: 'Se requiere una cuenta de administrador.' });
   return next();
 }
 
 function requireOrdersAccess(req, res, next) {
   const session = getSession(req);
   if (!session) return res.status(401).json({ error: 'No autorizado.' });
+  if (!['admin', 'store_manager', 'vendedor', 'orders'].includes(normalizeRole(session.role))) {
+    return res.status(403).json({ error: 'Esta cuenta no tiene acceso a Gestión de pedidos.' });
+  }
+  return next();
+}
+function requireStoreManager(req, res, next) {
+  const session = getSession(req);
+  if (!session) return res.status(401).json({ error: 'No autorizado.' });
+  if (!isStoreManager(session.role)) return res.status(403).json({ error: 'Solo el Jefe de tienda puede realizar esta acción.' });
+  return next();
+}
+function requireStoreManagerOrAdmin(req, res, next) {
+  const session = getSession(req);
+  if (!session) return res.status(401).json({ error: 'No autorizado.' });
+  if (!isStoreManager(session.role) && !isAdmin(session.role)) return res.status(403).json({ error: 'Solo el Jefe de tienda o un administrador puede eliminar pedidos.' });
   return next();
 }
 
@@ -1804,6 +1837,7 @@ app.post('/api/orders', async (req, res) => {
     status: 'Pendiente',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
+    assignedSellerId: null,
     ...result.order
   };
   orders.unshift(order);
@@ -1899,6 +1933,13 @@ app.delete('/api/admin/users/:id', requireAdmin, (req, res) => {
   }
   users.splice(index, 1);
   writeUsers(users);
+  if (isSellerRole(target.role)) {
+    const orders = readOrders();
+    const changed = orders.map(order => order.assignedSellerId === target.id
+      ? { ...order, assignedSellerId: null, updatedAt: new Date().toISOString() }
+      : order);
+    if (JSON.stringify(changed) !== JSON.stringify(orders)) writeOrders(changed);
+  }
   disableTwoFactor(target.id);
   destroySessionsForAccount(target.id);
   return res.status(204).end();
@@ -1932,13 +1973,50 @@ app.delete('/api/admin/users/:id/2fa', requireAdmin, (req, res) => {
   return res.json({ ok: true, twoFactorEnabled: false });
 });
 
-app.get('/api/admin/orders', requireOrdersAccess, (_, res) => res.json(readOrders()));
+function decorateOrderAssignment(order) {
+  const seller = order?.assignedSellerId ? readUsers().find(user => user.id === order.assignedSellerId && isSellerRole(user.role)) : null;
+  return { ...order, assignedSellerName: seller?.name || null };
+}
+
+app.get('/api/admin/order-sellers', requireStoreManager, (_, res) => {
+  const sellers = readUsers()
+    .filter(user => user.active !== false && isSellerRole(user.role))
+    .map(user => ({ id: user.id, name: user.name, username: user.username, role: 'vendedor' }));
+  return res.json(sellers);
+});
+
+app.get('/api/admin/orders', requireOrdersAccess, (req, res) => {
+  const session = getSession(req);
+  let orders = readOrders();
+  // Los vendedores solo reciben sus pedidos asignados. No pueden consultar pedidos de otros vendedores.
+  if (isSellerRole(session.role)) {
+    orders = orders.filter(order => order.assignedSellerId === session.accountId);
+  }
+  return res.json(orders.map(decorateOrderAssignment));
+});
+
 app.put('/api/admin/orders/:id', requireOrdersAccess, (req, res) => {
   const allowed = ['Pendiente', 'Confirmado', 'Preparando', 'Enviado', 'Entregado', 'Cancelado'];
   const body = req.body || {};
   const hasStatus = Object.prototype.hasOwnProperty.call(body, 'status');
   const hasInternalNote = Object.prototype.hasOwnProperty.call(body, 'internalNote');
-  if (!hasStatus && !hasInternalNote) return res.status(400).json({ error: 'No hay cambios para guardar.' });
+  const hasAssignment = Object.prototype.hasOwnProperty.call(body, 'assignedSellerId');
+  if (!hasStatus && !hasInternalNote && !hasAssignment) return res.status(400).json({ error: 'No hay cambios para guardar.' });
+
+  const session = getSession(req);
+  const orders = readOrders();
+  const index = orders.findIndex(order => order.id === req.params.id);
+  if (index < 0) return res.status(404).json({ error: 'Pedido no encontrado.' });
+  const currentOrder = orders[index];
+
+  // Un vendedor solo puede operar sobre pedidos que le fueron asignados.
+  if (isSellerRole(session.role) && currentOrder.assignedSellerId !== session.accountId) {
+    return res.status(403).json({ error: 'Este pedido no está asignado a tu usuario.' });
+  }
+
+  if (hasAssignment && !isStoreManager(session.role)) {
+    return res.status(403).json({ error: 'Solo el Jefe de tienda puede asignar o cambiar el vendedor.' });
+  }
 
   let normalizedStatus;
   if (hasStatus) {
@@ -1947,19 +2025,27 @@ app.put('/api/admin/orders/:id', requireOrdersAccess, (req, res) => {
     if (!normalizedStatus) return res.status(400).json({ error: 'Estado de pedido no válido.' });
   }
 
-  const orders = readOrders();
-  const index = orders.findIndex(order => order.id === req.params.id);
-  if (index < 0) return res.status(404).json({ error: 'Pedido no encontrado.' });
+  let assignedSellerId = currentOrder.assignedSellerId || null;
+  if (hasAssignment) {
+    const requestedSellerId = body.assignedSellerId === null || body.assignedSellerId === '' ? null : String(body.assignedSellerId);
+    if (requestedSellerId) {
+      const seller = readUsers().find(user => user.id === requestedSellerId && user.active !== false && isSellerRole(user.role));
+      if (!seller) return res.status(400).json({ error: 'El usuario seleccionado no es un vendedor activo.' });
+      assignedSellerId = seller.id;
+    } else {
+      assignedSellerId = null;
+    }
+  }
 
-  const updated = { ...orders[index], updatedAt: new Date().toISOString() };
+  const updated = { ...currentOrder, assignedSellerId, updatedAt: new Date().toISOString() };
   if (hasStatus) updated.status = normalizedStatus;
   if (hasInternalNote) updated.internalNote = cleanText(body.internalNote, 5000);
   orders[index] = updated;
   writeOrders(orders);
-  return res.json(updated);
+  return res.json(decorateOrderAssignment(updated));
 });
 
-app.delete('/api/admin/orders/:id', requireAdmin, (req, res) => {
+app.delete('/api/admin/orders/:id', requireStoreManagerOrAdmin, (req, res) => {
   const orders = readOrders();
   const order = orders.find(item => item.id === req.params.id);
   if (!order) return res.status(404).json({ error: 'Pedido no encontrado.' });
