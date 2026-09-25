@@ -34,7 +34,16 @@ function productHref(product) { return `/producto/${encodeURIComponent(productSl
 async function request(url, options = {}) {
   const response = await fetch(url, { credentials: 'same-origin', ...options, headers: { ...(options.headers || {}) } });
   const json = response.status === 204 ? null : await response.json().catch(() => ({}));
-  if (!response.ok) { const error = new Error(json.error || 'No se pudo completar la operación.'); error.status = response.status; error.data = json; throw error; }
+  if (!response.ok) {
+    const error = new Error(json.error || (response.status === 401 ? 'Tu sesión administrativa expiró. Inicia sesión nuevamente.' : 'No se pudo completar la operación.'));
+    error.status = response.status;
+    error.data = json;
+    if (response.status === 401 && String(url).startsWith('/api/admin/') && url !== '/api/admin/session') {
+      window.__yhorsSession = null;
+      if (typeof renderLogin === 'function') renderLogin();
+    }
+    throw error;
+  }
   return json;
 }
 
@@ -497,7 +506,11 @@ function checkoutPage() {
       const result=await request('/api/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
       localStorage.removeItem('yhors-cart'); cart=[];
       app.innerHTML=`<main class="checkout-page"><div class="checkout-success-page"><span class="success-mark">✓</span><span class="eyebrow">Pedido recibido</span><h1>#${escapeHTML(result.orderNumber)}</h1><p>Tu pedido fue registrado correctamente.</p><div class="success-total">Total del pedido: <strong>${money(result.total)}</strong></div><p class="success-note">Guarda tu número de pedido para futuras consultas.</p><a class="button" href="/">Volver a YHORS STORE <span>→</span></a></div></main>`;
-    } catch(err) { message.className='message error'; message.textContent=err.message; submit.disabled=false; }
+    } catch(err) {
+      message.className='message error';
+      message.textContent=err.message || 'No se pudo registrar el pedido.';
+      submit.disabled=false;
+    }
   });
 }
 
@@ -1005,6 +1018,15 @@ async function renderAdminOrders() {
         if (statusChanged && statusSelect) payload.status = nextStatus;
         const updated=await request(`/api/admin/orders/${id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
         orders=orders.map(o=>o.id===updated.id?updated:o);
+        const orderCard = button.closest('.admin-order');
+        if (orderCard) {
+          orderCard.dataset.orderStatus = updated.status || 'Pendiente';
+          const summaryStatus = orderCard.querySelector('.order-summary-status');
+          if (summaryStatus) {
+            summaryStatus.textContent = updated.status || 'Pendiente';
+            summaryStatus.className = `order-summary-status status-${statusClass(updated.status || 'Pendiente')}`;
+          }
+        }
         textarea.value = updated.internalNote || '';
         textarea.disabled = true;
         if (statusSelect) {
@@ -1421,11 +1443,6 @@ async function renderAdminInventory() {
         const product = products.find(p => p.id === record.dataset.inventoryId);
         if (!product) return;
         const get = key => record.querySelector(`[data-field="${key}"]`);
-        const name = get('name')?.value.trim() || '';
-        const sku = get('sku')?.value.trim() || '';
-        const brand = get('brand')?.value.trim() || '';
-        const productType = get('productType')?.value.trim() || '';
-        const category = get('category')?.value || '';
         const purchasePrice = Number(get('purchasePrice')?.value);
         const salePrice = Number(get('salePrice')?.value);
         const rentalRaw = get('rentalPrice')?.value;
@@ -1433,15 +1450,21 @@ async function renderAdminInventory() {
           ? (rentalRaw === '' || rentalRaw == null ? null : Number(rentalRaw))
           : null;
         const stock = Number(get('stock')?.value);
-        const description = get('description')?.value || '';
-        const image = get('image')?.value.trim() || '';
-        const images = [image, ...[1,2,3].map(i => record.querySelector(`[data-image-index="${i}"]`)?.value.trim() || '')].filter(Boolean);
-        const payload = { name, sku, brand, productType, category, purchasePrice, salePrice, rentalPrice, stock, description, image: images[0] || '', images, featured: !!get('featured')?.checked, hero: !!get('hero')?.checked, heroOrder: Number(get('heroOrder')?.value || 0) };
-        const confirmed = await showYhorsConfirm('¿Seguro que quieres guardar este cambio?', `Se actualizará toda la ficha de <strong>${escapeHTML(product.name)}</strong>, incluyendo precios, stock, datos e imágenes.`);
-        if (!confirmed) return;
-        if (!name || !description || !category || !Number.isFinite(salePrice) || salePrice < 0 || !Number.isFinite(purchasePrice) || purchasePrice < 0 || !Number.isInteger(stock) || stock < 0 || (category === 'cosplay' && (rentalPrice === null || !Number.isFinite(rentalPrice) || rentalPrice < 0))) {
-          const msg=record.querySelector('[data-inventory-message]'); msg.className='message error'; msg.textContent='Revisa los campos obligatorios, precios, alquiler y stock.'; return;
+        const payload = { purchasePrice, salePrice, stock };
+        if (product.category === 'cosplay') payload.rentalPrice = rentalPrice;
+
+        if (!Number.isFinite(salePrice) || salePrice < 0 ||
+            !Number.isFinite(purchasePrice) || purchasePrice < 0 ||
+            !Number.isInteger(stock) || stock < 0 ||
+            (product.category === 'cosplay' && (rentalPrice === null || !Number.isFinite(rentalPrice) || rentalPrice < 0))) {
+          const msg=record.querySelector('[data-inventory-message]'); msg.className='message error'; msg.textContent='Revisa precio de compra, precio de venta y stock.'; return;
         }
+
+        const confirmed = await showYhorsConfirm(
+          '¿Seguro que quieres guardar este cambio?',
+          `Se actualizarán el precio de compra, precio de venta${product.category === 'cosplay' ? ' y alquiler' : ''} y el stock de <strong>${escapeHTML(product.name)}</strong>.`
+        );
+        if (!confirmed) return;
         const button = record.querySelector('[data-inventory-save]'); button.disabled = true;
         try {
           const updated = await request(`/api/admin/inventory/${encodeURIComponent(product.id)}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });

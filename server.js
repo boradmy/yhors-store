@@ -2237,27 +2237,50 @@ app.put('/api/admin/inventory/:id', requireAdmin, (req, res) => {
   const products = readProducts();
   const index = products.findIndex(product => product.id === req.params.id);
   if (index < 0) return res.status(404).json({ error: 'Producto no encontrado.' });
+
+  // Inventario compacto: este endpoint SOLO modifica los campos de inventario.
+  // No vuelve a validar nombre, descripción, imágenes, SKU, etc.
   const previous = normalizeProduct(products[index]);
   const body = req.body || {};
-  const purchasePrice = body.purchasePrice === '' || body.purchasePrice == null ? previous.purchasePrice : Number(body.purchasePrice);
-  const stock = body.stock === '' || body.stock == null ? previous.stock : Number(body.stock);
-  const salePrice = body.salePrice == null || body.salePrice === '' ? previous.salePrice : Number(body.salePrice);
-  if (!Number.isFinite(purchasePrice) || purchasePrice < 0 || purchasePrice > 100000000) return res.status(400).json({ error: 'El precio de compra no es válido.' });
-  if (!Number.isInteger(stock) || stock < 0 || stock > 100000000) return res.status(400).json({ error: 'El stock debe ser un número entero igual o mayor que 0.' });
-  if (!Number.isFinite(salePrice) || salePrice < 0 || salePrice > 100000000) return res.status(400).json({ error: 'El precio de venta no es válido.' });
-  const result = validateProduct({ ...body, purchasePrice, stock, salePrice }, previous, products);
-  if (result.error) return res.status(400).json(result);
-  products[index] = normalizeProduct({
-    ...result.product,
-    id: previous.id,
-    createdAt: previous.createdAt,
+  const purchasePrice = body.purchasePrice === '' || body.purchasePrice == null
+    ? previous.purchasePrice : Number(body.purchasePrice);
+  const stock = body.stock === '' || body.stock == null
+    ? previous.stock : Number(body.stock);
+  const salePrice = body.salePrice === '' || body.salePrice == null
+    ? previous.salePrice : Number(body.salePrice);
+
+  if (!Number.isFinite(purchasePrice) || purchasePrice < 0 || purchasePrice > 100000000) {
+    return res.status(400).json({ error: 'El precio de compra no es válido.' });
+  }
+  if (!Number.isInteger(stock) || stock < 0 || stock > 100000000) {
+    return res.status(400).json({ error: 'El stock debe ser un número entero igual o mayor que 0.' });
+  }
+  if (!Number.isFinite(salePrice) || salePrice < 0 || salePrice > 100000000) {
+    return res.status(400).json({ error: 'El precio de venta no es válido.' });
+  }
+
+  const updated = {
+    ...previous,
     purchasePrice: Math.round(purchasePrice * 100) / 100,
+    salePrice: Math.round(salePrice * 100) / 100,
+    price: Math.round(salePrice * 100) / 100,
     stock,
     updatedAt: new Date().toISOString()
-  });
-  const previousImages = Array.isArray(previous.images) ? previous.images : (previous.image ? [previous.image] : []);
-  const currentImages = new Set(products[index].images || []);
-  previousImages.forEach(imageUrl => { if (!currentImages.has(imageUrl)) deleteUploadedImage(imageUrl); });
+  };
+
+  if (previous.category === 'cosplay') {
+    if (body.rentalPrice !== undefined && body.rentalPrice !== null && body.rentalPrice !== '') {
+      const rentalPrice = Number(body.rentalPrice);
+      if (!Number.isFinite(rentalPrice) || rentalPrice < 0 || rentalPrice > 100000000) {
+        return res.status(400).json({ error: 'El precio de alquiler no es válido.' });
+      }
+      updated.rentalPrice = Math.round(rentalPrice * 100) / 100;
+    }
+  } else {
+    updated.rentalPrice = null;
+  }
+
+  products[index] = normalizeProduct(updated);
   writeProducts(products);
   return res.json(products[index]);
 });
