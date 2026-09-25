@@ -339,7 +339,7 @@ function productCard(product) {
   const image = productImages(product)[0];
   const meta = productMeta(product);
   const inStock = product.inStock === true;
-  const availability = inStock ? `<small class="stock-availability">DISPONIBLE</small>` : `<small class="stock-availability out">SIN STOCK</small>`;
+  const availability = inStock ? `` : ``;
   const isCosplayRental = product.category === 'cosplay' && product.rentalPrice !== null && product.rentalPrice !== undefined && product.rentalPrice !== '';
   const rental = isCosplayRental ? `<small class="price-secondary">Alquiler: ${money(product.rentalPrice)} / día</small>` : '';
   const action = isCosplayRental
@@ -1990,3 +1990,18 @@ if (window.location.pathname === ADMIN_PATH || window.location.pathname === `${A
 
 document.addEventListener('change', e => { const file=e.target.closest('input[type=file][id^=\"imageFile\"]'); if(!file)return; const num=file.id==='imageFile'?1:Number(file.id.replace('imageFile','')); const preview=document.querySelector(`#productImagePreview${num}`); if(preview&&file.files?.[0]){const r=new FileReader();r.onload=()=>preview.src=r.result;r.readAsDataURL(file.files[0]);}});
 document.addEventListener('input', e => { const input=e.target.closest('input[type=url][id^=\"image\"]'); if(!input)return; const num=input.id==='image'?1:Number(input.id.replace('image','')); const preview=document.querySelector(`#productImagePreview${num}`); if(preview&&input.value.trim())preview.src=input.value.trim();});
+
+/* V14.16 inventory save normalization */
+document.addEventListener('click', async function(e){
+  const btn=e.target.closest('[data-inventory-save]');
+  if(!btn || btn.dataset.v1416Handled) return;
+  const card=btn.closest('[data-inventory-id]');
+  if(!card) return;
+  const get=(name)=>card.querySelector(`[data-field="${name}"]`);
+  const stockEl=get('stock');
+  if(!stockEl) return;
+  const stock=Number(stockEl.value);
+  if(Number.isInteger(stock) && stock>=0){
+    stockEl.setCustomValidity('');
+  }
+}, true);

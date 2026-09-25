@@ -1708,3 +1708,16 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}.brand{letter-sp
   content:none !important;
   display:none !important;
 }
+
+/* V14.17 — disponibilidad solo dentro del detalle */
+.product-card .stock-availability,
+.product-card .availability-available,
+.product-card .availability-out,
+.product-grid .stock-availability,
+.product-grid .availability-available,
+.product-grid .availability-out,
+.catalog-card .stock-availability,
+.catalog-card .availability-available,
+.catalog-card .availability-out {
+  display:none !important;
+}
