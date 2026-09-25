@@ -37,6 +37,108 @@ async function request(url, options = {}) {
   if (!response.ok) throw new Error(json.error || 'No se pudo completar la operación.');
   return json;
 }
+
+function accountMenu(account = {}) {
+  const username = escapeHTML(account.username || 'Usuario');
+  return `<div class="account-menu-wrap">
+    <button class="account-menu-trigger" id="accountMenuTrigger" type="button" aria-label="Abrir menú de usuario" aria-haspopup="menu" aria-expanded="false">
+      <span class="account-menu-avatar" aria-hidden="true"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="3.2"></circle><path d="M5.5 20c.8-3.2 3.1-5 6.5-5s5.7 1.8 6.5 5"></path></svg></span>
+      <span class="account-menu-caret" aria-hidden="true">⌄</span>
+    </button>
+    <div class="account-menu" id="accountMenu" role="menu" hidden>
+      <div class="account-menu-user"><strong>${username}</strong><small>${escapeHTML(userRoleLabel(account.role || ''))}</small></div>
+      <a href="/mi-cuenta" role="menuitem">Mi cuenta</a>
+      <button type="button" role="menuitem" id="accountMenuLogout">Cerrar sesión</button>
+    </div>
+  </div>`;
+}
+
+function wireAccountMenu() {
+  const wrap = document.querySelector('.account-menu-wrap');
+  const trigger = document.querySelector('#accountMenuTrigger');
+  const menu = document.querySelector('#accountMenu');
+  if (!wrap || !trigger || !menu) return;
+  const close = () => { menu.hidden = true; trigger.setAttribute('aria-expanded', 'false'); };
+  trigger.addEventListener('click', event => {
+    event.stopPropagation();
+    const open = menu.hidden;
+    menu.hidden = !open;
+    trigger.setAttribute('aria-expanded', String(open));
+  });
+  document.addEventListener('click', event => {
+    if (!wrap.contains(event.target)) close();
+  });
+  document.querySelector('#accountMenuLogout')?.addEventListener('click', async () => {
+    try { await request('/api/logout', { method: 'POST' }); } finally { renderLogin(); }
+  });
+}
+
+function base64UrlToBytes(value) {
+  const normalized = String(value || '').replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(String(value || '').length / 4) * 4, '=');
+  const binary = atob(normalized);
+  return Uint8Array.from(binary, char => char.charCodeAt(0));
+}
+function bytesToBase64Url(value) {
+  const bytes = value instanceof ArrayBuffer ? new Uint8Array(value) : new Uint8Array(value);
+  let binary = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+function registrationOptionsForBrowser(options) {
+  return {
+    ...options,
+    challenge: base64UrlToBytes(options.challenge),
+    user: { ...options.user, id: base64UrlToBytes(options.user.id) },
+    excludeCredentials: (options.excludeCredentials || []).map(item => ({ ...item, id: base64UrlToBytes(item.id) }))
+  };
+}
+function authenticationOptionsForBrowser(options) {
+  return {
+    ...options,
+    challenge: base64UrlToBytes(options.challenge),
+    allowCredentials: (options.allowCredentials || []).map(item => ({ ...item, id: base64UrlToBytes(item.id) }))
+  };
+}
+function serializeRegistrationCredential(credential) {
+  return {
+    id: credential.id,
+    rawId: bytesToBase64Url(credential.rawId),
+    response: {
+      clientDataJSON: bytesToBase64Url(credential.response.clientDataJSON),
+      attestationObject: bytesToBase64Url(credential.response.attestationObject),
+      transports: typeof credential.response.getTransports === 'function' ? credential.response.getTransports() : []
+    },
+    type: credential.type,
+    clientExtensionResults: credential.getClientExtensionResults ? credential.getClientExtensionResults() : {}
+  };
+}
+function serializeAuthenticationCredential(credential) {
+  return {
+    id: credential.id,
+    rawId: bytesToBase64Url(credential.rawId),
+    response: {
+      clientDataJSON: bytesToBase64Url(credential.response.clientDataJSON),
+      authenticatorData: bytesToBase64Url(credential.response.authenticatorData),
+      signature: bytesToBase64Url(credential.response.signature),
+      userHandle: credential.response.userHandle ? bytesToBase64Url(credential.response.userHandle) : null
+    },
+    type: credential.type,
+    clientExtensionResults: credential.getClientExtensionResults ? credential.getClientExtensionResults() : {}
+  };
+}
+async function nativeStartRegistration(options) {
+  if (!window.PublicKeyCredential || !navigator.credentials?.create) throw new Error('Este navegador no admite Passkeys/WebAuthn.');
+  const credential = await navigator.credentials.create({ publicKey: registrationOptionsForBrowser(options) });
+  if (!credential) throw new Error('No se pudo crear la Passkey.');
+  return serializeRegistrationCredential(credential);
+}
+async function nativeStartAuthentication(options) {
+  if (!window.PublicKeyCredential || !navigator.credentials?.get) throw new Error('Este navegador no admite Passkeys/WebAuthn.');
+  const credential = await navigator.credentials.get({ publicKey: authenticationOptionsForBrowser(options) });
+  if (!credential) throw new Error('No se pudo completar la autenticación con Passkey.');
+  return serializeAuthenticationCredential(credential);
+}
 function getCart() { try { return JSON.parse(localStorage.getItem('yhors-cart')) || []; } catch { return []; } }
 function setCart(cart) { localStorage.setItem('yhors-cart', JSON.stringify(cart)); }
 
@@ -667,7 +769,7 @@ async function renderAdminOrders() {
   const sectionNav = (session.role === 'orders' || session.role === 'store_manager')
     ? `<nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}/pedidos" class="admin-section-link active">PEDIDOS</a></nav>`
     : `<nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}" class="admin-section-link">PÁGINA WEB</a><a href="${ADMIN_PATH}/usuarios" class="admin-section-link">USUARIOS</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link active">PEDIDOS</a></nav>`;
-  app.innerHTML = `<main class="admin-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">${(session.role === 'orders' || session.role === 'store_manager') ? 'Gestión de pedidos' : 'Administración'}</h1><p class="admin-subtitle">${session.role === 'orders' ? 'Panel exclusivo para pedidos de YHORS STORE' : (session.role === 'store_manager' ? 'Jefe de tienda · pedidos y control operativo' : 'Gestión de YHORS STORE')}</p></div><div class="admin-top-actions"><a class="button secondary" href="/mi-cuenta">Mi cuenta</a><button class="button secondary" id="ordersLogout">Cerrar sesión</button></div></div>${sectionNav}${ordersPanel(orders, session.role === 'admin' || session.role === 'store_manager')}</div></main>`;
+  app.innerHTML = `<main class="admin-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">${(session.role === 'orders' || session.role === 'store_manager') ? 'Gestión de pedidos' : 'Administración'}</h1><p class="admin-subtitle">${session.role === 'orders' ? 'Panel exclusivo para pedidos de YHORS STORE' : (session.role === 'store_manager' ? 'Jefe de tienda · pedidos y control operativo' : 'Gestión de YHORS STORE')}</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>${sectionNav}${ordersPanel(orders, session.role === 'admin' || session.role === 'store_manager')}</div></main>`;
   const drawOrders = () => {
     const list=document.querySelector('#adminOrdersList'); if(!list) return;
     const query=(document.querySelector('#ordersSearch')?.value||'').trim().toLowerCase();
@@ -744,7 +846,7 @@ async function renderAdminOrders() {
   document.querySelector('#ordersStatusFilter')?.addEventListener('change',drawOrders);
    document.querySelector('#ordersDateFilter')?.addEventListener('change',drawOrders);
    document.querySelector('#clearOrdersDate')?.addEventListener('click',()=>{ const input=document.querySelector('#ordersDateFilter'); if(input){input.value='';drawOrders();} });
-  document.querySelector('#ordersLogout')?.addEventListener('click',async()=>{await request('/api/logout',{method:'POST'});renderLogin();});
+  wireAccountMenu();
   drawOrders();
 }
 
@@ -808,7 +910,7 @@ async function renderAdminUsers() {
 
   let users = await request('/api/admin/users').catch(() => []);
   app.innerHTML = `<main class="admin-shell"><div class="admin-wrap">
-    <div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Administración</h1><p class="admin-subtitle">Control de usuarios y accesos</p></div><div class="admin-top-actions"><a class="button secondary" href="/mi-cuenta">Mi cuenta</a><button class="button secondary" id="usersLogout">Cerrar sesión</button></div></div>
+    <div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Administración</h1><p class="admin-subtitle">Control de usuarios y accesos</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>
     <nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}" class="admin-section-link">PÁGINA WEB</a><a href="${ADMIN_PATH}/usuarios" class="admin-section-link active">USUARIOS</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link">PEDIDOS</a></nav>
     ${usersPanel(users)}
   </div></main>`;
@@ -881,7 +983,7 @@ async function renderAdminUsers() {
   }));
 
   cancel?.addEventListener('click', resetForm);
-  document.querySelector('#usersLogout')?.addEventListener('click', async () => { await request('/api/logout', { method: 'POST' }); renderLogin(); });
+  wireAccountMenu();
 
   form?.addEventListener('submit', async event => {
     event.preventDefault();
@@ -989,7 +1091,7 @@ async function renderAdmin() {
     <button type="button" data-admin-scroll="classificationPanel">Categorías</button>
     <button type="button" data-admin-scroll="productEditorPanel">Producto</button>
     <button type="button" data-admin-scroll="inventoryPanel">Inventario</button>
-  </aside><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Administración</h1></div><a class="button secondary" href="/mi-cuenta">Mi cuenta</a><button class="button secondary" id="logout">Cerrar sesión</button></div><nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}" class="admin-section-link active">PÁGINA WEB</a><a href="${ADMIN_PATH}/usuarios" class="admin-section-link">USUARIOS</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link">PEDIDOS</a></nav>${backupPanel(backupState)}${selectionPanel(products, settings)}${classificationPanel(classifications)}<section class="admin-panel product-editor-panel" id="productEditorPanel"><span class="eyebrow">Catálogo</span><h2 id="formTitle">Agregar producto</h2><div id="formArea"></div></section><section class="admin-products" id="inventoryPanel"><div class="section-heading inventory-heading"><div><span class="eyebrow">Inventario</span><h2>Productos publicados (${products.length})</h2></div><p>Edita datos, imágenes, portada y destacados.</p></div><div class="inventory-toolbar"><label class="inventory-search"><span aria-hidden="true">⌕</span><input id="inventorySearch" type="search" placeholder="Buscar por nombre, SKU, marca o categoría…" autocomplete="off"><button id="clearInventorySearch" type="button" aria-label="Limpiar búsqueda">×</button></label><span class="inventory-count" id="inventoryCount">${products.length} productos</span></div><div id="adminProducts"></div></section></div></main>`;
+  </aside><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Administración</h1></div><div class="admin-top-actions">${accountMenu(session)}</div></div><nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}" class="admin-section-link active">PÁGINA WEB</a><a href="${ADMIN_PATH}/usuarios" class="admin-section-link">USUARIOS</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link">PEDIDOS</a></nav>${backupPanel(backupState)}${selectionPanel(products, settings)}${classificationPanel(classifications)}<section class="admin-panel product-editor-panel" id="productEditorPanel"><span class="eyebrow">Catálogo</span><h2 id="formTitle">Agregar producto</h2><div id="formArea"></div></section><section class="admin-products" id="inventoryPanel"><div class="section-heading inventory-heading"><div><span class="eyebrow">Inventario</span><h2>Productos publicados (${products.length})</h2></div><p>Edita datos, imágenes, portada y destacados.</p></div><div class="inventory-toolbar"><label class="inventory-search"><span aria-hidden="true">⌕</span><input id="inventorySearch" type="search" placeholder="Buscar por nombre, SKU, marca o categoría…" autocomplete="off"><button id="clearInventorySearch" type="button" aria-label="Limpiar búsqueda">×</button></label><span class="inventory-count" id="inventoryCount">${products.length} productos</span></div><div id="adminProducts"></div></section></div></main>`;
   const quickNav = document.querySelector('.admin-quick-nav');
   quickNav?.querySelectorAll('[data-admin-scroll]').forEach(button => button.addEventListener('click', () => {
     const target = document.getElementById(button.dataset.adminScroll);
@@ -1371,7 +1473,7 @@ async function renderAdmin() {
     });
   }
 
-  document.querySelector('#logout').addEventListener('click', async () => { await request('/api/logout', { method: 'POST' }); renderLogin(); });
+  wireAccountMenu();
   bindBackupEvents();
   drawList(); renderClassifications(); bindClassificationEvents(); drawForm(); bindSelectionEvents();
   const quickTargets = [...document.querySelectorAll('[data-admin-scroll]')].map(button => ({ button, target: document.getElementById(button.dataset.adminScroll) })).filter(item => item.target);
@@ -1385,21 +1487,19 @@ async function renderAdmin() {
   }
 }
 async function registerMyPasskey() {
-  if (!window.SimpleWebAuthnBrowser) throw new Error('El módulo de Passkeys todavía no está disponible. Recarga la página.');
   const options = await request('/api/me/passkeys/options');
-  const deviceName = prompt('Nombre para este dispositivo (ej. PC oficina):', 'Este dispositivo') || 'Este dispositivo';
-  const credential = await window.SimpleWebAuthnBrowser.startRegistration({ optionsJSON: options });
-  credential.deviceName = deviceName;
+  const credential = await nativeStartRegistration(options);
+  const deviceName = prompt('Nombre para este dispositivo (opcional):', 'Este dispositivo') || 'Este dispositivo';
+  credential.deviceName = deviceName.slice(0, 80);
   await request('/api/me/passkeys', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(credential) });
-  alert('Passkey registrada correctamente. Desde ahora puedes usar Windows Hello, huella, Face ID o el método compatible de tu dispositivo.');
+  alert('Passkey registrada correctamente. Ahora puedes usar Windows Hello, huella, Face ID o el método compatible de tu dispositivo.');
   await renderMyAccount();
 }
 
 async function loginWithPasskey() {
-  if (!window.SimpleWebAuthnBrowser) throw new Error('El módulo de Passkeys todavía no está disponible. Recarga la página.');
   const options = await request('/api/passkey/options');
-  const assertion = await window.SimpleWebAuthnBrowser.startAuthentication({ optionsJSON: options });
-  const result = await request('/api/passkey/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(assertion) });
+  const assertion = await nativeStartAuthentication(options);
+  await request('/api/passkey/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(assertion) });
   const session = await request('/api/admin/session');
   if (session.role === 'orders' || session.role === 'store_manager') renderAdminOrders(); else renderAdmin();
 }
@@ -1408,16 +1508,16 @@ async function renderMyAccount() {
   const me = await request('/api/me').catch(() => null); if (!me) return renderLogin();
   const passkeys = me.passkeys || [];
   app.innerHTML = `<main class="admin-shell"><div class="admin-wrap">
-    <div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Mi cuenta</h1><p class="admin-subtitle">Datos y métodos de inicio de sesión</p></div><div class="admin-top-actions"><button class="button secondary" id="accountLogout">Cerrar sesión</button></div></div>
+    <div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Mi cuenta</h1><p class="admin-subtitle">Datos y métodos de inicio de sesión</p></div><div class="admin-top-actions">${accountMenu(me)}</div></div>
     <section class="admin-panel users-panel"><div class="section-heading"><div><span class="eyebrow">Cuenta</span><h2>${escapeHTML(me.name)}</h2></div><p>@${escapeHTML(me.username)} · ${escapeHTML(userRoleLabel(me.role))}</p></div>
       <div class="form-grid"><div class="field"><label>Nombre</label><input value="${escapeHTML(me.name)}" disabled></div><div class="field"><label>Usuario</label><input value="${escapeHTML(me.username)}" disabled></div></div>
       <hr><div class="section-heading"><div><span class="eyebrow">Contraseña</span><h2>Cambiar contraseña</h2></div></div>
       <form id="changePasswordForm" class="form-grid"><div class="field"><label>Contraseña actual</label><input name="currentPassword" type="password" autocomplete="current-password" required></div><div class="field"><label>Nueva contraseña</label><input name="newPassword" type="password" minlength="8" maxlength="200" autocomplete="new-password" required></div><div class="form-actions"><button class="button" type="submit">Actualizar contraseña</button><span class="message" id="passwordMessage"></span></div></form>
       <hr><div class="section-heading"><div><span class="eyebrow">Inicio de sesión moderno</span><h2>Passkeys</h2></div><p>Windows Hello, huella, Face ID o el método seguro compatible con tu dispositivo.</p></div>
       <div id="myPasskeys">${passkeys.length ? passkeys.map(pk => `<div class="admin-user-card"><div><strong>🔐 ${escapeHTML(pk.name || 'Passkey')}</strong><small>Registrada ${escapeHTML(new Date(pk.createdAt).toLocaleString())}${pk.lastUsedAt ? ` · Último uso ${escapeHTML(new Date(pk.lastUsedAt).toLocaleString())}` : ''}</small></div><button class="button danger small" data-delete-passkey="${escapeHTML(pk.id)}" type="button">Revocar</button></div>`).join('') : '<p class="backup-empty">No tienes Passkeys registradas.</p>'}</div>
-      <div class="form-actions"><button class="button primary" id="addPasskey" type="button">+ Registrar Passkey</button></div>
+      <div class="form-actions"><button class="button primary" id="addPasskey" type="button" ${me.passkeyAllowed ? '' : 'disabled'}>+ Registrar Passkey</button><span class="message">${me.passkeyAllowed ? 'Permitido en esta cuenta.' : 'El administrador ha bloqueado el inicio con Passkey para esta cuenta.'}</span></div>
     </section></div></main>`;
-  document.querySelector('#accountLogout').addEventListener('click', async () => { await request('/api/logout', { method: 'POST' }); renderLogin(); });
+  wireAccountMenu();
   document.querySelector('#addPasskey').addEventListener('click', async () => { try { await registerMyPasskey(); } catch (e) { alert(e.message); } });
   document.querySelectorAll('[data-delete-passkey]').forEach(btn => btn.addEventListener('click', async () => { if (!confirm('¿Revocar esta Passkey?')) return; try { await request(`/api/me/passkeys/${encodeURIComponent(btn.dataset.deletePasskey)}`, { method: 'DELETE' }); await renderMyAccount(); } catch (e) { alert(e.message); } }));
   document.querySelector('#changePasswordForm').addEventListener('submit', async e => { e.preventDefault(); const message=document.querySelector('#passwordMessage'); try { await request('/api/me/password',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.fromEntries(new FormData(e.currentTarget)))}); message.className='message success'; message.textContent='Contraseña actualizada. Se cerraron las demás sesiones.'; e.currentTarget.reset(); } catch(err){ message.className='message error'; message.textContent=err.message; } });

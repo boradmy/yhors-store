@@ -1,8 +1,8 @@
 {
   "name": "yhors-store",
-  "version": "11.0.0",
+  "version": "14.3.0",
   "private": true,
-  "description": "Tienda YHORS ligera con cat\u00e1logo, administraci\u00f3n privada y gesti\u00f3n de usuarios.",
+  "description": "Tienda YHORS ligera con catálogo, administración privada y gestión de usuarios.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -14,7 +14,6 @@
     "dotenv": "^16.4.7",
     "express": "^5.2.1",
     "multer": "^2.3.0",
-    "@simplewebauthn/server": "^14.0.2",
-    "@simplewebauthn/browser": "^14.0.0"
+    "@simplewebauthn/server": "^14.0.2"
   }
 }

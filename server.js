@@ -1559,8 +1559,12 @@ app.put('/api/me/password', requireLogin, async (req, res) => {
   if (!currentPassword) return res.status(400).json({ error: 'Ingresa tu contraseña actual.' });
   const ok = await bcrypt.compare(currentPassword, users[index].passwordHash || '');
   if (!ok) return res.status(401).json({ error: 'La contraseña actual no es correcta.' });
-  users[index].passwordHash = await bcrypt.hash(newPassword, 12); users[index].updatedAt = new Date().toISOString(); writeUsers(users); destroySessionsForAccount(users[index].id);
-  return res.json({ ok: true });
+  users[index].passwordHash = await bcrypt.hash(newPassword, 12); users[index].updatedAt = new Date().toISOString(); writeUsers(users);
+  const accountId = users[index].id;
+  destroySessionsForAccount(accountId);
+  const freshSession = makeSession(users[index].username, users[index].role, accountId);
+  setSessionCookie(res, freshSession);
+  return res.json({ ok: true, expiresAt: freshSession.expiresAt });
 });
 
 app.get('/api/me', (req, res) => {

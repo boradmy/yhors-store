@@ -19,3 +19,10 @@
 
 ## Nota
 La librería de servidor es `@simplewebauthn/server` y la interfaz usa el bundle oficial de `@simplewebauthn/browser`.
+
+
+## V14.3 UI/Passkey fixes
+- Passkeys ahora usa WebAuthn nativo del navegador; se eliminó la dependencia de un script UMD externo bloqueado por la CSP.
+- El menú de cuenta usa un único icono de usuario con Mi cuenta y Cerrar sesión.
+- Todos los roles, incluido Administrador, tienen acceso a Mi cuenta y pueden cambiar su propia contraseña.
+- Cambiar contraseña revoca las demás sesiones y conserva la sesión actual mediante una nueva sesión segura.

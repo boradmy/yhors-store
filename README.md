@@ -30,7 +30,7 @@ No publiques el archivo `.env`, no compartas la ruta de administración y usa un
 El proyecto necesita un alojamiento que ejecute Node.js, por ejemplo Render, Railway, Fly.io o un VPS. Configura las mismas variables del `.env` en el panel del hosting y usa:
 
 ```text
-Build command: npm ci --omit=dev
+Build command: npm install --omit=dev
 Start command: npm start
 ```
 
@@ -190,3 +190,11 @@ Cuando hagamos una nueva versión de YHORS:
 5. Si alguna vez necesitas recuperar información, puedes descargar un respaldo desde Administración.
 
 Antes de hacer cambios grandes, también puedes pulsar **Crear respaldo ahora**. Así tendrás un punto de recuperación independiente de la actualización.
+
+
+### V14.3 · Passkeys y menú de cuenta
+- Passkeys usa WebAuthn nativo del navegador; no depende de un script CDN externo.
+- La CSP permanece con `script-src 'self'`.
+- Todos los roles tienen acceso a `Mi cuenta`, incluido `admin`.
+- `Mi cuenta` y `Cerrar sesión` están dentro del menú del icono de usuario.
+- Cambiar contraseña revoca las demás sesiones y conserva la sesión actual mediante una nueva sesión segura.
