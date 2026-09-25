@@ -1,6 +1,6 @@
 {
   "name": "yhors-store",
-  "version": "14.17.1",
+  "version": "14.18.0",
   "private": true,
   "description": "Tienda YHORS ligera con catálogo, administración privada y gestión de usuarios.",
   "main": "server.js",
