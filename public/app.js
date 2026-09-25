@@ -805,7 +805,7 @@ function ordersListMarkup(orders = [], options = {}) {
       <span class="order-summary-chevron">⌄</span>
     </button>
     <div class="admin-order-details" id="orderDetails-${escapeHTML(order.id)}" hidden>
-      <div class="admin-order-head"><div><span class="eyebrow">${escapeHTML(date(order.createdAt))}</span><h3>#${escapeHTML(order.orderNumber)}</h3><strong>${escapeHTML(order.customer?.name || 'Cliente')}</strong></div><div class="order-status-wrap"><label>Estado</label><select data-order-status="${escapeHTML(order.id)}">${statuses.map(s => `<option ${s === order.status ? 'selected' : ''} value="${escapeHTML(s)}">${escapeHTML(s)}</option>`).join('')}</select></div></div>
+      <div class="admin-order-head"><div><span class="eyebrow">${escapeHTML(date(order.createdAt))}</span><h3>#${escapeHTML(order.orderNumber)}</h3><strong>${escapeHTML(order.customer?.name || 'Cliente')}</strong></div><div class="order-status-wrap"><label>Estado</label><select class="status-select-${statusClass(order.status || 'Pendiente')}" data-order-status="${escapeHTML(order.id)}" disabled>${statuses.map(s => `<option ${s === order.status ? 'selected' : ''} value="${escapeHTML(s)}">${escapeHTML(s)}</option>`).join('')}</select></div></div>
       <div class="admin-order-grid"><div><span class="order-label">Contacto</span><p>${escapeHTML(order.customer?.phone || '—')}${order.customer?.email ? `<br>${escapeHTML(order.customer.email)}` : ''}<br><strong>Cédula / RUC:</strong> ${escapeHTML(order.customer?.cedula || '—')}</p></div><div><span class="order-label">Entrega</span><p><strong>${escapeHTML(order.delivery?.label || '—')}</strong><br>${escapeHTML(order.customer?.city || '—')}${order.customer?.address ? ` · ${escapeHTML(order.customer.address)}` : ''}${order.customer?.mapsUrl ? `<br><a href="${escapeHTML(order.customer.mapsUrl)}" target="_blank" rel="noopener">📍 Abrir ubicación en Google Maps</a>` : ''}</p></div><div><span class="order-label">Total</span><p class="order-total">${money(order.total)}</p><small>Subtotal ${money(order.subtotal ?? order.total)} · Envío ${money(order.shippingCost ?? 0)}</small></div></div>
       <div class="admin-order-items">${(order.items || []).map(item => `<div class="admin-order-item"><span><strong>${escapeHTML(item.quantity)}×</strong> ${escapeHTML(item.name)} <small>SKU: ${escapeHTML(item.sku || '—')} · ${item.purchaseMode === 'rental' ? 'Alquiler' : 'Compra'}</small></span><strong>${money(item.subtotal)}</strong></div>`).join('')}</div>
       ${order.customer?.notes ? `<div class="order-notes"><span>Nota</span><p>${escapeHTML(order.customer.notes)}</p></div>` : ''}
@@ -816,12 +816,12 @@ function ordersListMarkup(orders = [], options = {}) {
       <div class="order-assignment">
         <div class="order-assignment-head"><span class="order-label">Asignado a</span><small>${isSellerRole(currentRole) ? 'Vendedor asignado a este pedido' : 'Vendedor responsable'}</small></div>
         ${canAssign
-          ? `<select class="order-assignment-select" data-order-assignment="${escapeHTML(order.id)}"><option value="">Sin asignar</option>${sellers.map(s => `<option value="${escapeHTML(s.id)}" ${s.id === order.assignedSellerId ? 'selected' : ''}>${escapeHTML(s.name)} · @${escapeHTML(s.username)}</option>`).join('')}</select>`
+          ? `<select class="order-assignment-select" data-order-assignment="${escapeHTML(order.id)}" disabled><option value="">Sin asignar</option>${sellers.map(s => `<option value="${escapeHTML(s.id)}" ${s.id === order.assignedSellerId ? 'selected' : ''}>${escapeHTML(s.name)} · @${escapeHTML(s.username)}</option>`).join('')}</select>`
           : `<div class="order-assignment-readonly">${escapeHTML(sellerName(order))}</div>`}
       </div>
       <div class="admin-order-footer">
         <button class="button success small" type="button" data-order-note-save="${escapeHTML(order.id)}" disabled>Guardar cambios</button>
-        <button class="button edit-note small" type="button" data-order-note-edit="${escapeHTML(order.id)}">Editar nota</button>
+        <button class="button edit-note small" type="button" data-order-note-edit="${escapeHTML(order.id)}">Editar pedido</button>
         ${canDelete ? `<button class="button danger small" type="button" data-order-delete="${escapeHTML(order.id)}">Eliminar pedido</button>` : ''}
       </div>
     </div>
@@ -836,7 +836,7 @@ async function renderAdminOrders() {
   let sellers = [];
   if (canAssign) sellers = await request('/api/admin/order-sellers').catch(() => []);
 
-  const sectionNav = (session.role === 'vendedor')
+  const sectionNav = (session.role === 'vendedor' || session.role === 'store_manager')
     ? `<nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}/pedidos" class="admin-section-link active">PEDIDOS</a></nav>`
     : `<nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}" class="admin-section-link">PÁGINA WEB</a><a href="${ADMIN_PATH}/usuarios" class="admin-section-link">USUARIOS</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link active">PEDIDOS</a></nav>`;
   const title = session.role === 'vendedor' ? 'Mis pedidos asignados' : 'Gestión de pedidos';
@@ -852,50 +852,23 @@ async function renderAdminOrders() {
     const filtered=orders.filter(order=>(!dateFilter||orderLocalDate(order.createdAt)===dateFilter)&&(!status||order.status===status)&&(!query||`${order.orderNumber} ${order.customer?.name||''} ${order.customer?.cedula||''} ${order.customer?.phone||''} ${order.customer?.email||''} ${(order.items||[]).map(i=>`${i.sku} ${i.name}`).join(' ')}`.toLowerCase().includes(query)));
     list.innerHTML=ordersListMarkup(filtered, { canDelete, canAssign, sellers, role: session.role });
 
-    list.querySelectorAll('select[data-order-status]').forEach(select=>select.addEventListener('change',async()=>{
-      const id = select.dataset.orderStatus;
-      const newStatus = String(select.value || '').trim();
-      const previous = orders.find(o=>o.id===id)?.status || '';
-      select.disabled = true;
-      try {
-        const updated = await request(`/api/admin/orders/${id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:newStatus})});
-        orders=orders.map(o=>o.id===updated.id?updated:o);
-        const card = select.closest('.admin-order');
-        const badge = card?.querySelector('.order-summary-status');
-        if (badge) {
-          badge.textContent = updated.status;
-          badge.className = `order-summary-status status-${statusClass(updated.status)}`;
-        }
-        select.className = `status-select-${statusClass(updated.status)}`;
-        select.disabled = false;
-      } catch(e) {
-        select.value = previous;
-        select.disabled = false;
-        alert(e.message);
-      }
-    }));
-
-    list.querySelectorAll('select[data-order-assignment]').forEach(select=>select.addEventListener('change',()=>{
-      const id = select.dataset.orderAssignment;
-      const order = orders.find(o=>o.id===id);
-      const saveButton = list.querySelector(`[data-order-note-save="${id}"]`);
-      if (!order || !saveButton) return;
-      const original = order.assignedSellerId || '';
-      select.dataset.changed = String(select.value || '') !== String(original);
-      saveButton.disabled = !select.dataset.changed && !saveButton.dataset.noteChanged;
-    }));
-
+    // Los campos del pedido permanecen bloqueados hasta pulsar "Editar pedido".
+    // Los cambios de estado se guardan junto con nota y asignación.
     list.querySelectorAll('[data-order-toggle]').forEach(button=>button.addEventListener('click',()=>{ const details=document.querySelector(`#orderDetails-${button.dataset.orderToggle}`); if(!details) return; const opening=details.hidden; details.hidden=!opening; button.setAttribute('aria-expanded',String(opening)); button.closest('.admin-order')?.classList.toggle('is-open',opening); }));
     list.querySelectorAll('[data-order-note-edit]').forEach(button => button.addEventListener('click', () => {
       const id = button.dataset.orderNoteEdit;
       const textarea = list.querySelector(`[data-order-note="${id}"]`);
       const saveButton = list.querySelector(`[data-order-note-save="${id}"]`);
+      const statusSelect = list.querySelector(`[data-order-status="${id}"]`);
+      const assignment = list.querySelector(`[data-order-assignment="${id}"]`);
       if (!textarea || !saveButton) return;
       textarea.disabled = false;
+      if (statusSelect) statusSelect.disabled = false;
+      if (assignment) assignment.disabled = false;
       textarea.focus();
       button.disabled = true;
       button.textContent = 'Editando…';
-      saveButton.dataset.noteChanged = 'true';
+      saveButton.dataset.editing = 'true';
       saveButton.disabled = false;
     }));
 
@@ -903,19 +876,18 @@ async function renderAdminOrders() {
       const id=button.dataset.orderNoteSave;
       const textarea=list.querySelector(`[data-order-note="${id}"]`);
       const assignment=list.querySelector(`[data-order-assignment="${id}"]`);
+      const statusSelect=list.querySelector(`[data-order-status="${id}"]`);
       const editButton=list.querySelector(`[data-order-note-edit="${id}"]`);
       const order=orders.find(o=>o.id===id);
       if(!order || !textarea) return;
+      if (button.dataset.editing !== 'true') return;
 
       const nextNote = textarea.value;
       const nextSeller = assignment ? (assignment.value || null) : (order.assignedSellerId || null);
+      const nextStatus = statusSelect ? (statusSelect.value || order.status || 'Pendiente') : (order.status || 'Pendiente');
       const noteChanged = nextNote !== (order.internalNote || '');
       const assignmentChanged = String(nextSeller || '') !== String(order.assignedSellerId || '');
-      if (!noteChanged && !assignmentChanged) {
-        textarea.disabled = true;
-        button.disabled = true;
-        return;
-      }
+      const statusChanged = String(nextStatus) !== String(order.status || '');
 
       const sellerLabel = assignment
         ? (assignment.options[assignment.selectedIndex]?.textContent || 'Sin asignar').trim()
@@ -923,32 +895,65 @@ async function renderAdminOrders() {
       const detailParts = [];
       if (noteChanged) detailParts.push('la nota interna');
       if (assignmentChanged) detailParts.push(`el vendedor asignado a "${sellerLabel}"`);
+      if (statusChanged) detailParts.push(`el estado a "${nextStatus}"`);
+      if (!detailParts.length) detailParts.push('ningún dato (no hay cambios nuevos)');
 
       const confirmed = await showYhorsConfirm(
         '¿Seguro que quieres guardar este cambio?',
-        `Se actualizará ${detailParts.join(' y ')} del pedido #${escapeHTML(order.orderNumber)}.`
+        `Se revisará ${detailParts.join(' y ')} del pedido #${escapeHTML(order.orderNumber)}.`
       );
       if (!confirmed) return;
 
       const originalText=button.textContent;
+      // Si no hubo cambios, no hacemos una escritura innecesaria: simplemente
+      // salimos del modo edición después de la segunda confirmación.
+      if (!noteChanged && !assignmentChanged && !statusChanged) {
+        textarea.value = order.internalNote || '';
+        textarea.disabled = true;
+        if (statusSelect) {
+          statusSelect.value = order.status || 'Pendiente';
+          statusSelect.disabled = true;
+        }
+        if (assignment) {
+          assignment.value = order.assignedSellerId || '';
+          assignment.disabled = true;
+        }
+        if (editButton) {
+          editButton.disabled = false;
+          editButton.textContent = 'Editar pedido';
+        }
+        delete button.dataset.editing;
+        button.textContent='Sin cambios';
+        button.disabled=true;
+        setTimeout(()=>{button.textContent='Guardar cambios';},1100);
+        return;
+      }
+
       button.disabled=true;
       try {
         const payload = {};
         if (noteChanged) payload.internalNote = nextNote;
         if (assignmentChanged && assignment) payload.assignedSellerId = nextSeller;
+        if (statusChanged && statusSelect) payload.status = nextStatus;
         const updated=await request(`/api/admin/orders/${id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
         orders=orders.map(o=>o.id===updated.id?updated:o);
         textarea.value = updated.internalNote || '';
         textarea.disabled = true;
+        if (statusSelect) {
+          statusSelect.value = updated.status || 'Pendiente';
+          statusSelect.className = `status-select-${statusClass(updated.status || 'Pendiente')}`;
+          statusSelect.disabled = true;
+        }
         if (assignment) {
           assignment.value = updated.assignedSellerId || '';
           assignment.dataset.changed = 'false';
+          assignment.disabled = true;
         }
         if (editButton) {
           editButton.disabled = false;
-          editButton.textContent = 'Editar nota';
+          editButton.textContent = 'Editar pedido';
         }
-        delete button.dataset.noteChanged;
+        delete button.dataset.editing;
         button.textContent='Cambios guardados ✓';
         setTimeout(()=>{button.textContent='Guardar cambios'; button.disabled=true;},1400);
       } catch(e) {
@@ -1208,7 +1213,7 @@ function formatBackupDate(value) {
 }
 
 async function renderAdmin() {
-  const session = await request('/api/admin/session').catch(() => ({ authenticated: false })); if (!session.authenticated) return renderLogin(); if (isSellerRole(session.role)) return renderAdminOrders();
+  const session = await request('/api/admin/session').catch(() => ({ authenticated: false })); if (!session.authenticated) return renderLogin(); if (isSellerRole(session.role) || session.role === 'store_manager') return renderAdminOrders();
   let products = await request('/api/admin/products').catch(() => []); let classifications = await request('/api/admin/classifications').catch(() => ({ brands: {}, productTypes: {} })); let settings = await request('/api/admin/storefront').catch(() => ({ heroProductIds: [], featuredProductIds: [] })); let editing = null;
   const backupState = await request('/api/admin/backups').catch(() => ({ storageMode: 'local', backups: [], retention: 30 }));
   app.innerHTML = `<main class="admin-shell"><aside class="admin-quick-nav" aria-label="Navegación rápida">
