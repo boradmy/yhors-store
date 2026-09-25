@@ -38,6 +38,17 @@ Los productos se guardan en `data/products.json`, los pedidos en `data/orders.js
 
 Para recibir pedidos, agrega el número internacional de WhatsApp sin `+` ni espacios a `WHATSAPP_NUMBER`, por ejemplo `573001234567`.
 
+
+## Seguridad de sesiones — V13
+
+- Las sesiones administrativas ya no contienen usuario/rol/expiración en una cookie firmada.
+- El navegador recibe únicamente un identificador aleatorio de sesión `httpOnly`.
+- Las sesiones se almacenan en memoria del servidor y se invalidan inmediatamente al cerrar sesión o al expirar.
+- La cookie usa `SameSite=Strict`; en producción debe usarse `COOKIE_SECURE=true` sobre HTTPS.
+- `SESSION_SECRET` ahora es obligatorio y debe tener al menos 32 caracteres.
+- Se admite `ADMIN_PASSWORD_HASH` y `ORDERS_PASSWORD_HASH` con hashes bcrypt. Las variables `ADMIN_PASSWORD` y `ORDERS_PASSWORD` siguen siendo compatibles para facilitar la transición.
+- V14 será el siguiente paso: 2FA y límite de intentos de inicio de sesión.
+
 ## Notas
 
 - La moneda visible está configurada como USD. Puedes cambiarla en `public/app.js` dentro de la función `money`.

@@ -29,12 +29,40 @@ const UPLOADS_DIR = process.env.YHORS_STORAGE_DIR ? path.join(STORAGE_ROOT, 'upl
 const BACKUPS_DIR = process.env.YHORS_STORAGE_DIR ? path.join(STORAGE_ROOT, 'backups') : path.join(__dirname, 'data', 'backups');
 const BACKUP_RETENTION = Math.max(3, Math.min(100, Number.parseInt(process.env.YHORS_BACKUP_RETENTION || '30', 10) || 30));
 const AUTO_BACKUP_INTERVAL_MS = Math.max(60 * 60 * 1000, Number.parseInt(process.env.YHORS_AUTO_BACKUP_INTERVAL_HOURS || '6', 10) * 60 * 60 * 1000 || 6 * 60 * 60 * 1000);
-const SESSION_SECRET = process.env.SESSION_SECRET || 'cambia-este-secreto-antes-de-publicar';
+// V13: sesiones de servidor + credenciales compatibles con variables existentes.
+// En producción, SESSION_SECRET debe existir y ser largo/aleatorio.
+const SESSION_SECRET = String(process.env.SESSION_SECRET || '').trim();
+if (!SESSION_SECRET || SESSION_SECRET.length < 32) {
+  throw new Error('[YHORS V13] SESSION_SECRET debe existir y tener al menos 32 caracteres.');
+}
 const ADMIN_USER = process.env.ADMIN_USER || 'admin';
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'cambia-esta-contrasena';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
+const ADMIN_PASSWORD_HASH = process.env.ADMIN_PASSWORD_HASH || '';
 const ORDERS_USER = process.env.ORDERS_USER || 'pedidos';
-const ORDERS_PASSWORD = process.env.ORDERS_PASSWORD || 'CAMBIA-ESTA-CONTRASENA-DE-PEDIDOS';
+const ORDERS_PASSWORD = process.env.ORDERS_PASSWORD || '';
+const ORDERS_PASSWORD_HASH = process.env.ORDERS_PASSWORD_HASH || '';
 const COOKIE_SECURE = process.env.COOKIE_SECURE === 'true';
+const SESSION_TTL_MS = Math.max(30 * 60 * 1000, Number.parseInt(process.env.SESSION_TTL_MINUTES || '720', 10) * 60 * 1000);
+const SESSION_COOKIE = 'yhors_session';
+const sessions = new Map();
+const passwordHashCache = new Map();
+
+function passwordHashFor(account) {
+  const cacheKey = account.role;
+  const configuredHash = account.passwordHash;
+  if (configuredHash) return configuredHash;
+  if (!account.password) throw new Error(`[YHORS V13] Falta contraseña para la cuenta ${account.role}.`);
+  if (!passwordHashCache.has(cacheKey)) passwordHashCache.set(cacheKey, bcrypt.hashSync(account.password, 12));
+  return passwordHashCache.get(cacheKey);
+}
+
+function sessionCleanup() {
+  const now = Date.now();
+  for (const [token, session] of sessions) {
+    if (session.expiresAt <= now) sessions.delete(token);
+  }
+}
+setInterval(sessionCleanup, 10 * 60 * 1000).unref();
 
 // V10: cifrado de datos personales de pedidos en reposo.
 // La clave NUNCA se guarda en el repositorio ni dentro de orders.json.
@@ -887,30 +915,38 @@ function validateOrder(input) {
   };
 }
 
-function sign(value) {
-  return crypto.createHmac('sha256', SESSION_SECRET).update(value).digest('base64url');
-}
-
 function makeSession(user, role) {
-  const payload = Buffer.from(JSON.stringify({ user, role, expires: Date.now() + 1000 * 60 * 60 * 12 })).toString('base64url');
-  return `${payload}.${sign(payload)}`;
+  sessionCleanup();
+  const token = crypto.randomBytes(32).toString('base64url');
+  const now = Date.now();
+  const session = {
+    id: token,
+    user,
+    role,
+    createdAt: now,
+    lastSeenAt: now,
+    expiresAt: now + SESSION_TTL_MS
+  };
+  sessions.set(token, session);
+  return session;
 }
 
 function getSession(req) {
-  const token = req.cookies.yhors_session;
-  if (!token || !token.includes('.')) return null;
-  const [payload, signature] = token.split('.');
-  const expected = sign(payload);
-  if (signature.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) return null;
-  try {
-    const session = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
-    if (!session.user || !['admin', 'orders'].includes(session.role) || Number(session.expires) <= Date.now()) return null;
-    if (session.role === 'admin' && session.user !== ADMIN_USER) return null;
-    if (session.role === 'orders' && session.user !== ORDERS_USER) return null;
-    return session;
-  } catch {
+  const token = req.cookies[SESSION_COOKIE];
+  if (!token) return null;
+  const session = sessions.get(token);
+  if (!session) return null;
+  if (session.expiresAt <= Date.now()) {
+    sessions.delete(token);
     return null;
   }
+  session.lastSeenAt = Date.now();
+  return session;
+}
+
+function destroySession(req) {
+  const token = req.cookies[SESSION_COOKIE];
+  if (token) sessions.delete(token);
 }
 
 function hasValidSession(req) { return Boolean(getSession(req)); }
@@ -1091,25 +1127,39 @@ app.post('/api/login', async (req, res) => {
   const username = cleanText(req.body?.username, 80);
   const password = String(req.body?.password || '');
   const accounts = [
-    { user: String(ADMIN_USER), password: String(ADMIN_PASSWORD), role: 'admin' },
-    { user: String(ORDERS_USER), password: String(ORDERS_PASSWORD), role: 'orders' }
+    { user: String(ADMIN_USER), password: String(ADMIN_PASSWORD), passwordHash: String(ADMIN_PASSWORD_HASH), role: 'admin' },
+    { user: String(ORDERS_USER), password: String(ORDERS_PASSWORD), passwordHash: String(ORDERS_PASSWORD_HASH), role: 'orders' }
   ];
   let account = null;
   for (const candidate of accounts) {
-    const nameMatches = username.length === candidate.user.length && crypto.timingSafeEqual(Buffer.from(username), Buffer.from(candidate.user));
-    if (nameMatches) {
-      const passwordMatches = await bcrypt.compare(password, await bcrypt.hash(candidate.password, 10));
-      if (passwordMatches) account = candidate;
-      break;
-    }
+    const nameMatches = username.length === candidate.user.length
+      && crypto.timingSafeEqual(Buffer.from(username), Buffer.from(candidate.user));
+    if (!nameMatches) continue;
+    const passwordMatches = await bcrypt.compare(password, passwordHashFor(candidate));
+    if (passwordMatches) account = candidate;
+    break;
   }
   if (!account) return res.status(401).json({ error: 'Usuario o contraseña incorrectos.' });
-  res.cookie('yhors_session', makeSession(account.user, account.role), { httpOnly: true, sameSite: 'strict', secure: COOKIE_SECURE, maxAge: 1000 * 60 * 60 * 12, path: '/' });
-  return res.json({ ok: true, role: account.role });
+
+  const session = makeSession(account.user, account.role);
+  res.cookie(SESSION_COOKIE, session.id, {
+    httpOnly: true,
+    sameSite: 'strict',
+    secure: COOKIE_SECURE,
+    maxAge: SESSION_TTL_MS,
+    path: '/'
+  });
+  return res.json({ ok: true, role: session.role, expiresAt: session.expiresAt });
 });
 
 app.post('/api/logout', (req, res) => {
-  res.clearCookie('yhors_session', { httpOnly: true, sameSite: 'strict', secure: COOKIE_SECURE, path: '/' });
+  destroySession(req);
+  res.clearCookie(SESSION_COOKIE, {
+    httpOnly: true,
+    sameSite: 'strict',
+    secure: COOKIE_SECURE,
+    path: '/'
+  });
   res.json({ ok: true });
 });
 
@@ -1132,8 +1182,23 @@ app.post('/api/orders', async (req, res) => {
   return res.status(201).json({ orderNumber: order.orderNumber, status: order.status, total: order.total });
 });
 
-app.get('/api/admin/session', (req, res) => { const session = getSession(req); return res.json({ authenticated: Boolean(session), username: session?.user || null, role: session?.role || null }); });
-app.get('/api/admin/security', requireAdmin, (_, res) => res.json({ dataEncryption: 'AES-256-GCM', ordersEncryptedAtRest: true, keySource: 'YHORS_DATA_KEY environment variable', version: 'V10' }));
+app.get('/api/admin/session', (req, res) => {
+  const session = getSession(req);
+  return res.json({
+    authenticated: Boolean(session),
+    username: session?.user || null,
+    role: session?.role || null,
+    expiresAt: session?.expiresAt || null
+  });
+});
+app.get('/api/admin/security', requireAdmin, (_, res) => res.json({
+  dataEncryption: 'AES-256-GCM',
+  ordersEncryptedAtRest: true,
+  keySource: 'YHORS_DATA_KEY environment variable',
+  sessionMode: 'server-side',
+  sessionTtlMinutes: Math.round(SESSION_TTL_MS / 60000),
+  version: 'V13'
+}));
 
 app.get('/api/admin/orders', requireOrdersAccess, (_, res) => res.json(readOrders()));
 app.put('/api/admin/orders/:id', requireOrdersAccess, (req, res) => {
