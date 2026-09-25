@@ -1386,7 +1386,11 @@ async function renderAdminInventory() {
     if (count) count.textContent = filtered ? `${matches.length} de ${products.length} productos` : `${products.length} productos`;
     const list = document.querySelector('#inventoryPageList');
     if (!list) return;
-    list.innerHTML = inventoryPageMarkup(matches).match(/<div id="inventoryPageList">([\s\S]*)<\/div><\/section><\/div><\/main>$/)?.[1] || '<div class="empty">No hay productos.</div>';
+    const inventoryMarkup = inventoryPageMarkup(matches);
+    const inventoryTemplate = document.createElement('template');
+    inventoryTemplate.innerHTML = inventoryMarkup.trim();
+    const inventoryList = inventoryTemplate.content.querySelector('#inventoryPageList');
+    list.innerHTML = inventoryList ? inventoryList.innerHTML : '<div class="empty">No hay productos.</div>';
     wireImageFallback(list);
 
     const refreshProfit = record => {

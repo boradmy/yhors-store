@@ -1674,3 +1674,37 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}.brand{letter-sp
     grid-template-columns:1fr;
   }
 }
+
+/* V14.15 — disponibilidad pública sutil */
+.stock-availability{
+  display:block;
+  margin-top:8px;
+  font-size:.68rem;
+  line-height:1.2;
+  font-weight:700;
+  letter-spacing:.12em;
+  text-transform:uppercase;
+  color:#6f735f;
+}
+.stock-availability.out{
+  color:#8a6b68;
+}
+.detail-availability{
+  margin:12px 0 0;
+  font-size:.72rem;
+  line-height:1.2;
+  font-weight:700;
+  letter-spacing:.13em;
+  text-transform:uppercase;
+  color:#6f735f;
+}
+.detail-availability.out{
+  color:#8a6b68;
+}
+.stock-availability::before,
+.stock-availability::after,
+.detail-availability::before,
+.detail-availability::after{
+  content:none !important;
+  display:none !important;
+}
