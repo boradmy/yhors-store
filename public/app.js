@@ -525,7 +525,10 @@ function wireCart(products, storefront) {
 }
 
 
+let __yhorsNavigationPromise = null;
 async function navigateToRoute(href, { replace = false } = {}) {
+  if (__yhorsNavigationPromise) return __yhorsNavigationPromise;
+  __yhorsNavigationPromise = (async () => {
   const target = new URL(href, window.location.origin);
   if (target.origin !== window.location.origin) return;
   const next = `${target.pathname}${target.search}${target.hash}`;
@@ -546,6 +549,9 @@ async function navigateToRoute(href, { replace = false } = {}) {
   await renderCurrentRoute();
   window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
   requestAnimationFrame(() => appEl?.classList.remove('route-transitioning'));
+  })();
+  try { return await __yhorsNavigationPromise; }
+  finally { __yhorsNavigationPromise = null; }
 }
 
 async function renderCurrentRoute() {
@@ -1045,10 +1051,11 @@ function ordersListMarkup(orders = [], options = {}) {
 
 function generateOrderNav(session) {
   const role = String(session.role || '').toLowerCase();
+  const seller = role === 'vendedor' || role === 'orders';
   return `<nav class="admin-section-nav" aria-label="Secciones de administración">
-    <a href="${ADMIN_PATH}" class="admin-section-link" data-smooth-route>PÁGINA WEB</a>
+    ${!seller ? `<a href="${ADMIN_PATH}" class="admin-section-link" data-smooth-route>PÁGINA WEB</a>` : ''}
     ${role === 'admin' ? `<a href="${ADMIN_PATH}/usuarios" class="admin-section-link" data-smooth-route>USUARIOS</a>` : ''}
-    <a href="${ADMIN_PATH}/inventario" class="admin-section-link" data-smooth-route>INVENTARIO</a>
+    ${!seller ? `<a href="${ADMIN_PATH}/inventario" class="admin-section-link" data-smooth-route>INVENTARIO</a>` : ''}
     <a href="${ADMIN_PATH}/pedidos" class="admin-section-link" data-smooth-route>PEDIDOS</a>
     <a href="${ADMIN_PATH}/generar-orden" class="admin-section-link active" data-smooth-route>GENERAR ORDEN</a>
   </nav>`;
@@ -1103,7 +1110,7 @@ async function renderAdminGenerateOrder() {
       <div class="generate-order-header"><div><span class="eyebrow">Nueva orden</span><h2>Orden de venta</h2><p>Registra al cliente, selecciona sus productos y asigna el vendedor responsable.</p></div><div class="generate-doc-badge"><span>DOCUMENTO</span><strong>ORDEN DE PEDIDO</strong><small>YHORS · ${new Date().toLocaleDateString('es-EC')}</small></div></div>
       <div class="generate-top-grid">
         <section class="generate-card customer-card"><div class="generate-card-head"><div><span class="generate-card-kicker">01 · Cliente</span><h3>Información del cliente</h3></div><button type="button" class="button secondary small" id="openCustomerModal">Agregar cliente →</button></div><div id="customerSummary">${customerSummaryMarkup(customer)}</div></section>
-        <section class="generate-card seller-card"><div class="generate-card-kicker">02 · Responsable</div><h3>Vendedor</h3><p>Define quién queda responsable de esta orden.</p><label class="generate-field"><span>Vendedor asignado</span><select id="generateSeller" ${role === 'vendedor' || role === 'orders' ? 'disabled' : ''}><option value="">Sin asignar</option>${role === 'vendedor' || role === 'orders' ? `<option value="${escapeHTML(session.accountId || '')}" selected>${escapeHTML(session.username || 'Mi usuario')}</option>` : sellers.map(s => `<option value="${escapeHTML(s.id)}" ${s.id === session.accountId ? 'selected' : ''}>${escapeHTML(s.name)} · @${escapeHTML(s.username)}</option>`).join('')}</select></label><small class="generate-field-note">${role === 'vendedor' || role === 'orders' ? 'La orden quedará asignada a tu usuario.' : 'Puedes cambiar el vendedor antes de generar la orden.'}</small></section>
+        <section class="generate-card seller-card"><div class="generate-card-kicker">02 · Responsable</div><h3>Vendedor</h3><p>Define quién queda responsable de esta orden.</p><label class="generate-field"><span>Vendedor asignado</span><select id="generateSeller"><option value="">Sin asignar</option>${sellers.map(s => `<option value="${escapeHTML(s.id)}" ${s.id === session.accountId ? 'selected' : ''}>${escapeHTML(s.name)} · @${escapeHTML(s.username)}</option>`).join('')}</select></label><small class="generate-field-note">${role === 'vendedor' || role === 'orders' ? 'Puedes generar la orden con tu usuario o asignarla a otro vendedor.' : 'Puedes cambiar el vendedor antes de generar la orden.'}</small></section>
       </div>
       <section class="generate-card generate-products-card"><div class="generate-card-head"><div><span class="generate-card-kicker">03 · Productos</span><h3>Detalle de la orden</h3></div><button type="button" class="button primary small" id="openProductPicker">+ Agregar productos</button></div><div class="generate-products-table-head"><span>Producto</span><span>Cant.</span><span>Precio</span><span>Total</span><span></span></div><div id="generateOrderLines">${generateOrderProductRows(lines)}</div></section>
       <section class="generate-bottom-grid">
@@ -1140,7 +1147,7 @@ async function renderAdminGenerateOrder() {
   document.querySelector('#generateOrderLines')?.addEventListener('click', event => { const qtyButton = event.target.closest('[data-gen-qty]'); if (qtyButton) { const line = lines.find(item => item.id === qtyButton.dataset.genQty); if (!line) return; line.quantity = Math.max(1, Math.min(99, Number(line.quantity || 1) + Number(qtyButton.dataset.change || 0))); drawLines(); return; } const remove = event.target.closest('[data-gen-remove]'); if (remove) { lines = lines.filter(item => item.id !== remove.dataset.genRemove); drawLines(); } });
   document.querySelector('#generateOrderLines')?.addEventListener('change', event => { const select = event.target.closest('[data-gen-days]'); if (!select) return; const line = lines.find(item => item.id === select.dataset.genDays); if (!line) return; line.rentalDays = Math.max(1, Math.min(10, Number(select.value) || 1)); drawLines(); });
   document.querySelectorAll('input[name="generateDelivery"]').forEach(input => input.addEventListener('change', updateTotals));
-  document.querySelector('#generateOrderSubmit')?.addEventListener('click', async () => { if (saving) return; const message = document.querySelector('#generateMessage'); message.hidden = true; if (!customer.name || !customer.phone || !customer.cedula || !customer.city) { message.hidden = false; message.className = 'message error'; message.textContent = 'Completa los datos del cliente antes de generar la orden.'; openModal('customerModal'); return; } if (!lines.length) { message.hidden = false; message.className = 'message error'; message.textContent = 'Agrega al menos un producto a la orden.'; openModal('productPickerModal'); return; } const deliveryMethod = document.querySelector('input[name="generateDelivery"]:checked')?.value || 'office'; if (deliveryMethod !== 'office' && !customer.address) { message.hidden = false; message.className = 'message error'; message.textContent = 'Ingresa la dirección del cliente para el envío seleccionado.'; openModal('customerModal'); return; } const submit = document.querySelector('#generateOrderSubmit'); saving = true; submit.disabled = true; submit.classList.add('is-loading'); submit.innerHTML = 'Generando…'; try { const assignedSellerId = (role === 'vendedor' || role === 'orders') ? session.accountId : (document.querySelector('#generateSeller')?.value || null); const payload = { customer: { ...customer, notes: document.querySelector('#generateNotes').value.trim() }, deliveryMethod, assignedSellerId, items: lines.map(line => ({ productId: line.productId || line.id, quantity: Number(line.quantity), purchaseMode: line.purchaseMode || 'purchase', rentalDays: line.purchaseMode === 'rental' ? Math.max(1, Number(line.rentalDays || 1)) : null })) }; const result = await request('/api/admin/generar-orden', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) }); app.querySelector('.generate-order-page').innerHTML = `<div class="generate-success"><span class="success-mark">✓</span><span class="eyebrow">Orden generada correctamente</span><h2>#${escapeHTML(result.orderNumber)}</h2><p>La orden quedó registrada en YHORS y el inventario se actualizó.</p><div class="generate-success-total">Total: <strong>${money(result.total)}</strong></div><div class="generate-success-actions"><button type="button" class="button primary" id="generateAnotherOrder">Nueva orden</button><a class="button secondary" href="${ADMIN_PATH}/pedidos" data-smooth-route>Ver pedidos</a>${result.orderId ? `<button type="button" class="button secondary" data-generated-pdf="${escapeHTML(result.orderId)}">PDF de orden</button>` : ''}</div></div>`; document.querySelector('#generateAnotherOrder')?.addEventListener('click', () => renderAdminGenerateOrder()); document.querySelector('[data-generated-pdf]')?.addEventListener('click', event => { const a=document.createElement('a'); a.href=`/api/admin/orders/${encodeURIComponent(event.currentTarget.dataset.generatedPdf)}/pdf?v=${Date.now()}`; a.target='_blank'; a.rel='noopener'; a.click(); }); } catch (error) { message.hidden = false; message.className = 'message error'; message.textContent = error.message || 'No se pudo generar la orden.'; submit.disabled = false; submit.classList.remove('is-loading'); submit.innerHTML = 'Generar orden <span>→</span>'; saving = false; } });
+  document.querySelector('#generateOrderSubmit')?.addEventListener('click', async () => { if (saving) return; const message = document.querySelector('#generateMessage'); message.hidden = true; if (!customer.name || !customer.phone || !customer.cedula || !customer.city) { message.hidden = false; message.className = 'message error'; message.textContent = 'Completa los datos del cliente antes de generar la orden.'; openModal('customerModal'); return; } if (!lines.length) { message.hidden = false; message.className = 'message error'; message.textContent = 'Agrega al menos un producto a la orden.'; openModal('productPickerModal'); return; } const deliveryMethod = document.querySelector('input[name="generateDelivery"]:checked')?.value || 'office'; if (deliveryMethod !== 'office' && !customer.address) { message.hidden = false; message.className = 'message error'; message.textContent = 'Ingresa la dirección del cliente para el envío seleccionado.'; openModal('customerModal'); return; } const submit = document.querySelector('#generateOrderSubmit'); saving = true; submit.disabled = true; submit.classList.add('is-loading'); submit.innerHTML = 'Generando…'; try { const assignedSellerId = document.querySelector('#generateSeller')?.value || null; const payload = { customer: { ...customer, notes: document.querySelector('#generateNotes').value.trim() }, deliveryMethod, assignedSellerId, items: lines.map(line => ({ productId: line.productId || line.id, quantity: Number(line.quantity), purchaseMode: line.purchaseMode || 'purchase', rentalDays: line.purchaseMode === 'rental' ? Math.max(1, Number(line.rentalDays || 1)) : null })) }; const result = await request('/api/admin/generar-orden', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) }); app.querySelector('.generate-order-page').innerHTML = `<div class="generate-success"><span class="success-mark">✓</span><span class="eyebrow">Orden generada correctamente</span><h2>#${escapeHTML(result.orderNumber)}</h2><p>La orden quedó registrada en YHORS y el inventario se actualizó.</p><div class="generate-success-total">Total: <strong>${money(result.total)}</strong></div><div class="generate-success-actions"><button type="button" class="button primary" id="generateAnotherOrder">Nueva orden</button><a class="button secondary" href="${ADMIN_PATH}/pedidos" data-smooth-route>Ver pedidos</a>${result.orderId ? `<button type="button" class="button secondary" data-generated-pdf="${escapeHTML(result.orderId)}">PDF de orden</button>` : ''}</div></div>`; document.querySelector('#generateAnotherOrder')?.addEventListener('click', () => renderAdminGenerateOrder()); document.querySelector('[data-generated-pdf]')?.addEventListener('click', event => { const a=document.createElement('a'); a.href=`/api/admin/orders/${encodeURIComponent(event.currentTarget.dataset.generatedPdf)}/pdf?v=${Date.now()}`; a.target='_blank'; a.rel='noopener'; a.click(); }); } catch (error) { message.hidden = false; message.className = 'message error'; message.textContent = error.message || 'No se pudo generar la orden.'; submit.disabled = false; submit.classList.remove('is-loading'); submit.innerHTML = 'Generar orden <span>→</span>'; saving = false; } });
   drawCustomer(); drawLines(); wireAccountMenu(); wireImageFallback(app);
 }
 
@@ -1574,7 +1581,9 @@ function showSaveSuccess(messageElement, text) {
   }, 3000);
 }
 
-function inventoryPageMarkup(products = []) {
+function inventoryPageMarkup(products = [], options = {}) {
+  const inventoryReadOnly = Boolean(options.readOnly);
+  const role = String(options.role || window.__yhorsSession?.role || '').toLowerCase();
   const rows = products.length ? products.map(product => {
     const images = productImages(product);
     const profit = Number(product.salePrice ?? product.price ?? 0) - Number(product.purchasePrice ?? 0);
@@ -1612,12 +1621,7 @@ function inventoryPageMarkup(products = []) {
           ${isCosplay ? `<label><span>Precio de alquiler / día</span><div class="inventory-input-wrap"><span>$</span><input type="number" min="0" step="0.01" value="${escapeHTML(rentalValue)}" data-field="rentalPrice" disabled></div></label>` : ''}
         </div>
 
-        <div class="inventory-record-actions">
-          <button class="button secondary small" type="button" data-inventory-edit>Editar</button>
-          <button class="button primary small" type="button" data-inventory-save disabled>Guardar cambios</button>
-          <button class="button secondary small" type="button" data-inventory-cancel disabled>Cancelar</button>
-          <span class="message" data-inventory-message></span>
-        </div>
+        <div class="inventory-record-actions">${inventoryReadOnly ? '<span class="inventory-readonly-note">Solo consulta · stock disponible</span>' : '<button class="button secondary small" type="button" data-inventory-edit>Editar</button><button class="button primary small" type="button" data-inventory-save disabled>Guardar cambios</button><button class="button secondary small" type="button" data-inventory-cancel disabled>Cancelar</button><span class="message" data-inventory-message></span>'}</div>
       </div>
     </article>`;
   }).join('') : '<div class="empty">No hay productos registrados.</div>';
@@ -1625,8 +1629,7 @@ function inventoryPageMarkup(products = []) {
   return `<main class="admin-shell"><div class="admin-wrap">
     <div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Inventario</h1><p class="admin-subtitle">Control de costos, precios y existencias</p></div><div class="admin-top-actions">${accountMenu(window.__yhorsSession || {})}</div></div>
     <nav class="admin-section-nav" aria-label="Secciones de administración">
-      <a href="${ADMIN_PATH}" class="admin-section-link" data-smooth-route>PÁGINA WEB</a>
-      <a href="${ADMIN_PATH}/usuarios" class="admin-section-link" data-smooth-route>USUARIOS</a>
+      ${role === 'admin' ? `<a href="${ADMIN_PATH}" class="admin-section-link" data-smooth-route>PÁGINA WEB</a><a href="${ADMIN_PATH}/usuarios" class="admin-section-link" data-smooth-route>USUARIOS</a>` : ''}
       <a href="${ADMIN_PATH}/inventario" class="admin-section-link active" data-smooth-route>INVENTARIO</a>
       <a href="${ADMIN_PATH}/pedidos" class="admin-section-link" data-smooth-route>PEDIDOS</a>
       <a href="${ADMIN_PATH}/generar-orden" class="admin-section-link" data-smooth-route>GENERAR ORDEN</a>
@@ -1646,8 +1649,9 @@ function inventoryPageMarkup(products = []) {
 async function renderAdminInventory() {
   const session = await request('/api/admin/session').catch(() => ({ authenticated: false }));
   if (!session.authenticated) return renderLogin();
-  if (session.role !== 'admin') return renderAdminOrders();
+  if (session.role !== 'admin' && session.role !== 'store_manager') return renderAdminOrders();
   window.__yhorsSession = session;
+  const inventoryReadOnly = session.role === 'store_manager';
   let products = await request('/api/admin/products').catch(() => []);
   const fields = ['name','sku','brand','productType','category','purchasePrice','salePrice','rentalPrice','stock','image','description','featured','hero','heroOrder'];
   const draw = () => {
@@ -1663,7 +1667,7 @@ async function renderAdminInventory() {
     if (count) count.textContent = filtered ? `${matches.length} de ${products.length} productos` : `${products.length} productos`;
     const list = document.querySelector('#inventoryPageList');
     if (!list) return;
-    const inventoryMarkup = inventoryPageMarkup(matches);
+    const inventoryMarkup = inventoryPageMarkup(matches, { readOnly: inventoryReadOnly, role: session.role });
     const inventoryTemplate = document.createElement('template');
     inventoryTemplate.innerHTML = inventoryMarkup.trim();
     const inventoryList = inventoryTemplate.content.querySelector('#inventoryPageList');
@@ -1733,7 +1737,7 @@ async function renderAdminInventory() {
       });
     });
   };
-  app.innerHTML = inventoryPageMarkup(products);
+  app.innerHTML = inventoryPageMarkup(products, { readOnly: inventoryReadOnly, role: session.role });
   draw();
   document.querySelector('#inventoryPageSearch')?.addEventListener('input', draw);
   document.querySelector('#inventoryPageCategoryFilter')?.addEventListener('change', draw);
@@ -2272,7 +2276,14 @@ document.addEventListener('click', event => {
   const target = new URL(href, window.location.origin);
   if (target.origin !== window.location.origin) return;
   event.preventDefault();
-  navigateToRoute(`${target.pathname}${target.search}${target.hash}`);
+  // La navegación administrativa se mantiene dentro de la SPA y siempre
+  // espera a que la vista destino termine de renderizarse.
+  void navigateToRoute(`${target.pathname}${target.search}${target.hash}`).catch(error => {
+    console.error('[YHORS] Error de navegación:', error);
+    // Si una vista falla por una sesión recién creada o por una respuesta
+    // incompleta, un segundo intento controlado evita dejar la pestaña congelada.
+    setTimeout(() => renderCurrentRoute(), 0);
+  });
 });
 
 window.addEventListener('popstate', () => renderCurrentRoute());

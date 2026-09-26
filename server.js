@@ -1713,6 +1713,13 @@ function requireStoreManagerOrAdmin(req, res, next) {
   return next();
 }
 
+function requireCatalogRead(req, res, next) {
+  const session = getSession(req);
+  if (!session) return res.status(401).json({ error: 'No autorizado.' });
+  if (!isAdmin(session.role) && !isStoreManager(session.role)) return res.status(403).json({ error: 'No autorizado para consultar el catálogo administrativo.' });
+  return next();
+}
+
 function cleanText(value, maxLength) {
   return typeof value === 'string' ? value.trim().slice(0, maxLength) : '';
 }
@@ -2192,11 +2199,13 @@ app.post('/api/admin/generar-orden', requireOrdersAccess, async (req, res) => {
 
   const requestedSellerId = req.body?.assignedSellerId === null || req.body?.assignedSellerId === '' || req.body?.assignedSellerId === undefined ? null : String(req.body.assignedSellerId);
   let assignedSellerId = null;
-  if (isSellerRole(session.role)) assignedSellerId = session.accountId || null;
-  else if (requestedSellerId) {
+  if (requestedSellerId) {
     const seller = readUsers().find(user => user.id === requestedSellerId && user.active !== false && isSellerRole(user.role));
     if (!seller) return res.status(400).json({ error: 'El vendedor seleccionado no es válido o no está activo.' });
     assignedSellerId = seller.id;
+  } else if (isSellerRole(session.role)) {
+    // Si el vendedor no cambia la selección, la orden queda a su nombre.
+    assignedSellerId = session.accountId || null;
   }
 
   const orders = readOrders();
@@ -2352,7 +2361,7 @@ function decorateOrderAssignment(order) {
   };
 }
 
-app.get('/api/admin/order-sellers', requireStoreManagerOrAdmin, (_, res) => {
+app.get('/api/admin/order-sellers', requireOrdersAccess, (_, res) => {
   const sellers = readUsers()
     .filter(user => user.active !== false && isSellerRole(user.role))
     .map(user => ({ id: user.id, name: user.name, username: user.username, role: 'vendedor' }));
@@ -2389,9 +2398,10 @@ app.get('/api/admin/orders/:id/pdf', requireOrdersAccess, (req, res) => {
 app.get('/api/admin/orders', requireOrdersAccess, (req, res) => {
   const session = getSession(req);
   let orders = readOrders();
-  // Los vendedores solo reciben sus pedidos asignados. No pueden consultar pedidos de otros vendedores.
+  // Los vendedores reciben sus pedidos y también los pedidos de la WEB que todavía
+  // no tienen vendedor, para que cualquiera pueda hacerse cargo de ellos.
   if (isSellerRole(session.role)) {
-    orders = orders.filter(order => order.assignedSellerId === session.accountId);
+    orders = orders.filter(order => !order.assignedSellerId || order.assignedSellerId === session.accountId);
   }
   return res.json(orders.map(decorateOrderAssignment));
 });
@@ -2577,7 +2587,7 @@ app.get('/api/admin/backups/:name/download', requireAdmin, (req, res) => {
   }
 });
 
-app.get('/api/admin/products', requireAdmin, (_, res) => res.json(readProducts().map(normalizeProduct)));
+app.get('/api/admin/products', requireCatalogRead, (_, res) => res.json(readProducts().map(normalizeProduct)));
 
 app.put('/api/admin/inventory/:id', requireAdmin, (req, res) => {
   const products = readProducts();
