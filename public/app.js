@@ -371,12 +371,32 @@ function wireCart(products, storefront) {
   let cart = getCart();
   const count = document.querySelector('#cartCount'); const area = document.querySelector('#cartItems');
   const updateCartCount = () => { if (count) count.textContent = cart.reduce((sum, line) => sum + Number(line.quantity || 0), 0); };
+  const getProductForLine = line => products.find(item => item.id === (line.productId || line.id || line.cartKey));
+  const getAvailableStock = line => {
+    const product = getProductForLine(line);
+    const stock = product ? Number(product.availableStock ?? product.stock) : Number(line.availableStock);
+    return Number.isInteger(stock) && stock >= 0 ? stock : 0;
+  };
+  const clampQuantity = (line, requested) => {
+    const minimum = Math.max(1, Number.parseInt(requested, 10) || 1);
+    if (line.purchaseMode !== 'purchase') return minimum;
+    const max = getAvailableStock(line);
+    return max > 0 ? Math.min(minimum, max) : 0;
+  };
   const drawCart = () => {
     if (!area) return;
+    cart = cart.filter(line => line.purchaseMode !== 'purchase' || getAvailableStock(line) > 0);
+    cart.forEach(line => {
+      if (line.purchaseMode === 'purchase') line.quantity = clampQuantity(line, line.quantity);
+    });
+    setCart(cart);
     area.innerHTML = cart.length ? cart.map(line => {
       const isRental = line.purchaseMode === 'rental';
       const days = isRental ? rentalDaysValue(line.rentalDays) : 1;
-      return `<div class="cart-item"><img data-fallback src="${escapeHTML(productImages(line)[0])}" alt=""><div class="cart-item-main"><h4>${escapeHTML(line.name)}</h4>${line.purchaseMode ? `<span class="cart-mode">${isRental ? `Alquiler · ${days} día${days === 1 ? '' : 's'}` : 'Compra'}</span>` : ''}${isRental ? `<label class="cart-rental-days">Días de alquiler<select data-rental-days="${escapeHTML(line.id)}">${Array.from({length:10},(_,i)=>i+1).map(day => `<option value="${day}" ${day === days ? 'selected' : ''}>${day} día${day === 1 ? '' : 's'}</option>`).join('')}</select></label>` : ''}<p class="cart-line-price">${money(Number(line.price) * (isRental ? days : 1))}${isRental ? ' <small>/ día × duración</small>' : ''}</p><div class="quantity-control"><button type="button" data-qty="${escapeHTML(line.id)}" data-change="-1">−</button><input type="number" min="1" value="${Number(line.quantity) || 1}" data-input="${escapeHTML(line.id)}"><button type="button" data-qty="${escapeHTML(line.id)}" data-change="1">+</button></div></div><button class="remove" data-remove="${escapeHTML(line.id)}">Quitar</button></div>`;
+      const maxStock = isRental ? null : getAvailableStock(line);
+      const quantity = Math.max(1, Number(line.quantity) || 1);
+      const atMax = !isRental && quantity >= maxStock;
+      return `<div class="cart-item"><img data-fallback src="${escapeHTML(productImages(line)[0])}" alt=""><div class="cart-item-main"><h4>${escapeHTML(line.name)}</h4>${line.purchaseMode ? `<span class="cart-mode">${isRental ? `Alquiler · ${days} día${days === 1 ? '' : 's'}` : 'Compra'}</span>` : ''}${!isRental ? `<small class="cart-stock">Disponible: ${maxStock}</small>` : ''}${isRental ? `<label class="cart-rental-days">Días de alquiler<select data-rental-days="${escapeHTML(line.id)}">${Array.from({length:10},(_,i)=>i+1).map(day => `<option value="${day}" ${day === days ? 'selected' : ''}>${day} día${day === 1 ? '' : 's'}</option>`).join('')}</select></label>` : ''}<p class="cart-line-price">${money(Number(line.price) * (isRental ? days : 1))}${isRental ? ' <small>/ día × duración</small>' : ''}</p><div class="quantity-control"><button type="button" data-qty="${escapeHTML(line.id)}" data-change="-1" ${quantity <= 1 ? 'disabled' : ''}>−</button><input type="number" min="1" ${!isRental ? `max="${maxStock}"` : ''} value="${quantity}" data-input="${escapeHTML(line.id)}"><button type="button" data-qty="${escapeHTML(line.id)}" data-change="1" ${atMax ? 'disabled' : ''}>+</button></div></div><button class="remove" data-remove="${escapeHTML(line.id)}">Quitar</button></div>`;
     }).join('') : '<div class="empty cart-empty">Tu carrito está vacío.<br><small>Agrega algo que te guste.</small></div>';
     const total = cart.reduce((sum, line) => sum + cartLineTotal(line), 0);
     const totalEl = document.querySelector('#cartTotal'); if (totalEl) totalEl.textContent = money(total);
@@ -388,20 +408,24 @@ function wireCart(products, storefront) {
     area.querySelectorAll('[data-qty]').forEach(btn => btn.addEventListener('click', () => {
       const line = cart.find(item => item.id === btn.dataset.qty); if (!line) return;
       const requested = Math.max(1, Number(line.quantity) + Number(btn.dataset.change));
-      line.quantity = requested;
+      const nextQuantity = clampQuantity(line, requested);
+      if (nextQuantity < 1) return;
+      line.quantity = nextQuantity;
       setCart(cart); updateCartCount(); drawCart();
     }));
     area.querySelectorAll('[data-input]').forEach(input => input.addEventListener('change', () => {
       const line = cart.find(item => item.id === input.dataset.input); if (!line) return;
-      const requested = Math.max(1, parseInt(input.value || '1', 10));
-      line.quantity = requested;
+      const nextQuantity = clampQuantity(line, input.value);
+      if (nextQuantity < 1) return drawCart();
+      line.quantity = nextQuantity;
       setCart(cart); updateCartCount(); drawCart();
     }));
     area.querySelectorAll('[data-remove]').forEach(btn => btn.addEventListener('click', () => { cart = cart.filter(line => line.id !== btn.dataset.remove); setCart(cart); updateCartCount(); drawCart(); }));
   };
   const addToCart = (product, button, purchaseMode = 'purchase', rentalDays = 1) => {
     const days = purchaseMode === 'rental' ? rentalDaysValue(rentalDays) : null;
-    const inStock = product.inStock === true;
+    const availableStock = Number(product.availableStock ?? product.stock ?? 0);
+    const inStock = product.inStock === true && availableStock > 0;
     const price = purchaseMode === 'rental' ? Number(product.rentalPrice) : (product.category === 'cosplay' && Number.isFinite(Number(product.salePrice)) ? Number(product.salePrice) : Number(product.price));
     const cartKey = `${product.id}::${purchaseMode}::${days || ''}`;
     const existing = cart.find(item => (item.cartKey || item.id) === cartKey);
@@ -411,16 +435,27 @@ function wireCart(products, storefront) {
       return;
     }
     if (existing) {
-      if (purchaseMode === 'purchase' && !inStock) {
+      const currentQuantity = Number(existing.quantity) || 0;
+      if (purchaseMode === 'purchase' && currentQuantity >= availableStock) {
+        const original = button.innerHTML;
         button.disabled = true;
+        button.innerHTML = '<span>Stock máximo</span><span>✓</span>';
+        setTimeout(() => { button.innerHTML = original; button.disabled = false; }, 900);
         return;
       }
-      existing.quantity += 1;
+      existing.quantity = purchaseMode === 'purchase' ? Math.min(currentQuantity + 1, availableStock) : currentQuantity + 1;
     } else {
-      cart.push({ ...product, id: cartKey, cartKey, productId: product.id, price, purchaseMode, rentalDays: days, quantity: 1 });
+      cart.push({ ...product, id: cartKey, cartKey, productId: product.id, price, purchaseMode, rentalDays: days, quantity: 1, availableStock });
     }
     setCart(cart); updateCartCount(); drawCart();
-    button.disabled = true; const original = button.innerHTML; button.innerHTML = '<span class="spinner"></span><span>Añadiendo</span>'; setTimeout(() => { button.innerHTML = '<span class="check">✓</span><span>Añadido</span>'; button.classList.add('added'); setTimeout(() => { button.innerHTML = original; button.classList.remove('added'); button.disabled = false; }, 850); }, 420);
+    button.disabled = true;
+    const original = button.innerHTML;
+    button.innerHTML = '<span class="spinner"></span><span>Añadiendo</span>';
+    setTimeout(() => {
+      button.innerHTML = '<span class="check">✓</span><span>Añadido</span>';
+      button.classList.add('added');
+      setTimeout(() => { button.innerHTML = original; button.classList.remove('added'); button.disabled = false; }, 650);
+    }, 420);
   };
   const openCart = () => { document.querySelector('#drawer')?.classList.add('open'); document.querySelector('#backdrop')?.classList.add('show'); document.body.classList.add('no-scroll'); };
   const closeCart = () => { document.querySelector('#drawer')?.classList.remove('open'); document.querySelector('#backdrop')?.classList.remove('show'); document.body.classList.remove('no-scroll'); };
@@ -2075,12 +2110,14 @@ document.addEventListener('click', (event) => {
   button.textContent = 'GENERANDO…';
 
   const pdfUrl = `/api/admin/orders/${encodeURIComponent(id)}/pdf`;
-  const pdfWindow = window.open(pdfUrl, '_blank', 'noopener');
-
-  if (!pdfWindow) {
-    window.location.href = pdfUrl;
-    return;
-  }
+  const pdfLink = document.createElement('a');
+  pdfLink.href = pdfUrl;
+  pdfLink.target = '_blank';
+  pdfLink.rel = 'noopener noreferrer';
+  pdfLink.style.display = 'none';
+  document.body.appendChild(pdfLink);
+  pdfLink.click();
+  pdfLink.remove();
 
   setTimeout(() => {
     button.disabled = false;

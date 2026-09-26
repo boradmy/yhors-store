@@ -786,13 +786,11 @@ function buildOrderPdf(order) {
   lines.push('----------------------------------------');
   lines.push('DATOS DEL CLIENTE');
   pushWrapped('NOMBRE: ', customer.name || customer.fullName || '');
-  if (customer.cedula || customer.identification || customer.document) {
-    pushWrapped('CEDULA: ', customer.cedula || customer.identification || customer.document);
-  }
-  if (customer.phone) pushWrapped('TELEFONO: ', customer.phone);
-  if (customer.email) pushWrapped('CORREO: ', customer.email);
-  if (customer.address) pushWrapped('DIRECCION: ', customer.address);
-  if (customer.city) pushWrapped('CIUDAD: ', customer.city);
+  pushWrapped('CEDULA / RUC: ', customer.cedula || customer.identification || customer.document || '—');
+  pushWrapped('CELULAR: ', customer.phone || '—');
+  pushWrapped('CORREO: ', customer.email || '—');
+  pushWrapped('CIUDAD: ', customer.city || '—');
+  pushWrapped('DIRECCION: ', customer.address || 'Retiro en oficina');
   lines.push('ENTREGA: ' + (order?.delivery?.label || ''));
   lines.push('----------------------------------------');
   lines.push('PRODUCTOS ADQUIRIDOS');
@@ -828,7 +826,6 @@ function buildOrderPdf(order) {
 
   lines.push('----------------------------------------');
   lines.push('YHORS - Documento de orden');
-  lines.push('Este documento es un comprobante de pedido y no necesariamente una factura tributaria.');
 
   const pageHeight = 842;
   const topY = 790;
@@ -1730,7 +1727,6 @@ async function sendOrderConfirmationEmail(order) {
   const mapsHtml = order.customer.mapsUrl ? `<p><strong>Ubicación:</strong> <a href="${escapeEmailHtml(order.customer.mapsUrl)}">Abrir en Google Maps</a></p>` : '';
   const html = `<div style="font-family:Arial,sans-serif;max-width:620px;margin:auto;color:#222">
     <h1 style="margin-bottom:4px">YHORS STORE</h1>
-    <p>Hola ${escapeEmailHtml(order.customer.name)}, recibimos correctamente tu pedido.</p>
     <div style="padding:16px;border:1px solid #ddd;border-radius:10px">
       <h2 style="margin-top:0">Pedido #${escapeEmailHtml(order.orderNumber)}</h2>
       <p><strong>Estado:</strong> ${escapeEmailHtml(order.status)}</p>
@@ -1742,13 +1738,15 @@ async function sendOrderConfirmationEmail(order) {
       <p style="text-align:right;font-size:18px"><strong>Total: $${Number(order.total || 0).toFixed(2)}</strong></p>
     </div>
     <p><strong>Cédula / RUC:</strong> ${escapeEmailHtml(order.customer.cedula || '—')}</p>
+    <p><strong>Celular:</strong> ${escapeEmailHtml(order.customer.phone || '—')}</p>
+    <p><strong>Correo:</strong> ${escapeEmailHtml(order.customer.email || '—')}</p>
     <p><strong>Ciudad:</strong> ${escapeEmailHtml(order.customer.city || '—')}</p>
     <p><strong>Dirección:</strong> ${escapeEmailHtml(order.customer.address || 'Retiro en oficina')}</p>
     ${mapsHtml}
     ${order.customer.notes ? `<p><strong>Nota:</strong> ${escapeEmailHtml(order.customer.notes)}</p>` : ''}
     <p style="color:#777">Te contactaremos para continuar con la coordinación de tu pedido.</p>
   </div>`;
-  const text = `YHORS STORE · Pedido #${order.orderNumber}\n\nHola ${order.customer.name}, recibimos correctamente tu pedido.\n\nTotal: $${Number(order.total || 0).toFixed(2)}\nEntrega: ${order.delivery.label}\nCédula/RUC: ${order.customer.cedula || '—'}\nCiudad: ${order.customer.city || '—'}\nDirección: ${order.customer.address || 'Retiro en oficina'}${order.customer.mapsUrl ? `\nGoogle Maps: ${order.customer.mapsUrl}` : ''}`;
+  const text = `YHORS STORE · Pedido #${order.orderNumber}\n\nTotal: $${Number(order.total || 0).toFixed(2)}\nEntrega: ${order.delivery.label}\nCédula / RUC: ${order.customer.cedula || '—'}\nCelular: ${order.customer.phone || '—'}\nCorreo: ${order.customer.email || '—'}\nCiudad: ${order.customer.city || '—'}\nDirección: ${order.customer.address || 'Retiro en oficina'}${order.customer.mapsUrl ? `\nGoogle Maps: ${order.customer.mapsUrl}` : ''}`;
 
   // Opción recomendada sin dominio: Google Apps Script envía desde tu propia cuenta Gmail.
   const appsScriptUrl = process.env.GOOGLE_APPS_SCRIPT_URL;
@@ -1878,7 +1876,7 @@ function normalizeProduct(product) {
 function publicProduct(product) {
   const normalized = normalizeProduct(product);
   const { stock, purchasePrice, ...safe } = normalized;
-  return { ...safe, inStock: stock > 0 };
+  return { ...safe, availableStock: stock, inStock: stock > 0 };
 }
 
 app.get('/api/products', (_, res) => res.json(readProducts().map(publicProduct)));
