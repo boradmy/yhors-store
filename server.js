@@ -727,153 +727,273 @@ function pdfEscape(value) {
     .replace(/\\/g, '\\\\')
     .replace(/\(/g, '\\(')
     .replace(/\)/g, '\\)')
-    // Helvetica Type1 uses WinAnsi/Latin-1 compatible bytes for Spanish text.
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[\u201C\u201D]/g, '"')
+    .replace(/[\u2013\u2014]/g, '-')
+    .replace(/\u2022/g, '-')
     .replace(/[^\x20-\xFF]/g, '?');
 }
 
 function buildOrderPdf(order) {
   const customer = order?.customer || {};
   const items = Array.isArray(order?.items) ? order.items : [];
-  const orderNo = order?.orderNumber || order?.id || '';
+  const orderNo = String(order?.orderNumber || order?.id || '');
   const assignedSeller = order?.assignedSellerId
     ? readUsers().find(user => user.id === order.assignedSellerId)
     : null;
   const seller = assignedSeller?.name || order?.assignedSellerName || order?.assignedSeller?.name || 'Sin asignar';
   const created = order?.createdAt ? new Date(order.createdAt) : null;
-  const date = created && !Number.isNaN(created.getTime()) ? created.toLocaleString('es-EC', { timeZone: 'America/Guayaquil' }) : '';
+  const date = created && !Number.isNaN(created.getTime())
+    ? (() => {
+        const parts = new Intl.DateTimeFormat('es-EC', { timeZone: 'America/Guayaquil', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).formatToParts(created);
+        const get = type => parts.find(part => part.type === type)?.value || '';
+        return `${get('day')}/${get('month')}/${get('year')} ${get('hour')}:${get('minute')}:${get('second')}`;
+      })()
+    : '';
   const subtotal = Number(order?.subtotal ?? order?.total ?? 0);
-  const shipping = Number(order?.shippingCost ?? 0);
-  const discount = Number(order?.discount ?? 0);
+  const shipping = Number(order?.shippingCost ?? order?.delivery?.cost ?? 0);
   const total = Number(order?.total ?? 0);
+  const status = String(order?.status || 'Pendiente');
+  const deliveryLabel = String(order?.delivery?.label || 'No especificada');
+  const customerNotes = String(customer?.notes || '');
+  const internalNote = String(order?.internalNote || '');
 
-  // Keep every product in the PDF. Long names/notes are wrapped instead of being
-  // truncated, and additional pages are created automatically when necessary.
-  const lines = [];
-  const wrap = (text, width = 82) => {
-    const value = String(text ?? '');
+  const W = 595;
+  const H = 842;
+  const margin = 38;
+  const right = W - margin;
+  const contentWidth = right - margin;
+  const normalFont = 1;
+  const boldFont = 2;
+  const imageWidth = 150;
+  const imageHeight = 33;
+  const logoPath = path.join(__dirname, 'public', 'assets', 'yhors-logo-pdf.jpg');
+  let logoJpeg = null;
+  try { logoJpeg = fs.readFileSync(logoPath); } catch { logoJpeg = null; }
+
+  const wrap = (text, maxChars) => {
+    const value = String(text ?? '').trim();
     if (!value) return [''];
     const words = value.split(/\s+/);
     const result = [];
     let current = '';
     for (const word of words) {
-      if (!current) {
-        current = word;
-      } else if ((current + ' ' + word).length <= width) {
-        current += ' ' + word;
-      } else {
-        result.push(current);
-        current = word;
-      }
+      if (!current) current = word;
+      else if ((current + ' ' + word).length <= maxChars) current += ' ' + word;
+      else { result.push(current); current = word; }
     }
     if (current) result.push(current);
     return result;
   };
-  const pushWrapped = (label, value, width = 82) => {
-    const prefix = String(label || '');
-    const chunks = wrap(value, Math.max(20, width - prefix.length));
-    if (!chunks.length) {
-      lines.push(prefix);
-      return;
-    }
-    lines.push(prefix + chunks[0]);
-    for (const chunk of chunks.slice(1)) lines.push(' '.repeat(Math.min(prefix.length, 4)) + chunk);
-  };
 
-  lines.push('YHORS');
-  lines.push('ORDEN DE PEDIDO');
-  lines.push('========================================');
-  lines.push(`No. ORDEN: ${orderNo}`);
-  lines.push(`FECHA: ${date}`);
-  lines.push(`ESTADO: ${order?.status || 'Pendiente'}`);
-  lines.push(`VENDEDOR: ${seller}`);
-  lines.push('----------------------------------------');
-  lines.push('DATOS DEL CLIENTE');
-  pushWrapped('NOMBRE: ', customer.name || customer.fullName || '');
-  pushWrapped('CEDULA / RUC: ', customer.cedula || customer.identification || customer.document || '—');
-  pushWrapped('CELULAR: ', customer.phone || '—');
-  pushWrapped('CORREO: ', customer.email || '—');
-  pushWrapped('CIUDAD: ', customer.city || '—');
-  pushWrapped('DIRECCION: ', customer.address || 'Retiro en oficina');
-  lines.push('ENTREGA: ' + (order?.delivery?.label || ''));
-  lines.push('----------------------------------------');
-  lines.push('PRODUCTOS ADQUIRIDOS');
+  const moneyPdf = value => `$${Number(value || 0).toFixed(2)}`;
+  const safeStatus = status.toLocaleUpperCase('es-EC');
 
-  items.forEach((item, index) => {
+  // Each row is a compact set of lines. A row never gets split between pages.
+  const rows = items.map((item, index) => {
     const qty = Number(item.quantity || 0);
     const name = String(item.name || item.productName || item.sku || 'Producto');
-    const sku = String(item.sku || '—');
+    const sku = String(item.sku || '-');
     const price = Number(item.unitPrice ?? item.price ?? 0);
     const lineTotal = Number(item.subtotal ?? item.lineTotal ?? item.total ?? price * qty);
     const mode = item.purchaseMode === 'rental'
-      ? `Alquiler · ${Math.max(1, Number(item.rentalDays || 1))} día(s)`
+      ? `Alquiler - ${Math.max(1, Number(item.rentalDays || 1))} dia(s)`
       : 'Compra';
-
-    lines.push(`${index + 1}. ${qty} x ${name}`);
-    lines.push(`   SKU: ${sku}`);
-    lines.push(`   MODALIDAD: ${mode}`);
-    lines.push(`   P.UNIT: $${price.toFixed(2)}    TOTAL: $${lineTotal.toFixed(2)}`);
-    if (index < items.length - 1) lines.push('');
+    return {
+      index: index + 1,
+      sku,
+      qty,
+      name,
+      price,
+      lineTotal,
+      mode,
+      descLines: wrap(`${name}${mode !== 'Compra' ? ` (${mode})` : ''}`, 44)
+    };
   });
 
-  lines.push('----------------------------------------');
-  lines.push(`SUBTOTAL: $${subtotal.toFixed(2)}`);
-  if (discount) lines.push(`DESCUENTO: $${discount.toFixed(2)}`);
-  lines.push(`ENVIO: $${shipping.toFixed(2)}`);
-  lines.push(`TOTAL: $${total.toFixed(2)}`);
-
-  if (order?.internalNote) {
-    lines.push('----------------------------------------');
-    lines.push('NOTAS INTERNAS');
-    lines.push(...wrap(order.internalNote));
-  }
-
-  lines.push('----------------------------------------');
-  lines.push('YHORS - Documento de orden');
-
-  const pageHeight = 842;
-  const topY = 790;
-  const lineHeight = 17;
-  const bottomY = 48;
-  const linesPerPage = Math.floor((topY - bottomY) / lineHeight);
   const pages = [];
-  for (let i = 0; i < lines.length; i += linesPerPage) {
-    pages.push(lines.slice(i, i + linesPerPage));
+  let currentRows = [];
+  let estimated = 0;
+  const maxRowsHeight = 560;
+  for (const row of rows) {
+    const rowHeight = Math.max(28, row.descLines.length * 10 + 18);
+    if (currentRows.length && estimated + rowHeight > maxRowsHeight) {
+      pages.push(currentRows);
+      currentRows = [];
+      estimated = 0;
+    }
+    currentRows.push(row);
+    estimated += rowHeight;
   }
-  if (!pages.length) pages.push(['YHORS', 'ORDEN DE PEDIDO']);
+  if (currentRows.length || !pages.length) pages.push(currentRows);
 
-  const pageObjects = [];
-  const contentObjects = [];
-  const fontObjectNumber = 3 + pages.length * 2;
+  const drawText = (ops, text, x, y, size = 9, font = normalFont, align = 'left') => {
+    const value = pdfEscape(text);
+    const approxWidth = String(text ?? '').length * size * 0.52;
+    let tx = x;
+    if (align === 'right') tx = x - approxWidth;
+    if (align === 'center') tx = x - approxWidth / 2;
+    ops.push(`BT /F${font} ${size} Tf ${tx.toFixed(2)} ${y.toFixed(2)} Td (${value}) Tj ET`);
+  };
+  const line = (ops, x1, y1, x2, y2, width = 0.7) => ops.push(`${width} w ${x1} ${y1} m ${x2} ${y2} l S`);
+  const rect = (ops, x, y, w, h, width = 0.7) => ops.push(`${width} w ${x} ${y} ${w} ${h} re S`);
+  const fillRect = (ops, x, y, w, h, r = 0.96, g = 0.95, b = 0.92) => {
+    ops.push(`${r} ${g} ${b} rg ${x} ${y} ${w} ${h} re f 0 0 0 rg`);
+  };
+  const setFill = (ops, r, g, b) => ops.push(`${r} ${g} ${b} rg`);
+  const setStroke = (ops, r, g, b) => ops.push(`${r} ${g} ${b} RG`);
 
-  pages.forEach((pageLines, pageIndex) => {
-    const pageObjectNumber = 3 + pageIndex * 2;
-    const contentObjectNumber = pageObjectNumber + 1;
-    const content = [];
-    let y = topY;
-    pageLines.forEach(line => {
-      content.push(`BT /F1 9 Tf 40 ${y} Td (${pdfEscape(line)}) Tj ET`);
-      y -= lineHeight;
+  const contentStreams = [];
+  pages.forEach((pageRows, pageIndex) => {
+    const ops = [];
+    let y = H - margin;
+    setStroke(ops, 0.12, 0.12, 0.12);
+    setFill(ops, 0, 0, 0);
+
+    // Header: logo + document identity, inspired by a formal invoice layout.
+    if (logoJpeg) {
+      ops.push(`q ${imageWidth} 0 0 ${imageHeight} ${margin} ${y - imageHeight + 4} cm /Im1 Do Q`);
+    } else {
+      drawText(ops, 'YHORS', margin, y - 10, 24, boldFont);
+    }
+    drawText(ops, 'ORDEN DE PEDIDO', right, y - 8, 18, boldFont, 'right');
+    drawText(ops, `N. ORDEN  ${orderNo}`, right, y - 29, 9, boldFont, 'right');
+    drawText(ops, `FECHA  ${date}`, right, y - 44, 8, normalFont, 'right');
+    setFill(ops, 0.78, 0.60, 0.24);
+    ops.push(`0.78 0.60 0.24 rg ${right - 116} ${y - 68} 116 18 re f 0 0 0 rg`);
+    drawText(ops, safeStatus, right - 58, y - 62, 8, boldFont, 'center');
+    y -= 85;
+    line(ops, margin, y, right, y, 1.1);
+    y -= 14;
+
+    // Seller / dispatch block.
+    const sellerBoxH = 48;
+    fillRect(ops, margin, y - sellerBoxH, contentWidth, sellerBoxH, 0.985, 0.98, 0.96);
+    rect(ops, margin, y - sellerBoxH, contentWidth, sellerBoxH, 0.8);
+    drawText(ops, 'CONTROL DE DESPACHO', margin + 9, y - 14, 8, boldFont);
+    drawText(ops, `VENDEDOR: ${seller}`, margin + 9, y - 29, 8, normalFont);
+    drawText(ops, `ENTREGA: ${deliveryLabel}`, right - 9, y - 29, 8, normalFont, 'right');
+    drawText(ops, `ESTADO DE DESPACHO: ${status === 'Pendiente' ? 'PENDIENTE' : safeStatus}`, margin + 9, y - 42, 7, boldFont);
+    y -= sellerBoxH + 13;
+
+    // Customer block, split into two columns like a commercial invoice.
+    const customerBoxH = 90;
+    rect(ops, margin, y - customerBoxH, contentWidth, customerBoxH, 0.8);
+    const mid = margin + contentWidth * 0.55;
+    line(ops, mid, y, mid, y - customerBoxH, 0.6);
+    drawText(ops, 'DATOS DEL CLIENTE', margin + 9, y - 14, 9, boldFont);
+    drawText(ops, 'Nombre / Razon social:', margin + 9, y - 31, 7, normalFont);
+    drawText(ops, customer.name || '-', margin + 105, y - 31, 8, boldFont);
+    drawText(ops, 'Cedula / RUC:', margin + 9, y - 46, 7, normalFont);
+    drawText(ops, customer.cedula || '-', margin + 75, y - 46, 8, boldFont);
+    drawText(ops, 'Telefono:', margin + 9, y - 61, 7, normalFont);
+    drawText(ops, customer.phone || '-', margin + 55, y - 61, 8, normalFont);
+    drawText(ops, 'Correo:', margin + 9, y - 76, 7, normalFont);
+    drawText(ops, customer.email || '-', margin + 48, y - 76, 7, normalFont);
+
+    drawText(ops, 'Ciudad:', mid + 9, y - 31, 7, normalFont);
+    drawText(ops, customer.city || '-', mid + 50, y - 31, 8, boldFont);
+    drawText(ops, 'Direccion:', mid + 9, y - 46, 7, normalFont);
+    const addressLines = wrap(customer.address || 'Retiro en oficina', 33);
+    addressLines.slice(0, 2).forEach((t, i) => drawText(ops, t, mid + 58, y - 46 - i * 10, 7, normalFont));
+    drawText(ops, 'Referencia:', mid + 9, y - 71, 7, normalFont);
+    drawText(ops, deliveryLabel, mid + 58, y - 71, 7, normalFont);
+    y -= customerBoxH + 14;
+
+    // Products table.
+    drawText(ops, 'DETALLE DE LA ORDEN', margin, y, 9, boldFont);
+    y -= 10;
+    const headerH = 22;
+    fillRect(ops, margin, y - headerH, contentWidth, headerH, 0.94, 0.93, 0.89);
+    rect(ops, margin, y - headerH, contentWidth, headerH, 0.75);
+    const cols = [margin, margin + 62, margin + 92, margin + 335, margin + 405, right];
+    ['CODIGO', 'CANT', 'DESCRIPCION', 'P. UNIT.', 'TOTAL'].forEach((label, i) => {
+      const x = i === 0 ? cols[0] + 5 : i === 1 ? cols[1] + 15 : i === 2 ? cols[2] + 5 : i === 3 ? cols[3] + 31 : cols[4] + 42;
+      drawText(ops, label, x, y - 14, i === 1 ? 6.2 : 7, boldFont, i >= 3 ? 'center' : 'left');
     });
-    // Page indicator is deliberately simple so it also works with the base font.
-    content.push(`BT /F1 7 Tf 500 25 Td (Pagina ${pageIndex + 1} de ${pages.length}) Tj ET`);
-    const stream = content.join('\n');
-    contentObjects.push({ number: contentObjectNumber, stream });
-    pageObjects.push({
-      number: pageObjectNumber,
-      contentObjectNumber,
-      object: `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 ${fontObjectNumber} 0 R >> >> /Contents ${contentObjectNumber} 0 R >>`
-    });
+    cols.slice(1, -1).forEach(x => line(ops, x, y, x, y - headerH, 0.5));
+    y -= headerH;
+
+    for (const row of pageRows) {
+      const rowH = Math.max(28, row.descLines.length * 10 + 18);
+      const top = y;
+      line(ops, margin, y - rowH, right, y - rowH, 0.5);
+      cols.slice(1, -1).forEach(x => line(ops, x, y, x, y - rowH, 0.5));
+      drawText(ops, row.sku, margin + 5, top - 14, 6.5, normalFont);
+      drawText(ops, String(row.qty), cols[1] + 15, top - 14, 7.5, boldFont, 'center');
+      row.descLines.forEach((text, i) => drawText(ops, text, cols[2] + 5, top - 12 - i * 10, 7.5, i === 0 ? boldFont : normalFont));
+      drawText(ops, moneyPdf(row.price), cols[4] - 35, top - 14, 7.5, normalFont, 'right');
+      drawText(ops, moneyPdf(row.lineTotal), right - 7, top - 14, 7.5, boldFont, 'right');
+      y -= rowH;
+    }
+
+    // Totals and observations on each page. Totals are only on the final page.
+    if (pageIndex === pages.length - 1) {
+      y -= 12;
+      const totalsW = 190;
+      const totalsX = right - totalsW;
+      drawText(ops, 'RESUMEN', totalsX, y, 8, boldFont);
+      y -= 7;
+      rect(ops, totalsX, y - 73, totalsW, 73, 0.8);
+      drawText(ops, 'SUBTOTAL', totalsX + 9, y - 16, 8, normalFont);
+      drawText(ops, moneyPdf(subtotal), right - 9, y - 16, 8, normalFont, 'right');
+      drawText(ops, 'ENVIO', totalsX + 9, y - 31, 8, normalFont);
+      drawText(ops, moneyPdf(shipping), right - 9, y - 31, 8, normalFont, 'right');
+      line(ops, totalsX + 8, y - 39, right - 8, y - 39, 0.5);
+      drawText(ops, 'TOTAL', totalsX + 9, y - 57, 10, boldFont);
+      drawText(ops, moneyPdf(total), right - 9, y - 57, 11, boldFont, 'right');
+      y -= 87;
+
+      const noteText = customerNotes || internalNote;
+      if (noteText) {
+        drawText(ops, 'OBSERVACIONES', margin, y, 8, boldFont);
+        y -= 7;
+        const noteLines = wrap(noteText, 88).slice(0, 5);
+        const noteH = Math.max(32, noteLines.length * 10 + 12);
+        rect(ops, margin, y - noteH, contentWidth, noteH, 0.65);
+        noteLines.forEach((t, i) => drawText(ops, t, margin + 8, y - 14 - i * 10, 7.5, normalFont));
+        y -= noteH + 13;
+      }
+
+      // Signature / dispatch confirmation area.
+      const sigY = Math.max(60, y - 45);
+      line(ops, margin, sigY, margin + 175, sigY, 0.6);
+      line(ops, right - 175, sigY, right, sigY, 0.6);
+      drawText(ops, 'Responsable de despacho', margin + 87, sigY - 13, 7, normalFont, 'center');
+      drawText(ops, 'Recepcion / conformidad', right - 87, sigY - 13, 7, normalFont, 'center');
+      drawText(ops, `Documento interno YHORS - ${orderNo}`, margin, 28, 6.5, normalFont);
+      drawText(ops, `Pagina ${pageIndex + 1} de ${pages.length}`, right, 28, 6.5, normalFont, 'right');
+    } else {
+      drawText(ops, `Continua en la pagina ${pageIndex + 2}`, right, 28, 6.5, normalFont, 'right');
+    }
+
+    contentStreams.push(ops.join('\n'));
   });
 
+  // PDF objects. Pages/contents are created first; image and fonts are shared.
+  const pageCount = contentStreams.length;
+  const imageObjectNumber = 3 + pageCount * 2;
+  const normalFontObjectNumber = imageObjectNumber + 1;
+  const boldFontObjectNumber = imageObjectNumber + 2;
   const objects = [
     '<< /Type /Catalog /Pages 2 0 R >>',
-    `<< /Type /Pages /Kids [${pageObjects.map(page => `${page.number} 0 R`).join(' ')}] /Count ${pageObjects.length} >>`
+    `<< /Type /Pages /Kids [${Array.from({ length: pageCount }, (_, i) => `${3 + i * 2} 0 R`).join(' ')}] /Count ${pageCount} >>`
   ];
-  pageObjects.forEach(page => objects.push(page.object));
-  contentObjects.forEach(content => {
-    objects.push(`<< /Length ${Buffer.byteLength(content.stream, 'latin1')} >>\nstream\n${content.stream}\nendstream`);
+  const pageObjects = [];
+  contentStreams.forEach((stream, i) => {
+    const pageNumber = 3 + i * 2;
+    const contentNumber = pageNumber + 1;
+    pageObjects.push({ pageNumber, contentNumber, stream });
+    objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] /Resources << /ProcSet [/PDF /Text /ImageC] /Font << /F1 ${normalFontObjectNumber} 0 R /F2 ${boldFontObjectNumber} 0 R >> /XObject << /Im1 ${imageObjectNumber} 0 R >> >> /Contents ${contentNumber} 0 R >>`);
+    objects.push(`<< /Length ${Buffer.byteLength(stream, 'latin1')} >>\nstream\n${stream}\nendstream`);
   });
+  if (logoJpeg) {
+    objects.push(`<< /Type /XObject /Subtype /Image /Width 839 /Height 184 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${logoJpeg.length} >>\nstream\n${logoJpeg.toString('latin1')}\nendstream`);
+  } else {
+    objects.push('<< /Type /XObject /Subtype /Image /Width 1 /Height 1 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Length 3 >>\nstream\n\xff\xff\xff\nendstream');
+  }
   objects.push('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>');
+  objects.push('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>');
 
   let pdf = '%PDF-1.4\n';
   const offsets = [0];
@@ -881,12 +1001,9 @@ function buildOrderPdf(order) {
     offsets.push(Buffer.byteLength(pdf, 'latin1'));
     pdf += `${index + 1} 0 obj\n${object}\nendobj\n`;
   });
-
   const xref = Buffer.byteLength(pdf, 'latin1');
   pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
-  for (let i = 1; i < offsets.length; i++) {
-    pdf += `${String(offsets[i]).padStart(10, '0')} 00000 n \n`;
-  }
+  for (let i = 1; i < offsets.length; i++) pdf += `${String(offsets[i]).padStart(10, '0')} 00000 n \n`;
   pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
   return Buffer.from(pdf, 'latin1');
 }
