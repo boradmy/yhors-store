@@ -1776,3 +1776,85 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}.brand{letter-sp
 .order-pdf-button {
   white-space: nowrap;
 }
+
+
+/* YHORS · refinamiento estético final: controles centrados y transición suave entre universos */
+.search-form button{
+  display:grid;
+  place-items:center;
+  align-content:center;
+  padding:0;
+  line-height:0;
+}
+.search-icon{
+  width:20px;
+  height:20px;
+  display:block;
+  fill:none;
+  stroke:currentColor;
+  stroke-width:2.35;
+  stroke-linecap:round;
+  stroke-linejoin:round;
+}
+.hero-arrow{
+  display:grid;
+  place-items:center;
+  align-content:center;
+  padding:0;
+  line-height:0;
+}
+.hero-arrow svg{
+  width:20px;
+  height:20px;
+  display:block;
+  fill:none;
+  stroke:currentColor;
+  stroke-width:2.25;
+  stroke-linecap:round;
+  stroke-linejoin:round;
+}
+.hero-arrow.hero-prev{left:22px}
+.hero-arrow.hero-next{right:22px}
+
+/* La disponibilidad queda pegada al SKU, como una segunda línea de información. */
+.detail-sku{margin-bottom:7px}
+.detail-availability{margin-top:0!important}
+
+/* Cambio de pestaña: el encabezado permanece estable y el catálogo entra suavemente. */
+#app > main.page-content-enter{
+  animation:yhorsPageEnter .42s cubic-bezier(.22,.61,.36,1) both;
+  transform-origin:top center;
+}
+#app > main.products-refreshing{
+  opacity:.48;
+  filter:saturate(.88);
+  transition:opacity .16s ease,filter .16s ease;
+}
+#app > main.page-content-enter .products .product{
+  animation:yhorsProductEnter .34s ease both;
+}
+#app > main.page-content-enter .products .product:nth-child(2){animation-delay:.025s}
+#app > main.page-content-enter .products .product:nth-child(3){animation-delay:.05s}
+#app > main.page-content-enter .products .product:nth-child(4){animation-delay:.075s}
+#app > main.page-content-enter .products .product:nth-child(5){animation-delay:.10s}
+#app > main.page-content-enter .products .product:nth-child(6){animation-delay:.125s}
+#app > main.page-content-enter .products .product:nth-child(7){animation-delay:.15s}
+#app > main.page-content-enter .products .product:nth-child(8){animation-delay:.175s}
+@keyframes yhorsPageEnter{
+  from{opacity:0;transform:translateY(12px)}
+  to{opacity:1;transform:translateY(0)}
+}
+@keyframes yhorsProductEnter{
+  from{opacity:0;transform:translateY(10px)}
+  to{opacity:1;transform:translateY(0)}
+}
+@media(prefers-reduced-motion:reduce){
+  #app > main.page-content-enter,
+  #app > main.page-content-enter .products .product{animation:none!important}
+}
+@media(max-width:760px){
+  .search-form button{display:grid;place-items:center}
+  .search-icon{width:18px;height:18px}
+  .hero-arrow svg{width:17px;height:17px}
+  .hero-arrow{display:grid;place-items:center}
+}
