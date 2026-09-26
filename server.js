@@ -735,7 +735,10 @@ function buildOrderPdf(order) {
   const customer = order?.customer || {};
   const items = Array.isArray(order?.items) ? order.items : [];
   const orderNo = order?.orderNumber || order?.id || '';
-  const seller = order?.assignedSellerName || order?.assignedSeller?.name || 'Sin asignar';
+  const assignedSeller = order?.assignedSellerId
+    ? readUsers().find(user => user.id === order.assignedSellerId)
+    : null;
+  const seller = assignedSeller?.name || order?.assignedSellerName || order?.assignedSeller?.name || 'Sin asignar';
   const created = order?.createdAt ? new Date(order.createdAt) : null;
   const date = created && !Number.isNaN(created.getTime()) ? created.toLocaleString('es-EC', { timeZone: 'America/Guayaquil' }) : '';
   const subtotal = Number(order?.subtotal ?? order?.total ?? 0);
@@ -1419,6 +1422,9 @@ function writeProducts(products) {
 // V14.23 — stock sincronizado por estado.
 // Estados que reservan/descuentan stock: Pendiente, Confirmado, Preparado, Enviado, Entregado.
 // Cancelado devuelve exactamente las unidades que el pedido tenía reservadas.
+// Todo pedido que no esté Cancelado mantiene su reserva de inventario.
+// "Preparado" se comporta igual que "Pendiente": las unidades siguen reservadas
+// y no se devuelven al inventario hasta que el pedido pase a Cancelado.
 const STOCK_ACTIVE_ORDER_STATUSES = new Set([
   'pendiente', 'confirmado', 'preparado', 'enviado', 'entregado'
 ]);
@@ -2333,7 +2339,11 @@ app.get('/api/admin/orders/:id/pdf', requireOrdersAccess, (req, res) => {
     return res.status(403).json({ error: 'Este pedido no está asignado a tu usuario.' });
   }
 
-  const pdf = buildOrderPdf(order);
+  // Resolver el vendedor justo antes de generar el PDF para que siempre use
+  // la asignación/nombre actual guardados en YHORS, incluso si otro administrador
+  // cambió el vendedor o actualizó su nombre.
+  const pdfOrder = decorateOrderAssignment(order);
+  const pdf = buildOrderPdf(pdfOrder);
   const safeName = String(order.orderNumber || order.id || 'orden').replace(/[^a-zA-Z0-9_-]/g, '_');
   // El PDF se genera en cada solicitud con los datos actuales del pedido.
   // Evitamos que el navegador reutilice una versión anterior después de guardar cambios.
