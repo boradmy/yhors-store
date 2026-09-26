@@ -2109,7 +2109,7 @@ document.addEventListener('click', (event) => {
   button.disabled = true;
   button.textContent = 'GENERANDO…';
 
-  const pdfUrl = `/api/admin/orders/${encodeURIComponent(id)}/pdf`;
+  const pdfUrl = `/api/admin/orders/${encodeURIComponent(id)}/pdf?v=${Date.now()}`;
   const pdfLink = document.createElement('a');
   pdfLink.href = pdfUrl;
   pdfLink.target = '_blank';

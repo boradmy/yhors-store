@@ -2330,9 +2330,14 @@ app.get('/api/admin/orders/:id/pdf', requireOrdersAccess, (req, res) => {
 
   const pdf = buildOrderPdf(order);
   const safeName = String(order.orderNumber || order.id || 'orden').replace(/[^a-zA-Z0-9_-]/g, '_');
+  // El PDF se genera en cada solicitud con los datos actuales del pedido.
+  // Evitamos que el navegador reutilice una versión anterior después de guardar cambios.
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `inline; filename="YHORS-${safeName}.pdf"`);
   res.setHeader('Content-Length', pdf.length);
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
   res.end(pdf);
 });
 
