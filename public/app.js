@@ -526,6 +526,29 @@ function wireCart(products, storefront) {
 
 
 let __yhorsNavigationPromise = null;
+async function renderAdminAfterLogin(session) {
+  const role = String(session?.role || '').toLowerCase();
+  const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  const isAdminRoute = current === ADMIN_PATH || current === `${ADMIN_PATH}/`
+    || current.startsWith(`${ADMIN_PATH}/`);
+  const limitedRole = role === 'vendedor' || role === 'store_manager' || role === 'orders';
+
+  // El login puede ocurrir dentro de cualquier ruta administrativa. Antes se
+  // renderizaba una vista distinta sin actualizar la URL, dejando por ejemplo
+  // /generar-orden en la barra mientras visualmente se mostraban PEDIDOS.
+  // Desde aquí la URL y la vista siempre se resuelven juntas.
+  let target = current;
+  if (!isAdminRoute) target = limitedRole ? `${ADMIN_PATH}/pedidos` : ADMIN_PATH;
+
+  if (limitedRole) {
+    const allowed = [`${ADMIN_PATH}/pedidos`, `${ADMIN_PATH}/generar-orden`];
+    if (!allowed.includes(target.replace(/\/$/, ''))) target = `${ADMIN_PATH}/pedidos`;
+  }
+
+  history.replaceState({}, '', target);
+  await renderCurrentRoute();
+}
+
 async function navigateToRoute(href, { replace = false } = {}) {
   // Nunca dejamos una navegación anterior bloqueando indefinidamente las
   // siguientes. Esto era especialmente visible justo después del login.
@@ -2201,7 +2224,7 @@ async function loginWithPasskey() {
   const assertion = await nativeStartAuthentication(options);
   await request('/api/passkey/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(assertion) });
   const session = await request('/api/admin/session');
-  if (isSellerRole(session.role) || session.role === 'store_manager') renderAdminOrders(); else renderAdmin();
+  await renderAdminAfterLogin(session);
 }
 
 async function renderMyAccount() {
@@ -2289,7 +2312,7 @@ function renderLogin(twoFactorMode = false) {
       const result = await request('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.fromEntries(new FormData(e.currentTarget))) });
       if (result.requiresTwoFactor) return renderLogin(true);
       const session = await request('/api/admin/session');
-      (isSellerRole(session.role) || session.role === 'store_manager') ? renderAdminOrders() : renderAdmin();
+      await renderAdminAfterLogin(session);
     } catch (error) {
       message.className = 'message error';
       if (error.data?.permanentLock) { setLockedUI(0, true); message.textContent = error.message; return; }
