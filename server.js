@@ -2389,9 +2389,10 @@ app.get('/api/admin/orders/:id/pdf', requireOrdersAccess, (req, res) => {
 app.get('/api/admin/orders', requireOrdersAccess, (req, res) => {
   const session = getSession(req);
   let orders = readOrders();
-  // Los vendedores solo reciben sus pedidos asignados. No pueden consultar pedidos de otros vendedores.
+  // Los vendedores ven sus pedidos asignados y también los pedidos que aún no tienen vendedor,
+  // para que puedan detectar y atender compras realizadas por la web que quedaron sin asignar.
   if (isSellerRole(session.role)) {
-    orders = orders.filter(order => order.assignedSellerId === session.accountId);
+    orders = orders.filter(order => !order.assignedSellerId || order.assignedSellerId === session.accountId);
   }
   return res.json(orders.map(decorateOrderAssignment));
 });

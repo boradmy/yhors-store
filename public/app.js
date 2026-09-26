@@ -1045,9 +1045,16 @@ function ordersListMarkup(orders = [], options = {}) {
 
 function generateOrderNav(session) {
   const role = String(session.role || '').toLowerCase();
+  const restricted = role === 'vendedor' || role === 'orders' || role === 'store_manager';
+  if (restricted) {
+    return `<nav class="admin-section-nav" aria-label="Secciones de administración">
+      <a href="${ADMIN_PATH}/pedidos" class="admin-section-link" data-smooth-route>PEDIDOS</a>
+      <a href="${ADMIN_PATH}/generar-orden" class="admin-section-link active" data-smooth-route>GENERAR ORDEN</a>
+    </nav>`;
+  }
   return `<nav class="admin-section-nav" aria-label="Secciones de administración">
     <a href="${ADMIN_PATH}" class="admin-section-link" data-smooth-route>PÁGINA WEB</a>
-    ${role === 'admin' ? `<a href="${ADMIN_PATH}/usuarios" class="admin-section-link" data-smooth-route>USUARIOS</a>` : ''}
+    <a href="${ADMIN_PATH}/usuarios" class="admin-section-link" data-smooth-route>USUARIOS</a>
     <a href="${ADMIN_PATH}/inventario" class="admin-section-link" data-smooth-route>INVENTARIO</a>
     <a href="${ADMIN_PATH}/pedidos" class="admin-section-link" data-smooth-route>PEDIDOS</a>
     <a href="${ADMIN_PATH}/generar-orden" class="admin-section-link active" data-smooth-route>GENERAR ORDEN</a>
