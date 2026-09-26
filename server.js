@@ -1245,6 +1245,7 @@ function writeProducts(products) {
   fs.renameSync(temporaryFile, DATA_FILE);
 }
 
+// V14.22 stock sync: state transitions are idempotent.
 function restoreOrderPurchaseStock(order) {
   const items = Array.isArray(order?.items) ? order.items : [];
   const restoreByProduct = new Map();
@@ -2190,24 +2191,40 @@ app.put('/api/admin/orders/:id', requireOrdersAccess, (req, res) => {
       assignedSellerId = null;
     }
   }
+  const previousStatus = String(currentOrder.status || 'Pendiente');
+  const nextStatus = normalizedStatus;
+  const previousCancelled = previousStatus.toLocaleLowerCase('es-EC') === 'cancelado';
+  const nextCancelled = nextStatus.toLocaleLowerCase('es-EC') === 'cancelado';
+  const stockReserved = Boolean(currentOrder.stockReservedAt);
+  const stockRestored = Boolean(currentOrder.stockRestoredAt);
 
-  const wasCancelled = String(currentOrder.status || '').toLowerCase() === 'cancelado';
-  const willBeCancelled = normalizedStatus === 'Cancelado';
-  const stockWasRestored = Boolean(currentOrder.stockRestoredAt);
+  // Stock lifecycle:
+  // - Confirmed/active order => reserve/deduct stock once.
+  // - Cancelled order => restore stock once.
+  // - Switching Cancelled -> Confirmed/active => deduct again.
+  // This is idempotent so repeated saves never double-add or double-subtract.
   try {
-    if (!wasCancelled && willBeCancelled && !stockWasRestored) {
+    if (nextCancelled && !previousCancelled && !stockRestored) {
       restoreOrderPurchaseStock(currentOrder);
-    } else if (wasCancelled && !willBeCancelled && stockWasRestored) {
+    } else if (!nextCancelled && previousCancelled && !stockReserved) {
+      removeOrderPurchaseStock(currentOrder);
+    } else if (!nextCancelled && !stockReserved && !stockRestored) {
       removeOrderPurchaseStock(currentOrder);
     }
   } catch (error) {
-    return res.status(400).json({ error: error.message || 'No se pudo actualizar el inventario del pedido.' });
+    return res.status(400).json({ error: error.message || 'No se pudo sincronizar el inventario con el pedido.' });
   }
-
   const updated = { ...currentOrder, assignedSellerId, updatedAt: new Date().toISOString() };
   if (hasStatus) updated.status = normalizedStatus;
-  if (willBeCancelled && !wasCancelled) updated.stockRestoredAt = new Date().toISOString();
-  if (!willBeCancelled && wasCancelled) delete updated.stockRestoredAt;
+
+  if (nextCancelled) {
+    updated.stockRestoredAt = currentOrder.stockRestoredAt || new Date().toISOString();
+    delete updated.stockReservedAt;
+  } else {
+    updated.stockReservedAt = currentOrder.stockReservedAt || new Date().toISOString();
+    delete updated.stockRestoredAt;
+  }
+
   if (hasInternalNote) updated.internalNote = cleanText(body.internalNote, 5000);
   orders[index] = updated;
   writeOrders(orders);
@@ -2222,7 +2239,7 @@ app.delete('/api/admin/orders/:id', requireStoreManagerOrAdmin, (req, res) => {
 
   try {
     // Si ya fue cancelado, el stock ya volvió al inventario y no se duplica.
-    if (!order.stockRestoredAt && String(order.status || '').toLowerCase() !== 'cancelado') {
+    if (order.stockReservedAt && !order.stockRestoredAt) {
       restoreOrderPurchaseStock(order);
     }
   } catch (error) {
