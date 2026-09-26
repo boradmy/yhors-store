@@ -2185,6 +2185,36 @@ app.post('/api/orders', async (req, res) => {
   return res.status(201).json({ orderNumber: order.orderNumber, status: order.status, total: order.total });
 });
 
+app.post('/api/admin/generar-orden', requireOrdersAccess, async (req, res) => {
+  const session = getSession(req);
+  const result = validateOrder(req.body || {});
+  if (result.error) return res.status(400).json(result);
+
+  const requestedSellerId = req.body?.assignedSellerId === null || req.body?.assignedSellerId === '' || req.body?.assignedSellerId === undefined ? null : String(req.body.assignedSellerId);
+  let assignedSellerId = null;
+  if (isSellerRole(session.role)) assignedSellerId = session.accountId || null;
+  else if (requestedSellerId) {
+    const seller = readUsers().find(user => user.id === requestedSellerId && user.active !== false && isSellerRole(user.role));
+    if (!seller) return res.status(400).json({ error: 'El vendedor seleccionado no es válido o no está activo.' });
+    assignedSellerId = seller.id;
+  }
+
+  const orders = readOrders();
+  const order = { id: crypto.randomUUID(), orderNumber: nextOrderNumber(orders), status: 'Pendiente', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), assignedSellerId, source: 'admin_generated', ...result.order };
+  const previousProducts = result.stockProducts.map(product => ({ ...product }));
+  try {
+    const updatedProducts = applyPurchaseStock(previousProducts, result.purchaseDemand);
+    writeProducts(updatedProducts);
+    orders.unshift(order);
+    try { writeOrders(orders); } catch (orderError) { try { writeProducts(previousProducts); } catch (rollbackError) { console.error('[YHORS] Falló el rollback del inventario:', rollbackError.message); } throw orderError; }
+  } catch (error) {
+    console.error('[YHORS] No se pudo generar la orden desde administración:', error.message);
+    return res.status(500).json({ error: 'No se pudo generar la orden. No se realizó el descuento de inventario.' });
+  }
+  try { await sendOrderConfirmationEmail(order); } catch (emailError) { console.error('[YHORS] No se pudo enviar la confirmación por correo:', emailError.message); }
+  return res.status(201).json({ orderId: order.id, orderNumber: order.orderNumber, status: order.status, total: order.total, assignedSellerId });
+});
+
 app.get('/api/admin/session', (req, res) => { const session = getSession(req); return res.json({ authenticated: Boolean(session), username: session?.user || null, role: session?.role || null }); });
 app.get('/api/admin/security', requireAdmin, (_, res) => res.json({
   dataEncryption: 'AES-256-GCM',
