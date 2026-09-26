@@ -1768,3 +1768,6 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}.brand{letter-sp
 }
 
 /* V14.23 — no visual change to the inventory cards; stock remains synchronized by server. */
+
+/* V14.24 — acceso rápido PDF */
+[data-order-pdf]{white-space:nowrap}

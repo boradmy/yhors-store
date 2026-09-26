@@ -2060,3 +2060,12 @@ document.addEventListener('orders:stock-synced', async () => {
     if (typeof drawInventory === 'function') drawInventory();
   } catch (_) {}
 });
+
+/* V14.24 — acceso rápido PDF de orden */
+document.addEventListener('click', (event) => {
+  const button = event.target.closest('[data-order-pdf]');
+  if (!button) return;
+  const id = button.getAttribute('data-order-pdf');
+  if (!id) return;
+  window.open(`/api/admin/orders/${encodeURIComponent(id)}/pdf`, '_blank', 'noopener');
+});

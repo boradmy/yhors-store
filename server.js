@@ -719,6 +719,82 @@ function corpSeoBody() {
 }
 
 // SEO public files are served explicitly so crawler access is independent of the static/admin middleware.
+// V14.24 PDF orden
+
+// V14.24 PDF orden — generador PDF ligero, sin dependencia externa.
+function pdfEscape(value) {
+  return String(value ?? '')
+    .replace(/\\/g, '\\\\')
+    .replace(/\(/g, '\\(')
+    .replace(/\)/g, '\\)')
+    .replace(/[^\x20-\x7E]/g, '?');
+}
+
+function buildOrderPdf(order) {
+  const lines = [];
+  const seller = order?.assignedSellerName || order?.assignedSeller?.name || 'Sin asignar';
+  const customer = order?.customer || {};
+  const items = Array.isArray(order?.items) ? order.items : [];
+
+  lines.push('YHORS');
+  lines.push('ORDEN DE PEDIDO');
+  lines.push(`Pedido: ${order?.orderNumber || order?.id || ''}`);
+  lines.push(`Fecha: ${order?.createdAt ? new Date(order.createdAt).toLocaleString('es-EC') : ''}`);
+  lines.push(`Estado: ${order?.status || 'Pendiente'}`);
+  lines.push(`Vendedor: ${seller}`);
+  lines.push(`Cliente: ${customer.name || ''}`);
+  if (customer.cedula) lines.push(`Cedula: ${customer.cedula}`);
+  if (customer.phone) lines.push(`Telefono: ${customer.phone}`);
+  if (customer.email) lines.push(`Correo: ${customer.email}`);
+  lines.push('----------------------------------------');
+  lines.push('PRODUCTOS');
+
+  for (const item of items) {
+    const qty = Number(item.quantity || 0);
+    const name = String(item.name || item.sku || 'Producto');
+    const price = Number(item.unitPrice ?? item.price ?? 0);
+    const total = Number(item.lineTotal ?? price * qty);
+    lines.push(`${qty} x ${name}`);
+    lines.push(`   $${price.toFixed(2)}    Total: $${total.toFixed(2)}`);
+  }
+
+  lines.push('----------------------------------------');
+  lines.push(`TOTAL: $${Number(order?.total || 0).toFixed(2)}`);
+  if (order?.internalNote) {
+    lines.push('NOTAS INTERNAS');
+    lines.push(String(order.internalNote));
+  }
+  lines.push('Documento generado desde YHORS');
+
+  // Simple one-page PDF, text only, suitable for quick access/printing.
+  const content=[];
+  let y=780;
+  for (const line of lines.slice(0, 42)) {
+    content.push(`BT /F1 10 Tf 40 ${y} Td (${pdfEscape(line)}) Tj ET`);
+    y-=17;
+  }
+  const stream=content.join('\\n');
+  const objects=[
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>',
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+    `<< /Length ${Buffer.byteLength(stream,'latin1')} >>\\nstream\\n${stream}\\nendstream`
+  ];
+  let pdf='%PDF-1.4\\n';
+  const offsets=[0];
+  objects.forEach((obj,i)=>{
+    offsets.push(Buffer.byteLength(pdf,'latin1'));
+    pdf+=`${i+1} 0 obj\\n${obj}\\nendobj\\n`;
+  });
+  const xref=Buffer.byteLength(pdf,'latin1');
+  pdf+=`xref\\n0 ${objects.length+1}\\n0000000000 65535 f \\n`;
+  for(let i=1;i<offsets.length;i++) pdf+=`${String(offsets[i]).padStart(10,'0')} 00000 n \\n`;
+  pdf+=`trailer\\n<< /Size ${objects.length+1} /Root 1 0 R >>\\nstartxref\\n${xref}\\n%%EOF`;
+  return Buffer.from(pdf,'latin1');
+}
+
+
 app.get('/robots.txt', (_, res) => {
   res.status(200)
     .set('Content-Type', 'text/plain; charset=utf-8')
@@ -2146,6 +2222,24 @@ app.get('/api/admin/order-sellers', requireStoreManagerOrAdmin, (_, res) => {
     .filter(user => user.active !== false && isSellerRole(user.role))
     .map(user => ({ id: user.id, name: user.name, username: user.username, role: 'vendedor' }));
   return res.json(sellers);
+});
+
+
+app.get('/api/admin/orders/:id/pdf', requireOrdersAccess, (req, res) => {
+  const order = readOrders().find(item => item.id === req.params.id);
+  if (!order) return res.status(404).json({ error: 'Pedido no encontrado.' });
+
+  const session = getSession(req);
+  if (isSellerRole(session.role) && order.assignedSellerId !== session.accountId) {
+    return res.status(403).json({ error: 'Este pedido no está asignado a tu usuario.' });
+  }
+
+  const pdf = buildOrderPdf(order);
+  const safeName = String(order.orderNumber || order.id || 'orden').replace(/[^a-zA-Z0-9_-]/g, '_');
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `inline; filename="YHORS-${safeName}.pdf"`);
+  res.setHeader('Content-Length', pdf.length);
+  res.end(pdf);
 });
 
 app.get('/api/admin/orders', requireOrdersAccess, (req, res) => {
