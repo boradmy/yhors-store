@@ -826,8 +826,8 @@ function ordersPanel(orders = [], canDelete = true) {
     <div class="section-heading"><div><span class="eyebrow">Ventas</span><h2>Pedidos recibidos <small class="orders-count">${orders.length}</small></h2></div><p>Administra pedidos sin mezclarlos con el catálogo.</p></div>
     <div class="orders-toolbar">
       <div class="orders-date-range">
-        <label class="order-date-filter"><span>Fecha 1</span><input id="ordersDateFrom" type="date" aria-label="Fecha inicial"></label>
-        <label class="order-date-filter"><span>Fecha 2</span><input id="ordersDateTo" type="date" aria-label="Fecha final"></label>
+        <label class="order-date-filter"><input id="ordersDateFrom" type="date" aria-label="Fecha inicial"></label>
+        <label class="order-date-filter"><input id="ordersDateTo" type="date" aria-label="Fecha final"></label>
         <button id="clearOrdersDate" type="button" class="button secondary small">Limpiar rango</button>
       </div>
       <select id="ordersStatusFilter"><option value="">Todos los estados</option>${statuses.map(s => `<option value="${escapeHTML(s)}">${escapeHTML(s)}</option>`).join('')}</select>

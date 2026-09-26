@@ -1726,3 +1726,43 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}.brand{letter-sp
 .orders-date-range{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap}
 .orders-date-range .order-date-filter{display:flex;flex-direction:column;gap:4px}
 .orders-date-range input[type="date"]{min-height:36px;padding:6px 9px;border:1px solid #d8d1c6;border-radius:7px;background:#fff}
+
+/* V14.21 — Pedidos */
+.orders-date-range,
+.orders-toolbar,
+.orders-filters,
+.orders-actions {
+  align-items: flex-end;
+}
+.orders-date-range button,
+.orders-toolbar button,
+.orders-filters button,
+.orders-actions button,
+.order-card button {
+  min-height: 38px;
+  height: 38px;
+  box-sizing: border-box;
+}
+.orders-date-range button,
+.orders-toolbar button,
+.orders-filters button {
+  min-width: 120px;
+}
+.orders-date-range .order-date-filter {
+  display:flex;
+  align-items:stretch;
+}
+.orders-date-range .order-date-filter input[type="date"] {
+  width:150px;
+  min-height:38px;
+  height:38px;
+  box-sizing:border-box;
+}
+.orders-date-range #clearOrdersDate {
+  background:#eee8df;
+  border-color:#d5cbbf;
+  color:#4f4a43;
+}
+.orders-date-range #clearOrdersDate:hover {
+  background:#e2d8cc;
+}

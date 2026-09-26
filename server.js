@@ -2164,10 +2164,10 @@ app.put('/api/admin/orders/:id', requireOrdersAccess, (req, res) => {
   const index = orders.findIndex(order => order.id === req.params.id);
   if (index < 0) return res.status(404).json({ error: 'Pedido no encontrado.' });
   const currentOrder = orders[index];
-
   if (isSellerRole(session.role) && currentOrder.assignedSellerId !== session.accountId) {
     return res.status(403).json({ error: 'Este pedido no está asignado a tu usuario.' });
   }
+
   if (hasAssignment && !isStoreManager(session.role) && !isAdmin(session.role)) {
     return res.status(403).json({ error: 'Solo el Jefe de tienda o un administrador puede asignar o cambiar el vendedor.' });
   }
