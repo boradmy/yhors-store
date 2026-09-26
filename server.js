@@ -2398,13 +2398,8 @@ app.get('/api/admin/orders/:id/pdf', requireOrdersAccess, (req, res) => {
 app.get('/api/admin/orders', requireOrdersAccess, (req, res) => {
   const session = getSession(req);
   let orders = readOrders();
-<<<<<<< HEAD
-  // Los vendedores reciben sus pedidos y también los pedidos de la WEB que todavía
-  // no tienen vendedor, para que cualquiera pueda hacerse cargo de ellos.
-=======
-  // Los vendedores ven sus pedidos asignados y también los pedidos que aún no tienen vendedor,
+// Los vendedores ven sus pedidos asignados y también los pedidos que aún no tienen vendedor,
   // para que puedan detectar y atender compras realizadas por la web que quedaron sin asignar.
->>>>>>> 4fa0c949968bfc510060068b21391de6dce0d244
   if (isSellerRole(session.role)) {
     orders = orders.filter(order => !order.assignedSellerId || order.assignedSellerId === session.accountId);
   }
