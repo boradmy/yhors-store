@@ -825,7 +825,11 @@ function ordersPanel(orders = [], canDelete = true) {
   return `<section class="admin-panel orders-panel" id="ordersPanel">
     <div class="section-heading"><div><span class="eyebrow">Ventas</span><h2>Pedidos recibidos <small class="orders-count">${orders.length}</small></h2></div><p>Administra pedidos sin mezclarlos con el catálogo.</p></div>
     <div class="orders-toolbar">
-      <label class="order-date-filter"><span>Fecha</span><input id="ordersDateFilter" type="date" aria-label="Filtrar pedidos por fecha"><button id="clearOrdersDate" type="button" title="Quitar fecha">×</button></label>
+      <div class="orders-date-range">
+        <label class="order-date-filter"><span>Fecha 1</span><input id="ordersDateFrom" type="date" aria-label="Fecha inicial"></label>
+        <label class="order-date-filter"><span>Fecha 2</span><input id="ordersDateTo" type="date" aria-label="Fecha final"></label>
+        <button id="clearOrdersDate" type="button" class="button secondary small">Limpiar rango</button>
+      </div>
       <select id="ordersStatusFilter"><option value="">Todos los estados</option>${statuses.map(s => `<option value="${escapeHTML(s)}">${escapeHTML(s)}</option>`).join('')}</select>
       <input id="ordersSearch" type="search" placeholder="Buscar por pedido, cliente, cédula/RUC, teléfono o SKU…" autocomplete="off">
     </div>
@@ -928,9 +932,14 @@ async function renderAdminOrders() {
     const list=document.querySelector('#adminOrdersList'); if(!list) return;
     const query=(document.querySelector('#ordersSearch')?.value||'').trim().toLowerCase();
     const status=document.querySelector('#ordersStatusFilter')?.value||'';
-    const dateFilter=(document.querySelector('#ordersDateFilter')?.value||'');
+    const dateFrom=(document.querySelector('#ordersDateFrom')?.value||'');
+    const dateTo=(document.querySelector('#ordersDateTo')?.value||'');
     const orderLocalDate = value => { const d=new Date(value); if(Number.isNaN(d.getTime())) return ''; return d.toLocaleDateString('en-CA',{timeZone:'America/Guayaquil'}); };
-    const filtered=orders.filter(order=>(!dateFilter||orderLocalDate(order.createdAt)===dateFilter)&&(!status||order.status===status)&&(!query||`${order.orderNumber} ${order.customer?.name||''} ${order.customer?.cedula||''} ${order.customer?.phone||''} ${order.customer?.email||''} ${(order.items||[]).map(i=>`${i.sku} ${i.name}`).join(' ')}`.toLowerCase().includes(query)));
+    const filtered=orders.filter(order=>{
+      const orderDate=orderLocalDate(order.createdAt);
+      const inRange=(!dateFrom||orderDate>=dateFrom)&&(!dateTo||orderDate<=dateTo);
+      return inRange&&(!status||order.status===status)&&(!query||`${order.orderNumber} ${order.customer?.name||''} ${order.customer?.cedula||''} ${order.customer?.phone||''} ${order.customer?.email||''} ${(order.items||[]).map(i=>`${i.sku} ${i.name}`).join(' ')}`.toLowerCase().includes(query));
+    });
     list.innerHTML=ordersListMarkup(filtered, { canDelete, canAssign, sellers, role: session.role });
 
     // Los campos del pedido permanecen bloqueados hasta pulsar "Editar pedido".
@@ -1060,8 +1069,21 @@ async function renderAdminOrders() {
   };
   document.querySelector('#ordersSearch')?.addEventListener('input',drawOrders);
   document.querySelector('#ordersStatusFilter')?.addEventListener('change',drawOrders);
-  document.querySelector('#ordersDateFilter')?.addEventListener('change',drawOrders);
-  document.querySelector('#clearOrdersDate')?.addEventListener('click',()=>{ const input=document.querySelector('#ordersDateFilter'); if(input){input.value='';drawOrders();} });
+  document.querySelector('#ordersDateFrom')?.addEventListener('change',drawOrders);
+  document.querySelector('#ordersDateTo')?.addEventListener('change',drawOrders);
+  document.querySelector('#clearOrdersDate')?.addEventListener('click',()=>{
+    const from=document.querySelector('#ordersDateFrom');
+    const to=document.querySelector('#ordersDateTo');
+    const today=new Date().toLocaleDateString('en-CA',{timeZone:'America/Guayaquil'});
+    if(from) from.value=today;
+    if(to) to.value=today;
+    drawOrders();
+  });
+  const today=new Date().toLocaleDateString('en-CA',{timeZone:'America/Guayaquil'});
+  const from=document.querySelector('#ordersDateFrom');
+  const to=document.querySelector('#ordersDateTo');
+  if(from) from.value=today;
+  if(to) to.value=today;
   wireAccountMenu();
   drawOrders();
 }
@@ -1482,6 +1504,7 @@ async function renderAdminInventory() {
   draw();
   document.querySelector('#inventoryPageSearch')?.addEventListener('input', draw);
   document.querySelector('#inventoryPageCategoryFilter')?.addEventListener('change', draw);
+  wireAccountMenu();
   document.querySelector('#clearInventoryPageSearch')?.addEventListener('click', () => { const input=document.querySelector('#inventoryPageSearch'); if(input){input.value='';input.focus();draw();} });
 }
 

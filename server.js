@@ -1245,6 +1245,70 @@ function writeProducts(products) {
   fs.renameSync(temporaryFile, DATA_FILE);
 }
 
+function restoreOrderPurchaseStock(order) {
+  const items = Array.isArray(order?.items) ? order.items : [];
+  const restoreByProduct = new Map();
+  for (const item of items) {
+    if (item?.purchaseMode !== 'purchase') continue;
+    const productId = String(item.productId || '');
+    const quantity = Number(item.quantity || 0);
+    if (!productId || !Number.isInteger(quantity) || quantity <= 0) continue;
+    restoreByProduct.set(productId, (restoreByProduct.get(productId) || 0) + quantity);
+  }
+  if (!restoreByProduct.size) return false;
+
+  const products = readProducts().map(normalizeProduct);
+  let changed = false;
+  const updated = products.map(product => {
+    const amount = Number(restoreByProduct.get(String(product.id)) || 0);
+    if (!amount) return product;
+    const current = Number(product.stock || 0);
+    changed = true;
+    return normalizeProduct({
+      ...product,
+      stock: (Number.isInteger(current) && current >= 0 ? current : 0) + amount,
+      updatedAt: new Date().toISOString()
+    });
+  });
+  if (changed) writeProducts(updated);
+  return changed;
+}
+
+function removeOrderPurchaseStock(order) {
+  const items = Array.isArray(order?.items) ? order.items : [];
+  const demand = new Map();
+  for (const item of items) {
+    if (item?.purchaseMode !== 'purchase') continue;
+    const productId = String(item.productId || '');
+    const quantity = Number(item.quantity || 0);
+    if (!productId || !Number.isInteger(quantity) || quantity <= 0) continue;
+    demand.set(productId, (demand.get(productId) || 0) + quantity);
+  }
+  if (!demand.size) return false;
+
+  const products = readProducts().map(normalizeProduct);
+  for (const [productId, quantity] of demand.entries()) {
+    const product = products.find(p => String(p.id) === productId);
+    if (!product) throw new Error(`El producto del pedido ya no existe: ${productId}`);
+    const current = Number(product.stock || 0);
+    if (!Number.isInteger(current) || current < quantity) {
+      throw new Error(`No hay suficiente stock para reactivar el pedido de “${product.name}”.`);
+    }
+  }
+
+  const updated = products.map(product => {
+    const amount = Number(demand.get(String(product.id)) || 0);
+    if (!amount) return product;
+    return normalizeProduct({
+      ...product,
+      stock: Number(product.stock || 0) - amount,
+      updatedAt: new Date().toISOString()
+    });
+  });
+  writeProducts(updated);
+  return true;
+}
+
 function readOrders() {
   const raw = fs.readFileSync(ORDERS_FILE, 'utf8');
   const parsed = JSON.parse(raw);
@@ -2101,16 +2165,14 @@ app.put('/api/admin/orders/:id', requireOrdersAccess, (req, res) => {
   if (index < 0) return res.status(404).json({ error: 'Pedido no encontrado.' });
   const currentOrder = orders[index];
 
-  // Un vendedor solo puede operar sobre pedidos que le fueron asignados.
   if (isSellerRole(session.role) && currentOrder.assignedSellerId !== session.accountId) {
     return res.status(403).json({ error: 'Este pedido no está asignado a tu usuario.' });
   }
-
   if (hasAssignment && !isStoreManager(session.role) && !isAdmin(session.role)) {
     return res.status(403).json({ error: 'Solo el Jefe de tienda o un administrador puede asignar o cambiar el vendedor.' });
   }
 
-  let normalizedStatus;
+  let normalizedStatus = currentOrder.status || 'Pendiente';
   if (hasStatus) {
     const status = cleanText(body.status, 30);
     normalizedStatus = allowed.find(item => item.toLocaleLowerCase('es-EC') === status.toLocaleLowerCase('es-EC'));
@@ -2129,18 +2191,44 @@ app.put('/api/admin/orders/:id', requireOrdersAccess, (req, res) => {
     }
   }
 
+  const wasCancelled = String(currentOrder.status || '').toLowerCase() === 'cancelado';
+  const willBeCancelled = normalizedStatus === 'Cancelado';
+  const stockWasRestored = Boolean(currentOrder.stockRestoredAt);
+  try {
+    if (!wasCancelled && willBeCancelled && !stockWasRestored) {
+      restoreOrderPurchaseStock(currentOrder);
+    } else if (wasCancelled && !willBeCancelled && stockWasRestored) {
+      removeOrderPurchaseStock(currentOrder);
+    }
+  } catch (error) {
+    return res.status(400).json({ error: error.message || 'No se pudo actualizar el inventario del pedido.' });
+  }
+
   const updated = { ...currentOrder, assignedSellerId, updatedAt: new Date().toISOString() };
   if (hasStatus) updated.status = normalizedStatus;
+  if (willBeCancelled && !wasCancelled) updated.stockRestoredAt = new Date().toISOString();
+  if (!willBeCancelled && wasCancelled) delete updated.stockRestoredAt;
   if (hasInternalNote) updated.internalNote = cleanText(body.internalNote, 5000);
   orders[index] = updated;
   writeOrders(orders);
   return res.json(decorateOrderAssignment(updated));
 });
 
+
 app.delete('/api/admin/orders/:id', requireStoreManagerOrAdmin, (req, res) => {
   const orders = readOrders();
   const order = orders.find(item => item.id === req.params.id);
   if (!order) return res.status(404).json({ error: 'Pedido no encontrado.' });
+
+  try {
+    // Si ya fue cancelado, el stock ya volvió al inventario y no se duplica.
+    if (!order.stockRestoredAt && String(order.status || '').toLowerCase() !== 'cancelado') {
+      restoreOrderPurchaseStock(order);
+    }
+  } catch (error) {
+    return res.status(400).json({ error: error.message || 'No se pudo devolver el stock al inventario.' });
+  }
+
   writeOrders(orders.filter(item => item.id !== req.params.id));
   return res.status(204).end();
 });
