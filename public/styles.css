@@ -1877,3 +1877,13 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}.brand{letter-sp
 .product-detail-page .detail-copy .detail-availability{
   margin-top:0 !important;
 }
+
+
+/* YHORS V14 · Transiciones fluidas entre carrito, checkout y administración */
+#app.route-transitioning{opacity:.72;transform:translateY(8px);transition:opacity .18s ease,transform .18s ease}
+#app > main.page-content-enter,.checkout-page,.checkout-success-page{animation:yhorsRouteEnter .38s cubic-bezier(.22,.61,.36,1) both}
+.admin-section-link{position:relative;overflow:hidden;transition:color .22s ease,background-color .22s ease,box-shadow .22s ease,transform .22s ease}
+.admin-section-link:active{transform:scale(.98)}
+.checkout-button.is-loading{pointer-events:none;opacity:.7;transform:translateY(1px)}
+@keyframes yhorsRouteEnter{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+@media (prefers-reduced-motion:reduce){#app.route-transitioning{transition:none}.checkout-page,.checkout-success-page,#app > main.page-content-enter{animation:none}.admin-section-link{transition:none}}

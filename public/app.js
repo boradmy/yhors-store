@@ -511,14 +511,52 @@ function wireCart(products, storefront) {
   document.querySelector('#cartButton')?.addEventListener('click', openCart); document.querySelector('#closeCart')?.addEventListener('click', closeCart); document.querySelector('#backdrop')?.addEventListener('click', closeCart);
   const checkoutButton = document.querySelector('#checkout');
   const checkoutMessage = document.querySelector('#checkoutMessage');
-  checkoutButton?.addEventListener('click', () => {
+  checkoutButton?.addEventListener('click', async () => {
     if (!cart.length) {
       checkoutMessage.textContent = 'Agrega al menos un producto para continuar.';
       return;
     }
-    window.open('/pedido', '_blank', 'noopener');
+    checkoutButton.disabled = true;
+    checkoutButton.classList.add('is-loading');
+    closeCart();
+    await navigateToRoute('/pedido');
   });
   updateCartCount(); drawCart(); return { addToCart, openCart, closeCart };
+}
+
+
+async function navigateToRoute(href, { replace = false } = {}) {
+  const target = new URL(href, window.location.origin);
+  if (target.origin !== window.location.origin) return;
+  const next = `${target.pathname}${target.search}${target.hash}`;
+  const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  if (next === current) {
+    if (target.pathname === '/' && window.scrollY > 0) window.scrollTo({ top: 0, behavior: 'smooth' });
+    return;
+  }
+
+  const appEl = document.querySelector('#app');
+  appEl?.classList.add('route-transitioning');
+  if (replace) history.replaceState({}, '', next); else history.pushState({}, '', next);
+
+  // Render in the same tab. The small delay lets the exit animation start
+  // before replacing the view, avoiding the abrupt white flash between cart
+  // and customer registration.
+  await new Promise(resolve => window.setTimeout(resolve, 90));
+  await renderCurrentRoute();
+  window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+  requestAnimationFrame(() => appEl?.classList.remove('route-transitioning'));
+}
+
+async function renderCurrentRoute() {
+  const path = window.location.pathname;
+  if (path === ADMIN_PATH || path === `${ADMIN_PATH}/`) return renderAdmin();
+  if (path === `${ADMIN_PATH}/pedidos` || path === `${ADMIN_PATH}/pedidos/`) return renderAdminOrders();
+  if (path === `${ADMIN_PATH}/usuarios` || path === `${ADMIN_PATH}/usuarios/`) return renderAdminUsers();
+  if (path === `${ADMIN_PATH}/inventario` || path === `${ADMIN_PATH}/inventario/`) return renderAdminInventory();
+  if (path === '/mi-cuenta' || path === '/mi-cuenta/') return renderMyAccount();
+  if (path === '/pedido' || path === '/pedido/') return checkoutPage();
+  return renderStore();
 }
 
 
@@ -532,11 +570,11 @@ function checkoutPage() {
     courier: { title: 'Courier', text: 'Envío mediante servicio de courier. Recargo fijo de $5,00.', price: 5 }
   };
   if (!cart.length) {
-    app.innerHTML = `<main class="checkout-page"><div class="checkout-page-inner"><span class="eyebrow">YHORS-STORE</span><h1>Tu carrito está vacío</h1><p>Agrega productos antes de realizar un pedido.</p><a class="button" href="/">Volver a la tienda <span>→</span></a></div></main>`;
+    app.innerHTML = `<main class="checkout-page"><div class="checkout-page-inner"><span class="eyebrow">YHORS-STORE</span><h1>Tu carrito está vacío</h1><p>Agrega productos antes de realizar un pedido.</p><a class="button" href="/" data-smooth-route>Volver a la tienda <span>→</span></a></div></main>`;
     return;
   }
   app.innerHTML = `<main class="checkout-page"><div class="checkout-page-inner">
-    <div class="checkout-page-top"><a class="brand" href="/">YHORS <small>STORE</small></a><a class="checkout-back" href="/">← Seguir comprando</a></div>
+    <div class="checkout-page-top"><a class="brand" href="/">YHORS <small>STORE</small></a><a class="checkout-back" href="/" data-smooth-route>← Seguir comprando</a></div>
     <div class="checkout-layout">
       <section class="checkout-card"><span class="eyebrow">Finalizar pedido</span><h1>Datos de tu pedido</h1><p class="checkout-intro">Completa tus datos y selecciona cómo quieres recibir tu compra.</p>
         <form id="fullCheckoutForm" class="form-grid">
@@ -589,7 +627,7 @@ function checkoutPage() {
       const payload={customer:{name:data.name,phone:data.phone,cedula:data.cedula,email:data.email,city:data.city,address:data.address,mapsUrl:data.mapsUrl,notes:data.notes},deliveryMethod:data.deliveryMethod,items:cart.map(line=>({productId:line.productId||line.id,quantity:Number(line.quantity),purchaseMode:line.purchaseMode||'purchase',rentalDays:line.purchaseMode==='rental'?rentalDaysValue(line.rentalDays):null}))};
       const result=await request('/api/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
       localStorage.removeItem('yhors-cart'); cart=[];
-      app.innerHTML=`<main class="checkout-page"><div class="checkout-success-page"><span class="success-mark">✓</span><span class="eyebrow">Pedido recibido</span><h1>#${escapeHTML(result.orderNumber)}</h1><p>Tu pedido fue registrado correctamente.</p><div class="success-total">Total del pedido: <strong>${money(result.total)}</strong></div><p class="success-note">Guarda tu número de pedido para futuras consultas.</p><a class="button" href="/">Volver a YHORS STORE <span>→</span></a></div></main>`;
+      app.innerHTML=`<main class="checkout-page"><div class="checkout-success-page"><span class="success-mark">✓</span><span class="eyebrow">Pedido recibido</span><h1>#${escapeHTML(result.orderNumber)}</h1><p>Tu pedido fue registrado correctamente.</p><div class="success-total">Total del pedido: <strong>${money(result.total)}</strong></div><p class="success-note">Guarda tu número de pedido para futuras consultas.</p><a class="button" href="/" data-smooth-route>Volver a YHORS STORE <span>→</span></a></div></main>`;
     } catch(err) {
       message.className='message error';
       message.textContent=err.message || 'No se pudo registrar el pedido.';
@@ -1013,8 +1051,8 @@ async function renderAdminOrders() {
   if (canAssign) sellers = await request('/api/admin/order-sellers').catch(() => []);
 
   const sectionNav = (session.role === 'vendedor' || session.role === 'store_manager')
-    ? `<nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}/pedidos" class="admin-section-link active">PEDIDOS</a></nav>`
-    : `<nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}" class="admin-section-link">PÁGINA WEB</a><a href="${ADMIN_PATH}/usuarios" class="admin-section-link">USUARIOS</a><a href="${ADMIN_PATH}/inventario" class="admin-section-link">INVENTARIO</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link active">PEDIDOS</a></nav>`;
+    ? `<nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}/pedidos" class="admin-section-link active" data-smooth-route>PEDIDOS</a></nav>`
+    : `<nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}" class="admin-section-link" data-smooth-route>PÁGINA WEB</a><a href="${ADMIN_PATH}/usuarios" class="admin-section-link" data-smooth-route>USUARIOS</a><a href="${ADMIN_PATH}/inventario" class="admin-section-link" data-smooth-route>INVENTARIO</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link active" data-smooth-route>PEDIDOS</a></nav>`;
   const title = session.role === 'vendedor' ? 'Mis pedidos asignados' : 'Gestión de pedidos';
   const subtitle = session.role === 'store_manager' ? 'Jefe de tienda · pedidos, asignaciones y control operativo' : (session.role === 'vendedor' ? 'Pedidos asignados a tu usuario · consulta y gestión operativa' : 'Gestión de YHORS STORE');
   app.innerHTML = `<main class="admin-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">${title}</h1><p class="admin-subtitle">${subtitle}</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>${sectionNav}${ordersPanel(orders, canDelete)}</div></main>`;
@@ -1246,7 +1284,7 @@ async function renderAdminUsers() {
   let users = await request('/api/admin/users').catch(() => []);
   app.innerHTML = `<main class="admin-shell"><div class="admin-wrap">
     <div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Administración</h1><p class="admin-subtitle">Control de usuarios y accesos</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>
-    <nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}" class="admin-section-link">PÁGINA WEB</a><a href="${ADMIN_PATH}/usuarios" class="admin-section-link active">USUARIOS</a><a href="${ADMIN_PATH}/inventario" class="admin-section-link">INVENTARIO</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link">PEDIDOS</a></nav>
+    <nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}" class="admin-section-link" data-smooth-route>PÁGINA WEB</a><a href="${ADMIN_PATH}/usuarios" class="admin-section-link active" data-smooth-route>USUARIOS</a><a href="${ADMIN_PATH}/inventario" class="admin-section-link" data-smooth-route>INVENTARIO</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link" data-smooth-route>PEDIDOS</a></nav>
     ${usersPanel(users)}
   </div></main>`;
 
@@ -1484,10 +1522,10 @@ function inventoryPageMarkup(products = []) {
   return `<main class="admin-shell"><div class="admin-wrap">
     <div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Inventario</h1><p class="admin-subtitle">Control de costos, precios y existencias</p></div><div class="admin-top-actions">${accountMenu(window.__yhorsSession || {})}</div></div>
     <nav class="admin-section-nav" aria-label="Secciones de administración">
-      <a href="${ADMIN_PATH}" class="admin-section-link">PÁGINA WEB</a>
-      <a href="${ADMIN_PATH}/usuarios" class="admin-section-link">USUARIOS</a>
-      <a href="${ADMIN_PATH}/inventario" class="admin-section-link active">INVENTARIO</a>
-      <a href="${ADMIN_PATH}/pedidos" class="admin-section-link">PEDIDOS</a>
+      <a href="${ADMIN_PATH}" class="admin-section-link" data-smooth-route>PÁGINA WEB</a>
+      <a href="${ADMIN_PATH}/usuarios" class="admin-section-link" data-smooth-route>USUARIOS</a>
+      <a href="${ADMIN_PATH}/inventario" class="admin-section-link active" data-smooth-route>INVENTARIO</a>
+      <a href="${ADMIN_PATH}/pedidos" class="admin-section-link" data-smooth-route>PEDIDOS</a>
     </nav>
     <section class="admin-panel inventory-page-panel">
       <div class="section-heading"><div><span class="eyebrow">Control de existencias</span><h2>Inventario de productos</h2></div><p>La ficha del producto permanece limpia; aquí solo se editan los datos de inventario.</p></div>
@@ -1610,7 +1648,7 @@ async function renderAdmin() {
     <button type="button" data-admin-scroll="classificationPanel">Categorías</button>
     <button type="button" data-admin-scroll="productEditorPanel">Producto</button>
     <button type="button" data-admin-scroll="inventoryPanel">Inventario</button>
-  </aside><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Administración</h1></div><div class="admin-top-actions">${accountMenu(session)}</div></div><nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}" class="admin-section-link active">PÁGINA WEB</a><a href="${ADMIN_PATH}/usuarios" class="admin-section-link">USUARIOS</a><a href="${ADMIN_PATH}/inventario" class="admin-section-link">INVENTARIO</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link">PEDIDOS</a></nav>${backupPanel(backupState)}${selectionPanel(products, settings)}${classificationPanel(classifications)}<section class="admin-panel product-editor-panel" id="productEditorPanel"><span class="eyebrow">Catálogo</span><h2 id="formTitle">Agregar producto</h2><div id="formArea"></div></section><section class="admin-products" id="inventoryPanel"><div class="section-heading inventory-heading"><div><span class="eyebrow">Inventario</span><h2>Productos publicados (${products.length})</h2></div><p>Edita datos, imágenes, portada y destacados.</p></div><div class="inventory-toolbar"><label class="inventory-search"><span aria-hidden="true">⌕</span><input id="inventorySearch" type="search" placeholder="Buscar por nombre, SKU, marca o categoría…" autocomplete="off"><button id="clearInventorySearch" type="button" aria-label="Limpiar búsqueda">×</button></label><label class="inventory-filter"><span>Categoría</span><select id="inventoryCategoryFilter"><option value="">Todas las categorías</option><option value="elegant">Elegante</option><option value="sports">Deportes</option><option value="tech">Tech</option><option value="cosplay">Cosplay</option><option value="pets">Mascotas</option><option value="details">Detalles</option><option value="collectibles">Coleccionables</option></select></label><span class="inventory-count" id="inventoryCount">${products.length} productos</span></div><div id="adminProducts"></div></section></div></main>`;
+  </aside><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Administración</h1></div><div class="admin-top-actions">${accountMenu(session)}</div></div><nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}" class="admin-section-link active" data-smooth-route>PÁGINA WEB</a><a href="${ADMIN_PATH}/usuarios" class="admin-section-link" data-smooth-route>USUARIOS</a><a href="${ADMIN_PATH}/inventario" class="admin-section-link" data-smooth-route>INVENTARIO</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link" data-smooth-route>PEDIDOS</a></nav>${backupPanel(backupState)}${selectionPanel(products, settings)}${classificationPanel(classifications)}<section class="admin-panel product-editor-panel" id="productEditorPanel"><span class="eyebrow">Catálogo</span><h2 id="formTitle">Agregar producto</h2><div id="formArea"></div></section><section class="admin-products" id="inventoryPanel"><div class="section-heading inventory-heading"><div><span class="eyebrow">Inventario</span><h2>Productos publicados (${products.length})</h2></div><p>Edita datos, imágenes, portada y destacados.</p></div><div class="inventory-toolbar"><label class="inventory-search"><span aria-hidden="true">⌕</span><input id="inventorySearch" type="search" placeholder="Buscar por nombre, SKU, marca o categoría…" autocomplete="off"><button id="clearInventorySearch" type="button" aria-label="Limpiar búsqueda">×</button></label><label class="inventory-filter"><span>Categoría</span><select id="inventoryCategoryFilter"><option value="">Todas las categorías</option><option value="elegant">Elegante</option><option value="sports">Deportes</option><option value="tech">Tech</option><option value="cosplay">Cosplay</option><option value="pets">Mascotas</option><option value="details">Detalles</option><option value="collectibles">Coleccionables</option></select></label><span class="inventory-count" id="inventoryCount">${products.length} productos</span></div><div id="adminProducts"></div></section></div></main>`;
   const quickNav = document.querySelector('.admin-quick-nav');
   quickNav?.querySelectorAll('[data-admin-scroll]').forEach(button => button.addEventListener('click', () => {
     const target = document.getElementById(button.dataset.adminScroll);
@@ -2122,8 +2160,19 @@ function renderLogin(twoFactorMode = false) {
   passkeyButton.addEventListener('click', async () => { try { await loginWithPasskey(); } catch (error) { message.className = error.code === 'PASSKEY_CANCELLED' ? 'message' : 'message error'; message.textContent = error.message; } });
 }
 
-window.addEventListener('popstate', () => renderStore());
-if (window.location.pathname === ADMIN_PATH || window.location.pathname === `${ADMIN_PATH}/`) renderAdmin(); else if (window.location.pathname === `${ADMIN_PATH}/pedidos` || window.location.pathname === `${ADMIN_PATH}/pedidos/`) renderAdminOrders(); else if (window.location.pathname === `${ADMIN_PATH}/usuarios` || window.location.pathname === `${ADMIN_PATH}/usuarios/`) renderAdminUsers(); else if (window.location.pathname === `${ADMIN_PATH}/inventario` || window.location.pathname === `${ADMIN_PATH}/inventario/`) renderAdminInventory(); else if (window.location.pathname === '/mi-cuenta' || window.location.pathname === '/mi-cuenta/') renderMyAccount(); else if (window.location.pathname === '/pedido' || window.location.pathname === '/pedido/') checkoutPage(); else renderStore();
+document.addEventListener('click', event => {
+  const link = event.target.closest('a[data-smooth-route]');
+  if (!link || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+  const href = link.getAttribute('href');
+  if (!href) return;
+  const target = new URL(href, window.location.origin);
+  if (target.origin !== window.location.origin) return;
+  event.preventDefault();
+  navigateToRoute(`${target.pathname}${target.search}${target.hash}`);
+});
+
+window.addEventListener('popstate', () => renderCurrentRoute());
+renderCurrentRoute();
 
 document.addEventListener('change', e => { const file=e.target.closest('input[type=file][id^=\"imageFile\"]'); if(!file)return; const num=file.id==='imageFile'?1:Number(file.id.replace('imageFile','')); const preview=document.querySelector(`#productImagePreview${num}`); if(preview&&file.files?.[0]){const r=new FileReader();r.onload=()=>preview.src=r.result;r.readAsDataURL(file.files[0]);}});
 document.addEventListener('input', e => { const input=e.target.closest('input[type=url][id^=\"image\"]'); if(!input)return; const num=input.id==='image'?1:Number(input.id.replace('image','')); const preview=document.querySelector(`#productImagePreview${num}`); if(preview&&input.value.trim())preview.src=input.value.trim();});
