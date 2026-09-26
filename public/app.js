@@ -856,7 +856,7 @@ function classificationPanel(classifications) {
 }
 
 function ordersPanel(orders = [], canDelete = true) {
-  const statuses = ['Pendiente', 'Confirmado', 'Preparando', 'Enviado', 'Entregado', 'Cancelado'];
+  const statuses = ['Pendiente', 'Confirmado', 'Preparado', 'Enviado', 'Entregado', 'Cancelado'];
   return `<section class="admin-panel orders-panel" id="ordersPanel">
     <div class="section-heading"><div><span class="eyebrow">Ventas</span><h2>Pedidos recibidos <small class="orders-count">${orders.length}</small></h2></div><p>Administra pedidos sin mezclarlos con el catálogo.</p></div>
     <div class="orders-toolbar">
@@ -913,7 +913,7 @@ function ordersListMarkup(orders = [], options = {}) {
   const currentRole = options.role || '';
   const date = value => { const d = new Date(value); return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString('es-EC', { dateStyle: 'medium', timeStyle: 'short' }); };
   const shortDate = value => { const d = new Date(value); return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString('es-EC', { day:'2-digit', month:'short', year:'numeric' }); };
-  const statuses = ['Pendiente', 'Confirmado', 'Preparando', 'Enviado', 'Entregado', 'Cancelado'];
+  const statuses = ['Pendiente', 'Confirmado', 'Preparado', 'Enviado', 'Entregado', 'Cancelado'];
   const sellerName = order => sellers.find(s => s.id === order.assignedSellerId)?.name || order.assignedSellerName || 'Sin asignar';
   if (!orders.length) return '<div class="empty">No hay pedidos que coincidan con los filtros.</div>';
   return orders.map(order => `<article class="admin-order admin-order-compact" data-order-search="${escapeHTML(`${order.orderNumber} ${order.customer?.name || ''} ${order.customer?.cedula || ''} ${order.customer?.phone || ''} ${order.customer?.email || ''} ${(order.items || []).map(i => `${i.sku} ${i.name}`).join(' ')}`.toLowerCase())}" data-order-status="${escapeHTML(order.status || '')}" data-order-date="${escapeHTML(String(order.createdAt || '').slice(0,10))}">
@@ -936,7 +936,13 @@ function ordersListMarkup(orders = [], options = {}) {
       <div class="order-assignment">
         <div class="order-assignment-head"><span class="order-label">Asignado a</span><small>${isSellerRole(currentRole) ? 'Vendedor asignado a este pedido' : 'Vendedor responsable'}</small></div>
         ${canAssign
-          ? `<select class="order-assignment-select" data-order-assignment="${escapeHTML(order.id)}" disabled><option value="">Sin asignar</option>${sellers.map(s => `<option value="${escapeHTML(s.id)}" ${s.id === order.assignedSellerId ? 'selected' : ''}>${escapeHTML(s.name)} · @${escapeHTML(s.username)}</option>`).join('')}</select>`
+          ? `<select class="order-assignment-select" data-order-assignment="${escapeHTML(order.id)}" disabled><option value="">Sin asignar</option>${(() => {
+              const list = [...sellers];
+              if (order.assignedSellerId && !list.some(s => s.id === order.assignedSellerId)) {
+                list.unshift({ id: order.assignedSellerId, name: order.assignedSellerName || 'Vendedor asignado', username: 'asignado' });
+              }
+              return list.map(s => `<option value="${escapeHTML(s.id)}" ${s.id === order.assignedSellerId ? 'selected' : ''}>${escapeHTML(s.name)} · @${escapeHTML(s.username)}</option>`).join('');
+            })()}</select>`
           : `<div class="order-assignment-readonly">${escapeHTML(sellerName(order))}</div>`}
       </div>
       <div class="admin-order-footer">
@@ -1059,7 +1065,7 @@ async function renderAdminOrders() {
       try {
         const payload = {};
         if (noteChanged) payload.internalNote = nextNote;
-        if (assignmentChanged && assignment) payload.assignedSellerId = nextSeller;
+        if (assignment && canAssign) payload.assignedSellerId = nextSeller;
         if (statusChanged && statusSelect) payload.status = nextStatus;
         const updated=await request(`/api/admin/orders/${id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
         orders=orders.map(o=>o.id===updated.id?updated:o);

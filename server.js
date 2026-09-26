@@ -2307,8 +2307,13 @@ app.delete('/api/admin/users/:id/2fa', requireAdmin, (req, res) => {
 });
 
 function decorateOrderAssignment(order) {
-  const seller = order?.assignedSellerId ? readUsers().find(user => user.id === order.assignedSellerId && isSellerRole(user.role)) : null;
-  return { ...order, assignedSellerName: seller?.name || null };
+  const seller = order?.assignedSellerId
+    ? readUsers().find(user => user.id === order.assignedSellerId)
+    : null;
+  return {
+    ...order,
+    assignedSellerName: seller?.name || order?.assignedSellerName || null
+  };
 }
 
 app.get('/api/admin/order-sellers', requireStoreManagerOrAdmin, (_, res) => {
@@ -2352,7 +2357,7 @@ app.get('/api/admin/orders', requireOrdersAccess, (req, res) => {
 });
 
 app.put('/api/admin/orders/:id', requireOrdersAccess, (req, res) => {
-  const allowed = ['Pendiente', 'Confirmado', 'Preparando', 'Enviado', 'Entregado', 'Cancelado'];
+  const allowed = ['Pendiente', 'Confirmado', 'Preparado', 'Enviado', 'Entregado', 'Cancelado'];
   const body = req.body || {};
   const hasStatus = Object.prototype.hasOwnProperty.call(body, 'status');
   const hasInternalNote = Object.prototype.hasOwnProperty.call(body, 'internalNote');
