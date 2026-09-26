@@ -1136,7 +1136,7 @@ function customerSummaryMarkup(customer = {}) {
     <div><span>CORREO</span><strong>${escapeHTML(customer.email || '—')}</strong></div>
     <div><span>CIUDAD</span><strong>${escapeHTML(customer.city || '—')}</strong></div>
     <div><span>ENTREGA</span><strong>${escapeHTML(delivery)}</strong></div>
-    <div class="full"><span>DIRECCIÓN</span><strong>${escapeHTML(customer.address || (customer.deliveryMethod === 'office' ? 'Retiro en oficina' : '—'))}</strong></div>
+    <div class="full"><span>DIRECCIÓN</span><strong>${escapeHTML(customer.address || '—')}</strong></div>
   </div>`;
 }
 

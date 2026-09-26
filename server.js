@@ -787,13 +787,23 @@ function buildOrderPdf(order) {
   };
 
   const moneyPdf = value => `$${Number(value || 0).toFixed(2)}`;
+  // En el documento mostramos un SKU corto y legible. El SKU completo sigue
+  // existiendo en el producto/pedido; aquí solo evitamos que invada las otras columnas.
+  const shortSku = value => {
+    const raw = String(value || '').trim();
+    if (!raw) return '-';
+    const parts = raw.split('-').filter(Boolean);
+    if (parts.length >= 3) return parts.slice(0, 3).join('-');
+    if (parts.length === 2) return parts.join('-');
+    return raw.length > 12 ? `${raw.slice(0, 12)}…` : raw;
+  };
   const safeStatus = status.toLocaleUpperCase('es-EC');
 
   // Each row is a compact set of lines. A row never gets split between pages.
   const rows = items.map((item, index) => {
     const qty = Number(item.quantity || 0);
     const name = String(item.name || item.productName || item.sku || 'Producto');
-    const sku = String(item.sku || '-');
+    const sku = shortSku(item.sku);
     const price = Number(item.unitPrice ?? item.price ?? 0);
     const lineTotal = Number(item.subtotal ?? item.lineTotal ?? item.total ?? price * qty);
     const mode = item.purchaseMode === 'rental'
@@ -856,12 +866,17 @@ function buildOrderPdf(order) {
     } else {
       drawText(ops, 'YHORS', margin, y - 10, 24, boldFont);
     }
-    drawText(ops, 'ORDEN DE PEDIDO', right, y - 8, 18, boldFont, 'right');
-    drawText(ops, `N. ORDEN  ${orderNo}`, right, y - 29, 9, boldFont, 'right');
-    drawText(ops, `FECHA  ${date}`, right, y - 44, 8, normalFont, 'right');
+    // Identidad del documento centrada en un mismo eje para que el encabezado
+    // no quede desalineado entre título, número, fecha y estado.
+    const headerCenter = margin + contentWidth * 0.78;
+    drawText(ops, 'ORDEN DE PEDIDO', headerCenter, y - 8, 18, boldFont, 'center');
+    drawText(ops, `N. ORDEN  ${orderNo}`, headerCenter, y - 29, 9, boldFont, 'center');
+    drawText(ops, `FECHA  ${date}`, headerCenter, y - 44, 8, normalFont, 'center');
+    const statusW = 116;
+    const statusX = headerCenter - statusW / 2;
     setFill(ops, 0.78, 0.60, 0.24);
-    ops.push(`0.78 0.60 0.24 rg ${right - 116} ${y - 68} 116 18 re f 0 0 0 rg`);
-    drawText(ops, safeStatus, right - 58, y - 62, 8, boldFont, 'center');
+    ops.push(`0.78 0.60 0.24 rg ${statusX} ${y - 68} ${statusW} 18 re f 0 0 0 rg`);
+    drawText(ops, safeStatus, headerCenter, y - 62, 8, boldFont, 'center');
     y -= 85;
     line(ops, margin, y, right, y, 1.1);
     y -= 14;
@@ -894,7 +909,7 @@ function buildOrderPdf(order) {
     drawText(ops, 'Ciudad:', mid + 9, y - 31, 7, normalFont);
     drawText(ops, customer.city || '-', mid + 50, y - 31, 8, boldFont);
     drawText(ops, 'Direccion:', mid + 9, y - 46, 7, normalFont);
-    const addressLines = wrap(customer.address || 'Retiro en oficina', 33);
+    const addressLines = wrap(customer.address || 'No registrada', 33);
     addressLines.slice(0, 2).forEach((t, i) => drawText(ops, t, mid + 58, y - 46 - i * 10, 7, normalFont));
     drawText(ops, 'Referencia:', mid + 9, y - 71, 7, normalFont);
     drawText(ops, deliveryLabel, mid + 58, y - 71, 7, normalFont);
