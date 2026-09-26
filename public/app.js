@@ -1,6 +1,6 @@
 const app = document.querySelector('#app');
 const ADMIN_PATH = '/yhors/admin593';
-const ORDER_STATUS_CLASS = { Pendiente:'pending', Confirmado:'confirmed', Preparando:'preparing', Enviado:'shipped', Entregado:'delivered', Cancelado:'cancelled' };
+const ORDER_STATUS_CLASS = { Pendiente:'pending', Confirmado:'confirmed', Preparado:'preparing', Enviado:'shipped', Entregado:'delivered', Cancelado:'cancelled' };
 const statusClass = value => ORDER_STATUS_CLASS[value] || 'pending';
 const categories = {
   all: 'Principal', elegant: 'Elegant', sports: 'Sports', tech: 'Tech', cosplay: 'Cosplay',
