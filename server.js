@@ -1716,7 +1716,7 @@ function requireStoreManagerOrAdmin(req, res, next) {
 function requireCatalogRead(req, res, next) {
   const session = getSession(req);
   if (!session) return res.status(401).json({ error: 'No autorizado.' });
-  if (!isAdmin(session.role) && !isStoreManager(session.role)) return res.status(403).json({ error: 'No autorizado para consultar el catálogo administrativo.' });
+  if (!isAdmin(session.role)) return res.status(403).json({ error: 'Solo el administrador puede consultar el catálogo administrativo.' });
   return next();
 }
 
@@ -2588,6 +2588,10 @@ app.get('/api/admin/backups/:name/download', requireAdmin, (req, res) => {
 });
 
 app.get('/api/admin/products', requireCatalogRead, (_, res) => res.json(readProducts().map(normalizeProduct)));
+
+// Catálogo operativo: solo para construir órdenes. No expone el área administrativa
+// de inventario ni habilita acciones de edición.
+app.get('/api/admin/order-products', requireOrdersAccess, (_, res) => res.json(readProducts().map(normalizeProduct)));
 
 app.put('/api/admin/inventory/:id', requireAdmin, (req, res) => {
   const products = readProducts();

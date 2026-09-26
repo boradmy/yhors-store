@@ -527,8 +527,12 @@ function wireCart(products, storefront) {
 
 let __yhorsNavigationPromise = null;
 async function navigateToRoute(href, { replace = false } = {}) {
-  if (__yhorsNavigationPromise) return __yhorsNavigationPromise;
-  __yhorsNavigationPromise = (async () => {
+  // Nunca dejamos una navegación anterior bloqueando indefinidamente las
+  // siguientes. Esto era especialmente visible justo después del login.
+  if (__yhorsNavigationPromise) {
+    try { await __yhorsNavigationPromise; } catch (_) {}
+  }
+
   const target = new URL(href, window.location.origin);
   if (target.origin !== window.location.origin) return;
   const next = `${target.pathname}${target.search}${target.hash}`;
@@ -538,20 +542,43 @@ async function navigateToRoute(href, { replace = false } = {}) {
     return;
   }
 
-  const appEl = document.querySelector('#app');
-  appEl?.classList.add('route-transitioning');
-  if (replace) history.replaceState({}, '', next); else history.pushState({}, '', next);
+  const navigation = (async () => {
+    const appEl = document.querySelector('#app');
+    appEl?.classList.add('route-transitioning');
+    if (replace) history.replaceState({}, '', next); else history.pushState({}, '', next);
 
-  // Render in the same tab. The small delay lets the exit animation start
-  // before replacing the view, avoiding the abrupt white flash between cart
-  // and customer registration.
-  await new Promise(resolve => window.setTimeout(resolve, 90));
-  await renderCurrentRoute();
-  window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
-  requestAnimationFrame(() => appEl?.classList.remove('route-transitioning'));
+    await new Promise(resolve => window.setTimeout(resolve, 90));
+
+    // Las vistas administrativas hacen varias peticiones. Si una respuesta
+    // se queda colgada, no dejamos la interfaz bloqueada: tras unos segundos
+    // se hace una recarga controlada en la ruta ya seleccionada.
+    let timedOut = false;
+    const timeout = new Promise((_, reject) => setTimeout(() => {
+      timedOut = true;
+      reject(new Error('NAVIGATION_TIMEOUT'));
+    }, 5000));
+    try {
+      await Promise.race([renderCurrentRoute(), timeout]);
+      window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+      requestAnimationFrame(() => appEl?.classList.remove('route-transitioning'));
+    } catch (error) {
+      appEl?.classList.remove('route-transitioning');
+      if (timedOut || error?.message === 'NAVIGATION_TIMEOUT') {
+        // La URL ya representa el destino correcto. Una recarga limpia la
+        // sesión/render anterior sin cambiar de pestaña ni perder la ruta.
+        window.location.reload();
+        return;
+      }
+      throw error;
+    }
   })();
-  try { return await __yhorsNavigationPromise; }
-  finally { __yhorsNavigationPromise = null; }
+
+  __yhorsNavigationPromise = navigation;
+  try {
+    return await navigation;
+  } finally {
+    if (__yhorsNavigationPromise === navigation) __yhorsNavigationPromise = null;
+  }
 }
 
 async function renderCurrentRoute() {
@@ -1051,11 +1078,12 @@ function ordersListMarkup(orders = [], options = {}) {
 
 function generateOrderNav(session) {
   const role = String(session.role || '').toLowerCase();
-  const sellerOnly = role === 'vendedor' || role === 'orders';
-  const storeManager = role === 'store_manager';
+  const limitedOperations = role === 'vendedor' || role === 'orders' || role === 'store_manager';
 
-  if (sellerOnly) {
-    return `<nav class="admin-section-nav" aria-label="Secciones de administración">
+  // Vendedores y Jefes de tienda solo trabajan con operaciones: pedidos y
+  // generación de órdenes. Las áreas de catálogo/usuarios siguen ocultas.
+  if (limitedOperations) {
+    return `<nav class="admin-section-nav" aria-label="Secciones operativas">
       <a href="${ADMIN_PATH}/pedidos" class="admin-section-link" data-smooth-route>PEDIDOS</a>
       <a href="${ADMIN_PATH}/generar-orden" class="admin-section-link active" data-smooth-route>GENERAR ORDEN</a>
     </nav>`;
@@ -1063,8 +1091,8 @@ function generateOrderNav(session) {
 
   return `<nav class="admin-section-nav" aria-label="Secciones de administración">
     <a href="${ADMIN_PATH}" class="admin-section-link" data-smooth-route>PÁGINA WEB</a>
-    ${role === 'admin' ? `<a href="${ADMIN_PATH}/usuarios" class="admin-section-link" data-smooth-route>USUARIOS</a>` : ''}
-    ${!sellerOnly ? `<a href="${ADMIN_PATH}/inventario" class="admin-section-link" data-smooth-route>INVENTARIO</a>` : ''}
+    <a href="${ADMIN_PATH}/usuarios" class="admin-section-link" data-smooth-route>USUARIOS</a>
+    <a href="${ADMIN_PATH}/inventario" class="admin-section-link" data-smooth-route>INVENTARIO</a>
     <a href="${ADMIN_PATH}/pedidos" class="admin-section-link" data-smooth-route>PEDIDOS</a>
     <a href="${ADMIN_PATH}/generar-orden" class="admin-section-link active" data-smooth-route>GENERAR ORDEN</a>
   </nav>`;
@@ -1106,7 +1134,7 @@ async function renderAdminGenerateOrder() {
   const role = String(session.role || '').toLowerCase();
   if (!['admin', 'store_manager', 'vendedor', 'orders'].includes(role)) return renderAdminOrders();
 
-  const products = await request('/api/admin/products').catch(() => []);
+  const products = await request('/api/admin/order-products').catch(() => []);
   const sellers = await request('/api/admin/order-sellers').catch(() => []);
   let customer = {};
   let lines = [];
@@ -1658,9 +1686,9 @@ function inventoryPageMarkup(products = [], options = {}) {
 async function renderAdminInventory() {
   const session = await request('/api/admin/session').catch(() => ({ authenticated: false }));
   if (!session.authenticated) return renderLogin();
-  if (session.role !== 'admin' && session.role !== 'store_manager') return renderAdminOrders();
+  if (session.role !== 'admin') return renderAdminOrders();
   window.__yhorsSession = session;
-  const inventoryReadOnly = session.role === 'store_manager';
+  const inventoryReadOnly = false;
   let products = await request('/api/admin/products').catch(() => []);
   const fields = ['name','sku','brand','productType','category','purchasePrice','salePrice','rentalPrice','stock','image','description','featured','hero','heroOrder'];
   const draw = () => {
