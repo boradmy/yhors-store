@@ -1188,6 +1188,15 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}.brand{letter-sp
 .drawer .form-actions{margin-top:4px}
 .drawer .form-actions .button{min-width:0;flex:1}
 .orders-panel{margin-bottom:24px}
+.orders-group{margin-top:20px}
+.orders-group:first-child{margin-top:0}
+.orders-group-head{display:flex;justify-content:space-between;align-items:end;gap:20px;padding:18px 4px 8px;border-bottom:1px solid var(--line,#ded8cc)}
+.orders-group-head h3{margin:4px 0 0;font-size:1.15rem}
+.orders-group-head p{margin:0;color:var(--muted);font-size:.8rem;max-width:560px;text-align:right;line-height:1.45}
+.orders-group-unassigned{padding:0 12px 12px;border:1px solid #e2d5b9;border-radius:14px;background:#fcfaf4}
+.orders-group-unassigned .orders-group-head{border-bottom-color:#e6dcc8}
+.orders-group-unassigned .admin-order{border-color:#e2d5b9}
+.admin-order-unassigned .order-summary-main:before{content:'SIN VENDEDOR';display:inline-block;margin-right:8px;padding:3px 6px;border-radius:999px;background:#f5e7bc;color:#7a5b17;font-size:.58rem;font-weight:800;letter-spacing:.07em;vertical-align:middle}
 .orders-count{font-size:.72em;font-weight:500;color:#777}
 .orders-toolbar{display:flex;gap:10px;margin:16px 0;flex-wrap:wrap}
 .orders-toolbar input,.orders-toolbar select{border:1px solid var(--line,#ded8cc);background:#fff;border-radius:9px;padding:11px 13px;font:inherit}

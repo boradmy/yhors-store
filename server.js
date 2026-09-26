@@ -2197,14 +2197,18 @@ app.post('/api/admin/generar-orden', requireOrdersAccess, async (req, res) => {
   const result = validateOrder(req.body || {});
   if (result.error) return res.status(400).json(result);
 
-  const requestedSellerId = req.body?.assignedSellerId === null || req.body?.assignedSellerId === '' || req.body?.assignedSellerId === undefined ? null : String(req.body.assignedSellerId);
+  const hasSellerSelection = Object.prototype.hasOwnProperty.call(req.body || {}, 'assignedSellerId');
+  const requestedSellerId = hasSellerSelection && req.body.assignedSellerId !== null && req.body.assignedSellerId !== ''
+    ? String(req.body.assignedSellerId)
+    : null;
   let assignedSellerId = null;
   if (requestedSellerId) {
     const seller = readUsers().find(user => user.id === requestedSellerId && user.active !== false && isSellerRole(user.role));
     if (!seller) return res.status(400).json({ error: 'El vendedor seleccionado no es válido o no está activo.' });
     assignedSellerId = seller.id;
-  } else if (isSellerRole(session.role)) {
-    // Si el vendedor no cambia la selección, la orden queda a su nombre.
+  } else if (isSellerRole(session.role) && !hasSellerSelection) {
+    // Compatibilidad: si una petición antigua no envía el campo, se mantiene
+    // la asignación automática al vendedor que está creando la orden.
     assignedSellerId = session.accountId || null;
   }
 

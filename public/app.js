@@ -1002,7 +1002,7 @@ function classificationPanel(classifications) {
 function ordersPanel(orders = [], canDelete = true) {
   const statuses = ['Pendiente', 'Confirmado', 'Preparado', 'Enviado', 'Entregado', 'Cancelado'];
   return `<section class="admin-panel orders-panel" id="ordersPanel">
-    <div class="section-heading"><div><span class="eyebrow">Ventas</span><h2>Pedidos recibidos <small class="orders-count">${orders.length}</small></h2></div><p>Administra pedidos sin mezclarlos con el catálogo.</p></div>
+    <div class="section-heading"><div><span class="eyebrow">Ventas</span><h2>Pedidos recibidos <small class="orders-count">${orders.length}</small></h2></div><p>Los pedidos sin vendedor quedan separados para que puedas detectar lo que falta despachar.</p></div>
     <div class="orders-toolbar">
       <div class="orders-date-range">
         <label class="order-date-filter"><input id="ordersDateFrom" type="date" aria-label="Fecha inicial"></label>
@@ -1012,7 +1012,7 @@ function ordersPanel(orders = [], canDelete = true) {
       <select id="ordersStatusFilter"><option value="">Todos los estados</option>${statuses.map(s => `<option value="${escapeHTML(s)}">${escapeHTML(s)}</option>`).join('')}</select>
       <input id="ordersSearch" type="search" placeholder="Buscar por pedido, cliente, cédula/RUC, teléfono o SKU…" autocomplete="off">
     </div>
-    <div id="adminOrdersList">${ordersListMarkup(orders, { canDelete })}</div>
+    <div id="adminOrdersList">${ordersListMarkup(orders, { canDelete, canAssign: false, sellers: [], role: '' })}</div>
   </section>`;
 }
 
@@ -1060,7 +1060,7 @@ function ordersListMarkup(orders = [], options = {}) {
   const statuses = ['Pendiente', 'Confirmado', 'Preparado', 'Enviado', 'Entregado', 'Cancelado'];
   const sellerName = order => sellers.find(s => s.id === order.assignedSellerId)?.name || order.assignedSellerName || 'Sin asignar';
   if (!orders.length) return '<div class="empty">No hay pedidos que coincidan con los filtros.</div>';
-  return orders.map(order => `<article class="admin-order admin-order-compact" data-order-search="${escapeHTML(`${order.orderNumber} ${order.customer?.name || ''} ${order.customer?.cedula || ''} ${order.customer?.phone || ''} ${order.customer?.email || ''} ${(order.items || []).map(i => `${i.sku} ${i.name}`).join(' ')}`.toLowerCase())}" data-order-status="${escapeHTML(order.status || '')}" data-order-date="${escapeHTML(String(order.createdAt || '').slice(0,10))}">
+  const renderOrder = order => `<article class="admin-order admin-order-compact${order.assignedSellerId ? '' : ' admin-order-unassigned'}" data-order-search="${escapeHTML(`${order.orderNumber} ${order.customer?.name || ''} ${order.customer?.cedula || ''} ${order.customer?.phone || ''} ${order.customer?.email || ''} ${(order.items || []).map(i => `${i.sku} ${i.name}`).join(' ')}`.toLowerCase())}" data-order-status="${escapeHTML(order.status || '')}" data-order-date="${escapeHTML(String(order.createdAt || '').slice(0,10))}">
     <button type="button" class="admin-order-summary" data-order-toggle="${escapeHTML(order.id)}" aria-expanded="false">
       <span class="order-summary-date">${escapeHTML(shortDate(order.createdAt))}</span>
       <span class="order-summary-main"><strong>#${escapeHTML(order.orderNumber)}</strong><b>${escapeHTML(order.customer?.name || 'Cliente')}</b><small class="order-summary-item">${escapeHTML((order.items?.[0]?.quantity || 1) + '× ' + (order.items?.[0]?.name || 'Sin productos'))}${(order.items?.length || 0) > 1 ? ` · +${order.items.length - 1} más` : ''}</small></span>
@@ -1096,7 +1096,13 @@ function ordersListMarkup(orders = [], options = {}) {
         ${canDelete ? `<button class="button danger small" type="button" data-order-delete="${escapeHTML(order.id)}">Eliminar pedido</button>` : ''}
       </div>
     </div>
-  </article>`).join('');
+  </article>`;
+  const unassigned = orders.filter(order => !order.assignedSellerId);
+  const assigned = orders.filter(order => Boolean(order.assignedSellerId));
+  const renderSection = (title, description, items, extraClass = '') => items.length
+    ? `<section class="orders-group ${extraClass}"><div class="orders-group-head"><div><span class="eyebrow">${escapeHTML(title)}</span><h3>${items.length} pedido${items.length === 1 ? '' : 's'}</h3></div><p>${escapeHTML(description)}</p></div>${items.map(renderOrder).join('')}</section>`
+    : '';
+  return `${renderSection('Sin vendedor · por despachar', 'Pedidos que todavía no tienen un vendedor responsable. Revísalos y asígnalos antes de despacharlos.', unassigned, 'orders-group-unassigned')}${renderSection('Pedidos asignados', 'Pedidos que ya tienen un vendedor responsable.', assigned, 'orders-group-assigned')}`;
 }
 
 function generateOrderNav(session) {
