@@ -228,15 +228,38 @@ function wireSearch() {
 function wireCategoryNavigation() {
   const navigateWithStoreTransition = (link, event) => {
     if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+
     const href = link.getAttribute('href');
-    if (!href || href === `${location.pathname}${location.search}`) return;
+    const currentHref = `${location.pathname}${location.search}`;
+    const isHomeLink = link.hasAttribute('data-home-link');
+
+    if (!href) return;
+
+    // Si ya estamos en Principal, el logo debe funcionar como un botón de
+    // "volver arriba" en lugar de no hacer nada.
+    if (href === currentHref) {
+      if (isHomeLink) {
+        event.preventDefault();
+        window.scrollTo({ top: 0, left: 0, behavior: 'smooth' });
+      }
+      return;
+    }
+
     event.preventDefault();
     document.querySelector('#siteNav')?.classList.remove('mobile-open');
     document.querySelector('#mobileMenuToggle')?.classList.remove('open');
     document.querySelector('#mobileMenuToggle')?.setAttribute('aria-expanded', 'false');
     document.querySelector('#app > main')?.classList.add('products-refreshing');
+
     history.pushState({}, '', href);
-    window.setTimeout(() => renderStore(), 70);
+
+    // Esperamos a que la nueva vista termine de renderizar y recién entonces
+    // llevamos el documento al inicio. Así el logo nunca deja la portada
+    // cargando a mitad de scroll ni conserva la posición de la publicación.
+    window.setTimeout(async () => {
+      await renderStore();
+      window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+    }, 70);
   };
 
   document.querySelectorAll('[data-category-link], [data-home-link]').forEach(link => {
