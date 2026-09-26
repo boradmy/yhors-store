@@ -67,7 +67,7 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}.brand{letter-sp
 .hero-backdrop{position:absolute;inset:-35px;background-size:cover;background-position:center;background-repeat:no-repeat;filter:blur(24px);transform:scale(1.08);opacity:.72;transition:transform 6s ease,opacity .5s ease}.hero-slide.active .hero-backdrop{transform:scale(1.03);opacity:.78}.hero-bg{position:absolute;inset:0;width:100%;height:100%;padding:28px 5vw 28px 34%;object-fit:contain;object-position:right center;transform:scale(1.015);transition:transform 6s ease;filter:drop-shadow(0 18px 28px rgba(0,0,0,.28))}.hero-slide.active .hero-bg{transform:scale(1)}
 .hero-overlay{position:absolute;inset:0;background:linear-gradient(90deg,rgba(8,7,6,.78) 0%,rgba(8,7,6,.42) 38%,rgba(8,7,6,.08) 72%),linear-gradient(0deg,rgba(8,7,6,.48),transparent 35%,rgba(8,7,6,.18))}
 .hero-content{position:absolute;left:max(7vw,48px);top:50%;transform:translateY(-50%);max-width:610px;text-align:left;z-index:2}.hero-content .eyebrow{color:#dfbd7d}.hero h1{font-family:Georgia,"Times New Roman",serif;font-weight:400;letter-spacing:-.025em;font-size:clamp(3rem,6.2vw,6.6rem);line-height:.92;margin:18px 0 24px;text-transform:none}.hero h1 em{color:#e0bd7a}.hero p{margin:0 0 32px;color:#eee9e0;max-width:540px;font-size:1rem;line-height:1.75}.hero-button{background:#fff;color:#171513;border-color:#fff;padding:14px 23px}.hero-button:hover{background:#dfbd7d;border-color:#dfbd7d}
-.hero-arrow{position:absolute;z-index:4;top:50%;transform:translateY(-50%);width:48px;height:48px;border:1px solid rgba(255,255,255,.72);border-radius:50%;background:rgba(255,255,255,.92);color:#171513;font-size:2rem;line-height:1}.hero-prev{left:22px}.hero-next{right:22px}.hero-arrow:hover{background:#fff;transform:translateY(-50%) scale(1.05)}
+.hero-arrow{position:absolute;z-index:4;top:50%;transform:translateY(-50%);width:48px;height:48px;border:1px solid rgba(255,255,255,.72);border-radius:50%;background:rgba(255,255,255,.92);color:#171513;font-size:2rem;line-height:1;display:grid;place-items:center;padding:0}.hero-prev{left:22px}.hero-next{right:22px}.hero-arrow span{display:block;line-height:1;transform:translateY(-1px)}.hero-arrow:hover{background:#fff;transform:translateY(-50%) scale(1.05)}
 .hero-dots{position:absolute;z-index:4;bottom:28px;left:50%;transform:translateX(-50%);display:flex;gap:8px}.hero-dot{width:34px;height:3px;border:0;padding:0;background:rgba(255,255,255,.42);transition:.25s}.hero-dot.active{background:#fff;width:58px}
 
 .footer-grid{display:grid;grid-template-columns:1.2fr 1fr 1fr;align-items:start}.footer-links{display:grid;gap:12px}.footer-links>div{display:flex;flex-wrap:wrap;gap:6px 14px}.footer-links a{color:#aaa49a;text-decoration:none;font-size:.74rem}.footer-links a:hover{color:var(--gold-light)}.footer-inner strong{font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:#ddd8cf}
@@ -493,8 +493,8 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}.brand{letter-sp
 .search-form{height:44px;display:flex;align-items:stretch;max-width:760px;width:100%;justify-self:center;border:1px solid rgba(210,176,113,.42);background:#fff;border-radius:3px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,.12)}
 .search-form input{min-width:0;flex:1;border:0;outline:0;padding:0 17px;color:#171513;background:#fff;font-size:.83rem}
 .search-form input::placeholder{color:#817a70}
-.search-form button{width:54px;border:0;background:var(--gold);color:#171513;font-size:1.5rem;font-weight:800;line-height:1;transition:.2s}
-.search-form button:hover{background:#d5b16e}
+.search-form button{width:54px;border:0;background:var(--gold);color:#171513;font-size:1.5rem;font-weight:800;line-height:1;transition:.2s;display:grid;place-items:center;padding:0}
+.search-form button:hover{background:#d5b16e}.search-form .search-icon{width:22px;height:22px;display:block;fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round}
 .nav-wrap{max-width:1440px;margin:auto;min-height:48px;display:flex;align-items:center;justify-content:center}
 .nav-wrap .nav{width:100%;justify-content:center;flex:initial}
 .header-category{padding:16px 18px!important;font-size:.72rem!important;letter-spacing:.07em;text-transform:uppercase}
@@ -1621,7 +1621,7 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}.brand{letter-sp
 .stock-availability::before{content:'✓';font-size:.9rem;line-height:1}
 .stock-availability.out{color:#a52f2f!important;border-color:#efc2c2!important;background:linear-gradient(180deg,#fff7f7,#fdeaea)!important;box-shadow:0 4px 14px rgba(165,47,47,.07)}
 .stock-availability.out::before{content:'×'}
-.detail-availability{display:inline-flex;align-items:center;gap:7px;width:max-content;padding:8px 14px;border-radius:999px;font-weight:900;font-size:.78rem;letter-spacing:.1em;text-transform:uppercase;border:1px solid #b9dfc6;background:#e8f7ed;color:#176b3a}
+.detail-availability{display:inline-flex;align-items:center;gap:7px;width:max-content;margin-top:-7px;padding:8px 14px;border-radius:999px;font-weight:900;font-size:.78rem;letter-spacing:.1em;text-transform:uppercase;border:1px solid #b9dfc6;background:#e8f7ed;color:#176b3a}
 .detail-availability::before{content:'✓'}
 .detail-availability.out{border-color:#efc2c2;color:#a52f2f;background:#fdeaea}
 .detail-availability.out::before{content:'×'}
@@ -1776,3 +1776,26 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}.brand{letter-sp
 .order-pdf-button {
   white-space: nowrap;
 }
+
+
+/* YHORS · Ajuste estético solicitado: disponibilidad visible debajo del SKU. */
+.detail-availability{
+  display:inline-flex;
+  align-items:center;
+  gap:7px;
+  width:max-content;
+  margin:0 0 16px;
+  padding:8px 14px;
+  border-radius:999px;
+  font-size:.72rem;
+  line-height:1;
+  font-weight:900;
+  letter-spacing:.1em;
+  text-transform:uppercase;
+  border:1px solid #b9dfc6;
+  background:#e8f7ed;
+  color:#176b3a;
+}
+.detail-availability::before{content:'✓';font-size:.85rem;line-height:1}
+.detail-availability.out{border-color:#efc2c2;color:#a52f2f;background:#fdeaea}
+.detail-availability.out::before{content:'×'}
