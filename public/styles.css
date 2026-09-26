@@ -1858,3 +1858,22 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}.brand{letter-sp
   .hero-arrow svg{width:17px;height:17px}
   .hero-arrow{display:grid;place-items:center}
 }
+
+
+/* YHORS 4.7 · navegación del logo con la misma transición de las pestañas. */
+.site-header .brand[data-home-link]{
+  cursor:pointer;
+}
+
+/* YHORS 4.7 · disponibilidad debajo del SKU en la ficha de producto. */
+.product-detail-page .detail-copy .detail-sku,
+.product-detail-page .detail-copy .detail-availability{
+  display:flex !important;
+  width:max-content;
+}
+.product-detail-page .detail-copy .detail-sku{
+  margin-bottom:7px !important;
+}
+.product-detail-page .detail-copy .detail-availability{
+  margin-top:0 !important;
+}

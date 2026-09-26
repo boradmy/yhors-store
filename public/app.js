@@ -201,7 +201,7 @@ function renderHeader(currentCategory = '') {
   return `<header class="site-header">
     <div class="topbar"><div class="header-main">
       <button class="mobile-menu-toggle" id="mobileMenuToggle" type="button" aria-label="Abrir menú" aria-controls="siteNav" aria-expanded="false"><span></span><span></span><span></span></button>
-      <a class="brand" href="/" aria-label="YHORS inicio"><span>YHORS</span><small>STORE</small></a>
+      <a class="brand" href="/" aria-label="YHORS inicio" data-home-link><span>YHORS</span><small>STORE</small></a>
       <form class="search-form" id="siteSearch" role="search">
         <input id="siteSearchInput" type="search" name="buscar" placeholder="Buscar productos, marcas o categorías" autocomplete="off">
         <button type="submit" aria-label="Buscar"><svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"></circle><path d="M16 16l5 5"></path></svg></button>
@@ -226,19 +226,21 @@ function wireSearch() {
 }
 
 function wireCategoryNavigation() {
-  document.querySelectorAll('[data-category-link]').forEach(link => {
-    link.addEventListener('click', event => {
-      if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-      const href = link.getAttribute('href');
-      if (!href || href === `${location.pathname}${location.search}`) return;
-      event.preventDefault();
-      document.querySelector('#siteNav')?.classList.remove('mobile-open');
-      document.querySelector('#mobileMenuToggle')?.classList.remove('open');
-      document.querySelector('#mobileMenuToggle')?.setAttribute('aria-expanded', 'false');
-      document.querySelector('#app > main')?.classList.add('products-refreshing');
-      history.pushState({}, '', href);
-      window.setTimeout(() => renderStore(), 70);
-    });
+  const navigateWithStoreTransition = (link, event) => {
+    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const href = link.getAttribute('href');
+    if (!href || href === `${location.pathname}${location.search}`) return;
+    event.preventDefault();
+    document.querySelector('#siteNav')?.classList.remove('mobile-open');
+    document.querySelector('#mobileMenuToggle')?.classList.remove('open');
+    document.querySelector('#mobileMenuToggle')?.setAttribute('aria-expanded', 'false');
+    document.querySelector('#app > main')?.classList.add('products-refreshing');
+    history.pushState({}, '', href);
+    window.setTimeout(() => renderStore(), 70);
+  };
+
+  document.querySelectorAll('[data-category-link], [data-home-link]').forEach(link => {
+    link.addEventListener('click', event => navigateWithStoreTransition(link, event));
   });
 }
 
