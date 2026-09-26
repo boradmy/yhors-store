@@ -1766,3 +1766,5 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}.brand{letter-sp
 .orders-date-range #clearOrdersDate:hover {
   background:#e2d8cc;
 }
+
+/* V14.23 — no visual change to the inventory cards; stock remains synchronized by server. */

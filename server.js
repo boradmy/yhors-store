@@ -1246,68 +1246,74 @@ function writeProducts(products) {
 }
 
 // V14.22 stock sync: state transitions are idempotent.
-function restoreOrderPurchaseStock(order) {
-  const items = Array.isArray(order?.items) ? order.items : [];
-  const restoreByProduct = new Map();
-  for (const item of items) {
-    if (item?.purchaseMode !== 'purchase') continue;
-    const productId = String(item.productId || '');
-    const quantity = Number(item.quantity || 0);
-    if (!productId || !Number.isInteger(quantity) || quantity <= 0) continue;
-    restoreByProduct.set(productId, (restoreByProduct.get(productId) || 0) + quantity);
-  }
-  if (!restoreByProduct.size) return false;
 
-  const products = readProducts().map(normalizeProduct);
-  let changed = false;
-  const updated = products.map(product => {
-    const amount = Number(restoreByProduct.get(String(product.id)) || 0);
-    if (!amount) return product;
-    const current = Number(product.stock || 0);
-    changed = true;
-    return normalizeProduct({
-      ...product,
-      stock: (Number.isInteger(current) && current >= 0 ? current : 0) + amount,
-      updatedAt: new Date().toISOString()
-    });
-  });
-  if (changed) writeProducts(updated);
-  return changed;
+// V14.23 — stock sincronizado por estado.
+// Estados que reservan/descuentan stock: Pendiente, Confirmado, Preparado, Enviado, Entregado.
+// Cancelado devuelve exactamente las unidades que el pedido tenía reservadas.
+const STOCK_ACTIVE_ORDER_STATUSES = new Set([
+  'pendiente', 'confirmado', 'preparado', 'enviado', 'entregado'
+]);
+
+function orderStatusUsesStock(status) {
+  return STOCK_ACTIVE_ORDER_STATUSES.has(String(status || '').trim().toLocaleLowerCase('es-EC'));
 }
 
-function removeOrderPurchaseStock(order) {
-  const items = Array.isArray(order?.items) ? order.items : [];
+function getPurchaseItems(order) {
+  return (Array.isArray(order?.items) ? order.items : []).filter(item => {
+    const mode = String(item?.purchaseMode || 'purchase').toLowerCase();
+    return mode !== 'rental' && mode !== 'alquiler';
+  });
+}
+
+function getStockDemand(order) {
   const demand = new Map();
-  for (const item of items) {
-    if (item?.purchaseMode !== 'purchase') continue;
+  for (const item of getPurchaseItems(order)) {
     const productId = String(item.productId || '');
     const quantity = Number(item.quantity || 0);
     if (!productId || !Number.isInteger(quantity) || quantity <= 0) continue;
     demand.set(productId, (demand.get(productId) || 0) + quantity);
   }
+  return demand;
+}
+
+function changeOrderStock(order, direction) {
+  const demand = getStockDemand(order);
   if (!demand.size) return false;
 
   const products = readProducts().map(normalizeProduct);
-  for (const [productId, quantity] of demand.entries()) {
-    const product = products.find(p => String(p.id) === productId);
-    if (!product) throw new Error(`El producto del pedido ya no existe: ${productId}`);
-    const current = Number(product.stock || 0);
-    if (!Number.isInteger(current) || current < quantity) {
-      throw new Error(`No hay suficiente stock para reactivar el pedido de “${product.name}”.`);
+
+  if (direction < 0) {
+    for (const [productId, quantity] of demand.entries()) {
+      const product = products.find(p => String(p.id) === productId);
+      if (!product) throw new Error(`El producto del pedido ya no existe: ${productId}`);
+      const current = Number(product.stock || 0);
+      if (!Number.isInteger(current) || current < quantity) {
+        throw new Error(`No hay suficiente stock para el producto “${product.name}”. Disponible: ${current}, solicitado: ${quantity}.`);
+      }
     }
   }
 
   const updated = products.map(product => {
-    const amount = Number(demand.get(String(product.id)) || 0);
-    if (!amount) return product;
+    const quantity = Number(demand.get(String(product.id)) || 0);
+    if (!quantity) return product;
+    const current = Number(product.stock || 0);
     return normalizeProduct({
       ...product,
-      stock: Number(product.stock || 0) - amount,
+      stock: Math.max(0, current + (direction < 0 ? -quantity : quantity)),
       updatedAt: new Date().toISOString()
     });
   });
+
   writeProducts(updated);
   return true;
+}
+
+function reserveOrderStock(order) {
+  return changeOrderStock(order, -1);
+}
+
+function restoreOrderPurchaseStock(order) {
+  return changeOrderStock(order, 1);
 }
 
 function readOrders() {
@@ -2191,38 +2197,35 @@ app.put('/api/admin/orders/:id', requireOrdersAccess, (req, res) => {
       assignedSellerId = null;
     }
   }
+  
   const previousStatus = String(currentOrder.status || 'Pendiente');
   const nextStatus = normalizedStatus;
-  const previousCancelled = previousStatus.toLocaleLowerCase('es-EC') === 'cancelado';
-  const nextCancelled = nextStatus.toLocaleLowerCase('es-EC') === 'cancelado';
-  const stockReserved = Boolean(currentOrder.stockReservedAt);
-  const stockRestored = Boolean(currentOrder.stockRestoredAt);
+  const previousUsesStock = orderStatusUsesStock(previousStatus);
+  const nextUsesStock = orderStatusUsesStock(nextStatus);
+  const statusChanged = previousStatus.toLocaleLowerCase('es-EC') !== nextStatus.toLocaleLowerCase('es-EC');
 
-  // Stock lifecycle:
-  // - Confirmed/active order => reserve/deduct stock once.
-  // - Cancelled order => restore stock once.
-  // - Switching Cancelled -> Confirmed/active => deduct again.
-  // This is idempotent so repeated saves never double-add or double-subtract.
+  // El stock representa exactamente los pedidos cuyo estado está activo.
+  // Al pasar de cualquier estado activo -> Cancelado: devuelve unidades.
+  // Al pasar de Cancelado -> cualquier estado activo: descuenta unidades.
+  // Guardar sin cambiar estado no modifica stock.
   try {
-    if (nextCancelled && !previousCancelled && !stockRestored) {
+    if (statusChanged && previousUsesStock && !nextUsesStock) {
       restoreOrderPurchaseStock(currentOrder);
-    } else if (!nextCancelled && previousCancelled && !stockReserved) {
-      removeOrderPurchaseStock(currentOrder);
-    } else if (!nextCancelled && !stockReserved && !stockRestored) {
-      removeOrderPurchaseStock(currentOrder);
+    } else if (statusChanged && !previousUsesStock && nextUsesStock) {
+      reserveOrderStock(currentOrder);
     }
   } catch (error) {
     return res.status(400).json({ error: error.message || 'No se pudo sincronizar el inventario con el pedido.' });
   }
+
   const updated = { ...currentOrder, assignedSellerId, updatedAt: new Date().toISOString() };
   if (hasStatus) updated.status = normalizedStatus;
-
-  if (nextCancelled) {
-    updated.stockRestoredAt = currentOrder.stockRestoredAt || new Date().toISOString();
-    delete updated.stockReservedAt;
-  } else {
+  if (orderStatusUsesStock(normalizedStatus)) {
     updated.stockReservedAt = currentOrder.stockReservedAt || new Date().toISOString();
     delete updated.stockRestoredAt;
+  } else {
+    updated.stockRestoredAt = currentOrder.stockRestoredAt || new Date().toISOString();
+    delete updated.stockReservedAt;
   }
 
   if (hasInternalNote) updated.internalNote = cleanText(body.internalNote, 5000);

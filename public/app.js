@@ -2051,3 +2051,12 @@ document.addEventListener('click', async function(e){
     stockEl.setCustomValidity('');
   }
 }, true);
+
+/* V14.23 inventory sync event */
+document.addEventListener('orders:stock-synced', async () => {
+  try {
+    if (typeof loadProducts === 'function') await loadProducts();
+    if (typeof renderInventory === 'function') renderInventory();
+    if (typeof drawInventory === 'function') drawInventory();
+  } catch (_) {}
+});
