@@ -753,7 +753,7 @@ function productForm(product = {}, classifications = {}) {
     }).join('')}
     <div class="field full"><label for="description">Descripción completa</label><textarea id="description" name="description" required maxlength="2000" rows="9" ${lock}>${escapeHTML(product.description || '')}</textarea><small class="field-help">Puedes usar saltos de línea y emojis.</small></div>
     <div class="field featured-field"><label><input id="hero" name="hero" type="checkbox" ${lock} ${product.hero ? 'checked' : ''}> Usar en slider de portada</label><label><input id="featured" name="featured" type="checkbox" ${lock} ${product.featured ? 'checked' : ''}> Mostrar como destacado</label></div>
-  </div><div class="form-actions"><button class="button" type="submit" ${lock}>${product.id ? 'Guardar cambios' : 'Crear producto'}</button><button class="button secondary ${product.id ? '' : 'hidden'}" type="button" id="cancelEdit">Cancelar</button><span class="message" id="formMessage"></span></div></form>`;
+  </div><div class="form-actions"><button type="button" class="button order-pdf-button" data-order-pdf="order.id" title="Generar PDF de la orden">Generar PDF</button><button class="button" type="submit" ${lock}>${product.id ? 'Guardar cambios' : 'Crear producto'}</button><button class="button secondary ${product.id ? '' : 'hidden'}" type="button" id="cancelEdit">Cancelar</button><span class="message" id="formMessage"></span></div></form>`;
 }
 function selectionPanel(products, settings) {
   const heroIds = settings.heroProductIds || [];
@@ -2062,6 +2062,15 @@ document.addEventListener('orders:stock-synced', async () => {
 });
 
 /* V14.24 — acceso rápido PDF de orden */
+document.addEventListener('click', (event) => {
+  const button = event.target.closest('[data-order-pdf]');
+  if (!button) return;
+  const id = button.getAttribute('data-order-pdf');
+  if (!id) return;
+  window.open(`/api/admin/orders/${encodeURIComponent(id)}/pdf`, '_blank', 'noopener');
+});
+
+/* V14.25 PDF button */
 document.addEventListener('click', (event) => {
   const button = event.target.closest('[data-order-pdf]');
   if (!button) return;

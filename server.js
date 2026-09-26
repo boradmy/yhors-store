@@ -735,42 +735,58 @@ function buildOrderPdf(order) {
   const seller = order?.assignedSellerName || order?.assignedSeller?.name || 'Sin asignar';
   const customer = order?.customer || {};
   const items = Array.isArray(order?.items) ? order.items : [];
+  const orderNo = order?.orderNumber || order?.id || '';
+  const date = order?.createdAt ? new Date(order.createdAt).toLocaleString('es-EC') : '';
+  const subtotal = Number(order?.subtotal ?? order?.total ?? 0);
+  const total = Number(order?.total || 0);
 
   lines.push('YHORS');
   lines.push('ORDEN DE PEDIDO');
-  lines.push(`Pedido: ${order?.orderNumber || order?.id || ''}`);
-  lines.push(`Fecha: ${order?.createdAt ? new Date(order.createdAt).toLocaleString('es-EC') : ''}`);
-  lines.push(`Estado: ${order?.status || 'Pendiente'}`);
-  lines.push(`Vendedor: ${seller}`);
-  lines.push(`Cliente: ${customer.name || ''}`);
-  if (customer.cedula) lines.push(`Cedula: ${customer.cedula}`);
-  if (customer.phone) lines.push(`Telefono: ${customer.phone}`);
-  if (customer.email) lines.push(`Correo: ${customer.email}`);
+  lines.push('========================================');
+  lines.push(`No. ORDEN: ${orderNo}`);
+  lines.push(`FECHA: ${date}`);
+  lines.push(`ESTADO: ${order?.status || 'Pendiente'}`);
+  lines.push(`VENDEDOR: ${seller}`);
   lines.push('----------------------------------------');
-  lines.push('PRODUCTOS');
+  lines.push('DATOS DEL CLIENTE');
+  lines.push(`NOMBRE: ${customer.name || customer.fullName || ''}`);
+  if (customer.cedula || customer.identification || customer.document) {
+    lines.push(`CEDULA: ${customer.cedula || customer.identification || customer.document}`);
+  }
+  if (customer.phone) lines.push(`TELEFONO: ${customer.phone}`);
+  if (customer.email) lines.push(`CORREO: ${customer.email}`);
+  if (customer.address) lines.push(`DIRECCION: ${customer.address}`);
+  lines.push('----------------------------------------');
+  lines.push('DETALLE DE LA ORDEN');
 
   for (const item of items) {
     const qty = Number(item.quantity || 0);
-    const name = String(item.name || item.sku || 'Producto');
+    const name = String(item.name || item.productName || item.sku || 'Producto');
     const price = Number(item.unitPrice ?? item.price ?? 0);
-    const total = Number(item.lineTotal ?? price * qty);
+    const totalLine = Number(item.lineTotal ?? item.total ?? price * qty);
     lines.push(`${qty} x ${name}`);
-    lines.push(`   $${price.toFixed(2)}    Total: $${total.toFixed(2)}`);
+    lines.push(`   P.UNIT: $${price.toFixed(2)}    TOTAL: $${totalLine.toFixed(2)}`);
   }
 
   lines.push('----------------------------------------');
-  lines.push(`TOTAL: $${Number(order?.total || 0).toFixed(2)}`);
+  lines.push(`SUBTOTAL: $${subtotal.toFixed(2)}`);
+  if (order?.discount != null) lines.push(`DESCUENTO: $${Number(order.discount).toFixed(2)}`);
+  if (order?.shippingCost != null) lines.push(`ENVIO: $${Number(order.shippingCost).toFixed(2)}`);
+  lines.push(`TOTAL: $${total.toFixed(2)}`);
+
   if (order?.internalNote) {
+    lines.push('----------------------------------------');
     lines.push('NOTAS INTERNAS');
     lines.push(String(order.internalNote));
   }
-  lines.push('Documento generado desde YHORS');
+  lines.push('----------------------------------------');
+  lines.push('YHORS - Documento de orden');
+  lines.push('Este documento es un comprobante de pedido y no necesariamente una factura tributaria.');
 
-  // Simple one-page PDF, text only, suitable for quick access/printing.
   const content=[];
-  let y=780;
-  for (const line of lines.slice(0, 42)) {
-    content.push(`BT /F1 10 Tf 40 ${y} Td (${pdfEscape(line)}) Tj ET`);
+  let y=790;
+  for (const line of lines.slice(0, 44)) {
+    content.push(`BT /F1 9 Tf 40 ${y} Td (${pdfEscape(line)}) Tj ET`);
     y-=17;
   }
   const stream=content.join('\\n');

@@ -1771,3 +1771,8 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}.brand{letter-sp
 
 /* V14.24 — acceso rápido PDF */
 [data-order-pdf]{white-space:nowrap}
+
+/* V14.25 — botón PDF junto a Guardar cambios */
+.order-pdf-button {
+  white-space: nowrap;
+}
