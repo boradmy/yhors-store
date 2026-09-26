@@ -905,6 +905,7 @@ function ordersListMarkup(orders = [], options = {}) {
           : `<div class="order-assignment-readonly">${escapeHTML(sellerName(order))}</div>`}
       </div>
       <div class="admin-order-footer">
+        <button class="button pdf-order small" type="button" data-order-pdf="${escapeHTML(order.id)}" title="Generar PDF de esta orden">PDF ORDEN</button>
         <button class="button success small" type="button" data-order-note-save="${escapeHTML(order.id)}" disabled>Guardar cambios</button>
         <button class="button edit-note small" type="button" data-order-note-edit="${escapeHTML(order.id)}">Editar pedido</button>
         ${canDelete ? `<button class="button danger small" type="button" data-order-delete="${escapeHTML(order.id)}">Eliminar pedido</button>` : ''}
@@ -2061,20 +2062,28 @@ document.addEventListener('orders:stock-synced', async () => {
   } catch (_) {}
 });
 
-/* V14.24 — acceso rápido PDF de orden */
+/* YHORS — PDF de una orden específica */
 document.addEventListener('click', (event) => {
   const button = event.target.closest('[data-order-pdf]');
   if (!button) return;
-  const id = button.getAttribute('data-order-pdf');
-  if (!id) return;
-  window.open(`/api/admin/orders/${encodeURIComponent(id)}/pdf`, '_blank', 'noopener');
-});
 
-/* V14.25 PDF button */
-document.addEventListener('click', (event) => {
-  const button = event.target.closest('[data-order-pdf]');
-  if (!button) return;
   const id = button.getAttribute('data-order-pdf');
   if (!id) return;
-  window.open(`/api/admin/orders/${encodeURIComponent(id)}/pdf`, '_blank', 'noopener');
+
+  const originalText = button.textContent;
+  button.disabled = true;
+  button.textContent = 'GENERANDO…';
+
+  const pdfUrl = `/api/admin/orders/${encodeURIComponent(id)}/pdf`;
+  const pdfWindow = window.open(pdfUrl, '_blank', 'noopener');
+
+  if (!pdfWindow) {
+    window.location.href = pdfUrl;
+    return;
+  }
+
+  setTimeout(() => {
+    button.disabled = false;
+    button.textContent = originalText;
+  }, 800);
 });
