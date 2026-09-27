@@ -866,38 +866,15 @@ function buildOrderPdf(order) {
     } else {
       drawText(ops, 'YHORS', margin, y - 10, 24, boldFont);
     }
-    // Encabezado: los tres textos comparten exactamente el mismo centro
-    // horizontal que el recuadro PENDIENTE. Para que el centrado visual sea
-    // real y no dependa de una estimación por cantidad de caracteres, usamos
-    // las métricas estándar de Helvetica/Helvetica-Bold.
-    const headerRight = right - 18;
+    // Encabezado: los tres textos se alinean por su BORDE DERECHO con
+    // el borde derecho del recuadro PENDIENTE. No se centra el texto sobre
+    // el recuadro; todos terminan exactamente en la misma vertical.
     const statusW = 116;
     const statusX = right - statusW;
-    const headerCenter = statusX + statusW / 2;
-    const headerFontWidths = {
-      normal: {
-        ' ': 278, '.': 278, ':': 278, '/': 278, '-': 333,
-        '0': 556, '1': 556, '2': 556, '3': 556, '4': 556, '5': 556, '6': 556, '7': 556, '8': 556, '9': 556,
-        'A': 667, 'B': 667, 'C': 722, 'D': 722, 'E': 667, 'F': 611, 'G': 778, 'H': 722, 'I': 278, 'J': 500, 'K': 667, 'L': 556, 'M': 833, 'N': 722, 'O': 778, 'P': 667, 'Q': 778, 'R': 722, 'S': 667, 'T': 611, 'U': 722, 'V': 667, 'W': 944, 'X': 667, 'Y': 667, 'Z': 611,
-        'a': 556, 'b': 556, 'c': 500, 'd': 556, 'e': 556, 'f': 278, 'g': 556, 'h': 556, 'i': 222, 'j': 222, 'k': 500, 'l': 222, 'm': 833, 'n': 556, 'o': 556, 'p': 556, 'q': 556, 'r': 333, 's': 500, 't': 278, 'u': 556, 'v': 500, 'w': 722, 'x': 500, 'y': 500, 'z': 500
-      },
-      bold: {
-        ' ': 278, '.': 278, ':': 278, '/': 278, '-': 333,
-        '0': 556, '1': 556, '2': 556, '3': 556, '4': 556, '5': 556, '6': 556, '7': 556, '8': 556, '9': 556,
-        'A': 722, 'B': 667, 'C': 722, 'D': 722, 'E': 667, 'F': 611, 'G': 778, 'H': 722, 'I': 278, 'J': 500, 'K': 722, 'L': 611, 'M': 833, 'N': 722, 'O': 778, 'P': 667, 'Q': 778, 'R': 722, 'S': 667, 'T': 611, 'U': 722, 'V': 667, 'W': 944, 'X': 667, 'Y': 667, 'Z': 611,
-        'a': 556, 'b': 556, 'c': 500, 'd': 556, 'e': 556, 'f': 333, 'g': 556, 'h': 556, 'i': 278, 'j': 278, 'k': 556, 'l': 278, 'm': 833, 'n': 556, 'o': 556, 'p': 556, 'q': 556, 'r': 392, 's': 500, 't': 333, 'u': 556, 'v': 500, 'w': 722, 'x': 500, 'y': 500, 'z': 500
-      }
-    };
-    const drawHeaderCentered = (text, yPos, size, font) => {
-      const widths = font === boldFont ? headerFontWidths.bold : headerFontWidths.normal;
-      const units = String(text ?? '').split('').reduce((sum, ch) => sum + (widths[ch] ?? 556), 0);
-      const textWidth = units / 1000 * size;
-      const tx = headerCenter - textWidth / 2;
-      ops.push(`BT /F${font} ${size} Tf ${tx.toFixed(2)} ${yPos.toFixed(2)} Td (${pdfEscape(text)}) Tj ET`);
-    };
-    drawHeaderCentered('ORDEN DE PEDIDO', y - 8, 18, boldFont);
-    drawHeaderCentered(`N. ORDEN  ${orderNo}`, y - 29, 9, boldFont);
-    drawHeaderCentered(`FECHA  ${date}`, y - 44, 8, normalFont);
+    const headerRight = statusX + statusW;
+    drawText(ops, 'ORDEN DE PEDIDO', headerRight, y - 8, 18, boldFont, 'right');
+    drawText(ops, `N. ORDEN  ${orderNo}`, headerRight, y - 29, 9, boldFont, 'right');
+    drawText(ops, `FECHA  ${date}`, headerRight, y - 44, 8, normalFont, 'right');
     setFill(ops, 0.78, 0.60, 0.24);
     ops.push(`0.78 0.60 0.24 rg ${statusX} ${y - 68} ${statusW} 18 re f 0 0 0 rg`);
     drawText(ops, safeStatus, statusX + statusW / 2, y - 62, 8, boldFont, 'center');
