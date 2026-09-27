@@ -866,14 +866,17 @@ function buildOrderPdf(order) {
     } else {
       drawText(ops, 'YHORS', margin, y - 10, 24, boldFont);
     }
-    // Título, número y fecha comparten exactamente el mismo eje derecho
-    // del recuadro de estado. No modificar la posición del recuadro PENDIENTE.
-    const statusW = 116;
-    const statusX = right - statusW;
-    const headerRight = statusX;
+    // Identidad del documento centrada en un mismo eje para que el encabezado
+    // no quede desalineado entre título, número, fecha y estado.
+    // Dejamos un pequeño margen de seguridad a la derecha porque el
+    // generador PDF usa un cálculo aproximado del ancho de las fuentes.
+    // Así ningún texto del encabezado puede quedar recortado.
+    const headerRight = right - 18;
     drawText(ops, 'ORDEN DE PEDIDO', headerRight, y - 8, 18, boldFont, 'right');
     drawText(ops, `N. ORDEN  ${orderNo}`, headerRight, y - 29, 9, boldFont, 'right');
     drawText(ops, `FECHA  ${date}`, headerRight, y - 44, 8, normalFont, 'right');
+    const statusW = 116;
+    const statusX = right - statusW;
     setFill(ops, 0.78, 0.60, 0.24);
     ops.push(`0.78 0.60 0.24 rg ${statusX} ${y - 68} ${statusW} 18 re f 0 0 0 rg`);
     drawText(ops, safeStatus, statusX + statusW / 2, y - 62, 8, boldFont, 'center');
