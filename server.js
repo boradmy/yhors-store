@@ -2618,12 +2618,179 @@ app.post('/api/admin/gastos', requireAdmin, (req, res) => {
   return res.status(201).json({ ...expense });
 });
 
+app.put('/api/admin/gastos/:id', requireAdmin, (req, res) => {
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(String(req.body?.date || '')) ? String(req.body.date) : '';
+  const description = cleanText(req.body?.description, 120);
+  const note = cleanText(req.body?.note, 500);
+  const amount = Number(req.body?.amount);
+  if (!date) return res.status(400).json({ error: 'Selecciona una fecha válida para el gasto.' });
+  if (!description) return res.status(400).json({ error: 'Ingresa una descripción para el gasto.' });
+  if (!Number.isFinite(amount) || amount <= 0 || amount > 100000000) return res.status(400).json({ error: 'Ingresa un valor de gasto válido.' });
+  const expenses = readExpenses();
+  const index = expenses.findIndex(expense => String(expense.id) === String(req.params.id));
+  if (index < 0) return res.status(404).json({ error: 'Gasto no encontrado.' });
+  const current = expenses[index];
+  const updated = {
+    ...current,
+    date,
+    description,
+    amount: Math.round(amount * 100) / 100,
+    note,
+    updatedAt: new Date().toISOString(),
+    updatedBy: getSession(req)?.accountId || null
+  };
+  expenses[index] = updated;
+  writeExpenses(expenses);
+  return res.json(updated);
+});
+
 app.delete('/api/admin/gastos/:id', requireAdmin, (req, res) => {
   const expenses = readExpenses();
   const next = expenses.filter(expense => String(expense.id) !== String(req.params.id));
   if (next.length === expenses.length) return res.status(404).json({ error: 'Gasto no encontrado.' });
   writeExpenses(next);
   return res.status(204).end();
+});
+
+
+app.get('/api/admin/calculo-comision', requireAdmin, (req, res) => {
+  const orders = readOrders();
+  const users = readUsers();
+  const expenses = readExpenses();
+  const from = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.from || '')) ? String(req.query.from) : '';
+  const to = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.to || '')) ? String(req.query.to) : '';
+  const localDate = value => {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    return date.toLocaleDateString('en-CA', { timeZone: 'America/Guayaquil' });
+  };
+  const qualifyingStatuses = new Set(['Enviado', 'Entregado']);
+  const sellers = users
+    .filter(user => isSellerRole(user.role) && user.active !== false)
+    .map(user => ({ id: user.id, name: user.name, username: user.username, role: 'vendedor' }))
+    .sort((a, b) => a.name.localeCompare(b.name, 'es'));
+
+  const rows = new Map(sellers.map(user => [String(user.id), {
+    userId: user.id, name: user.name, username: user.username, role: 'vendedor',
+    orderCount: 0, sales: 0, paid: false, paidExpenseId: null, paidAmount: 0
+  }]));
+  const manager = users.find(user => isStoreManager(user.role) && user.active !== false);
+  const managerRow = manager ? {
+    userId: manager.id, name: manager.name || 'Jefe de Tienda', username: manager.username || '',
+    role: 'store_manager', orderCount: 0, sales: 0, paid: false, paidExpenseId: null, paidAmount: 0
+  } : {
+    userId: 'store_manager', name: 'Jefe de Tienda', username: '', role: 'store_manager',
+    orderCount: 0, sales: 0, paid: false, paidExpenseId: null, paidAmount: 0
+  };
+
+  for (const order of orders) {
+    const date = localDate(order.createdAt);
+    const status = String(order.status || 'Pendiente');
+    if (!date || (from && date < from) || (to && date > to) || !qualifyingStatuses.has(status)) continue;
+    const total = Number(order.total || 0);
+    const seller = rows.get(String(order.assignedSellerId || ''));
+    if (seller) {
+      seller.orderCount += 1;
+      seller.sales += total;
+    }
+    // La base del Jefe de Tienda es la venta total de Enviado + Entregado.
+    managerRow.orderCount += 1;
+    managerRow.sales += total;
+  }
+
+  const paidFor = (userId) => expenses
+    .filter(expense => expense.type === 'commission'
+      && String(expense.commissionUserId || '') === String(userId)
+      && String(expense.commissionFrom || '') === from
+      && String(expense.commissionTo || '') === to)
+    .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))[0] || null;
+
+  const round = value => Math.round(Number(value || 0) * 100) / 100;
+  const normalized = [...rows.values(), managerRow].map(row => {
+    const paid = paidFor(row.userId);
+    return {
+      ...row,
+      sales: round(row.sales),
+      paid: Boolean(paid),
+      paidExpenseId: paid?.id || null,
+      paidAmount: round(paid?.amount || 0),
+      paidRate: Number(paid?.commissionRate || 0)
+    };
+  });
+  const totalSales = round(normalized.reduce((sum, row) => sum + row.sales, 0) - managerRow.sales);
+  const qualifyingOrders = normalized.filter(row => row.role === 'vendedor').reduce((sum, row) => sum + row.orderCount, 0);
+
+  return res.json({
+    filters: { from, to },
+    statuses: ['Enviado', 'Entregado'],
+    rows: normalized,
+    totals: { sales: totalSales, orderCount: qualifyingOrders, managerSales: round(managerRow.sales) }
+  });
+});
+
+app.post('/api/admin/calculo-comision/pagar', requireAdmin, (req, res) => {
+  const userId = cleanText(req.body?.userId, 100);
+  const from = /^\d{4}-\d{2}-\d{2}$/.test(String(req.body?.from || '')) ? String(req.body.from) : '';
+  const to = /^\d{4}-\d{2}-\d{2}$/.test(String(req.body?.to || '')) ? String(req.body.to) : '';
+  const rate = Number(req.body?.rate);
+  if (!userId) return res.status(400).json({ error: 'Selecciona un usuario para pagar la comisión.' });
+  if (!from || !to || from > to) return res.status(400).json({ error: 'Selecciona un período válido.' });
+  if (!Number.isFinite(rate) || rate <= 0 || rate > 100) return res.status(400).json({ error: 'El porcentaje debe estar entre 0,01% y 100%.' });
+
+  const users = readUsers();
+  const isManager = userId === 'store_manager';
+  const user = isManager
+    ? users.find(item => isStoreManager(item.role) && item.active !== false)
+    : users.find(item => String(item.id) === userId && isSellerRole(item.role) && item.active !== false);
+  if (!user && !isManager) return res.status(404).json({ error: 'Vendedor no encontrado.' });
+
+  const orders = readOrders();
+  const qualifyingStatuses = new Set(['Enviado', 'Entregado']);
+  const localDate = value => {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    return date.toLocaleDateString('en-CA', { timeZone: 'America/Guayaquil' });
+  };
+  let sales = 0;
+  for (const order of orders) {
+    const date = localDate(order.createdAt);
+    if (!date || date < from || date > to || !qualifyingStatuses.has(String(order.status || 'Pendiente'))) continue;
+    if (isManager || String(order.assignedSellerId || '') === String(user.id)) sales += Number(order.total || 0);
+  }
+  sales = Math.round(sales * 100) / 100;
+  const amount = Math.round(sales * (rate / 100) * 100) / 100;
+  if (sales <= 0) return res.status(400).json({ error: 'No hay ventas Enviado o Entregado para calcular esta comisión en el período.' });
+  if (amount <= 0) return res.status(400).json({ error: 'La comisión calculada es $0,00.' });
+
+  const expenses = readExpenses();
+  const existing = expenses.find(expense => expense.type === 'commission'
+    && String(expense.commissionUserId || '') === userId
+    && String(expense.commissionFrom || '') === from
+    && String(expense.commissionTo || '') === to);
+  if (existing) {
+    return res.status(409).json({ error: `La comisión de este usuario para ${from} → ${to} ya fue pagada.`, expense: existing });
+  }
+
+  const recipientName = user?.name || 'Jefe de Tienda';
+  const expense = {
+    id: crypto.randomUUID(),
+    date: to,
+    description: `Comisión — ${recipientName}`,
+    amount,
+    note: `Comisión ${rate}% sobre ${sales.toFixed(2)} de ventas Enviado + Entregado · período ${from} → ${to}.`,
+    type: 'commission',
+    commissionUserId: user?.id || 'store_manager',
+    commissionRole: isManager ? 'store_manager' : 'vendedor',
+    commissionFrom: from,
+    commissionTo: to,
+    commissionRate: rate,
+    commissionBase: sales,
+    createdAt: new Date().toISOString(),
+    createdBy: getSession(req)?.accountId || null
+  };
+  expenses.push(expense);
+  writeExpenses(expenses);
+  return res.status(201).json(expense);
 });
 
 app.get('/api/admin/ventas-generales', requireOrdersAccess, (req, res) => {

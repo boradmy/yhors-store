@@ -2168,3 +2168,37 @@ body.generate-modal-open{overflow:hidden}
 .financial-modal-close:hover{background:#f7f4ee}
 @media(max-width:900px){.financial-summary{grid-template-columns:1fr 1fr}.financial-grid{grid-template-columns:1fr}.financial-expense-breakdown{grid-template-columns:1fr 1fr}.financial-expense-breakdown .total{border-left:0;padding-left:0}}
 @media(max-width:560px){.financial-summary{grid-template-columns:1fr}.financial-toolbar{align-items:stretch}.financial-date-range{width:100%}.financial-date-filter{flex:1}.financial-date-filter input{width:100%}.financial-toolbar>#financialRefresh{width:100%}.financial-expense-breakdown{grid-template-columns:1fr}.financial-modal-dialog{padding:17px}.financial-profit-banner>div{display:grid}}
+
+.financial-expense-actions{display:flex;align-items:center;justify-content:flex-end;gap:6px}
+.financial-edit-expense{border:1px solid #d8c9a6;background:#fff9ec;color:#6f551f;border-radius:7px;padding:5px 9px;font-size:.72rem;font-weight:700;cursor:pointer}
+.financial-edit-expense:hover{background:#f7edd5}
+.commission-shell .admin-wrap{max-width:1400px}
+.commission-panel{overflow:hidden}
+.commission-heading{margin-bottom:18px}
+.commission-toolbar{display:flex;align-items:flex-end;justify-content:space-between;gap:15px;margin-bottom:16px;flex-wrap:wrap}
+.commission-date-range{display:flex;gap:10px;flex-wrap:wrap}
+.commission-date-filter{display:flex;flex-direction:column;gap:6px;font-size:.68rem;font-weight:800;letter-spacing:.08em;color:#777}
+.commission-date-filter input{min-height:42px;border:1px solid var(--line,#ded8cc);border-radius:9px;padding:8px 11px;background:#fff;font:inherit;letter-spacing:normal;color:#24211d}
+.commission-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:0 0 18px}
+.commission-summary>div{border:1px solid #e8e1d5;border-radius:12px;background:#faf8f3;padding:13px 15px;display:flex;flex-direction:column;gap:5px}
+.commission-summary span{font-size:.62rem;letter-spacing:.08em;color:#777;font-weight:800}
+.commission-summary strong{font-size:1rem}
+.commission-table-wrap{overflow:auto;border:1px solid #e6dfd3;border-radius:13px}
+.commission-table{width:100%;border-collapse:collapse;min-width:980px}
+.commission-table th,.commission-table td{padding:13px 14px;border-bottom:1px solid #eeeae2;text-align:right;font-size:.82rem;vertical-align:middle}
+.commission-table th:first-child,.commission-table td:first-child,.commission-table th:nth-child(2),.commission-table td:nth-child(2){text-align:left}
+.commission-table thead th{font-size:.63rem;letter-spacing:.08em;color:#777;background:#faf8f3}
+.commission-table td:first-child small{display:block;color:#888;margin-top:3px;font-size:.68rem}
+.commission-manager-row{background:#fffaf0}
+.commission-rate-wrap{display:inline-flex;align-items:center;gap:5px}
+.commission-rate-wrap input{width:88px;min-height:36px;border:1px solid #d8d0c3;border-radius:8px;padding:6px 8px;text-align:right;background:#fff}
+.commission-rate-wrap span{font-weight:800;color:#777}
+.commission-pay-button{white-space:nowrap}
+.commission-pay-button:disabled{opacity:.55;cursor:not-allowed}
+.commission-paid{display:inline-flex;align-items:center;border-radius:999px;padding:6px 10px;background:#eaf6ec;border:1px solid #bfe0c4;color:#26753a;font-size:.72rem;font-weight:800}
+.commission-note{margin-top:14px;padding:13px 15px;border-radius:10px;background:#faf8f3;border:1px solid #e8e1d5;color:#716c64;font-size:.74rem;line-height:1.55}
+.commission-loading,.commission-empty{text-align:center!important;color:#777!important;padding:30px!important}
+.commission-message{margin:10px 0;padding:11px 13px;border-radius:9px;background:#edf6ff;border:1px solid #cfe4f7;color:#24577c}
+.commission-message.error{background:#fff0ef;border-color:#e9c2be;color:#8b2f28}
+@media(max-width:900px){.commission-summary{grid-template-columns:1fr 1fr}}
+@media(max-width:560px){.commission-summary{grid-template-columns:1fr}.commission-toolbar{align-items:stretch}.commission-date-range{width:100%}.commission-date-filter{flex:1}.commission-date-filter input{width:100%}.commission-toolbar>#commissionRefresh{width:100%}}

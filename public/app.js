@@ -609,6 +609,7 @@ async function renderCurrentRoute() {
   if (path === ADMIN_PATH || path === `${ADMIN_PATH}/`) return renderAdmin();
   if (path === `${ADMIN_PATH}/ventas-generales` || path === `${ADMIN_PATH}/ventas-generales/`) return renderAdminSales();
   if (path === `${ADMIN_PATH}/resumen-financiero` || path === `${ADMIN_PATH}/resumen-financiero/`) return renderAdminFinancial();
+  if (path === `${ADMIN_PATH}/calculo-comision` || path === `${ADMIN_PATH}/calculo-comision/`) return renderAdminCommission();
   if (path === `${ADMIN_PATH}/pedidos` || path === `${ADMIN_PATH}/pedidos/`) return renderAdminOrders();
   if (path === `${ADMIN_PATH}/generar-orden` || path === `${ADMIN_PATH}/generar-orden/`) return renderAdminGenerateOrder();
   if (path === `${ADMIN_PATH}/usuarios` || path === `${ADMIN_PATH}/usuarios/`) return renderAdminUsers();
@@ -1146,7 +1147,7 @@ function generateOrderNav(session) {
   // generación de órdenes. Las áreas de catálogo/usuarios siguen ocultas.
   if (limitedOperations) {
     return `<nav class="admin-section-nav" aria-label="Secciones operativas">
-      <a href="${ADMIN_PATH}/ventas-generales" class="admin-section-link" data-smooth-route>VENTAS GENERALES</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link" data-smooth-route>PEDIDOS</a>
+      <a href="${ADMIN_PATH}/ventas-generales" class="admin-section-link" data-smooth-route>VENTAS GENERALES</a><a href="${ADMIN_PATH}/calculo-comision" class="admin-section-link" data-smooth-route>CALCULO DE COMISION</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link" data-smooth-route>PEDIDOS</a>
       <a href="${ADMIN_PATH}/generar-orden" class="admin-section-link active" data-smooth-route>GENERAR ORDEN</a>
     </nav>`;
   }
@@ -1257,6 +1258,123 @@ async function renderAdminGenerateOrder() {
   drawCustomer(); drawLines(); wireAccountMenu(); wireImageFallback(app);
 }
 
+
+async function renderAdminCommission() {
+  const session = await request('/api/admin/session').catch(() => ({ authenticated: false }));
+  if (!session.authenticated) return renderLogin();
+  if (String(session.role || '').toLowerCase() !== 'admin') return renderAdminOrders();
+
+  const localToday = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Guayaquil' });
+  const today = localToday();
+  const monthStart = `${today.slice(0, 7)}-01`;
+  const nav = `<nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}" class="admin-section-link" data-smooth-route>PÁGINA WEB</a><a href="${ADMIN_PATH}/usuarios" class="admin-section-link" data-smooth-route>USUARIOS</a><a href="${ADMIN_PATH}/inventario" class="admin-section-link" data-smooth-route>INVENTARIO</a><a href="${ADMIN_PATH}/resumen-financiero" class="admin-section-link" data-smooth-route>RESUMEN FINANCIERO</a><a href="${ADMIN_PATH}/ventas-generales" class="admin-section-link" data-smooth-route>VENTAS GENERALES</a><a href="${ADMIN_PATH}/calculo-comision" class="admin-section-link active" data-smooth-route>CALCULO DE COMISION</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link" data-smooth-route>PEDIDOS</a><a href="${ADMIN_PATH}/generar-orden" class="admin-section-link" data-smooth-route>GENERAR ORDEN</a></nav>`;
+
+  app.innerHTML = `<main class="admin-shell commission-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Cálculo de comisión</h1><p class="admin-subtitle">Comisiones para vendedores y Jefe de Tienda · acceso exclusivo de Administración</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>${nav}
+    <section class="admin-panel commission-panel">
+      <div class="section-heading commission-heading"><div><span class="eyebrow">Comisiones</span><h2>Pago de comisiones</h2></div><p>Solo se toman ventas con estado <strong>Enviado</strong> y <strong>Entregado</strong>. El porcentaje se puede definir individualmente antes de pagar.</p></div>
+      <div class="commission-toolbar">
+        <div class="commission-date-range"><label class="commission-date-filter"><span>Desde</span><input id="commissionDateFrom" type="date" value="${monthStart}" aria-label="Fecha inicial"></label><label class="commission-date-filter"><span>Hasta</span><input id="commissionDateTo" type="date" value="${today}" aria-label="Fecha final"></label></div>
+        <button type="button" class="button primary small" id="commissionRefresh">Actualizar</button>
+      </div>
+      <div class="commission-message" id="commissionMessage" hidden></div>
+      <div class="commission-summary" id="commissionSummary"></div>
+      <div class="commission-table-wrap"><table class="commission-table"><thead><tr><th>USUARIO</th><th>ROL</th><th>PEDIDOS</th><th>VENTAS COMISIONABLES</th><th>% COMISIÓN</th><th>COMISIÓN</th><th>ACCIÓN</th></tr></thead><tbody id="commissionTableBody"><tr><td colspan="7" class="commission-loading">Calculando…</td></tr></tbody></table></div>
+      <div class="commission-note"><strong>Importante:</strong> al pulsar <strong>Pagar comisión</strong>, el valor se registra automáticamente en <strong>Resumen Financiero → Gastos</strong> como un gasto normal, con su concepto, fecha y detalle.</div>
+    </section>
+  </div></main>`;
+
+  const moneyCell = value => money(Number(value || 0));
+  const message = document.querySelector('#commissionMessage');
+
+  const loadCommissions = async () => {
+    const from = document.querySelector('#commissionDateFrom')?.value || '';
+    const to = document.querySelector('#commissionDateTo')?.value || '';
+    const body = document.querySelector('#commissionTableBody');
+    const summary = document.querySelector('#commissionSummary');
+    if (!body) return;
+    if (from && to && from > to) {
+      body.innerHTML = '<tr><td colspan="7" class="commission-empty">La fecha inicial no puede ser posterior a la fecha final.</td></tr>';
+      if (summary) summary.innerHTML = '';
+      return;
+    }
+    if (message) message.hidden = true;
+    body.innerHTML = '<tr><td colspan="7" class="commission-loading">Calculando comisiones…</td></tr>';
+    try {
+      const result = await request(`/api/admin/calculo-comision?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
+      const rows = Array.isArray(result.rows) ? result.rows : [];
+      const totals = result.totals || {};
+      if (summary) summary.innerHTML = `<div><span>PERÍODO</span><strong>${escapeHTML(from || 'Todo')} → ${escapeHTML(to || 'Todo')}</strong></div><div><span>ESTADOS</span><strong>Enviado + Entregado</strong></div><div><span>VENTAS COMISIONABLES</span><strong>${moneyCell(totals.sales)}</strong></div><div><span>JEFE DE TIENDA</span><strong>${moneyCell(totals.managerSales)}</strong></div>`;
+
+      body.innerHTML = rows.length ? rows.map(row => {
+        const roleLabel = row.role === 'store_manager' ? 'Jefe de Tienda' : 'Vendedor';
+        const defaultRate = row.paid ? Number(row.paidRate || 0) : 0;
+        const amount = row.paid ? Number(row.paidAmount || 0) : 0;
+        return `<tr class="${row.role === 'store_manager' ? 'commission-manager-row' : ''}">
+          <td><strong>${escapeHTML(row.name || 'Sin nombre')}</strong><small>${escapeHTML(row.username ? '@' + row.username : '')}</small></td>
+          <td>${escapeHTML(roleLabel)}</td>
+          <td>${Number(row.orderCount || 0)}</td>
+          <td><strong>${moneyCell(row.sales)}</strong></td>
+          <td><div class="commission-rate-wrap"><input type="number" min="0.01" max="100" step="0.01" value="${defaultRate || ''}" data-commission-rate="${escapeHTML(String(row.userId))}" ${row.paid ? 'disabled' : ''}><span>%</span></div></td>
+          <td><strong data-commission-amount="${escapeHTML(String(row.userId))}">${row.paid ? moneyCell(amount) : moneyCell(0)}</strong></td>
+          <td>${row.paid
+            ? `<span class="commission-paid">Pagada · ${Number(row.paidRate || 0).toFixed(2)}%</span>`
+            : `<button type="button" class="button primary small commission-pay-button" data-pay-commission="${escapeHTML(String(row.userId))}" ${Number(row.sales || 0) <= 0 ? 'disabled' : ''}>Pagar comisión</button>`}</td>
+        </tr>`;
+      }).join('') : '<tr><td colspan="7" class="commission-empty">No hay vendedores o Jefe de Tienda disponibles.</td></tr>';
+
+      body.querySelectorAll('[data-commission-rate]').forEach(input => {
+        const update = () => {
+          const rate = Number(input.value || 0);
+          const row = rows.find(item => String(item.userId) === String(input.dataset.commissionRate));
+          const amount = row ? Number(row.sales || 0) * Math.max(0, Math.min(100, rate)) / 100 : 0;
+          const target = body.querySelector(`[data-commission-amount="${CSS.escape(String(input.dataset.commissionRate))}"]`);
+          if (target) target.textContent = moneyCell(amount);
+        };
+        input.addEventListener('input', update);
+        update();
+      });
+    } catch (error) {
+      if (message) { message.hidden = false; message.className = 'commission-message error'; message.textContent = error.message || 'No se pudo calcular las comisiones.'; }
+      body.innerHTML = '<tr><td colspan="7" class="commission-empty">No se pudo cargar la información.</td></tr>';
+    }
+  };
+
+  document.querySelector('#commissionRefresh')?.addEventListener('click', loadCommissions);
+  document.querySelector('#commissionDateFrom')?.addEventListener('change', loadCommissions);
+  document.querySelector('#commissionDateTo')?.addEventListener('change', loadCommissions);
+
+  document.querySelector('#commissionTableBody')?.addEventListener('click', async event => {
+    const button = event.target.closest('[data-pay-commission]');
+    if (!button) return;
+    const userId = button.dataset.payCommission;
+    const input = document.querySelector(`[data-commission-rate="${CSS.escape(userId)}"]`);
+    const rate = Number(input?.value || 0);
+    if (!Number.isFinite(rate) || rate <= 0 || rate > 100) {
+      alert('Ingresa un porcentaje válido entre 0,01% y 100%.');
+      input?.focus();
+      return;
+    }
+    const from = document.querySelector('#commissionDateFrom')?.value || '';
+    const to = document.querySelector('#commissionDateTo')?.value || '';
+    const amountEl = document.querySelector(`[data-commission-amount="${CSS.escape(userId)}"]`);
+    const amountText = amountEl?.textContent || '$0,00';
+    if (!confirm(`¿Pagar la comisión de ${rate}% (${amountText}) para el período ${from} → ${to}?\n\nSe agregará automáticamente a Gastos del Resumen Financiero.`)) return;
+    button.disabled = true;
+    button.textContent = 'Pagando…';
+    try {
+      await request('/api/admin/calculo-comision/pagar', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ userId, from, to, rate }) });
+      await loadCommissions();
+    } catch (error) {
+      alert(error.message || 'No se pudo registrar la comisión.');
+      button.disabled = false;
+      button.textContent = 'Pagar comisión';
+    }
+  });
+
+  await loadCommissions();
+  wireAccountMenu();
+}
+
 async function renderAdminFinancial() {
   const session = await request('/api/admin/session').catch(() => ({ authenticated: false }));
   if (!session.authenticated) return renderLogin();
@@ -1265,7 +1383,7 @@ async function renderAdminFinancial() {
   const localToday = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Guayaquil' });
   const today = localToday();
   const monthStart = `${today.slice(0, 7)}-01`;
-  const nav = `<nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}" class="admin-section-link" data-smooth-route>PÁGINA WEB</a><a href="${ADMIN_PATH}/usuarios" class="admin-section-link" data-smooth-route>USUARIOS</a><a href="${ADMIN_PATH}/inventario" class="admin-section-link" data-smooth-route>INVENTARIO</a><a href="${ADMIN_PATH}/resumen-financiero" class="admin-section-link active" data-smooth-route>RESUMEN FINANCIERO</a><a href="${ADMIN_PATH}/ventas-generales" class="admin-section-link" data-smooth-route>VENTAS GENERALES</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link" data-smooth-route>PEDIDOS</a><a href="${ADMIN_PATH}/generar-orden" class="admin-section-link" data-smooth-route>GENERAR ORDEN</a></nav>`;
+  const nav = `<nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}" class="admin-section-link" data-smooth-route>PÁGINA WEB</a><a href="${ADMIN_PATH}/usuarios" class="admin-section-link" data-smooth-route>USUARIOS</a><a href="${ADMIN_PATH}/inventario" class="admin-section-link" data-smooth-route>INVENTARIO</a><a href="${ADMIN_PATH}/resumen-financiero" class="admin-section-link active" data-smooth-route>RESUMEN FINANCIERO</a><a href="${ADMIN_PATH}/ventas-generales" class="admin-section-link" data-smooth-route>VENTAS GENERALES</a><a href="${ADMIN_PATH}/calculo-comision" class="admin-section-link" data-smooth-route>CALCULO DE COMISION</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link" data-smooth-route>PEDIDOS</a><a href="${ADMIN_PATH}/generar-orden" class="admin-section-link" data-smooth-route>GENERAR ORDEN</a></nav>`;
 
   app.innerHTML = `<main class="admin-shell financial-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Resumen Financiero</h1><p class="admin-subtitle">Ventas, costos, gastos y ganancias de YHORS · acceso exclusivo de Administración</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>${nav}
     <section class="admin-panel financial-panel">
@@ -1283,13 +1401,26 @@ async function renderAdminFinancial() {
       </div>
     </section>
   </div></main>
-  <div class="financial-modal" id="expenseModal" hidden><div class="financial-modal-backdrop" data-close-financial-modal></div><div class="financial-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="expenseModalTitle"><div class="financial-modal-head"><div><span class="eyebrow">Control de gastos</span><h2 id="expenseModalTitle">Agregar gasto</h2></div><button type="button" class="financial-modal-close" data-close-financial-modal>×</button></div><form id="expenseForm"><div class="form-grid"><div class="field"><label for="expenseDate">Fecha</label><input id="expenseDate" type="date" value="${today}" required></div><div class="field"><label for="expenseAmount">Valor</label><input id="expenseAmount" type="number" min="0.01" max="100000000" step="0.01" placeholder="0,00" required></div><div class="field full"><label for="expenseDescription">Concepto</label><input id="expenseDescription" maxlength="120" placeholder="Internet, luz, publicidad, transporte…" required></div><div class="field full"><label for="expenseNote">Detalle (opcional)</label><textarea id="expenseNote" rows="3" maxlength="500" placeholder="Observación o referencia del gasto"></textarea></div></div><div class="form-actions"><button type="button" class="button secondary" data-close-financial-modal>Cancelar</button><button type="submit" class="button primary" id="saveExpense">Guardar gasto</button><span class="message" id="expenseMessage"></span></div></form></div></div></div>`;
+  <div class="financial-modal" id="expenseModal" hidden><div class="financial-modal-backdrop" data-close-financial-modal></div><div class="financial-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="expenseModalTitle"><div class="financial-modal-head"><div><span class="eyebrow">Control de gastos</span><h2 id="expenseModalTitle">Agregar gasto</h2><input type="hidden" id="expenseId" value=""></div><button type="button" class="financial-modal-close" data-close-financial-modal>×</button></div><form id="expenseForm"><div class="form-grid"><div class="field"><label for="expenseDate">Fecha</label><input id="expenseDate" type="date" value="${today}" required></div><div class="field"><label for="expenseAmount">Valor</label><input id="expenseAmount" type="number" min="0.01" max="100000000" step="0.01" placeholder="0,00" required></div><div class="field full"><label for="expenseDescription">Concepto</label><input id="expenseDescription" maxlength="120" placeholder="Internet, luz, publicidad, transporte…" required></div><div class="field full"><label for="expenseNote">Detalle (opcional)</label><textarea id="expenseNote" rows="3" maxlength="500" placeholder="Observación o referencia del gasto"></textarea></div></div><div class="form-actions"><button type="button" class="button secondary" data-close-financial-modal>Cancelar</button><button type="submit" class="button primary" id="saveExpense">Guardar gasto</button><span class="message" id="expenseMessage"></span></div></form></div></div></div>`;
 
   const moneyCell = value => money(Number(value || 0));
   const modal = document.querySelector('#expenseModal');
+  let financialExpenseRows = [];
+  const resetExpenseForm = () => {
+    document.querySelector('#expenseForm')?.reset();
+    document.querySelector('#expenseId').value = '';
+    document.querySelector('#expenseModalTitle').textContent = 'Agregar gasto';
+    document.querySelector('#saveExpense').textContent = 'Guardar gasto';
+    document.querySelector('#expenseDate').value = document.querySelector('#financialDateTo')?.value || today;
+    document.querySelector('#expenseMessage').textContent = '';
+  };
   const closeModal = () => { if (modal) modal.hidden = true; document.querySelector('#expenseMessage')?.replaceChildren(); };
   document.querySelectorAll('[data-close-financial-modal]').forEach(button => button.addEventListener('click', closeModal));
-  document.querySelector('#openExpenseModal')?.addEventListener('click', () => { modal.hidden = false; document.querySelector('#expenseDate').value = document.querySelector('#financialDateTo')?.value || today; document.querySelector('#expenseDescription')?.focus(); });
+  document.querySelector('#openExpenseModal')?.addEventListener('click', () => {
+    resetExpenseForm();
+    modal.hidden = false;
+    document.querySelector('#expenseDescription')?.focus();
+  });
 
   const renderFinancial = async () => {
     const from = document.querySelector('#financialDateFrom')?.value || '';
@@ -1311,7 +1442,8 @@ async function renderAdminFinancial() {
       if (profit) profit.innerHTML = `<div class="${positive ? 'positive' : 'negative'}"><span>Resultado neto</span><strong>${moneyCell(totals.profit)}</strong><small>Margen: ${Number(totals.margin || 0).toFixed(2)}% · Período: ${escapeHTML(from || 'Todo')} → ${escapeHTML(to || 'Todo')}</small></div>`;
       if (breakdown) breakdown.innerHTML = `<div><span>Envíos por factura</span><strong>${moneyCell(totals.shipping)}</strong></div><div><span>Otros gastos</span><strong>${moneyCell(totals.manualExpenses)}</strong></div><div class="total"><span>Total gastos</span><strong>${moneyCell(totals.expenses)}</strong></div>`;
       const expenseRows = Array.isArray(result.expenses) ? result.expenses : [];
-      if (expensesBody) expensesBody.innerHTML = expenseRows.length ? expenseRows.map(expense => `<tr><td>${escapeHTML(expense.date)}</td><td><strong>${escapeHTML(expense.description)}</strong>${expense.note ? `<small>${escapeHTML(expense.note)}</small>` : ''}</td><td>Manual</td><td><strong>${moneyCell(expense.amount)}</strong></td><td><button type="button" class="financial-delete-expense" data-delete-expense="${escapeHTML(expense.id)}" title="Eliminar gasto">×</button></td></tr>`).join('') : '<tr><td colspan="5" class="financial-empty">No hay gastos manuales registrados en este período.</td></tr>';
+      financialExpenseRows = expenseRows;
+      if (expensesBody) expensesBody.innerHTML = expenseRows.length ? expenseRows.map(expense => `<tr><td>${escapeHTML(expense.date)}</td><td><strong>${escapeHTML(expense.description)}</strong>${expense.note ? `<small>${escapeHTML(expense.note)}</small>` : ''}</td><td>Manual</td><td><strong>${moneyCell(expense.amount)}</strong></td><td><div class="financial-expense-actions"><button type="button" class="financial-edit-expense" data-edit-expense="${escapeHTML(expense.id)}" title="Editar gasto">Editar</button><button type="button" class="financial-delete-expense" data-delete-expense="${escapeHTML(expense.id)}" title="Eliminar gasto">×</button></div></td></tr>`).join('') : '<tr><td colspan="5" class="financial-empty">No hay gastos manuales registrados en este período.</td></tr>';
       const sellerRows = Array.isArray(result.salesBySeller) ? result.salesBySeller : [];
       if (sellersBody) sellersBody.innerHTML = sellerRows.length ? sellerRows.map(row => `<tr><td><strong>${escapeHTML(row.sellerName || 'Sin vendedor')}</strong></td><td>${Number(row.orders || 0)}</td><td><strong>${moneyCell(row.total)}</strong></td></tr>`).join('') : '<tr><td colspan="3" class="financial-empty">No hay ventas para este período.</td></tr>';
     } catch (error) {
@@ -1323,6 +1455,23 @@ async function renderAdminFinancial() {
   document.querySelector('#financialRefresh')?.addEventListener('click', renderFinancial);
   document.querySelector('#financialDateFrom')?.addEventListener('change', renderFinancial);
   document.querySelector('#financialDateTo')?.addEventListener('change', renderFinancial);
+  document.querySelector('#financialExpensesBody')?.addEventListener('click', event => {
+    const button = event.target.closest('[data-edit-expense]');
+    if (!button) return;
+    const expense = financialExpenseRows.find(item => String(item.id) === String(button.dataset.editExpense));
+    if (!expense) return;
+    document.querySelector('#expenseId').value = expense.id;
+    document.querySelector('#expenseModalTitle').textContent = 'Editar gasto';
+    document.querySelector('#saveExpense').textContent = 'Guardar cambios';
+    document.querySelector('#expenseDate').value = expense.date || today;
+    document.querySelector('#expenseAmount').value = Number(expense.amount || 0).toFixed(2);
+    document.querySelector('#expenseDescription').value = expense.description || '';
+    document.querySelector('#expenseNote').value = expense.note || '';
+    document.querySelector('#expenseMessage').textContent = '';
+    modal.hidden = false;
+    document.querySelector('#expenseDescription')?.focus();
+  });
+
   document.querySelector('#financialExpensesBody')?.addEventListener('click', async event => {
     const button = event.target.closest('[data-delete-expense]');
     if (!button) return;
@@ -1334,10 +1483,26 @@ async function renderAdminFinancial() {
     event.preventDefault();
     const submit = document.querySelector('#saveExpense');
     const message = document.querySelector('#expenseMessage');
+    const expenseId = document.querySelector('#expenseId')?.value || '';
     const payload = { date: document.querySelector('#expenseDate').value, description: document.querySelector('#expenseDescription').value.trim(), amount: Number(document.querySelector('#expenseAmount').value), note: document.querySelector('#expenseNote').value.trim() };
-    submit.disabled = true; submit.textContent = 'Guardando…'; if (message) message.textContent = '';
-    try { await request('/api/admin/gastos', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) }); document.querySelector('#expenseForm').reset(); document.querySelector('#expenseDate').value = document.querySelector('#financialDateTo')?.value || today; closeModal(); await renderFinancial(); } catch (error) { if (message) message.textContent = error.message || 'No se pudo guardar el gasto.'; } finally { submit.disabled = false; submit.textContent = 'Guardar gasto'; }
+    submit.disabled = true; submit.textContent = expenseId ? 'Guardando cambios…' : 'Guardando…'; if (message) message.textContent = '';
+    try {
+      await request(expenseId ? `/api/admin/gastos/${encodeURIComponent(expenseId)}` : '/api/admin/gastos', {
+        method: expenseId ? 'PUT' : 'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(payload)
+      });
+      resetExpenseForm();
+      closeModal();
+      await renderFinancial();
+    } catch (error) {
+      if (message) message.textContent = error.message || 'No se pudo guardar el gasto.';
+    } finally {
+      submit.disabled = false;
+      submit.textContent = 'Guardar gasto';
+    }
   });
+
   wireAccountMenu();
   await renderFinancial();
 }
@@ -1421,7 +1586,7 @@ async function renderAdminOrders() {
 
   const sectionNav = (session.role === 'vendedor' || session.role === 'store_manager')
     ? `<nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}/ventas-generales" class="admin-section-link" data-smooth-route>VENTAS GENERALES</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link active" data-smooth-route>PEDIDOS</a><a href="${ADMIN_PATH}/generar-orden" class="admin-section-link" data-smooth-route>GENERAR ORDEN</a></nav>`
-    : `<nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}" class="admin-section-link" data-smooth-route>PÁGINA WEB</a><a href="${ADMIN_PATH}/usuarios" class="admin-section-link" data-smooth-route>USUARIOS</a><a href="${ADMIN_PATH}/inventario" class="admin-section-link" data-smooth-route>INVENTARIO</a><a href="${ADMIN_PATH}/resumen-financiero" class="admin-section-link" data-smooth-route>RESUMEN FINANCIERO</a><a href="${ADMIN_PATH}/ventas-generales" class="admin-section-link" data-smooth-route>VENTAS GENERALES</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link active" data-smooth-route>PEDIDOS</a><a href="${ADMIN_PATH}/generar-orden" class="admin-section-link" data-smooth-route>GENERAR ORDEN</a></nav>`;
+    : `<nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}" class="admin-section-link" data-smooth-route>PÁGINA WEB</a><a href="${ADMIN_PATH}/usuarios" class="admin-section-link" data-smooth-route>USUARIOS</a><a href="${ADMIN_PATH}/inventario" class="admin-section-link" data-smooth-route>INVENTARIO</a><a href="${ADMIN_PATH}/resumen-financiero" class="admin-section-link" data-smooth-route>RESUMEN FINANCIERO</a><a href="${ADMIN_PATH}/ventas-generales" class="admin-section-link" data-smooth-route>VENTAS GENERALES</a><a href="${ADMIN_PATH}/calculo-comision" class="admin-section-link" data-smooth-route>CALCULO DE COMISION</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link active" data-smooth-route>PEDIDOS</a><a href="${ADMIN_PATH}/generar-orden" class="admin-section-link" data-smooth-route>GENERAR ORDEN</a></nav>`;
   const title = session.role === 'vendedor' ? 'Mis pedidos asignados' : 'Gestión de pedidos';
   const subtitle = session.role === 'store_manager' ? 'Jefe de tienda · pedidos, asignaciones y control operativo' : (session.role === 'vendedor' ? 'Pedidos asignados a tu usuario · consulta y gestión operativa' : 'Gestión de YHORS STORE');
   app.innerHTML = `<main class="admin-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">${title}</h1><p class="admin-subtitle">${subtitle}</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>${sectionNav}${ordersPanel(orders, canDelete)}</div></main>`;
@@ -1853,7 +2018,7 @@ async function renderAdminUsers() {
   let users = await request('/api/admin/users').catch(() => []);
   app.innerHTML = `<main class="admin-shell"><div class="admin-wrap">
     <div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Administración</h1><p class="admin-subtitle">Control de usuarios y accesos</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>
-    <nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}" class="admin-section-link" data-smooth-route>PÁGINA WEB</a><a href="${ADMIN_PATH}/usuarios" class="admin-section-link active" data-smooth-route>USUARIOS</a><a href="${ADMIN_PATH}/inventario" class="admin-section-link" data-smooth-route>INVENTARIO</a><a href="${ADMIN_PATH}/resumen-financiero" class="admin-section-link" data-smooth-route>RESUMEN FINANCIERO</a><a href="${ADMIN_PATH}/ventas-generales" class="admin-section-link" data-smooth-route>VENTAS GENERALES</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link" data-smooth-route>PEDIDOS</a><a href="${ADMIN_PATH}/generar-orden" class="admin-section-link" data-smooth-route>GENERAR ORDEN</a></nav>
+    <nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}" class="admin-section-link" data-smooth-route>PÁGINA WEB</a><a href="${ADMIN_PATH}/usuarios" class="admin-section-link active" data-smooth-route>USUARIOS</a><a href="${ADMIN_PATH}/inventario" class="admin-section-link" data-smooth-route>INVENTARIO</a><a href="${ADMIN_PATH}/resumen-financiero" class="admin-section-link" data-smooth-route>RESUMEN FINANCIERO</a><a href="${ADMIN_PATH}/ventas-generales" class="admin-section-link" data-smooth-route>VENTAS GENERALES</a><a href="${ADMIN_PATH}/calculo-comision" class="admin-section-link" data-smooth-route>CALCULO DE COMISION</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link" data-smooth-route>PEDIDOS</a><a href="${ADMIN_PATH}/generar-orden" class="admin-section-link" data-smooth-route>GENERAR ORDEN</a></nav>
     ${usersPanel(users)}
   </div></main>`;
 
@@ -2091,7 +2256,7 @@ function inventoryPageMarkup(products = [], options = {}) {
       ${role === 'admin' ? `<a href="${ADMIN_PATH}" class="admin-section-link" data-smooth-route>PÁGINA WEB</a><a href="${ADMIN_PATH}/usuarios" class="admin-section-link" data-smooth-route>USUARIOS</a>` : ''}
       <a href="${ADMIN_PATH}/inventario" class="admin-section-link active" data-smooth-route>INVENTARIO</a>
       <a href="${ADMIN_PATH}/resumen-financiero" class="admin-section-link" data-smooth-route>RESUMEN FINANCIERO</a>
-      <a href="${ADMIN_PATH}/ventas-generales" class="admin-section-link" data-smooth-route>VENTAS GENERALES</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link" data-smooth-route>PEDIDOS</a>
+      <a href="${ADMIN_PATH}/ventas-generales" class="admin-section-link" data-smooth-route>VENTAS GENERALES</a><a href="${ADMIN_PATH}/calculo-comision" class="admin-section-link" data-smooth-route>CALCULO DE COMISION</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link" data-smooth-route>PEDIDOS</a>
       <a href="${ADMIN_PATH}/generar-orden" class="admin-section-link" data-smooth-route>GENERAR ORDEN</a>
     </nav>
     <section class="admin-panel inventory-page-panel">
@@ -2216,7 +2381,7 @@ async function renderAdmin() {
     <button type="button" data-admin-scroll="classificationPanel">Categorías</button>
     <button type="button" data-admin-scroll="productEditorPanel">Producto</button>
     <button type="button" data-admin-scroll="inventoryPanel">Inventario</button>
-  </aside><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Administración</h1></div><div class="admin-top-actions">${accountMenu(session)}</div></div><nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}" class="admin-section-link active" data-smooth-route>PÁGINA WEB</a><a href="${ADMIN_PATH}/usuarios" class="admin-section-link" data-smooth-route>USUARIOS</a><a href="${ADMIN_PATH}/inventario" class="admin-section-link" data-smooth-route>INVENTARIO</a><a href="${ADMIN_PATH}/resumen-financiero" class="admin-section-link" data-smooth-route>RESUMEN FINANCIERO</a><a href="${ADMIN_PATH}/ventas-generales" class="admin-section-link" data-smooth-route>VENTAS GENERALES</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link" data-smooth-route>PEDIDOS</a><a href="${ADMIN_PATH}/generar-orden" class="admin-section-link" data-smooth-route>GENERAR ORDEN</a></nav>${backupPanel(backupState)}${selectionPanel(products, settings)}${classificationPanel(classifications)}<section class="admin-panel product-editor-panel" id="productEditorPanel"><span class="eyebrow">Catálogo</span><h2 id="formTitle">Agregar producto</h2><div id="formArea"></div></section><section class="admin-products" id="inventoryPanel"><div class="section-heading inventory-heading"><div><span class="eyebrow">Inventario</span><h2>Productos e inventario (${products.length})</h2></div><p>Edita datos, imágenes, portada y destacados.</p></div><div class="inventory-toolbar"><label class="inventory-search"><span aria-hidden="true">⌕</span><input id="inventorySearch" type="search" placeholder="Buscar por nombre, SKU, marca o categoría…" autocomplete="off"><button id="clearInventorySearch" type="button" aria-label="Limpiar búsqueda">×</button></label><label class="inventory-filter"><span>Categoría</span><select id="inventoryCategoryFilter"><option value="">Todas las categorías</option><option value="elegant">Elegante</option><option value="sports">Deportes</option><option value="tech">Tech</option><option value="cosplay">Cosplay</option><option value="pets">Mascotas</option><option value="details">Detalles</option><option value="collectibles">Coleccionables</option></select></label><span class="inventory-count" id="inventoryCount">${products.length} productos</span></div><div id="adminProducts"></div></section></div></main>`;
+  </aside><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Administración</h1></div><div class="admin-top-actions">${accountMenu(session)}</div></div><nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}" class="admin-section-link active" data-smooth-route>PÁGINA WEB</a><a href="${ADMIN_PATH}/usuarios" class="admin-section-link" data-smooth-route>USUARIOS</a><a href="${ADMIN_PATH}/inventario" class="admin-section-link" data-smooth-route>INVENTARIO</a><a href="${ADMIN_PATH}/resumen-financiero" class="admin-section-link" data-smooth-route>RESUMEN FINANCIERO</a><a href="${ADMIN_PATH}/ventas-generales" class="admin-section-link" data-smooth-route>VENTAS GENERALES</a><a href="${ADMIN_PATH}/calculo-comision" class="admin-section-link" data-smooth-route>CALCULO DE COMISION</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link" data-smooth-route>PEDIDOS</a><a href="${ADMIN_PATH}/generar-orden" class="admin-section-link" data-smooth-route>GENERAR ORDEN</a></nav>${backupPanel(backupState)}${selectionPanel(products, settings)}${classificationPanel(classifications)}<section class="admin-panel product-editor-panel" id="productEditorPanel"><span class="eyebrow">Catálogo</span><h2 id="formTitle">Agregar producto</h2><div id="formArea"></div></section><section class="admin-products" id="inventoryPanel"><div class="section-heading inventory-heading"><div><span class="eyebrow">Inventario</span><h2>Productos e inventario (${products.length})</h2></div><p>Edita datos, imágenes, portada y destacados.</p></div><div class="inventory-toolbar"><label class="inventory-search"><span aria-hidden="true">⌕</span><input id="inventorySearch" type="search" placeholder="Buscar por nombre, SKU, marca o categoría…" autocomplete="off"><button id="clearInventorySearch" type="button" aria-label="Limpiar búsqueda">×</button></label><label class="inventory-filter"><span>Categoría</span><select id="inventoryCategoryFilter"><option value="">Todas las categorías</option><option value="elegant">Elegante</option><option value="sports">Deportes</option><option value="tech">Tech</option><option value="cosplay">Cosplay</option><option value="pets">Mascotas</option><option value="details">Detalles</option><option value="collectibles">Coleccionables</option></select></label><span class="inventory-count" id="inventoryCount">${products.length} productos</span></div><div id="adminProducts"></div></section></div></main>`;
   const quickNav = document.querySelector('.admin-quick-nav');
   quickNav?.querySelectorAll('[data-admin-scroll]').forEach(button => button.addEventListener('click', () => {
     const target = document.getElementById(button.dataset.adminScroll);
