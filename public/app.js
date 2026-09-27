@@ -1147,7 +1147,7 @@ function generateOrderNav(session) {
   // generación de órdenes. Las áreas de catálogo/usuarios siguen ocultas.
   if (limitedOperations) {
     return `<nav class="admin-section-nav" aria-label="Secciones operativas">
-      <a href="${ADMIN_PATH}/ventas-generales" class="admin-section-link" data-smooth-route>VENTAS GENERALES</a><a href="${ADMIN_PATH}/calculo-comision" class="admin-section-link" data-smooth-route>CALCULO DE COMISION</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link" data-smooth-route>PEDIDOS</a>
+      <a href="${ADMIN_PATH}/ventas-generales" class="admin-section-link" data-smooth-route>VENTAS GENERALES</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link" data-smooth-route>PEDIDOS</a>
       <a href="${ADMIN_PATH}/generar-orden" class="admin-section-link active" data-smooth-route>GENERAR ORDEN</a>
     </nav>`;
   }
@@ -1156,7 +1156,10 @@ function generateOrderNav(session) {
     <a href="${ADMIN_PATH}" class="admin-section-link" data-smooth-route>PÁGINA WEB</a>
     <a href="${ADMIN_PATH}/usuarios" class="admin-section-link" data-smooth-route>USUARIOS</a>
     <a href="${ADMIN_PATH}/inventario" class="admin-section-link" data-smooth-route>INVENTARIO</a>
-    <a href="${ADMIN_PATH}/ventas-generales" class="admin-section-link" data-smooth-route>VENTAS GENERALES</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link" data-smooth-route>PEDIDOS</a>
+    <a href="${ADMIN_PATH}/resumen-financiero" class="admin-section-link" data-smooth-route>RESUMEN FINANCIERO</a>
+    <a href="${ADMIN_PATH}/ventas-generales" class="admin-section-link" data-smooth-route>VENTAS GENERALES</a>
+    <a href="${ADMIN_PATH}/calculo-comision" class="admin-section-link" data-smooth-route>CALCULO DE COMISION</a>
+    <a href="${ADMIN_PATH}/pedidos" class="admin-section-link" data-smooth-route>PEDIDOS</a>
     <a href="${ADMIN_PATH}/generar-orden" class="admin-section-link active" data-smooth-route>GENERAR ORDEN</a>
   </nav>`;
 }
@@ -1518,7 +1521,7 @@ async function renderAdminSales() {
   const moneyCell = value => money(Number(value || 0));
   const nav = (session.role === 'vendedor' || session.role === 'store_manager')
     ? `<nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}/ventas-generales" class="admin-section-link active" data-smooth-route>VENTAS GENERALES</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link" data-smooth-route>PEDIDOS</a><a href="${ADMIN_PATH}/generar-orden" class="admin-section-link" data-smooth-route>GENERAR ORDEN</a></nav>`
-    : `<nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}" class="admin-section-link" data-smooth-route>PÁGINA WEB</a><a href="${ADMIN_PATH}/usuarios" class="admin-section-link" data-smooth-route>USUARIOS</a><a href="${ADMIN_PATH}/inventario" class="admin-section-link" data-smooth-route>INVENTARIO</a><a href="${ADMIN_PATH}/resumen-financiero" class="admin-section-link" data-smooth-route>RESUMEN FINANCIERO</a><a href="${ADMIN_PATH}/ventas-generales" class="admin-section-link active" data-smooth-route>VENTAS GENERALES</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link" data-smooth-route>PEDIDOS</a><a href="${ADMIN_PATH}/generar-orden" class="admin-section-link" data-smooth-route>GENERAR ORDEN</a></nav>`;
+    : `<nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}" class="admin-section-link" data-smooth-route>PÁGINA WEB</a><a href="${ADMIN_PATH}/usuarios" class="admin-section-link" data-smooth-route>USUARIOS</a><a href="${ADMIN_PATH}/inventario" class="admin-section-link" data-smooth-route>INVENTARIO</a><a href="${ADMIN_PATH}/resumen-financiero" class="admin-section-link" data-smooth-route>RESUMEN FINANCIERO</a><a href="${ADMIN_PATH}/ventas-generales" class="admin-section-link active" data-smooth-route>VENTAS GENERALES</a><a href="${ADMIN_PATH}/calculo-comision" class="admin-section-link" data-smooth-route>CALCULO DE COMISION</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link" data-smooth-route>PEDIDOS</a><a href="${ADMIN_PATH}/generar-orden" class="admin-section-link" data-smooth-route>GENERAR ORDEN</a></nav>`;
 
   app.innerHTML = `<main class="admin-shell sales-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Ventas Generales</h1><p class="admin-subtitle">Resumen de ventas por vendedor · visible para todos los usuarios operativos</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>${nav}
     <section class="admin-panel sales-panel">
