@@ -837,36 +837,12 @@ function buildOrderPdf(order) {
   }
   if (currentRows.length || !pages.length) pages.push(currentRows);
 
-  // Métricas reales de Helvetica/Helvetica-Bold (1000 unidades em).
-  // Usarlas evita que textos con tamaños y letras distintas queden visualmente
-  // descentrados por una aproximación basada solo en cantidad de caracteres.
-  const helveticaWidths = {
-    1: [278,278,355,556,556,889,667,222,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,278,278,584,584,584,556,1015,667,667,722,722,667,611,778,722,278,500,667,556,833,722,778,667,778,722,667,611,722,667,944,667,667,611,278,278,278,469,556,222,556,556,500,556,556,278,556,222,222,500,222,833,556,556,556,556,333,500,278,556,500,722,500,500,500,334,260,334,584],
-    2: [278,333,474,556,556,889,722,278,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,333,333,584,584,584,611,975,722,722,722,722,667,611,778,722,278,556,722,611,833,722,778,667,778,722,667,611,722,667,944,667,667,611,333,278,333,584,556,278,556,611,556,611,556,333,611,278,278,556,278,889,611,611,611,611,389,556,333,611,556,778,556,556,500,389,280,389,584]
-  };
-  const textWidth = (text, size, font) => {
-    const widths = helveticaWidths[font] || helveticaWidths[1];
-    let units = 0;
-    for (const ch of String(text ?? '')) {
-      const code = ch.charCodeAt(0);
-      units += (code >= 32 && code <= 126) ? widths[code - 32] : 600;
-    }
-    return units * size / 1000;
-  };
   const drawText = (ops, text, x, y, size = 9, font = normalFont, align = 'left') => {
     const value = pdfEscape(text);
-    const width = textWidth(text, size, font);
-    let tx = x;
-    if (align === 'right') tx = x - width;
-    if (align === 'center') tx = x - width / 2;
-    ops.push(`BT /F${font} ${size} Tf ${tx.toFixed(2)} ${y.toFixed(2)} Td (${value}) Tj ET`);
-  };
-  // Se conserva esta variante únicamente para el texto PENDIENTE, cuyo
-  // posicionamiento visual ya estaba correcto en la versión anterior.
-  const drawTextLegacyCenter = (ops, text, x, y, size = 9, font = normalFont) => {
-    const value = pdfEscape(text);
     const approxWidth = String(text ?? '').length * size * 0.52;
-    const tx = x - approxWidth / 2;
+    let tx = x;
+    if (align === 'right') tx = x - approxWidth;
+    if (align === 'center') tx = x - approxWidth / 2;
     ops.push(`BT /F${font} ${size} Tf ${tx.toFixed(2)} ${y.toFixed(2)} Td (${value}) Tj ET`);
   };
   const line = (ops, x1, y1, x2, y2, width = 0.7) => ops.push(`${width} w ${x1} ${y1} m ${x2} ${y2} l S`);
@@ -890,19 +866,18 @@ function buildOrderPdf(order) {
     } else {
       drawText(ops, 'YHORS', margin, y - 10, 24, boldFont);
     }
-    // El encabezado ocupa la columna derecha del documento, pero NO se
-    // centra contra el borde derecho de la página. Este eje (78% del ancho
-    // útil) es el que mantiene el título, número, fecha y PENDIENTE dentro
-    // del margen y con la misma apariencia de la versión correcta anterior.
-    const headerCenter = margin + contentWidth * 0.78;
+    // Encabezado: los tres textos se alinean por su BORDE DERECHO con
+    // el borde derecho del recuadro PENDIENTE. No se centra el texto sobre
+    // el recuadro; todos terminan exactamente en la misma vertical.
     const statusW = 116;
-    const statusX = headerCenter - statusW / 2;
-    drawText(ops, 'ORDEN DE PEDIDO', headerCenter, y - 8, 18, boldFont, 'center');
-    drawText(ops, `N. ORDEN  ${orderNo}`, headerCenter, y - 29, 9, boldFont, 'center');
-    drawText(ops, `FECHA  ${date}`, headerCenter, y - 44, 8, normalFont, 'center');
+    const statusX = right - statusW;
+    const headerRight = statusX + statusW;
+    drawText(ops, 'ORDEN DE PEDIDO', headerRight, y - 8, 18, boldFont, 'right');
+    drawText(ops, `N. ORDEN  ${orderNo}`, headerRight, y - 29, 9, boldFont, 'right');
+    drawText(ops, `FECHA  ${date}`, headerRight, y - 44, 8, normalFont, 'right');
     setFill(ops, 0.78, 0.60, 0.24);
     ops.push(`0.78 0.60 0.24 rg ${statusX} ${y - 68} ${statusW} 18 re f 0 0 0 rg`);
-    drawTextLegacyCenter(ops, safeStatus, statusX + statusW / 2, y - 62, 8, boldFont);
+    drawText(ops, safeStatus, statusX + statusW / 2, y - 62, 8, boldFont, 'center');
     y -= 85;
     line(ops, margin, y, right, y, 1.1);
     y -= 14;
