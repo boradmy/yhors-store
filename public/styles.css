@@ -2110,3 +2110,61 @@ body.generate-modal-open{overflow:hidden}
 .sales-manager-total small{color:#777;font-size:.72rem}
 @media(max-width:800px){.sales-summary{grid-template-columns:1fr 1fr}.sales-heading{align-items:flex-start}.sales-toolbar{align-items:stretch}.sales-date-range{width:100%}.sales-date-filter{flex:1}.sales-date-filter input{width:100%}.sales-status-filter{flex:1}.sales-status-filter select{width:100%}.sales-toolbar>#salesRefresh{width:100%}}
 @media(max-width:520px){.sales-summary{grid-template-columns:1fr}.sales-manager-total>div{width:100%;box-sizing:border-box}}
+
+/* RESUMEN FINANCIERO · YHORS */
+.financial-shell .admin-wrap{max-width:1180px}
+.financial-panel{margin-bottom:24px}
+.financial-heading{align-items:flex-end}
+.financial-toolbar{display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;margin:18px 0}
+.financial-date-range{display:flex;gap:10px;flex-wrap:wrap}
+.financial-date-filter{display:flex;flex-direction:column;gap:5px}
+.financial-date-filter span{font-size:.68rem;text-transform:uppercase;letter-spacing:.08em;color:#777;font-weight:700}
+.financial-date-filter input{height:40px;box-sizing:border-box;border:1px solid var(--line,#ded8cc);background:#fff;border-radius:9px;padding:8px 11px;font:inherit;min-width:150px}
+.financial-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:18px 0}
+.financial-metric{border:1px solid var(--line,#ded8cc);border-radius:13px;padding:18px 16px;display:grid;gap:6px;background:#fff;box-shadow:0 3px 14px rgba(30,25,18,.035);border-top:4px solid var(--gold)}
+.financial-metric span{font-size:.68rem;letter-spacing:.09em;color:#777;font-weight:800}
+.financial-metric strong{font-size:1.55rem;line-height:1.1}
+.financial-metric small{font-size:.72rem;color:#777}
+.financial-metric.sales{border-top-color:#2b80d7}
+.financial-metric.purchases{border-top-color:#b7a07a}
+.financial-metric.profit{border-top-color:#2f8a54}
+.financial-metric.expenses{border-top-color:#b84b45}
+.financial-profit-banner{margin:12px 0 22px}
+.financial-profit-banner>div{border-radius:13px;padding:15px 18px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;background:#f6f0e3;border:1px solid #decda8}
+.financial-profit-banner .positive{background:#eaf6ed;border-color:#c7e2ce}
+.financial-profit-banner .negative{background:#fbebea;border-color:#e6c1bd}
+.financial-profit-banner span{font-size:.68rem;text-transform:uppercase;letter-spacing:.09em;font-weight:800;color:#6f644f}
+.financial-profit-banner strong{font-size:1.45rem}
+.financial-profit-banner small{color:#777}
+.financial-grid{display:grid;grid-template-columns:1.25fr .9fr;gap:16px}
+.financial-card{border:1px solid var(--line,#ded8cc);border-radius:13px;background:#fff;overflow:hidden}
+.financial-card-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:17px 18px;border-bottom:1px solid #eeeae2}
+.financial-card-head h3{margin:4px 0 0;font-size:1rem}
+.financial-expense-breakdown{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;padding:14px 18px;background:#faf8f3}
+.financial-expense-breakdown>div{display:grid;gap:3px}
+.financial-expense-breakdown span{font-size:.66rem;color:#777;text-transform:uppercase;letter-spacing:.07em;font-weight:700}
+.financial-expense-breakdown strong{font-size:.95rem}
+.financial-expense-breakdown .total{padding-left:12px;border-left:1px solid #ddd4c6}
+.financial-expenses-table-wrap,.financial-sellers-table-wrap{overflow:auto}
+.financial-expenses-table,.financial-sellers-table{width:100%;border-collapse:collapse;min-width:560px}
+.financial-expenses-table th,.financial-expenses-table td,.financial-sellers-table th,.financial-sellers-table td{padding:12px 15px;border-bottom:1px solid #eeeae2;text-align:right;font-size:.8rem}
+.financial-expenses-table th:first-child,.financial-expenses-table td:first-child,.financial-expenses-table th:nth-child(2),.financial-expenses-table td:nth-child(2),.financial-sellers-table th:first-child,.financial-sellers-table td:first-child{text-align:left}
+.financial-expenses-table thead th,.financial-sellers-table thead th{font-size:.63rem;letter-spacing:.08em;color:#777;background:#faf8f3}
+.financial-expenses-table td:nth-child(2){max-width:280px}
+.financial-expenses-table td:nth-child(2) small{display:block;color:#777;margin-top:3px;font-size:.7rem}
+.financial-delete-expense{width:28px;height:28px;border:1px solid #e2aaa5;background:#fff;border-radius:7px;color:#b02c23;font-size:1rem;cursor:pointer}
+.financial-delete-expense:hover{background:#fff4f3}
+.financial-card-note{padding:13px 16px;color:#777;font-size:.72rem;background:#faf8f3}
+.financial-loading,.financial-empty{text-align:center!important;color:#777!important;padding:28px!important}
+.financial-message{margin:10px 0;padding:11px 13px;border-radius:9px;background:#edf6ff;border:1px solid #cfe4f7;color:#24577c}
+.financial-message.error{background:#fff0ef;border-color:#e9c2be;color:#8b2f28}
+.financial-modal{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;padding:20px}
+.financial-modal[hidden]{display:none}
+.financial-modal-backdrop{position:absolute;inset:0;background:rgba(24,22,19,.58);backdrop-filter:blur(2px)}
+.financial-modal-dialog{position:relative;width:min(650px,100%);background:#fff;border:1px solid var(--line,#ded8cc);border-radius:16px;box-shadow:0 24px 70px rgba(0,0,0,.25);padding:22px}
+.financial-modal-head{display:flex;align-items:flex-start;justify-content:space-between;gap:15px;margin-bottom:18px}
+.financial-modal-head h2{margin:4px 0 0}
+.financial-modal-close{width:38px;height:38px;border:1px solid #d9d2c6;border-radius:9px;background:#fff;font-size:1.5rem;line-height:1;cursor:pointer;color:#706d66}
+.financial-modal-close:hover{background:#f7f4ee}
+@media(max-width:900px){.financial-summary{grid-template-columns:1fr 1fr}.financial-grid{grid-template-columns:1fr}.financial-expense-breakdown{grid-template-columns:1fr 1fr}.financial-expense-breakdown .total{border-left:0;padding-left:0}}
+@media(max-width:560px){.financial-summary{grid-template-columns:1fr}.financial-toolbar{align-items:stretch}.financial-date-range{width:100%}.financial-date-filter{flex:1}.financial-date-filter input{width:100%}.financial-toolbar>#financialRefresh{width:100%}.financial-expense-breakdown{grid-template-columns:1fr}.financial-modal-dialog{padding:17px}.financial-profit-banner>div{display:grid}}

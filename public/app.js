@@ -608,6 +608,7 @@ async function renderCurrentRoute() {
   const path = window.location.pathname;
   if (path === ADMIN_PATH || path === `${ADMIN_PATH}/`) return renderAdmin();
   if (path === `${ADMIN_PATH}/ventas-generales` || path === `${ADMIN_PATH}/ventas-generales/`) return renderAdminSales();
+  if (path === `${ADMIN_PATH}/resumen-financiero` || path === `${ADMIN_PATH}/resumen-financiero/`) return renderAdminFinancial();
   if (path === `${ADMIN_PATH}/pedidos` || path === `${ADMIN_PATH}/pedidos/`) return renderAdminOrders();
   if (path === `${ADMIN_PATH}/generar-orden` || path === `${ADMIN_PATH}/generar-orden/`) return renderAdminGenerateOrder();
   if (path === `${ADMIN_PATH}/usuarios` || path === `${ADMIN_PATH}/usuarios/`) return renderAdminUsers();
@@ -1256,6 +1257,91 @@ async function renderAdminGenerateOrder() {
   drawCustomer(); drawLines(); wireAccountMenu(); wireImageFallback(app);
 }
 
+async function renderAdminFinancial() {
+  const session = await request('/api/admin/session').catch(() => ({ authenticated: false }));
+  if (!session.authenticated) return renderLogin();
+  if (String(session.role || '').toLowerCase() !== 'admin') return renderAdminOrders();
+
+  const localToday = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Guayaquil' });
+  const today = localToday();
+  const monthStart = `${today.slice(0, 7)}-01`;
+  const nav = `<nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}" class="admin-section-link" data-smooth-route>PÁGINA WEB</a><a href="${ADMIN_PATH}/usuarios" class="admin-section-link" data-smooth-route>USUARIOS</a><a href="${ADMIN_PATH}/inventario" class="admin-section-link" data-smooth-route>INVENTARIO</a><a href="${ADMIN_PATH}/resumen-financiero" class="admin-section-link active" data-smooth-route>RESUMEN FINANCIERO</a><a href="${ADMIN_PATH}/ventas-generales" class="admin-section-link" data-smooth-route>VENTAS GENERALES</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link" data-smooth-route>PEDIDOS</a><a href="${ADMIN_PATH}/generar-orden" class="admin-section-link" data-smooth-route>GENERAR ORDEN</a></nav>`;
+
+  app.innerHTML = `<main class="admin-shell financial-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Resumen Financiero</h1><p class="admin-subtitle">Ventas, costos, gastos y ganancias de YHORS · acceso exclusivo de Administración</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>${nav}
+    <section class="admin-panel financial-panel">
+      <div class="section-heading financial-heading"><div><span class="eyebrow">Finanzas</span><h2>Resumen del período</h2></div><p>Calcula el resultado del período usando las ventas activas, el precio de compra registrado en cada producto y los gastos del negocio.</p></div>
+      <div class="financial-toolbar">
+        <div class="financial-date-range"><label class="financial-date-filter"><span>Desde</span><input id="financialDateFrom" type="date" value="${monthStart}" aria-label="Fecha inicial"></label><label class="financial-date-filter"><span>Hasta</span><input id="financialDateTo" type="date" value="${today}" aria-label="Fecha final"></label></div>
+        <button type="button" class="button primary small" id="financialRefresh">Actualizar resumen</button>
+      </div>
+      <div class="financial-message" id="financialMessage" hidden></div>
+      <div class="financial-summary" id="financialSummary"><div class="financial-loading">Calculando resumen…</div></div>
+      <div class="financial-profit-banner" id="financialProfit"></div>
+      <div class="financial-grid">
+        <section class="financial-card"><div class="financial-card-head"><div><span class="eyebrow">Gastos</span><h3>Gastos del período</h3></div><button type="button" class="button primary small" id="openExpenseModal">+ Agregar gasto</button></div><div class="financial-expense-breakdown" id="financialExpenseBreakdown"></div><div class="financial-expenses-table-wrap"><table class="financial-expenses-table"><thead><tr><th>FECHA</th><th>CONCEPTO</th><th>TIPO</th><th>VALOR</th><th></th></tr></thead><tbody id="financialExpensesBody"><tr><td colspan="5" class="financial-loading">Cargando…</td></tr></tbody></table></div></section>
+        <section class="financial-card"><div class="financial-card-head"><div><span class="eyebrow">Ventas</span><h3>Ventas por vendedor</h3></div></div><div class="financial-sellers-table-wrap"><table class="financial-sellers-table"><thead><tr><th>VENDEDOR</th><th>PEDIDOS</th><th>VENDIDO</th></tr></thead><tbody id="financialSellersBody"><tr><td colspan="3" class="financial-loading">Cargando…</td></tr></tbody></table></div><div class="financial-card-note">Las ventas canceladas no forman parte del resumen financiero.</div></section>
+      </div>
+    </section>
+  </div></main>
+  <div class="financial-modal" id="expenseModal" hidden><div class="financial-modal-backdrop" data-close-financial-modal></div><div class="financial-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="expenseModalTitle"><div class="financial-modal-head"><div><span class="eyebrow">Control de gastos</span><h2 id="expenseModalTitle">Agregar gasto</h2></div><button type="button" class="financial-modal-close" data-close-financial-modal>×</button></div><form id="expenseForm"><div class="form-grid"><div class="field"><label for="expenseDate">Fecha</label><input id="expenseDate" type="date" value="${today}" required></div><div class="field"><label for="expenseAmount">Valor</label><input id="expenseAmount" type="number" min="0.01" max="100000000" step="0.01" placeholder="0,00" required></div><div class="field full"><label for="expenseDescription">Concepto</label><input id="expenseDescription" maxlength="120" placeholder="Internet, luz, publicidad, transporte…" required></div><div class="field full"><label for="expenseNote">Detalle (opcional)</label><textarea id="expenseNote" rows="3" maxlength="500" placeholder="Observación o referencia del gasto"></textarea></div></div><div class="form-actions"><button type="button" class="button secondary" data-close-financial-modal>Cancelar</button><button type="submit" class="button primary" id="saveExpense">Guardar gasto</button><span class="message" id="expenseMessage"></span></div></form></div></div></div>`;
+
+  const moneyCell = value => money(Number(value || 0));
+  const modal = document.querySelector('#expenseModal');
+  const closeModal = () => { if (modal) modal.hidden = true; document.querySelector('#expenseMessage')?.replaceChildren(); };
+  document.querySelectorAll('[data-close-financial-modal]').forEach(button => button.addEventListener('click', closeModal));
+  document.querySelector('#openExpenseModal')?.addEventListener('click', () => { modal.hidden = false; document.querySelector('#expenseDate').value = document.querySelector('#financialDateTo')?.value || today; document.querySelector('#expenseDescription')?.focus(); });
+
+  const renderFinancial = async () => {
+    const from = document.querySelector('#financialDateFrom')?.value || '';
+    const to = document.querySelector('#financialDateTo')?.value || '';
+    const summary = document.querySelector('#financialSummary');
+    const profit = document.querySelector('#financialProfit');
+    const expensesBody = document.querySelector('#financialExpensesBody');
+    const breakdown = document.querySelector('#financialExpenseBreakdown');
+    const sellersBody = document.querySelector('#financialSellersBody');
+    const message = document.querySelector('#financialMessage');
+    if (from && to && from > to) { if (message) { message.hidden = false; message.className = 'financial-message error'; message.textContent = 'La fecha inicial no puede ser posterior a la fecha final.'; } return; }
+    if (message) message.hidden = true;
+    if (summary) summary.innerHTML = '<div class="financial-loading">Calculando resumen…</div>';
+    try {
+      const result = await request(`/api/admin/resumen-financiero?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
+      const totals = result.totals || {};
+      if (summary) summary.innerHTML = `<article class="financial-metric sales"><span>VENTAS TOTALES</span><strong>${moneyCell(totals.sales)}</strong><small>${Number(totals.orderCount || 0)} pedido(s) activo(s)</small></article><article class="financial-metric purchases"><span>TOTAL COMPRAS</span><strong>${moneyCell(totals.purchases)}</strong><small>Costo de compra de productos vendidos</small></article><article class="financial-metric profit"><span>GANANCIAS NETAS</span><strong>${moneyCell(totals.profit)}</strong><small>Ventas − compras − gastos</small></article><article class="financial-metric expenses"><span>TOTAL GASTOS</span><strong>${moneyCell(totals.expenses)}</strong><small>Envíos + gastos registrados</small></article>`;
+      const positive = Number(totals.profit || 0) >= 0;
+      if (profit) profit.innerHTML = `<div class="${positive ? 'positive' : 'negative'}"><span>Resultado neto</span><strong>${moneyCell(totals.profit)}</strong><small>Margen: ${Number(totals.margin || 0).toFixed(2)}% · Período: ${escapeHTML(from || 'Todo')} → ${escapeHTML(to || 'Todo')}</small></div>`;
+      if (breakdown) breakdown.innerHTML = `<div><span>Envíos por factura</span><strong>${moneyCell(totals.shipping)}</strong></div><div><span>Otros gastos</span><strong>${moneyCell(totals.manualExpenses)}</strong></div><div class="total"><span>Total gastos</span><strong>${moneyCell(totals.expenses)}</strong></div>`;
+      const expenseRows = Array.isArray(result.expenses) ? result.expenses : [];
+      if (expensesBody) expensesBody.innerHTML = expenseRows.length ? expenseRows.map(expense => `<tr><td>${escapeHTML(expense.date)}</td><td><strong>${escapeHTML(expense.description)}</strong>${expense.note ? `<small>${escapeHTML(expense.note)}</small>` : ''}</td><td>Manual</td><td><strong>${moneyCell(expense.amount)}</strong></td><td><button type="button" class="financial-delete-expense" data-delete-expense="${escapeHTML(expense.id)}" title="Eliminar gasto">×</button></td></tr>`).join('') : '<tr><td colspan="5" class="financial-empty">No hay gastos manuales registrados en este período.</td></tr>';
+      const sellerRows = Array.isArray(result.salesBySeller) ? result.salesBySeller : [];
+      if (sellersBody) sellersBody.innerHTML = sellerRows.length ? sellerRows.map(row => `<tr><td><strong>${escapeHTML(row.sellerName || 'Sin vendedor')}</strong></td><td>${Number(row.orders || 0)}</td><td><strong>${moneyCell(row.total)}</strong></td></tr>`).join('') : '<tr><td colspan="3" class="financial-empty">No hay ventas para este período.</td></tr>';
+    } catch (error) {
+      if (message) { message.hidden = false; message.className = 'financial-message error'; message.textContent = error.message || 'No se pudo calcular el resumen financiero.'; }
+      if (summary) summary.innerHTML = '<div class="financial-loading">No se pudo cargar el resumen.</div>';
+    }
+  };
+
+  document.querySelector('#financialRefresh')?.addEventListener('click', renderFinancial);
+  document.querySelector('#financialDateFrom')?.addEventListener('change', renderFinancial);
+  document.querySelector('#financialDateTo')?.addEventListener('change', renderFinancial);
+  document.querySelector('#financialExpensesBody')?.addEventListener('click', async event => {
+    const button = event.target.closest('[data-delete-expense]');
+    if (!button) return;
+    if (!confirm('¿Eliminar este gasto del resumen financiero?')) return;
+    button.disabled = true;
+    try { await request(`/api/admin/gastos/${encodeURIComponent(button.dataset.deleteExpense)}`, { method: 'DELETE' }); await renderFinancial(); } catch (error) { alert(error.message || 'No se pudo eliminar el gasto.'); button.disabled = false; }
+  });
+  document.querySelector('#expenseForm')?.addEventListener('submit', async event => {
+    event.preventDefault();
+    const submit = document.querySelector('#saveExpense');
+    const message = document.querySelector('#expenseMessage');
+    const payload = { date: document.querySelector('#expenseDate').value, description: document.querySelector('#expenseDescription').value.trim(), amount: Number(document.querySelector('#expenseAmount').value), note: document.querySelector('#expenseNote').value.trim() };
+    submit.disabled = true; submit.textContent = 'Guardando…'; if (message) message.textContent = '';
+    try { await request('/api/admin/gastos', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) }); document.querySelector('#expenseForm').reset(); document.querySelector('#expenseDate').value = document.querySelector('#financialDateTo')?.value || today; closeModal(); await renderFinancial(); } catch (error) { if (message) message.textContent = error.message || 'No se pudo guardar el gasto.'; } finally { submit.disabled = false; submit.textContent = 'Guardar gasto'; }
+  });
+  wireAccountMenu();
+  await renderFinancial();
+}
+
 async function renderAdminSales() {
   const session = await request('/api/admin/session').catch(() => ({ authenticated: false }));
   if (!session.authenticated) return renderLogin();
@@ -1267,7 +1353,7 @@ async function renderAdminSales() {
   const moneyCell = value => money(Number(value || 0));
   const nav = (session.role === 'vendedor' || session.role === 'store_manager')
     ? `<nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}/ventas-generales" class="admin-section-link active" data-smooth-route>VENTAS GENERALES</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link" data-smooth-route>PEDIDOS</a><a href="${ADMIN_PATH}/generar-orden" class="admin-section-link" data-smooth-route>GENERAR ORDEN</a></nav>`
-    : `<nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}" class="admin-section-link" data-smooth-route>PÁGINA WEB</a><a href="${ADMIN_PATH}/usuarios" class="admin-section-link" data-smooth-route>USUARIOS</a><a href="${ADMIN_PATH}/inventario" class="admin-section-link" data-smooth-route>INVENTARIO</a><a href="${ADMIN_PATH}/ventas-generales" class="admin-section-link active" data-smooth-route>VENTAS GENERALES</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link" data-smooth-route>PEDIDOS</a><a href="${ADMIN_PATH}/generar-orden" class="admin-section-link" data-smooth-route>GENERAR ORDEN</a></nav>`;
+    : `<nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}" class="admin-section-link" data-smooth-route>PÁGINA WEB</a><a href="${ADMIN_PATH}/usuarios" class="admin-section-link" data-smooth-route>USUARIOS</a><a href="${ADMIN_PATH}/inventario" class="admin-section-link" data-smooth-route>INVENTARIO</a><a href="${ADMIN_PATH}/resumen-financiero" class="admin-section-link" data-smooth-route>RESUMEN FINANCIERO</a><a href="${ADMIN_PATH}/ventas-generales" class="admin-section-link active" data-smooth-route>VENTAS GENERALES</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link" data-smooth-route>PEDIDOS</a><a href="${ADMIN_PATH}/generar-orden" class="admin-section-link" data-smooth-route>GENERAR ORDEN</a></nav>`;
 
   app.innerHTML = `<main class="admin-shell sales-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Ventas Generales</h1><p class="admin-subtitle">Resumen de ventas por vendedor · visible para todos los usuarios operativos</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>${nav}
     <section class="admin-panel sales-panel">
@@ -1335,7 +1421,7 @@ async function renderAdminOrders() {
 
   const sectionNav = (session.role === 'vendedor' || session.role === 'store_manager')
     ? `<nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}/ventas-generales" class="admin-section-link" data-smooth-route>VENTAS GENERALES</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link active" data-smooth-route>PEDIDOS</a><a href="${ADMIN_PATH}/generar-orden" class="admin-section-link" data-smooth-route>GENERAR ORDEN</a></nav>`
-    : `<nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}" class="admin-section-link" data-smooth-route>PÁGINA WEB</a><a href="${ADMIN_PATH}/usuarios" class="admin-section-link" data-smooth-route>USUARIOS</a><a href="${ADMIN_PATH}/inventario" class="admin-section-link" data-smooth-route>INVENTARIO</a><a href="${ADMIN_PATH}/ventas-generales" class="admin-section-link" data-smooth-route>VENTAS GENERALES</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link active" data-smooth-route>PEDIDOS</a><a href="${ADMIN_PATH}/generar-orden" class="admin-section-link" data-smooth-route>GENERAR ORDEN</a></nav>`;
+    : `<nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}" class="admin-section-link" data-smooth-route>PÁGINA WEB</a><a href="${ADMIN_PATH}/usuarios" class="admin-section-link" data-smooth-route>USUARIOS</a><a href="${ADMIN_PATH}/inventario" class="admin-section-link" data-smooth-route>INVENTARIO</a><a href="${ADMIN_PATH}/resumen-financiero" class="admin-section-link" data-smooth-route>RESUMEN FINANCIERO</a><a href="${ADMIN_PATH}/ventas-generales" class="admin-section-link" data-smooth-route>VENTAS GENERALES</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link active" data-smooth-route>PEDIDOS</a><a href="${ADMIN_PATH}/generar-orden" class="admin-section-link" data-smooth-route>GENERAR ORDEN</a></nav>`;
   const title = session.role === 'vendedor' ? 'Mis pedidos asignados' : 'Gestión de pedidos';
   const subtitle = session.role === 'store_manager' ? 'Jefe de tienda · pedidos, asignaciones y control operativo' : (session.role === 'vendedor' ? 'Pedidos asignados a tu usuario · consulta y gestión operativa' : 'Gestión de YHORS STORE');
   app.innerHTML = `<main class="admin-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">${title}</h1><p class="admin-subtitle">${subtitle}</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>${sectionNav}${ordersPanel(orders, canDelete)}</div></main>`;
@@ -1767,7 +1853,7 @@ async function renderAdminUsers() {
   let users = await request('/api/admin/users').catch(() => []);
   app.innerHTML = `<main class="admin-shell"><div class="admin-wrap">
     <div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Administración</h1><p class="admin-subtitle">Control de usuarios y accesos</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>
-    <nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}" class="admin-section-link" data-smooth-route>PÁGINA WEB</a><a href="${ADMIN_PATH}/usuarios" class="admin-section-link active" data-smooth-route>USUARIOS</a><a href="${ADMIN_PATH}/inventario" class="admin-section-link" data-smooth-route>INVENTARIO</a><a href="${ADMIN_PATH}/ventas-generales" class="admin-section-link" data-smooth-route>VENTAS GENERALES</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link" data-smooth-route>PEDIDOS</a><a href="${ADMIN_PATH}/generar-orden" class="admin-section-link" data-smooth-route>GENERAR ORDEN</a></nav>
+    <nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}" class="admin-section-link" data-smooth-route>PÁGINA WEB</a><a href="${ADMIN_PATH}/usuarios" class="admin-section-link active" data-smooth-route>USUARIOS</a><a href="${ADMIN_PATH}/inventario" class="admin-section-link" data-smooth-route>INVENTARIO</a><a href="${ADMIN_PATH}/resumen-financiero" class="admin-section-link" data-smooth-route>RESUMEN FINANCIERO</a><a href="${ADMIN_PATH}/ventas-generales" class="admin-section-link" data-smooth-route>VENTAS GENERALES</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link" data-smooth-route>PEDIDOS</a><a href="${ADMIN_PATH}/generar-orden" class="admin-section-link" data-smooth-route>GENERAR ORDEN</a></nav>
     ${usersPanel(users)}
   </div></main>`;
 
@@ -2004,6 +2090,7 @@ function inventoryPageMarkup(products = [], options = {}) {
     <nav class="admin-section-nav" aria-label="Secciones de administración">
       ${role === 'admin' ? `<a href="${ADMIN_PATH}" class="admin-section-link" data-smooth-route>PÁGINA WEB</a><a href="${ADMIN_PATH}/usuarios" class="admin-section-link" data-smooth-route>USUARIOS</a>` : ''}
       <a href="${ADMIN_PATH}/inventario" class="admin-section-link active" data-smooth-route>INVENTARIO</a>
+      <a href="${ADMIN_PATH}/resumen-financiero" class="admin-section-link" data-smooth-route>RESUMEN FINANCIERO</a>
       <a href="${ADMIN_PATH}/ventas-generales" class="admin-section-link" data-smooth-route>VENTAS GENERALES</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link" data-smooth-route>PEDIDOS</a>
       <a href="${ADMIN_PATH}/generar-orden" class="admin-section-link" data-smooth-route>GENERAR ORDEN</a>
     </nav>
@@ -2129,7 +2216,7 @@ async function renderAdmin() {
     <button type="button" data-admin-scroll="classificationPanel">Categorías</button>
     <button type="button" data-admin-scroll="productEditorPanel">Producto</button>
     <button type="button" data-admin-scroll="inventoryPanel">Inventario</button>
-  </aside><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Administración</h1></div><div class="admin-top-actions">${accountMenu(session)}</div></div><nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}" class="admin-section-link active" data-smooth-route>PÁGINA WEB</a><a href="${ADMIN_PATH}/usuarios" class="admin-section-link" data-smooth-route>USUARIOS</a><a href="${ADMIN_PATH}/inventario" class="admin-section-link" data-smooth-route>INVENTARIO</a><a href="${ADMIN_PATH}/ventas-generales" class="admin-section-link" data-smooth-route>VENTAS GENERALES</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link" data-smooth-route>PEDIDOS</a><a href="${ADMIN_PATH}/generar-orden" class="admin-section-link" data-smooth-route>GENERAR ORDEN</a></nav>${backupPanel(backupState)}${selectionPanel(products, settings)}${classificationPanel(classifications)}<section class="admin-panel product-editor-panel" id="productEditorPanel"><span class="eyebrow">Catálogo</span><h2 id="formTitle">Agregar producto</h2><div id="formArea"></div></section><section class="admin-products" id="inventoryPanel"><div class="section-heading inventory-heading"><div><span class="eyebrow">Inventario</span><h2>Productos e inventario (${products.length})</h2></div><p>Edita datos, imágenes, portada y destacados.</p></div><div class="inventory-toolbar"><label class="inventory-search"><span aria-hidden="true">⌕</span><input id="inventorySearch" type="search" placeholder="Buscar por nombre, SKU, marca o categoría…" autocomplete="off"><button id="clearInventorySearch" type="button" aria-label="Limpiar búsqueda">×</button></label><label class="inventory-filter"><span>Categoría</span><select id="inventoryCategoryFilter"><option value="">Todas las categorías</option><option value="elegant">Elegante</option><option value="sports">Deportes</option><option value="tech">Tech</option><option value="cosplay">Cosplay</option><option value="pets">Mascotas</option><option value="details">Detalles</option><option value="collectibles">Coleccionables</option></select></label><span class="inventory-count" id="inventoryCount">${products.length} productos</span></div><div id="adminProducts"></div></section></div></main>`;
+  </aside><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Administración</h1></div><div class="admin-top-actions">${accountMenu(session)}</div></div><nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}" class="admin-section-link active" data-smooth-route>PÁGINA WEB</a><a href="${ADMIN_PATH}/usuarios" class="admin-section-link" data-smooth-route>USUARIOS</a><a href="${ADMIN_PATH}/inventario" class="admin-section-link" data-smooth-route>INVENTARIO</a><a href="${ADMIN_PATH}/resumen-financiero" class="admin-section-link" data-smooth-route>RESUMEN FINANCIERO</a><a href="${ADMIN_PATH}/ventas-generales" class="admin-section-link" data-smooth-route>VENTAS GENERALES</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link" data-smooth-route>PEDIDOS</a><a href="${ADMIN_PATH}/generar-orden" class="admin-section-link" data-smooth-route>GENERAR ORDEN</a></nav>${backupPanel(backupState)}${selectionPanel(products, settings)}${classificationPanel(classifications)}<section class="admin-panel product-editor-panel" id="productEditorPanel"><span class="eyebrow">Catálogo</span><h2 id="formTitle">Agregar producto</h2><div id="formArea"></div></section><section class="admin-products" id="inventoryPanel"><div class="section-heading inventory-heading"><div><span class="eyebrow">Inventario</span><h2>Productos e inventario (${products.length})</h2></div><p>Edita datos, imágenes, portada y destacados.</p></div><div class="inventory-toolbar"><label class="inventory-search"><span aria-hidden="true">⌕</span><input id="inventorySearch" type="search" placeholder="Buscar por nombre, SKU, marca o categoría…" autocomplete="off"><button id="clearInventorySearch" type="button" aria-label="Limpiar búsqueda">×</button></label><label class="inventory-filter"><span>Categoría</span><select id="inventoryCategoryFilter"><option value="">Todas las categorías</option><option value="elegant">Elegante</option><option value="sports">Deportes</option><option value="tech">Tech</option><option value="cosplay">Cosplay</option><option value="pets">Mascotas</option><option value="details">Detalles</option><option value="collectibles">Coleccionables</option></select></label><span class="inventory-count" id="inventoryCount">${products.length} productos</span></div><div id="adminProducts"></div></section></div></main>`;
   const quickNav = document.querySelector('.admin-quick-nav');
   quickNav?.querySelectorAll('[data-admin-scroll]').forEach(button => button.addEventListener('click', () => {
     const target = document.getElementById(button.dataset.adminScroll);

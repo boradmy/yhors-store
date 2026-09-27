@@ -27,6 +27,7 @@ const STOREFRONT_FILE = path.join(DATA_DIR, 'storefront.json');
 const CLASSIFICATIONS_FILE = path.join(DATA_DIR, 'classifications.json');
 const ORDERS_FILE = path.join(DATA_DIR, 'orders.json');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
+const EXPENSES_FILE = path.join(DATA_DIR, 'expenses.json');
 const UPLOADS_DIR = process.env.YHORS_STORAGE_DIR ? path.join(STORAGE_ROOT, 'uploads') : path.join(__dirname, 'uploads');
 const BACKUPS_DIR = process.env.YHORS_STORAGE_DIR ? path.join(STORAGE_ROOT, 'backups') : path.join(__dirname, 'data', 'backups');
 const BACKUP_RETENTION = Math.max(3, Math.min(100, Number.parseInt(process.env.YHORS_BACKUP_RETENTION || '30', 10) || 30));
@@ -588,7 +589,7 @@ function ensureStorage() {
   // Primera ejecución con disco vacío: copia los datos que viajan con el código.
   // Nunca sobrescribe un archivo que ya exista en el almacenamiento persistente.
   if (process.env.YHORS_STORAGE_DIR) {
-    const seedFiles = ['products.json', 'storefront.json', 'classifications.json', 'orders.json', 'users.json', 'security.json'];
+    const seedFiles = ['products.json', 'storefront.json', 'classifications.json', 'orders.json', 'users.json', 'security.json', 'expenses.json'];
     for (const fileName of seedFiles) {
       const source = path.join(__dirname, 'data', fileName);
       const target = path.join(DATA_DIR, fileName);
@@ -609,6 +610,7 @@ function ensureStorage() {
     const target = path.join(DATA_DIR, fileName);
     if (!fs.existsSync(target)) fs.writeFileSync(target, fileName === 'orders.json' ? '[]\n' : fileName === 'products.json' ? '[]\n' : fileName === 'storefront.json' ? '{\n  "heroProductIds": [],\n  "featuredProductIds": []\n}\n' : '{\n  "brands": {},\n  "productTypes": {}\n}\n', 'utf8');
   }
+  if (!fs.existsSync(EXPENSES_FILE)) fs.writeFileSync(EXPENSES_FILE, '[]\n', 'utf8');
 }
 ensureStorage();
 migrateAllOrderStorageToEncryption();
@@ -1243,7 +1245,7 @@ function createBackup(reason = 'manual', options = {}) {
   fs.mkdirSync(backupDataDir, { recursive: true });
   fs.mkdirSync(backupUploadsDir, { recursive: true });
 
-  for (const fileName of ['products.json', 'storefront.json', 'classifications.json', 'orders.json', 'users.json', 'security.json']) {
+  for (const fileName of ['products.json', 'storefront.json', 'classifications.json', 'orders.json', 'users.json', 'security.json', 'expenses.json']) {
     const source = path.join(DATA_DIR, fileName);
     if (fs.existsSync(source)) fs.copyFileSync(source, path.join(backupDataDir, fileName));
   }
@@ -1315,7 +1317,7 @@ function validateBackupDirectory(backupDir) {
     if (!fs.existsSync(file)) throw new Error(`Falta ${fileName} en el respaldo.`);
     JSON.parse(fs.readFileSync(file, 'utf8'));
   }
-  for (const fileName of ['users.json', 'security.json']) {
+  for (const fileName of ['users.json', 'security.json', 'expenses.json']) {
     const file = path.join(dataDir, fileName);
     if (fs.existsSync(file)) JSON.parse(fs.readFileSync(file, 'utf8'));
   }
@@ -1377,7 +1379,7 @@ function applyBackupDirectory(backupDir) {
       fs.copyFileSync(source, temporaryFile);
       fs.renameSync(temporaryFile, target);
     }
-    for (const fileName of ['users.json', 'security.json']) {
+    for (const fileName of ['users.json', 'security.json', 'expenses.json']) {
       const source = path.join(backupDataDir, fileName);
       if (!fs.existsSync(source)) continue;
       const target = path.join(DATA_DIR, fileName);
@@ -1631,6 +1633,23 @@ function restoreOrderPurchaseStock(order) {
   return changeOrderStock(order, 1);
 }
 
+function readExpenses() {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(EXPENSES_FILE, 'utf8'));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeExpenses(expenses) {
+  maybeAutoBackup();
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  const temporaryFile = `${EXPENSES_FILE}.tmp`;
+  fs.writeFileSync(temporaryFile, `${JSON.stringify(expenses, null, 2)}\n`, 'utf8');
+  fs.renameSync(temporaryFile, EXPENSES_FILE);
+}
+
 function readOrders() {
   const raw = fs.readFileSync(ORDERS_FILE, 'utf8');
   const parsed = JSON.parse(raw);
@@ -1722,6 +1741,7 @@ function validateOrder(input) {
       rentalDays,
       quantity,
       unitPrice: Math.round(price * 100) / 100,
+      purchaseCost: purchaseMode === 'purchase' ? Math.round(Math.max(0, Number(product.purchasePrice) || 0) * 100) / 100 : 0,
       subtotal: Math.round(price * quantity * durationMultiplier * 100) / 100
     });
   }
@@ -2515,6 +2535,97 @@ app.get('/api/admin/order-sellers', requireOrdersAccess, (_, res) => {
 });
 
 
+app.get('/api/admin/resumen-financiero', requireAdmin, (req, res) => {
+  const orders = readOrders();
+  const products = readProducts().map(normalizeProduct);
+  const users = readUsers();
+  const sellerMap = new Map(users.filter(user => isSellerRole(user.role)).map(user => [String(user.id), user]));
+  const expenses = readExpenses();
+  const from = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.from || '')) ? String(req.query.from) : '';
+  const to = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.to || '')) ? String(req.query.to) : '';
+  const localDate = value => {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    return date.toLocaleDateString('en-CA', { timeZone: 'America/Guayaquil' });
+  };
+  const activeStatuses = new Set(['Pendiente', 'Confirmado', 'Preparado', 'Enviado', 'Entregado']);
+  const productMap = new Map(products.map(product => [String(product.id), product]));
+  const filteredOrders = orders.filter(order => {
+    const date = localDate(order.createdAt);
+    if (!date || (from && date < from) || (to && date > to)) return false;
+    return activeStatuses.has(String(order.status || 'Pendiente'));
+  });
+  const filteredExpenses = expenses.filter(expense => {
+    const date = String(expense.date || '');
+    return /^\d{4}-\d{2}-\d{2}$/.test(date) && (!from || date >= from) && (!to || date <= to);
+  });
+  const round = value => Math.round(Number(value || 0) * 100) / 100;
+  let sales = 0;
+  let purchases = 0;
+  let shipping = 0;
+  const salesBySeller = new Map();
+
+  for (const order of filteredOrders) {
+    sales += Number(order.total || 0);
+    shipping += Number(order.shippingCost ?? order.delivery?.cost ?? 0);
+    for (const item of Array.isArray(order.items) ? order.items : []) {
+      if (item.purchaseMode !== 'purchase') continue;
+      const fallbackProduct = productMap.get(String(item.productId || ''));
+      const purchaseCost = Number.isFinite(Number(item.purchaseCost)) ? Number(item.purchaseCost) : Number(fallbackProduct?.purchasePrice || 0);
+      purchases += Math.max(0, purchaseCost) * Math.max(0, Number(item.quantity || 0));
+    }
+    const sellerId = order.assignedSellerId || 'unassigned';
+    const sellerName = order.assignedSellerName || sellerMap.get(String(order.assignedSellerId || ''))?.name || (sellerId === 'unassigned' ? 'Sin vendedor' : 'Vendedor');
+    const seller = salesBySeller.get(sellerId) || { sellerId, sellerName, total: 0, orders: 0 };
+    seller.total += Number(order.total || 0);
+    seller.orders += 1;
+    salesBySeller.set(sellerId, seller);
+  }
+
+  const manualExpenses = filteredExpenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
+  const totalExpenses = shipping + manualExpenses;
+  const totalSales = round(sales);
+  const totalPurchases = round(purchases);
+  const totalShipping = round(shipping);
+  const totalManualExpenses = round(manualExpenses);
+  const totalExpensesRounded = round(totalExpenses);
+  const profit = round(totalSales - totalPurchases - totalExpensesRounded);
+  const margin = totalSales > 0 ? round((profit / totalSales) * 100) : 0;
+  const expenseRows = filteredExpenses
+    .map(expense => ({ ...expense, amount: round(expense.amount) }))
+    .sort((a, b) => String(b.date).localeCompare(String(a.date)) || String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+
+  return res.json({
+    filters: { from, to },
+    totals: { sales: totalSales, purchases: totalPurchases, shipping: totalShipping, manualExpenses: totalManualExpenses, expenses: totalExpensesRounded, profit, margin, orderCount: filteredOrders.length },
+    expenses: expenseRows,
+    salesBySeller: [...salesBySeller.values()].sort((a, b) => b.total - a.total).map(row => ({ ...row, total: round(row.total) }))
+  });
+});
+
+app.post('/api/admin/gastos', requireAdmin, (req, res) => {
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(String(req.body?.date || '')) ? String(req.body.date) : '';
+  const description = cleanText(req.body?.description, 120);
+  const note = cleanText(req.body?.note, 500);
+  const amount = Number(req.body?.amount);
+  if (!date) return res.status(400).json({ error: 'Selecciona una fecha válida para el gasto.' });
+  if (!description) return res.status(400).json({ error: 'Ingresa una descripción para el gasto.' });
+  if (!Number.isFinite(amount) || amount <= 0 || amount > 100000000) return res.status(400).json({ error: 'Ingresa un valor de gasto válido.' });
+  const expenses = readExpenses();
+  const expense = { id: crypto.randomUUID(), date, description, amount: Math.round(amount * 100) / 100, note, createdAt: new Date().toISOString(), createdBy: getSession(req)?.accountId || null };
+  expenses.push(expense);
+  writeExpenses(expenses);
+  return res.status(201).json({ ...expense });
+});
+
+app.delete('/api/admin/gastos/:id', requireAdmin, (req, res) => {
+  const expenses = readExpenses();
+  const next = expenses.filter(expense => String(expense.id) !== String(req.params.id));
+  if (next.length === expenses.length) return res.status(404).json({ error: 'Gasto no encontrado.' });
+  writeExpenses(next);
+  return res.status(204).end();
+});
+
 app.get('/api/admin/ventas-generales', requireOrdersAccess, (req, res) => {
   const orders = readOrders();
   const users = readUsers();
@@ -2650,6 +2761,7 @@ function buildEditedOrderItems(requestedItems, products) {
       rentalDays,
       quantity,
       unitPrice: Math.round(price * 100) / 100,
+      purchaseCost: purchaseMode === 'purchase' ? Math.round(Math.max(0, Number(product.purchasePrice) || 0) * 100) / 100 : 0,
       subtotal: Math.round(price * quantity * durationMultiplier * 100) / 100
     });
   }
