@@ -77,8 +77,8 @@ function auditLog(req, action, module, details = {}, result = 'success') {
       id: `AUD-${new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`,
       createdAt: new Date().toISOString(),
       username: session?.username || details.username || null,
-      accountId: session?.accountId || null,
-      role: session?.role || null,
+      accountId: session?.accountId || details.accountId || null,
+      role: session?.role || details.role || null,
       module,
       action,
       result,
@@ -2197,7 +2197,7 @@ app.post('/api/login', async (req, res) => {
         const minutes = Math.ceil(protection.remainingSeconds / 60);
         return res.status(423).json({ error: `Demasiados intentos. Tu acceso se bloqueará durante ${minutes} minutos.`, lockoutSeconds: protection.remainingSeconds, lockoutStage: protection.stage });
       }
-      auditLog(req, 'Inicio de sesión fallido', 'Seguridad', { username, attemptsRemaining: protection.attemptsRemaining, attemptsUsed: protection.failures }, 'failure');
+      auditLog(req, 'Inicio de sesión fallido', 'Seguridad', { username, accountId: account.id, role: account.role, attemptsRemaining: protection.attemptsRemaining, attemptsUsed: protection.failures }, 'failure');
       return res.status(401).json({ error: 'Usuario o contraseña incorrectos.', attemptsRemaining: protection.attemptsRemaining, attemptsUsed: protection.failures, attemptsLimit: ACCOUNT_LOGIN_ATTEMPTS_BEFORE_LOCK });
     }
     auditLog(req, 'Inicio de sesión fallido', 'Seguridad', { username, reason: 'Credenciales incorrectas' }, 'failure');
@@ -3258,6 +3258,15 @@ app.delete('/api/admin/orders/:id', requireStoreManagerOrAdmin, (req, res) => {
 
 app.get('/api/admin/audit', requireAdmin, (req, res) => {
   const entries = readAudit().slice().reverse();
+  const users = readUsers();
+  const userMap = new Map(users.map(user => [String(user.username || '').toLowerCase(), user]));
+  entries.forEach(entry => {
+    const user = userMap.get(String(entry.username || '').toLowerCase());
+    if (user) {
+      if (!entry.role) entry.role = user.role;
+      if (!entry.accountId) entry.accountId = user.id;
+    }
+  });
   const q = String(req.query.q || '').trim().toLowerCase();
   const module = String(req.query.module || '').trim();
   const action = String(req.query.action || '').trim();

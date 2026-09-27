@@ -49,15 +49,18 @@ async function request(url, options = {}) {
 
 function accountMenu(account = {}) {
   const username = escapeHTML(account.username || 'Usuario');
+  const role = escapeHTML(userRoleLabel(account.role || ''));
+  const initial = escapeHTML((account.name || account.username || 'U').trim().slice(0, 1).toUpperCase());
   return `<div class="account-menu-wrap">
-    <button class="account-menu-trigger" id="accountMenuTrigger" type="button" aria-label="Abrir menú de usuario" aria-haspopup="menu" aria-expanded="false">
-      <span class="account-menu-avatar" aria-hidden="true"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="3.2"></circle><path d="M5.5 20c.8-3.2 3.1-5 6.5-5s5.7 1.8 6.5 5"></path></svg></span>
+    <button class="account-menu-trigger" id="accountMenuTrigger" type="button" aria-label="Abrir menú de cuenta" aria-haspopup="menu" aria-expanded="false">
+      <span class="account-menu-avatar" aria-hidden="true">${initial}</span>
+      <span class="account-menu-trigger-copy"><strong>${username}</strong><small>${role}</small></span>
       <span class="account-menu-caret" aria-hidden="true">⌄</span>
     </button>
     <div class="account-menu" id="accountMenu" role="menu" hidden>
-      <div class="account-menu-user"><strong>${username}</strong><small>${escapeHTML(userRoleLabel(account.role || ''))}</small></div>
-      <a href="/mi-cuenta" role="menuitem">Mi cuenta</a>
-      <button type="button" role="menuitem" id="accountMenuLogout">Cerrar sesión</button>
+      <div class="account-menu-user"><span class="account-menu-user-label">CUENTA YHORS</span><strong>${username}</strong><small>${role}</small></div>
+      <a href="/mi-cuenta" role="menuitem">Mi cuenta <span>→</span></a>
+      <button type="button" role="menuitem" id="accountMenuLogout">Cerrar sesión <span>↗</span></button>
     </div>
   </div>`;
 }
@@ -67,6 +70,9 @@ function wireAccountMenu() {
   const trigger = document.querySelector('#accountMenuTrigger');
   const menu = document.querySelector('#accountMenu');
   if (!wrap || !trigger || !menu) return;
+  if (window.__yhorsAccountMenuDocumentHandler) {
+    document.removeEventListener('click', window.__yhorsAccountMenuDocumentHandler);
+  }
   const close = () => { menu.hidden = true; trigger.setAttribute('aria-expanded', 'false'); };
   trigger.addEventListener('click', event => {
     event.stopPropagation();
@@ -74,9 +80,10 @@ function wireAccountMenu() {
     menu.hidden = !open;
     trigger.setAttribute('aria-expanded', String(open));
   });
-  document.addEventListener('click', event => {
+  window.__yhorsAccountMenuDocumentHandler = event => {
     if (!wrap.contains(event.target)) close();
-  });
+  };
+  document.addEventListener('click', window.__yhorsAccountMenuDocumentHandler);
   document.querySelector('#accountMenuLogout')?.addEventListener('click', async () => {
     try { await request('/api/logout', { method: 'POST' }); } finally { renderLogin(); }
   });
@@ -1137,9 +1144,9 @@ function adminSectionNav(session = {}, active = '') {
   const limitedOperations = role === 'vendedor' || role === 'orders' || role === 'store_manager';
   const link = (key, href, label) => `<a href="${href}" class="admin-section-link${active === key ? ' active' : ''}" data-smooth-route>${label}</a>`;
   if (limitedOperations) {
-    return `<nav class="admin-section-nav" aria-label="Secciones operativas">${link('ventas-generales', `${ADMIN_PATH}/ventas-generales`, 'VENTAS GENERALES')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('generar-orden', `${ADMIN_PATH}/generar-orden`, 'GENERAR ORDEN')}</nav>`;
+    return `<nav class="admin-section-nav admin-section-nav--compact" id="adminSectionNav" aria-label="Secciones operativas">${link('ventas-generales', `${ADMIN_PATH}/ventas-generales`, 'VENTAS GENERALES')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('generar-orden', `${ADMIN_PATH}/generar-orden`, 'GENERAR ORDEN')}</nav>`;
   }
-  return `<nav class="admin-section-nav" aria-label="Secciones de administración">${link('web', ADMIN_PATH, 'PÁGINA WEB')}${link('usuarios', `${ADMIN_PATH}/usuarios`, 'USUARIOS')}${link('auditoria', `${ADMIN_PATH}/auditoria`, 'AUDITORÍA')}${link('inventario', `${ADMIN_PATH}/inventario`, 'INVENTARIO')}${link('resumen-financiero', `${ADMIN_PATH}/resumen-financiero`, 'RESUMEN FINANCIERO')}${link('ventas-generales', `${ADMIN_PATH}/ventas-generales`, 'VENTAS GENERALES')}${link('calculo-comision', `${ADMIN_PATH}/calculo-comision`, 'CALCULO DE COMISION')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('generar-orden', `${ADMIN_PATH}/generar-orden`, 'GENERAR ORDEN')}</nav>`;
+  return `<nav class="admin-section-nav" id="adminSectionNav" aria-label="Secciones de administración">${link('web', ADMIN_PATH, 'PÁGINA WEB')}${link('usuarios', `${ADMIN_PATH}/usuarios`, 'USUARIOS')}${link('auditoria', `${ADMIN_PATH}/auditoria`, 'AUDITORÍA')}${link('inventario', `${ADMIN_PATH}/inventario`, 'INVENTARIO')}${link('resumen-financiero', `${ADMIN_PATH}/resumen-financiero`, 'RESUMEN FINANCIERO')}${link('ventas-generales', `${ADMIN_PATH}/ventas-generales`, 'VENTAS GENERALES')}${link('calculo-comision', `${ADMIN_PATH}/calculo-comision`, 'CÁLCULO DE COMISIÓN')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('generar-orden', `${ADMIN_PATH}/generar-orden`, 'GENERAR ORDEN')}</nav>`;
 }
 
 function generateOrderNav(session) {
@@ -1978,17 +1985,40 @@ async function renderAdminAudit() {
   </div></main>`;
 
   const esc = value => escapeHTML(value == null ? '' : String(value));
-  const pretty = value => {
-    if (value === null || value === undefined) return '—';
-    if (typeof value === 'object') return `<pre class="audit-json">${esc(JSON.stringify(value, null, 2))}</pre>`;
-    return esc(value);
+  const auditLabels = {
+    username:'Usuario', accountId:'Cuenta', role:'Rol', reason:'Motivo', attemptsRemaining:'Intentos restantes', attemptsUsed:'Intentos utilizados', attemptsLimit:'Límite de intentos',
+    orderId:'Pedido', orderNumber:'Número de pedido', productId:'Producto', sku:'SKU', name:'Nombre', status:'Estado', assignedSellerId:'Vendedor asignado', assignedSellerName:'Vendedor responsable',
+    internalNote:'Nota interna', total:'Total', source:'Origen', stockReturned:'Inventario devuelto', active:'Activo', published:'Publicado', category:'Categoría', purchasePrice:'Precio de compra', salePrice:'Precio de venta', rentalPrice:'Precio de alquiler',
+    details:'Detalle', changes:'Cambios', before:'Antes', after:'Después', items:'Productos'
+  };
+  const auditLabel = key => auditLabels[key] || String(key).replace(/([A-Z])/g,' $1').replace(/^./, c => c.toUpperCase());
+  const auditValueText = value => {
+    if (value === null || value === undefined || value === '') return '—';
+    if (typeof value === 'boolean') return value ? 'Sí' : 'No';
+    if (typeof value === 'number') return String(value);
+    if (Array.isArray(value)) return value.map(item => typeof item === 'object' ? (item.name || item.sku || JSON.stringify(item)) : item).join(', ');
+    return String(value);
+  };
+  const auditDetailsMarkup = details => {
+    if (!details || typeof details !== 'object') return `<div class="audit-detail-row"><span>Detalle</span><strong>${esc(auditValueText(details))}</strong></div>`;
+    const entries = Object.entries(details).filter(([key]) => !['userAgent','password','token','secret'].includes(key));
+    return `<div class="audit-detail-grid">${entries.map(([key,value]) => {
+      if (key === 'changes' && value && typeof value === 'object') {
+        const changes = Object.entries(value);
+        return `<div class="audit-change-block"><span class="audit-detail-label">Cambios realizados</span>${changes.length ? changes.map(([field,change]) => `<div class="audit-change"><b>${esc(auditLabel(field))}</b><span>${esc(auditValueText(change?.before))}</span><i>→</i><strong>${esc(auditValueText(change?.after))}</strong></div>`).join('') : '<small>Sin cambios registrados.</small>'}</div>`;
+      }
+      if (key === 'order' && value && typeof value === 'object') {
+        return `<div class="audit-detail-block"><span class="audit-detail-label">Resumen del pedido</span><div class="audit-detail-grid nested">${Object.entries(value).filter(([k]) => k !== 'items').map(([k,v]) => `<div class="audit-detail-row"><span>${esc(auditLabel(k))}</span><strong>${esc(auditValueText(v))}</strong></div>`).join('')}</div></div>`;
+      }
+      return `<div class="audit-detail-row"><span>${esc(auditLabel(key))}</span><strong>${esc(auditValueText(value))}</strong></div>`;
+    }).join('')}</div>`;
   };
   const localToday = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Guayaquil' });
   const queryEls = ['auditQuery','auditUser','auditModule','auditAction','auditFrom','auditTo'].map(id => document.getElementById(id));
 
   const draw = async () => {
     const [q,user,module,action,from,to] = queryEls.map(el => el?.value || '');
-    const params = new URLSearchParams({ q,user,module,action,from,to });
+    const params = new URLSearchParams({ q,username:user,module,action,from,to });
     const data = await request(`/api/admin/audit?${params.toString()}`).catch(e => ({ entries: [], total: 0, error: e.message }));
     const fill = (id, values, selected) => {
       const select=document.getElementById(id); if(!select) return;
@@ -2016,9 +2046,9 @@ async function renderAdminAudit() {
           <span class="audit-entry-arrow">›</span>
         </button>
         <div class="audit-entry-details" data-audit-details="${index}" hidden>
-          <div class="audit-meta"><span><b>Usuario</b>${esc(entry.username || 'Sistema')}</span><span><b>Rol</b>${esc(entry.role || '—')}</span><span><b>IP</b>${esc(entry.ip || '—')}</span><span><b>Resultado</b>${esc(entry.result || 'success')}</span><span><b>ID</b>${esc(entry.id)}</span></div>
-          <div class="audit-detail-box">${pretty(details)}</div>
-          ${entry.userAgent ? `<small class="audit-user-agent">${esc(entry.userAgent)}</small>` : ''}
+          <div class="audit-meta"><span><b>Usuario</b>${esc(entry.username || 'Sistema')}</span><span><b>Rol</b>${esc(userRoleLabel(entry.role || ''))}</span><span><b>IP</b>${esc(String(entry.ip || '—').replace(/^::ffff:/,''))}</span><span><b>Resultado</b>${entry.result === 'failure' ? 'Fallido' : 'Correcto'}</span><span><b>ID</b>${esc(entry.id)}</span></div>
+          <div class="audit-detail-box">${auditDetailsMarkup(details)}</div>
+          ${entry.userAgent ? `<details class="audit-technical"><summary>Ver información técnica</summary><small class="audit-user-agent">${esc(entry.userAgent)}</small></details>` : ''}
         </div>
       </article>`;
     }).join('');

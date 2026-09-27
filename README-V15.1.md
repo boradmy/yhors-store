@@ -1,3 +1,11 @@
+# YHORS V15.2
+
+## Mejoras de esta entrega
+- Header administrativo unificado y responsive.
+- Menú de cuenta rediseñado.
+- Auditoría con presentación legible y roles enriquecidos.
+- Compatibilidad con registros históricos de auditoría sin rol.
+
 # YHORS V15.1 — Auditoría detallada
 
 - Registro server-side de acciones de seguridad, usuarios, pedidos e inventario.
