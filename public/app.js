@@ -1016,7 +1016,9 @@ function ordersPanel(orders = [], canDelete = true) {
   </section>`;
 }
 
-function showYhorsConfirm(title, message) {
+function showYhorsConfirm(title, message, options = {}) {
+  const cancelText = options.cancelText || 'Cancelar';
+  const confirmText = options.confirmText || 'Aceptar';
   return new Promise(resolve => {
     const existing = document.querySelector('#yhorsConfirmModal');
     if (existing) existing.remove();
@@ -1029,8 +1031,8 @@ function showYhorsConfirm(title, message) {
         <h2 id="yhorsConfirmTitle">${escapeHTML(title)}</h2>
         <p>${message}</p>
         <div class="yhors-confirm-actions">
-          <button type="button" class="button secondary" data-confirm-cancel>Cancelar</button>
-          <button type="button" class="button primary" data-confirm-ok>Aceptar</button>
+          <button type="button" class="button secondary" data-confirm-cancel>${escapeHTML(cancelText)}</button>
+          <button type="button" class="button primary" data-confirm-ok>${escapeHTML(confirmText)}</button>
         </div>
       </div>`;
     document.body.appendChild(modal);
@@ -1121,6 +1123,7 @@ function ordersListMarkup(orders = [], options = {}) {
         <button class="button pdf-order small" type="button" data-order-pdf="${escapeHTML(order.id)}" title="Generar PDF de esta orden">PDF ORDEN</button>
         <button class="button success small" type="button" data-order-note-save="${escapeHTML(order.id)}" disabled>Guardar cambios</button>
         <button class="button edit-note small" type="button" data-order-note-edit="${escapeHTML(order.id)}">Editar pedido</button>
+        <button class="button order-edit-cancel small" type="button" data-order-edit-cancel="${escapeHTML(order.id)}" hidden>Cancelar</button>
         ${canDelete ? `<button class="button danger small" type="button" data-order-delete="${escapeHTML(order.id)}">Eliminar pedido</button>` : ''}
       </div>
     </div>
@@ -1241,7 +1244,14 @@ async function renderAdminGenerateOrder() {
   document.querySelector('#generateOrderLines')?.addEventListener('click', event => { const qtyButton = event.target.closest('[data-gen-qty]'); if (qtyButton) { const line = lines.find(item => item.id === qtyButton.dataset.genQty); if (!line) return; line.quantity = Math.max(1, Math.min(99, Number(line.quantity || 1) + Number(qtyButton.dataset.change || 0))); drawLines(); return; } const remove = event.target.closest('[data-gen-remove]'); if (remove) { lines = lines.filter(item => item.id !== remove.dataset.genRemove); drawLines(); } });
   document.querySelector('#generateOrderLines')?.addEventListener('change', event => { const select = event.target.closest('[data-gen-days]'); if (!select) return; const line = lines.find(item => item.id === select.dataset.genDays); if (!line) return; line.rentalDays = Math.max(1, Math.min(10, Number(select.value) || 1)); drawLines(); });
   document.querySelectorAll('input[name="generateDelivery"]').forEach(input => input.addEventListener('change', updateTotals));
-  document.querySelector('#generateOrderSubmit')?.addEventListener('click', async () => { if (saving) return; const message = document.querySelector('#generateMessage'); message.hidden = true; if (!customer.name || !customer.phone || !customer.cedula || !customer.city) { message.hidden = false; message.className = 'message error'; message.textContent = 'Completa los datos del cliente antes de generar la orden.'; openModal('customerModal'); return; } if (!lines.length) { message.hidden = false; message.className = 'message error'; message.textContent = 'Agrega al menos un producto a la orden.'; openModal('productPickerModal'); return; } const deliveryMethod = document.querySelector('input[name="generateDelivery"]:checked')?.value || 'office'; if (deliveryMethod !== 'office' && !customer.address) { message.hidden = false; message.className = 'message error'; message.textContent = 'Ingresa la dirección del cliente para el envío seleccionado.'; openModal('customerModal'); return; } const submit = document.querySelector('#generateOrderSubmit'); saving = true; submit.disabled = true; submit.classList.add('is-loading'); submit.innerHTML = 'Generando…'; try { const assignedSellerId = document.querySelector('#generateSeller')?.value || null; const payload = { customer: { ...customer, notes: document.querySelector('#generateNotes').value.trim() }, deliveryMethod, assignedSellerId, items: lines.map(line => ({ productId: line.productId || line.id, quantity: Number(line.quantity), purchaseMode: line.purchaseMode || 'purchase', rentalDays: line.purchaseMode === 'rental' ? Math.max(1, Number(line.rentalDays || 1)) : null })) }; const result = await request('/api/admin/generar-orden', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) }); app.querySelector('.generate-order-page').innerHTML = `<div class="generate-success"><span class="success-mark">✓</span><span class="eyebrow">Orden generada correctamente</span><h2>#${escapeHTML(result.orderNumber)}</h2><p>La orden quedó registrada en YHORS y el inventario se actualizó.</p><div class="generate-success-total">Total: <strong>${money(result.total)}</strong></div><div class="generate-success-actions"><button type="button" class="button primary" id="generateAnotherOrder">Nueva orden</button><a class="button secondary" href="${ADMIN_PATH}/pedidos" data-smooth-route>Ver pedidos</a>${result.orderId ? `<button type="button" class="button secondary" data-generated-pdf="${escapeHTML(result.orderId)}">PDF de orden</button>` : ''}</div></div>`; document.querySelector('#generateAnotherOrder')?.addEventListener('click', () => renderAdminGenerateOrder()); document.querySelector('[data-generated-pdf]')?.addEventListener('click', event => { const a=document.createElement('a'); a.href=`/api/admin/orders/${encodeURIComponent(event.currentTarget.dataset.generatedPdf)}/pdf?v=${Date.now()}`; a.target='_blank'; a.rel='noopener'; a.click(); }); } catch (error) { message.hidden = false; message.className = 'message error'; message.textContent = error.message || 'No se pudo generar la orden.'; submit.disabled = false; submit.classList.remove('is-loading'); submit.innerHTML = 'Generar orden <span>→</span>'; saving = false; } });
+  document.querySelector('#generateOrderSubmit')?.addEventListener('click', async () => { if (saving) return; const message = document.querySelector('#generateMessage'); message.hidden = true; if (!customer.name || !customer.phone || !customer.cedula || !customer.city) { message.hidden = false; message.className = 'message error'; message.textContent = 'Completa los datos del cliente antes de generar la orden.'; openModal('customerModal'); return; } if (!lines.length) { message.hidden = false; message.className = 'message error'; message.textContent = 'Agrega al menos un producto a la orden.'; openModal('productPickerModal'); return; } const deliveryMethod = document.querySelector('input[name="generateDelivery"]:checked')?.value || 'office'; if (deliveryMethod !== 'office' && !customer.address) { message.hidden = false; message.className = 'message error'; message.textContent = 'Ingresa la dirección del cliente para el envío seleccionado.'; openModal('customerModal'); return; } const submit = document.querySelector('#generateOrderSubmit');
+    const confirmed = await showYhorsConfirm(
+      '¿Deseas generar esta orden?',
+      'Si continúas, la orden se registrará y se actualizará el inventario. Si eliges <strong>Cancelar</strong>, puedes seguir agregando o modificando productos.',
+      { cancelText: 'Cancelar', confirmText: 'Generar orden' }
+    );
+    if (!confirmed) return;
+    saving = true; submit.disabled = true; submit.classList.add('is-loading'); submit.innerHTML = 'Generando…'; try { const assignedSellerId = document.querySelector('#generateSeller')?.value || null; const payload = { customer: { ...customer, notes: document.querySelector('#generateNotes').value.trim() }, deliveryMethod, assignedSellerId, items: lines.map(line => ({ productId: line.productId || line.id, quantity: Number(line.quantity), purchaseMode: line.purchaseMode || 'purchase', rentalDays: line.purchaseMode === 'rental' ? Math.max(1, Number(line.rentalDays || 1)) : null })) }; const result = await request('/api/admin/generar-orden', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) }); app.querySelector('.generate-order-page').innerHTML = `<div class="generate-success"><span class="success-mark">✓</span><span class="eyebrow">Orden generada correctamente</span><h2>#${escapeHTML(result.orderNumber)}</h2><p>La orden quedó registrada en YHORS y el inventario se actualizó.</p><div class="generate-success-total">Total: <strong>${money(result.total)}</strong></div><div class="generate-success-actions"><button type="button" class="button primary" id="generateAnotherOrder">Nueva orden</button><a class="button secondary" href="${ADMIN_PATH}/pedidos" data-smooth-route>Ver pedidos</a>${result.orderId ? `<button type="button" class="button secondary" data-generated-pdf="${escapeHTML(result.orderId)}">PDF de orden</button>` : ''}</div></div>`; document.querySelector('#generateAnotherOrder')?.addEventListener('click', () => renderAdminGenerateOrder()); document.querySelector('[data-generated-pdf]')?.addEventListener('click', event => { const a=document.createElement('a'); a.href=`/api/admin/orders/${encodeURIComponent(event.currentTarget.dataset.generatedPdf)}/pdf?v=${Date.now()}`; a.target='_blank'; a.rel='noopener'; a.click(); }); } catch (error) { message.hidden = false; message.className = 'message error'; message.textContent = error.message || 'No se pudo generar la orden.'; submit.disabled = false; submit.classList.remove('is-loading'); submit.innerHTML = 'Generar orden <span>→</span>'; saving = false; } });
   drawCustomer(); drawLines(); wireAccountMenu(); wireImageFallback(app);
 }
 
@@ -1428,8 +1438,37 @@ async function renderAdminOrders() {
       textarea.focus();
       button.disabled = true;
       button.textContent = 'Editando…';
+      const cancelButton = list.querySelector(`[data-order-edit-cancel="${id}"]`);
+      if (cancelButton) cancelButton.hidden = false;
       saveButton.dataset.editing = 'true';
       saveButton.disabled = false;
+    }));
+
+    // Cancelar edición descarta TODO el borrador local y devuelve el pedido
+    // exactamente al estado que tenía antes de pulsar "Editar pedido".
+    list.querySelectorAll('[data-order-edit-cancel]').forEach(button => button.addEventListener('click', () => {
+      const id = button.dataset.orderEditCancel;
+      const order = orders.find(o => o.id === id);
+      if (!order) return;
+      const textarea = list.querySelector(`[data-order-note="${id}"]`);
+      const statusSelect = list.querySelector(`[data-order-status="${id}"]`);
+      const assignment = list.querySelector(`[data-order-assignment="${id}"]`);
+      const saveButton = list.querySelector(`[data-order-note-save="${id}"]`);
+      const editButton = list.querySelector(`[data-order-note-edit="${id}"]`);
+      const productsButton = list.querySelector(`[data-order-items-edit="${id}"]`);
+
+      if (textarea) { textarea.value = order.internalNote || ''; textarea.disabled = true; }
+      if (statusSelect) { statusSelect.value = order.status || 'Pendiente'; statusSelect.disabled = true; statusSelect.className = `status-select-${statusClass(order.status || 'Pendiente')}`; }
+      if (assignment) { assignment.value = order.assignedSellerId || ''; assignment.disabled = true; assignment.dataset.changed = 'false'; }
+
+      closeOrderEditor(id);
+      editingOrders.delete(id);
+      draftItems.delete(id);
+      productEditorsOpen.delete(id);
+      if (productsButton) { productsButton.disabled = true; productsButton.hidden = false; }
+      if (editButton) { editButton.disabled = false; editButton.textContent = 'Editar pedido'; }
+      button.hidden = true;
+      if (saveButton) { delete saveButton.dataset.editing; saveButton.disabled = true; saveButton.textContent = 'Guardar cambios'; }
     }));
 
     const refreshOrderItemsView = order => {
@@ -1497,6 +1536,8 @@ async function renderAdminOrders() {
           editButton.disabled = false;
           editButton.textContent = 'Editar pedido';
         }
+        const cancelButton = list.querySelector(`[data-order-edit-cancel="${id}"]`);
+        if (cancelButton) cancelButton.hidden = true;
         const productsButton = list.querySelector(`[data-order-items-edit="${id}"]`);
         if (productsButton) { productsButton.disabled = true; productsButton.hidden = false; }
         closeOrderEditor(id);
@@ -1548,6 +1589,8 @@ async function renderAdminOrders() {
           editButton.disabled = false;
           editButton.textContent = 'Editar pedido';
         }
+        const cancelButton = list.querySelector(`[data-order-edit-cancel="${id}"]`);
+        if (cancelButton) cancelButton.hidden = true;
         const productsButton = list.querySelector(`[data-order-items-edit="${id}"]`);
         if (productsButton) { productsButton.disabled = true; productsButton.hidden = false; }
         refreshOrderItemsView(updated);

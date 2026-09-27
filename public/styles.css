@@ -2061,3 +2061,15 @@ body.generate-modal-open{overflow:hidden}
 .order-edit-products-note{padding:12px 8px 8px;color:var(--muted);font-size:.72rem;border-top:1px solid #eeeae2;margin-top:2px}
 .admin-order-items-actions .button:disabled{opacity:.45;cursor:not-allowed;transform:none}
 @media(max-width:900px){.order-edit-products-card .generate-products-table-head{display:none}.order-edit-products-card .generate-product-row{grid-template-columns:1fr auto auto 78px;gap:8px}.order-edit-products-card .generate-product-info{grid-column:1/-1}.order-edit-products-card .generate-qty{grid-column:1}.order-edit-products-card .generate-unit-price{grid-column:2}.order-edit-products-card .generate-line-total{grid-column:3}.order-edit-products-card .order-edit-remove{grid-column:4;grid-row:2}}
+
+/* YHORS — cancelar edición de pedido */
+.button.order-edit-cancel{
+  background:#e7e7e7;
+  color:#555;
+  border-color:#cfcfcf;
+}
+.button.order-edit-cancel:hover{
+  background:#dcdcdc;
+  border-color:#bdbdbd;
+  color:#333;
+}
