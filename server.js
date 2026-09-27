@@ -2515,6 +2515,63 @@ app.get('/api/admin/order-sellers', requireOrdersAccess, (_, res) => {
 });
 
 
+app.get('/api/admin/ventas-generales', requireOrdersAccess, (req, res) => {
+  const orders = readOrders();
+  const users = readUsers();
+  const statuses = ['Pendiente', 'Confirmado', 'Preparado', 'Enviado', 'Entregado', 'Cancelado'];
+  const activeStatuses = new Set(['Pendiente', 'Confirmado', 'Preparado', 'Enviado', 'Entregado']);
+  const requestedStatus = String(req.query.status || 'active').trim();
+  const statusFilter = requestedStatus === 'all' || statuses.includes(requestedStatus) ? requestedStatus : 'active';
+  const from = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.from || '')) ? String(req.query.from) : '';
+  const to = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.to || '')) ? String(req.query.to) : '';
+  const localDate = value => {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    return date.toLocaleDateString('en-CA', { timeZone: 'America/Guayaquil' });
+  };
+
+  const sellers = users
+    .filter(user => isSellerRole(user.role))
+    .map(user => ({ id: user.id, name: user.name, username: user.username, active: user.active !== false }))
+    .sort((a, b) => a.name.localeCompare(b.name, 'es'));
+  const sellerMap = new Map(sellers.map(seller => [seller.id, seller]));
+  const rows = new Map(sellers.map(seller => [seller.id, { sellerId: seller.id, sellerName: seller.name, username: seller.username, active: seller.active, orderCount: 0, subtotal: 0, shipping: 0, total: 0 }]));
+  const unassigned = { sellerId: null, sellerName: 'Sin vendedor', username: '', active: true, orderCount: 0, subtotal: 0, shipping: 0, total: 0 };
+
+  const filteredOrders = orders.filter(order => {
+    const date = localDate(order.createdAt);
+    if (!date || (from && date < from) || (to && date > to)) return false;
+    const orderStatus = String(order.status || 'Pendiente');
+    if (statusFilter === 'active') return activeStatuses.has(orderStatus);
+    if (statusFilter !== 'all' && orderStatus !== statusFilter) return false;
+    return true;
+  });
+
+  for (const order of filteredOrders) {
+    const seller = sellerMap.get(order.assignedSellerId);
+    const row = seller ? rows.get(seller.id) : unassigned;
+    row.orderCount += 1;
+    row.subtotal += Number(order.subtotal || 0);
+    row.shipping += Number(order.shippingCost || order.delivery?.cost || 0);
+    row.total += Number(order.total || 0);
+  }
+
+  const round = value => Math.round(Number(value || 0) * 100) / 100;
+  const normalizedRows = [...rows.values()].map(row => ({ ...row, subtotal: round(row.subtotal), shipping: round(row.shipping), total: round(row.total) }));
+  if (unassigned.orderCount) normalizedRows.push({ ...unassigned, subtotal: round(unassigned.subtotal), shipping: round(unassigned.shipping), total: round(unassigned.total) });
+  const grandTotal = round(normalizedRows.reduce((sum, row) => sum + row.total, 0));
+  const grandSubtotal = round(normalizedRows.reduce((sum, row) => sum + row.subtotal, 0));
+  const grandShipping = round(normalizedRows.reduce((sum, row) => sum + row.shipping, 0));
+
+  return res.json({
+    rows: normalizedRows,
+    totals: { orderCount: filteredOrders.length, subtotal: grandSubtotal, shipping: grandShipping, total: grandTotal },
+    filters: { from, to, status: statusFilter },
+    statuses,
+    activeStatuses: [...activeStatuses]
+  });
+});
+
 app.get('/api/admin/orders/:id/pdf', requireOrdersAccess, (req, res) => {
   const order = readOrders().find(item => item.id === req.params.id);
   if (!order) return res.status(404).json({ error: 'Pedido no encontrado.' });

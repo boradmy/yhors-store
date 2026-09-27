@@ -2073,3 +2073,40 @@ body.generate-modal-open{overflow:hidden}
   border-color:#bdbdbd;
   color:#333;
 }
+
+
+/* YHORS · Ventas Generales */
+.sales-panel{margin-bottom:24px}
+.sales-heading{align-items:flex-end}
+.sales-toolbar{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin:18px 0}
+.sales-date-range{display:flex;gap:10px;flex-wrap:wrap}
+.sales-date-filter,.sales-status-filter{display:flex;flex-direction:column;gap:5px}
+.sales-date-filter span,.sales-status-filter span{font-size:.68rem;text-transform:uppercase;letter-spacing:.08em;color:#777;font-weight:700}
+.sales-date-filter input,.sales-status-filter select{height:40px;box-sizing:border-box;border:1px solid var(--line,#ded8cc);background:#fff;border-radius:9px;padding:8px 11px;font:inherit}
+.sales-date-filter input{min-width:145px}
+.sales-status-filter select{min-width:190px}
+.sales-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:18px 0}
+.sales-summary>div{border:1px solid var(--line,#ded8cc);background:#faf8f3;border-radius:11px;padding:12px 14px;display:grid;gap:4px}
+.sales-summary span{font-size:.64rem;letter-spacing:.08em;color:#777;font-weight:700}
+.sales-summary strong{font-size:.96rem}
+.sales-table-wrap{overflow:auto;border:1px solid var(--line,#ded8cc);border-radius:13px;background:#fff}
+.sales-table{width:100%;border-collapse:collapse;min-width:720px}
+.sales-table th,.sales-table td{padding:13px 15px;border-bottom:1px solid #eeeae2;text-align:right;font-size:.82rem}
+.sales-table th:first-child,.sales-table td:first-child{text-align:left}
+.sales-table thead th{font-size:.64rem;letter-spacing:.08em;color:#777;background:#faf8f3}
+.sales-table tbody tr:hover{background:#fcfbf8}
+.sales-table tbody tr:last-child td{border-bottom:0}
+.sales-table tfoot th{padding:15px;border-top:2px solid #d9d1c4;background:#f5f1e9;font-size:.82rem}
+.sales-table tfoot th:first-child{text-align:left}
+.sales-seller{display:grid;gap:3px}
+.sales-seller strong{font-size:.86rem}
+.sales-seller small{color:#777;font-size:.7rem}
+.sales-unassigned-row{background:#fffaf0}
+.sales-loading,.sales-empty{text-align:center!important;color:#777!important;padding:28px!important}
+.sales-manager-total{display:flex;justify-content:flex-end;margin-top:14px}
+.sales-manager-total>div{min-width:280px;border:1px solid #d9c9a6;background:#fbf5e8;border-radius:13px;padding:14px 16px;display:grid;gap:3px}
+.sales-manager-total span{font-size:.66rem;text-transform:uppercase;letter-spacing:.09em;color:#7b6741;font-weight:800}
+.sales-manager-total strong{font-size:1.35rem}
+.sales-manager-total small{color:#777;font-size:.72rem}
+@media(max-width:800px){.sales-summary{grid-template-columns:1fr 1fr}.sales-heading{align-items:flex-start}.sales-toolbar{align-items:stretch}.sales-date-range{width:100%}.sales-date-filter{flex:1}.sales-date-filter input{width:100%}.sales-status-filter{flex:1}.sales-status-filter select{width:100%}.sales-toolbar>#salesRefresh{width:100%}}
+@media(max-width:520px){.sales-summary{grid-template-columns:1fr}.sales-manager-total>div{width:100%;box-sizing:border-box}}
