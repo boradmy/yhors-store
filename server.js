@@ -2661,6 +2661,10 @@ function buildFinancialReportPdf(report) {
     line(ops, margin, y, right, y, 1);
     y -= 18;
   };
+
+  y -= 2;
+
+
   newPage();
 
   const title = 'RESUMEN FINANCIERO YHORS';
@@ -2697,6 +2701,7 @@ function buildFinancialReportPdf(report) {
   };
 
   section('VENTAS POR VENDEDOR');
+  y -= 5;
   drawText(ops,'VENDEDOR',margin,y,7,boldFont);
   drawText(ops,'VENTAS CONFIRMADAS',right-150,y,7,boldFont,'right');
   drawText(ops,'TOTAL VENDIDO',right,y,7,boldFont,'right');
@@ -2708,6 +2713,8 @@ function buildFinancialReportPdf(report) {
     drawText(ops,money(row.total),right,y,8,boldFont,'right');
     y -= 16; line(ops,margin,y,right,y,.35); y -= 7;
   }
+
+  y -= 2;
 
   section('GASTOS DEL PERÍODO');
   drawText(ops,'FECHA',margin,y,7,boldFont);
