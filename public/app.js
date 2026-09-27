@@ -1969,7 +1969,7 @@ async function renderAdminAudit() {
     <div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Auditoría</h1><p class="admin-subtitle">Historial de acciones importantes de YHORS</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>
     ${nav}
     <section class="admin-panel audit-panel">
-      <div class="section-heading"><div><span class="eyebrow">V15.1 · Registro protegido</span><h2>Actividad del sistema</h2></div><p>Consulta quién hizo cada acción, cuándo ocurrió y qué cambió.</p></div>
+      <div class="section-heading"><div><span class="eyebrow">V15.3 · Pedidos e inventario</span><h2>Actividad del sistema</h2></div><p>Consulta quién hizo cada acción, cuándo ocurrió y qué cambió.</p></div>
       <div class="audit-filters">
         <label class="users-search-field"><span>Buscar</span><input id="auditQuery" type="search" placeholder="Pedido, usuario, producto…"></label>
         <label class="users-search-field"><span>Usuario</span><select id="auditUser"><option value="">Todos</option></select></label>
@@ -1989,7 +1989,7 @@ async function renderAdminAudit() {
     username:'Usuario', accountId:'Cuenta', role:'Rol', reason:'Motivo', attemptsRemaining:'Intentos restantes', attemptsUsed:'Intentos utilizados', attemptsLimit:'Límite de intentos',
     orderId:'Pedido', orderNumber:'Número de pedido', productId:'Producto', sku:'SKU', name:'Nombre', status:'Estado', assignedSellerId:'Vendedor asignado', assignedSellerName:'Vendedor responsable',
     internalNote:'Nota interna', total:'Total', source:'Origen', stockReturned:'Inventario devuelto', active:'Activo', published:'Publicado', category:'Categoría', purchasePrice:'Precio de compra', salePrice:'Precio de venta', rentalPrice:'Precio de alquiler',
-    details:'Detalle', changes:'Cambios', before:'Antes', after:'Después', items:'Productos'
+    details:'Detalle', changes:'Cambios', before:'Antes', after:'Después', items:'Productos', inventory:'Inventario', synchronized:'Sincronizado', movements:'Movimientos', direction:'Movimiento', quantity:'Cantidad', reason:'Motivo', stockReturned:'Inventario devuelto', previousStock:'Stock anterior', removedFromCatalog:'Retirado del catálogo'
   };
   const auditLabel = key => auditLabels[key] || String(key).replace(/([A-Z])/g,' $1').replace(/^./, c => c.toUpperCase());
   const auditValueText = value => {
@@ -2006,6 +2006,23 @@ async function renderAdminAudit() {
       if (key === 'changes' && value && typeof value === 'object') {
         const changes = Object.entries(value);
         return `<div class="audit-change-block"><span class="audit-detail-label">Cambios realizados</span>${changes.length ? changes.map(([field,change]) => `<div class="audit-change"><b>${esc(auditLabel(field))}</b><span>${esc(auditValueText(change?.before))}</span><i>→</i><strong>${esc(auditValueText(change?.after))}</strong></div>`).join('') : '<small>Sin cambios registrados.</small>'}</div>`;
+      }
+      if (key === 'inventory' && value && typeof value === 'object') {
+        const movements = Array.isArray(value.movements) ? value.movements : [];
+        const movementMarkup = movements.length
+          ? movements.map(move => `<div class="audit-stock-movement">
+              <div><strong>${esc(move.name || move.sku || 'Producto')}</strong><small>${esc(move.sku || '')}</small></div>
+              <span class="audit-stock-direction ${move.direction === 'entrada' ? 'is-in' : 'is-out'}">${move.direction === 'entrada' ? 'Entrada' : 'Salida'}</span>
+              <span>${esc(String(move.before ?? '—'))} → <strong>${esc(String(move.after ?? '—'))}</strong></span>
+              <span>${esc(String(move.quantity ?? '—'))} ud.</span>
+              <small>${esc(move.reason || '')}</small>
+            </div>`).join('')
+          : '<small class="audit-muted">Sin movimientos de inventario en este evento.</small>';
+        return `<div class="audit-detail-block audit-inventory-block">
+          <div class="audit-detail-label">Sincronización de inventario</div>
+          <div class="audit-inventory-summary"><span>Estado</span><strong>${value.synchronized === false ? 'No sincronizado' : 'Sincronizado'}</strong></div>
+          ${movementMarkup}
+        </div>`;
       }
       if (key === 'order' && value && typeof value === 'object') {
         return `<div class="audit-detail-block"><span class="audit-detail-label">Resumen del pedido</span><div class="audit-detail-grid nested">${Object.entries(value).filter(([k]) => k !== 'items').map(([k,v]) => `<div class="audit-detail-row"><span>${esc(auditLabel(k))}</span><strong>${esc(auditValueText(v))}</strong></div>`).join('')}</div></div>`;

@@ -2395,11 +2395,16 @@ body.generate-modal-open{overflow:hidden}
 .audit-result.is-warning{background:#fff4e5;color:#9a5b00}
 .audit-detail-modal{max-width:760px}
 .audit-detail-modal pre{max-height:60vh;overflow:auto;white-space:pre-wrap;word-break:break-word;background:#f7f7f8;padding:16px;border-radius:10px}
-@media (max-width:800px){.audit-filters{grid-template-columns:1fr 1fr}.audit-table{min-width:850px}}
+@media (max-width:900px){.audit-filters{grid-template-columns:repeat(2,minmax(0,1fr))}.audit-table{min-width:850px}}
 
-/* V15.1 Auditoría */
+/* V15.3 · Auditoría de pedidos e inventario */
 .audit-panel{margin-top:20px}
-.audit-filters{display:grid;grid-template-columns:repeat(6,minmax(120px,1fr));gap:12px;align-items:end;margin:18px 0}
+.audit-filters{display:grid;grid-template-columns:minmax(220px,1.55fr) repeat(3,minmax(145px,1fr)) repeat(2,minmax(145px,.9fr));gap:12px;align-items:end;margin:18px 0}
+.audit-filters > *{min-width:0}
+.audit-filters .users-search-field{min-width:0}
+.audit-filters .users-search-field input,
+.audit-filters .users-search-field select{width:100%;min-width:0;max-width:100%}
+.audit-filters #auditClear{grid-column:1 / -1;justify-self:start;min-width:170px}
 .audit-summary{padding:10px 0;color:var(--muted,#6b7280)}
 .audit-list{display:grid;gap:10px}
 .audit-entry{border:1px solid rgba(0,0,0,.08);border-radius:14px;background:#fff;overflow:hidden}
@@ -2419,7 +2424,20 @@ body.generate-modal-open{overflow:hidden}
 .audit-json{margin:0;white-space:pre-wrap;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace}
 .audit-user-agent{display:block;margin-top:10px;color:#777}
 @media(max-width:900px){.audit-filters{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:560px){.audit-filters{grid-template-columns:1fr}.audit-entry-details{padding-left:16px}.audit-meta{display:grid;grid-template-columns:1fr 1fr}}
+@media(max-width:560px){.audit-filters{grid-template-columns:1fr}.audit-filters #auditClear{grid-column:auto;width:100%}.audit-entry-details{padding-left:16px}.audit-meta{display:grid;grid-template-columns:1fr 1fr}}
+
+
+.audit-inventory-block{margin-top:4px}
+.audit-inventory-summary{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 11px;margin-bottom:8px;border:1px solid #e6e2da;border-radius:9px;background:#fff}
+.audit-inventory-summary strong{color:#277347}
+.audit-stock-movement{display:grid;grid-template-columns:minmax(180px,1.5fr) auto auto auto minmax(150px,.9fr);gap:10px;align-items:center;padding:10px 11px;border-top:1px solid #e7e4de}
+.audit-stock-movement>div{display:grid;gap:2px}
+.audit-stock-movement small{color:var(--muted,#6b7280)}
+.audit-stock-direction{display:inline-flex;justify-content:center;padding:4px 8px;border-radius:999px;font-size:.68rem;font-weight:800}
+.audit-stock-direction.is-in{background:#eaf7ef;color:#237545}
+.audit-stock-direction.is-out{background:#fff1ed;color:#a63a2d}
+.audit-muted{color:var(--muted,#6b7280)}
+@media(max-width:800px){.audit-stock-movement{grid-template-columns:1fr 1fr}.audit-stock-movement>div{grid-column:1/-1}}
 
 /* V15.1.1 · Navegación administrativa estable y siempre visible.
    Evita que la barra de secciones quede detrás de bloques de contenido al

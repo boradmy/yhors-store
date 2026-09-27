@@ -94,6 +94,32 @@ function auditLog(req, action, module, details = {}, result = 'success') {
   }
 }
 
+function auditStockMovementDiff(beforeProducts = [], afterProducts = [], reason = 'Actualización de inventario') {
+  const beforeMap = new Map((beforeProducts || []).map(product => [String(product.id), normalizeProduct(product)]));
+  const afterMap = new Map((afterProducts || []).map(product => [String(product.id), normalizeProduct(product)]));
+  const ids = new Set([...beforeMap.keys(), ...afterMap.keys()]);
+  const movements = [];
+  for (const id of ids) {
+    const before = beforeMap.get(id);
+    const after = afterMap.get(id);
+    const beforeStock = Number(before?.stock || 0);
+    const afterStock = Number(after?.stock || 0);
+    if (beforeStock === afterStock) continue;
+    const quantity = Math.abs(afterStock - beforeStock);
+    movements.push({
+      productId: after?.id || before?.id || id,
+      sku: after?.sku || before?.sku || '',
+      name: after?.name || before?.name || '',
+      quantity,
+      direction: afterStock < beforeStock ? 'salida' : 'entrada',
+      before: beforeStock,
+      after: afterStock,
+      reason
+    });
+  }
+  return movements;
+}
+
 function auditOrderSnapshot(order) {
   if (!order) return null;
   return {
@@ -1548,7 +1574,7 @@ function getStockDemand(order) {
 
 function changeOrderStock(order, direction) {
   const demand = getStockDemand(order);
-  if (!demand.size) return false;
+  if (!demand.size) return [];
 
   const products = readProducts().map(normalizeProduct);
 
@@ -1563,19 +1589,31 @@ function changeOrderStock(order, direction) {
     }
   }
 
+  const movements = [];
   const updated = products.map(product => {
     const quantity = Number(demand.get(String(product.id)) || 0);
     if (!quantity) return product;
     const current = Number(product.stock || 0);
+    const next = Math.max(0, current + (direction < 0 ? -quantity : quantity));
+    movements.push({
+      productId: product.id,
+      sku: product.sku || '',
+      name: product.name || '',
+      quantity,
+      direction: direction < 0 ? 'salida' : 'entrada',
+      before: current,
+      after: next,
+      reason: direction < 0 ? 'Reserva de pedido' : 'Devolución de pedido'
+    });
     return normalizeProduct({
       ...product,
-      stock: Math.max(0, current + (direction < 0 ? -quantity : quantity)),
+      stock: next,
       updatedAt: new Date().toISOString()
     });
   });
 
   writeProducts(updated);
-  return true;
+  return movements;
 }
 
 function reserveOrderStock(order) {
@@ -2268,7 +2306,16 @@ app.post('/api/orders', async (req, res) => {
     return res.status(500).json({ error: 'No se pudo registrar el pedido. No se realizó el descuento de inventario.' });
   }
 
-  auditLog(req, 'Pedido creado', 'Pedidos', { orderId: order.id, orderNumber: order.orderNumber, source: 'public', order: auditOrderSnapshot(order) });
+  auditLog(req, 'Pedido creado', 'Pedidos', {
+    orderId: order.id,
+    orderNumber: order.orderNumber,
+    source: 'public',
+    order: auditOrderSnapshot(order),
+    inventory: {
+      synchronized: true,
+      movements: auditStockMovementDiff(previousProducts, updatedProducts, 'Reserva de pedido')
+    }
+  });
   try { await sendOrderConfirmationEmail(order); } catch (emailError) { console.error('[YHORS] No se pudo enviar la confirmación por correo:', emailError.message); }
   return res.status(201).json({ orderNumber: order.orderNumber, status: order.status, total: order.total });
 });
@@ -2296,8 +2343,9 @@ app.post('/api/admin/generar-orden', requireOrdersAccess, async (req, res) => {
   const orders = readOrders();
   const order = { id: crypto.randomUUID(), orderNumber: nextOrderNumber(orders), status: 'Pendiente', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), assignedSellerId, source: 'admin_generated', ...result.order };
   const previousProducts = result.stockProducts.map(product => ({ ...product }));
+  let updatedProducts;
   try {
-    const updatedProducts = applyPurchaseStock(previousProducts, result.purchaseDemand);
+    updatedProducts = applyPurchaseStock(previousProducts, result.purchaseDemand);
     writeProducts(updatedProducts);
     orders.unshift(order);
     try { writeOrders(orders); } catch (orderError) { try { writeProducts(previousProducts); } catch (rollbackError) { console.error('[YHORS] Falló el rollback del inventario:', rollbackError.message); } throw orderError; }
@@ -2305,6 +2353,16 @@ app.post('/api/admin/generar-orden', requireOrdersAccess, async (req, res) => {
     console.error('[YHORS] No se pudo generar la orden desde administración:', error.message);
     return res.status(500).json({ error: 'No se pudo generar la orden. No se realizó el descuento de inventario.' });
   }
+  auditLog(req, 'Pedido creado', 'Pedidos', {
+    orderId: order.id,
+    orderNumber: order.orderNumber,
+    source: 'admin_generated',
+    order: auditOrderSnapshot(order),
+    inventory: {
+      synchronized: true,
+      movements: auditStockMovementDiff(previousProducts, updatedProducts, 'Reserva de pedido')
+    }
+  });
   try { await sendOrderConfirmationEmail(order); } catch (emailError) { console.error('[YHORS] No se pudo enviar la confirmación por correo:', emailError.message); }
   return res.status(201).json({ orderId: order.id, orderNumber: order.orderNumber, status: order.status, total: order.total, assignedSellerId });
 });
@@ -3090,7 +3148,7 @@ function buildEditedOrderItems(requestedItems, products) {
 }
 
 function applyOrderItemStockDelta(currentOrder, nextItems) {
-  if (!orderStatusUsesStock(currentOrder.status || 'Pendiente')) return;
+  if (!orderStatusUsesStock(currentOrder.status || 'Pendiente')) return [];
 
   const currentDemand = getStockDemand(currentOrder);
   const nextDemand = getStockDemand({ items: nextItems });
@@ -3110,21 +3168,33 @@ function applyOrderItemStockDelta(currentOrder, nextItems) {
     }
   }
 
-  let changed = false;
+  const movements = [];
   const updated = products.map(product => {
     const before = Number(currentDemand.get(String(product.id)) || 0);
     const after = Number(nextDemand.get(String(product.id)) || 0);
     const delta = after - before;
     if (!delta) return product;
-    changed = true;
+    const currentStock = Number(product.stock || 0);
+    const nextStock = Math.max(0, currentStock - delta);
+    movements.push({
+      productId: product.id,
+      sku: product.sku || '',
+      name: product.name || '',
+      quantity: Math.abs(delta),
+      direction: delta > 0 ? 'salida' : 'entrada',
+      before: currentStock,
+      after: nextStock,
+      reason: delta > 0 ? 'Aumento de cantidad en pedido' : 'Reducción de cantidad en pedido'
+    });
     return normalizeProduct({
       ...product,
-      stock: Math.max(0, Number(product.stock || 0) - delta),
+      stock: nextStock,
       updatedAt: new Date().toISOString()
     });
   });
 
-  if (changed) writeProducts(updated);
+  if (movements.length) writeProducts(updated);
+  return movements;
 }
 
 app.put('/api/admin/orders/:id', requireOrdersAccess, (req, res) => {
@@ -3184,18 +3254,17 @@ app.put('/api/admin/orders/:id', requireOrdersAccess, (req, res) => {
   const nextUsesStock = orderStatusUsesStock(nextStatus);
   const statusChanged = previousStatus.toLocaleLowerCase('es-EC') !== nextStatus.toLocaleLowerCase('es-EC');
 
-  // El stock representa exactamente los pedidos cuyo estado está activo.
-  // Al editar productos de un pedido activo, solo se aplica la diferencia:
-  // productos añadidos descuentan stock y productos quitados/devueltos lo recuperan.
-  // Los alquileres no reservan stock.
-  // Al pasar de cualquier estado activo -> Cancelado: devuelve unidades.
-  // Al pasar de Cancelado -> cualquier estado activo: descuenta unidades.
+  // V15.3 — El stock y la auditoría se actualizan como una sola operación.
+  // Cada cambio deja trazabilidad de producto, cantidad y stock antes/después.
+  const stockMovements = [];
   try {
-    if (hasItems && previousUsesStock === nextUsesStock) applyOrderItemStockDelta(currentOrder, nextItems);
+    if (hasItems && previousUsesStock === nextUsesStock) {
+      stockMovements.push(...applyOrderItemStockDelta(currentOrder, nextItems));
+    }
     if (statusChanged && previousUsesStock && !nextUsesStock) {
-      restoreOrderPurchaseStock(currentOrder);
+      stockMovements.push(...restoreOrderPurchaseStock(currentOrder));
     } else if (statusChanged && !previousUsesStock && nextUsesStock) {
-      reserveOrderStock(hasItems ? { ...currentOrder, items: nextItems } : currentOrder);
+      stockMovements.push(...reserveOrderStock(hasItems ? { ...currentOrder, items: nextItems } : currentOrder));
     }
   } catch (error) {
     return res.status(400).json({ error: error.message || 'No se pudo sincronizar el inventario con el pedido.' });
@@ -3224,7 +3293,14 @@ app.put('/api/admin/orders/:id', requireOrdersAccess, (req, res) => {
   auditLog(req, 'Pedido actualizado', 'Pedidos', {
     orderId: updated.id,
     orderNumber: updated.orderNumber,
-    changes: auditDiff(auditOrderSnapshot(currentOrder), auditOrderSnapshot(updated), ['status','assignedSellerId','internalNote','total','items'])
+    changes: auditDiff(auditOrderSnapshot(currentOrder), auditOrderSnapshot(updated), ['status','assignedSellerId','internalNote','total','items']),
+    inventory: stockMovements.length ? {
+      synchronized: true,
+      movements: stockMovements
+    } : {
+      synchronized: true,
+      movements: []
+    }
   });
   return res.json(decorateOrderAssignment(updated));
 });
@@ -3235,10 +3311,11 @@ app.delete('/api/admin/orders/:id', requireStoreManagerOrAdmin, (req, res) => {
   const order = orders.find(item => item.id === req.params.id);
   if (!order) return res.status(404).json({ error: 'Pedido no encontrado.' });
 
+  let stockMovements = [];
   try {
     // Si ya fue cancelado, el stock ya volvió al inventario y no se duplica.
     if (order.stockReservedAt && !order.stockRestoredAt) {
-      restoreOrderPurchaseStock(order);
+      stockMovements = restoreOrderPurchaseStock(order);
     }
   } catch (error) {
     return res.status(400).json({ error: error.message || 'No se pudo devolver el stock al inventario.' });
@@ -3249,7 +3326,11 @@ app.delete('/api/admin/orders/:id', requireStoreManagerOrAdmin, (req, res) => {
     orderId: order.id,
     orderNumber: order.orderNumber,
     status: order.status,
-    stockReturned: Boolean(order.stockReservedAt && !order.stockRestoredAt),
+    stockReturned: stockMovements.length > 0,
+    inventory: {
+      synchronized: true,
+      movements: stockMovements
+    },
     order: auditOrderSnapshot(order)
   });
   return res.status(204).end();
@@ -3492,7 +3573,22 @@ app.put('/api/admin/products/:id', requireAdmin, (req, res) => {
   auditLog(req, 'Producto actualizado', 'Inventario', {
     productId: products[index].id,
     sku: products[index].sku,
-    changes: auditDiff(previous, products[index], ['name','sku','category','stock','purchasePrice','salePrice','rentalPrice','published','description'])
+    changes: auditDiff(previous, products[index], ['name','sku','category','stock','purchasePrice','salePrice','rentalPrice','published','description']),
+    inventory: {
+      synchronized: true,
+      movements: Number(previous.stock || 0) !== Number(products[index].stock || 0)
+        ? [{
+            productId: products[index].id,
+            sku: products[index].sku || '',
+            name: products[index].name || '',
+            quantity: Math.abs(Number(products[index].stock || 0) - Number(previous.stock || 0)),
+            direction: Number(products[index].stock || 0) < Number(previous.stock || 0) ? 'salida' : 'entrada',
+            before: Number(previous.stock || 0),
+            after: Number(products[index].stock || 0),
+            reason: 'Edición manual de inventario'
+          }]
+        : []
+    }
   });
   return res.json(products[index]);
 });
@@ -3503,6 +3599,16 @@ app.delete('/api/admin/products/:id', requireAdmin, (req, res) => {
   if (!product) return res.status(404).json({ error: 'Producto no encontrado.' });
   writeProducts(products.filter((item) => item.id !== req.params.id));
   (product.images || [product.image]).forEach(deleteUploadedImage);
+  auditLog(req, 'Producto eliminado', 'Inventario', {
+    productId: product.id,
+    sku: product.sku,
+    name: product.name,
+    inventory: {
+      synchronized: true,
+      removedFromCatalog: true,
+      previousStock: Number(product.stock || 0)
+    }
+  });
   return res.status(204).end();
 });
 
