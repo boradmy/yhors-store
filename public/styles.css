@@ -2386,3 +2386,13 @@ body.generate-modal-open{overflow:hidden}
     padding: 6px 7px;
   }
 }
+
+/* V15 — Auditoría */
+.audit-filters{display:grid;grid-template-columns:repeat(6,minmax(120px,1fr));gap:10px;align-items:center}
+.audit-summary{margin:14px 0;color:var(--muted,#6b7280);font-size:.9rem}
+.audit-result{display:inline-block;padding:3px 8px;border-radius:999px;font-size:.78rem}
+.audit-result.is-success{background:#eaf8ef;color:#16733a}
+.audit-result.is-warning{background:#fff4e5;color:#9a5b00}
+.audit-detail-modal{max-width:760px}
+.audit-detail-modal pre{max-height:60vh;overflow:auto;white-space:pre-wrap;word-break:break-word;background:#f7f7f8;padding:16px;border-radius:10px}
+@media (max-width:800px){.audit-filters{grid-template-columns:1fr 1fr}.audit-table{min-width:850px}}
