@@ -872,9 +872,16 @@ function buildOrderPdf(order) {
     const statusW = 116;
     const statusX = right - statusW;
     const headerRight = statusX + statusW;
-    drawText(ops, 'ORDEN DE PEDIDO', headerRight, y - 8, 18, boldFont, 'right');
-    drawText(ops, `N. ORDEN  ${orderNo}`, headerRight, y - 29, 9, boldFont, 'right');
-    drawText(ops, `FECHA  ${date}`, headerRight, y - 44, 8, normalFont, 'right');
+
+    // Ajustes finos del encabezado:
+    // cada línea tiene su propio desplazamiento horizontal para conservar
+    // el centrado visual solicitado sin mover el recuadro PENDIENTE.
+    const titleRight = headerRight + 18;
+    const orderRight = headerRight + 8;
+    const dateRight = headerRight + 4;
+    drawText(ops, 'ORDEN DE PEDIDO', titleRight, y - 8, 18, boldFont, 'right');
+    drawText(ops, `N. ORDEN  ${orderNo}`, orderRight, y - 29, 9, boldFont, 'right');
+    drawText(ops, `FECHA  ${date}`, dateRight, y - 44, 8, normalFont, 'right');
     setFill(ops, 0.78, 0.60, 0.24);
     ops.push(`0.78 0.60 0.24 rg ${statusX} ${y - 68} ${statusW} 18 re f 0 0 0 rg`);
     drawText(ops, safeStatus, statusX + statusW / 2, y - 62, 8, boldFont, 'center');
