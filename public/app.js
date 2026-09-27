@@ -1097,18 +1097,9 @@ function ordersListMarkup(orders = [], options = {}) {
       <div class="admin-order-grid"><div><span class="order-label">Contacto</span><p>${escapeHTML(order.customer?.phone || '—')}${order.customer?.email ? `<br>${escapeHTML(order.customer.email)}` : ''}<br><strong>Cédula / RUC:</strong> ${escapeHTML(order.customer?.cedula || '—')}</p></div><div><span class="order-label">Entrega</span><p><strong>${escapeHTML(order.delivery?.label || '—')}</strong><br>${escapeHTML(order.customer?.city || '—')}${order.customer?.address ? ` · ${escapeHTML(order.customer.address)}` : ''}${order.customer?.mapsUrl ? `<br><a href="${escapeHTML(order.customer.mapsUrl)}" target="_blank" rel="noopener">📍 Abrir ubicación en Google Maps</a>` : ''}</p></div><div><span class="order-label">Total</span><p class="order-total">${money(order.total)}</p><small>Subtotal ${money(order.subtotal ?? order.total)} · Envío ${money(order.shippingCost ?? 0)}</small></div></div>
       <div class="admin-order-items" data-order-items-view="${escapeHTML(order.id)}">${(order.items || []).map(item => { const isRental=item.purchaseMode==='rental'; const days=Number(item.rentalDays||1); return `<div class="admin-order-item"><span><strong>${escapeHTML(item.quantity)}×</strong> ${escapeHTML(item.name)} <small>SKU: ${escapeHTML(item.sku || '—')} · ${isRental ? `Alquiler · ${days} día${days===1?'':'s'} · ${money(item.unitPrice)}/día` : 'Compra'}</small></span><strong>${money(item.subtotal)}</strong></div>`; }).join('')}</div>
       <div class="admin-order-items-actions">
-        <button class="button edit-note small" type="button" data-order-items-edit="${escapeHTML(order.id)}">Editar productos</button>
+        <button class="button edit-note small" type="button" data-order-items-edit="${escapeHTML(order.id)}" disabled>Editar productos</button>
       </div>
-      <div class="order-items-editor" data-order-items-editor="${escapeHTML(order.id)}" hidden>
-        <div class="order-items-editor-head"><div><strong>Editar productos del pedido</strong><small>Puedes añadir, quitar productos, cambiar cantidades y elegir compra o alquiler.</small></div></div>
-        <div class="order-items-editor-list" data-order-items-list="${escapeHTML(order.id)}">${(order.items || []).map(itemEditorRow).join('')}</div>
-        <div class="order-items-editor-actions">
-          <button class="button small" type="button" data-order-item-add="${escapeHTML(order.id)}">+ Añadir producto</button>
-          <span class="order-items-editor-spacer"></span>
-          <button class="button small" type="button" data-order-items-cancel="${escapeHTML(order.id)}">Cancelar</button>
-          <button class="button success small" type="button" data-order-items-save="${escapeHTML(order.id)}">Guardar productos</button>
-        </div>
-      </div>
+      <div class="order-items-editor-modern" data-order-items-editor="${escapeHTML(order.id)}" hidden></div>
       ${order.customer?.notes ? `<div class="order-notes"><span>Nota</span><p>${escapeHTML(order.customer.notes)}</p></div>` : ''}
       <div class="admin-order-internal-note">
         <label for="internalNote-${escapeHTML(order.id)}">Nota interna</label>
@@ -1271,14 +1262,41 @@ async function renderAdminOrders() {
   const subtitle = session.role === 'store_manager' ? 'Jefe de tienda · pedidos, asignaciones y control operativo' : (session.role === 'vendedor' ? 'Pedidos asignados a tu usuario · consulta y gestión operativa' : 'Gestión de YHORS STORE');
   app.innerHTML = `<main class="admin-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">${title}</h1><p class="admin-subtitle">${subtitle}</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>${sectionNav}${ordersPanel(orders, canDelete)}</div></main>`;
 
-  const editorProductOptions = (selectedId = '') => orderProducts.map(p => `<option value="${escapeHTML(p.id)}" ${String(p.id) === String(selectedId) ? 'selected' : ''}>${escapeHTML(p.name || 'Producto')} · ${escapeHTML(p.sku || 'sin SKU')}</option>`).join('');
-  const editorRow = (productId = orderProducts[0]?.id || '', mode = 'purchase', quantity = 1, days = 1) => `<div class="order-item-editor-row" data-order-item-row>
-      <select class="order-item-product" aria-label="Producto">${editorProductOptions(productId)}</select>
-      <select class="order-item-mode" aria-label="Modalidad"><option value="purchase" ${mode === 'purchase' ? 'selected' : ''}>Compra</option><option value="rental" ${mode === 'rental' ? 'selected' : ''}>Alquiler</option></select>
-      <input class="order-item-quantity" type="number" min="1" max="99" step="1" value="${escapeHTML(quantity)}" aria-label="Cantidad">
-      <input class="order-item-days" type="number" min="1" max="10" step="1" value="${escapeHTML(days)}" aria-label="Días de alquiler" ${mode === 'rental' ? '' : 'disabled'}>
-      <button class="button danger small order-item-remove" type="button" title="Quitar producto">Quitar</button>
-    </div>`;
+  const editingOrders = new Set();
+  const productEditorsOpen = new Set();
+  const draftItems = new Map();
+  const cloneOrderItems = items => (Array.isArray(items) ? items : []).map(item => ({
+    productId: item.productId,
+    name: item.name,
+    sku: item.sku,
+    purchaseMode: item.purchaseMode === 'rental' ? 'rental' : 'purchase',
+    quantity: Math.max(1, Number(item.quantity || 1)),
+    rentalDays: Math.max(1, Number(item.rentalDays || 1)),
+    unitPrice: Number(item.unitPrice || 0),
+    subtotal: Number(item.subtotal || 0)
+  }));
+  const getDraft = order => {
+    if (!draftItems.has(order.id)) draftItems.set(order.id, cloneOrderItems(order.items));
+    return draftItems.get(order.id);
+  };
+  const productById = id => orderProducts.find(p => String(p.id) === String(id));
+  const orderEditorMarkup = (order, items) => {
+    const rows = items.length ? items.map((item, index) => {
+      const product = productById(item.productId) || item;
+      const rental = item.purchaseMode === 'rental';
+      const unit = Number(rental ? (product?.rentalPrice ?? item.unitPrice ?? 0) : (product?.salePrice ?? product?.price ?? item.unitPrice ?? 0));
+      const days = Math.max(1, Number(item.rentalDays || 1));
+      const total = unit * Number(item.quantity || 1) * (rental ? days : 1);
+      return `<div class="generate-product-row order-edit-product-row" data-order-draft-index="${index}">
+        <div class="generate-product-info"><img src="${escapeHTML(productImages(product || item)[0])}" data-fallback alt=""><div><strong>${escapeHTML(product?.name || item.name || 'Producto')}</strong><small>SKU: ${escapeHTML(product?.sku || item.sku || '—')} · ${rental ? `Alquiler · ${days} día${days===1?'':'s'}` : 'Compra'}</small></div></div>
+        <div class="generate-qty"><button type="button" data-order-draft-qty="${index}" data-change="-1">−</button><strong>${escapeHTML(item.quantity)}</strong><button type="button" data-order-draft-qty="${index}" data-change="1">+</button>${rental ? `<select class="generate-rental-days" data-order-draft-days="${index}" aria-label="Días de alquiler">${Array.from({length:10},(_,i)=>i+1).map(day=>`<option value="${day}" ${day===days?'selected':''}>${day} día${day===1?'':'s'}</option>`).join('')}</select>` : ''}</div>
+        <strong class="generate-unit-price">${money(unit)}${rental ? ' / día' : ''}</strong>
+        <strong class="generate-line-total">${money(total)}</strong>
+        <button type="button" class="order-edit-remove" data-order-draft-remove="${index}" aria-label="Quitar producto">Quitar</button>
+      </div>`;
+    }).join('') : `<div class="generate-empty-state"><span>+</span><strong>Aún no hay productos</strong><small>Agrega productos desde el catálogo.</small></div>`;
+    return `<section class="generate-card generate-products-card order-edit-products-card"><div class="generate-card-head"><div><span class="generate-card-kicker">03 · Productos</span><h3>Detalle de la orden</h3></div><button type="button" class="button primary small" data-order-open-picker="${escapeHTML(order.id)}">+ Agregar productos</button></div><div class="generate-products-table-head"><span>Producto</span><span>No poder.</span><span>Precio</span><span>Total</span><span></span></div><div class="order-edit-lines">${rows}</div><div class="order-edit-products-note">Los cambios quedan pendientes hasta pulsar <strong>Guardar cambios</strong>.</div></section>`;
+  };
   const drawOrders = () => {
     const list=document.querySelector('#adminOrdersList'); if(!list) return;
     const query=(document.querySelector('#ordersSearch')?.value||'').trim().toLowerCase();
@@ -1296,113 +1314,71 @@ async function renderAdminOrders() {
     // Los campos del pedido permanecen bloqueados hasta pulsar "Editar pedido".
     // Los cambios de estado se guardan junto con nota y asignación.
     list.querySelectorAll('[data-order-toggle]').forEach(button=>button.addEventListener('click',()=>{ const details=document.querySelector(`#orderDetails-${button.dataset.orderToggle}`); if(!details) return; const opening=details.hidden; details.hidden=!opening; button.setAttribute('aria-expanded',String(opening)); button.closest('.admin-order')?.classList.toggle('is-open',opening); }));
-    list.querySelectorAll('[data-order-items-edit]').forEach(button => button.addEventListener('click', () => {
-      const id = button.dataset.orderItemsEdit;
+    const syncOrderEditor = id => {
+      const order = orders.find(o => o.id === id);
       const editor = list.querySelector(`[data-order-items-editor="${id}"]`);
-      const view = list.querySelector(`[data-order-items-view="${id}"]`);
-      if (!editor) return;
+      if (!order || !editor) return;
+      editor.innerHTML = orderEditorMarkup(order, getDraft(order));
       editor.hidden = false;
-      if (view) view.hidden = true;
-      button.hidden = true;
-    }));
+      wireImageFallback(editor);
+    };
 
-    list.querySelectorAll('[data-order-items-cancel]').forEach(button => button.addEventListener('click', () => {
-      const id = button.dataset.orderItemsCancel;
+    const closeOrderEditor = id => {
       const editor = list.querySelector(`[data-order-items-editor="${id}"]`);
-      const view = list.querySelector(`[data-order-items-view="${id}"]`);
-      const editButton = list.querySelector(`[data-order-items-edit="${id}"]`);
-      if (editor) editor.hidden = true;
-      if (view) view.hidden = false;
-      if (editButton) editButton.hidden = false;
+      if (editor) { editor.hidden = true; editor.innerHTML = ''; }
+      productEditorsOpen.delete(id);
+    };
+
+    const openOrderProductPicker = id => {
+      const order = orders.find(o => o.id === id);
+      if (!order) return;
+      const existing = document.querySelector('#orderProductPickerModal');
+      if (existing) existing.remove();
+      const modal = document.createElement('div');
+      modal.className = 'generate-modal';
+      modal.id = 'orderProductPickerModal';
+      modal.innerHTML = `<div class="generate-modal-backdrop" data-order-picker-close></div><div class="generate-modal-dialog generate-product-picker" role="dialog" aria-modal="true" aria-labelledby="orderProductPickerTitle"><div class="generate-modal-head"><div><span class="eyebrow">Catálogo YHORS</span><h2 id="orderProductPickerTitle">Agregar productos</h2></div><button type="button" class="generate-modal-close" data-order-picker-close>×</button></div><div class="generate-picker-toolbar"><input id="orderProductSearch" type="search" placeholder="Buscar por nombre, SKU, marca…"><select id="orderProductCategory"><option value="">Todas las categorías</option><option value="elegant">Elegante</option><option value="sports">Deportes</option><option value="tech">Tech</option><option value="cosplay">Cosplay</option><option value="pets">Mascotas</option><option value="details">Details</option><option value="collectibles">Coleccionables</option></select></div><div class="generate-picker-list" id="orderPickerList"></div><div class="generate-modal-actions"><span class="generate-picker-hint">Puedes agregar varios productos y cantidades antes de cerrar.</span><button type="button" class="button primary" data-order-picker-close>Listo</button></div></div>`;
+      document.body.appendChild(modal);
+      const close = () => { modal.classList.remove('is-open'); document.body.classList.remove('generate-modal-open'); setTimeout(()=>modal.remove(),180); };
+      modal.querySelectorAll('[data-order-picker-close]').forEach(el=>el.addEventListener('click',close));
+      const drawPicker = () => {
+        const query=(modal.querySelector('#orderProductSearch')?.value||'').trim().toLowerCase();
+        const category=modal.querySelector('#orderProductCategory')?.value||'';
+        const filtered=orderProducts.filter(product=>{ const hay=`${product.name||''} ${product.sku||''} ${product.brand||''} ${product.productType||''}`.toLowerCase(); return (!query||hay.includes(query))&&(!category||product.category===category); });
+        const target=modal.querySelector('#orderPickerList');
+        target.innerHTML=filtered.length ? filtered.map(product=>{ const stock=Number(product.stock||0); const rental=product.category==='cosplay' && product.rentalPrice!==null && product.rentalPrice!==undefined && product.rentalPrice!==''; return `<article class="generate-picker-product"><img src="${escapeHTML(productImages(product)[0])}" data-fallback alt=""><div class="generate-picker-info"><strong>${escapeHTML(product.name)}</strong><small>SKU: ${escapeHTML(product.sku||'—')} · ${escapeHTML(categories[product.category]||product.category||'Producto')}</small><b>${money(product.salePrice??product.price??0)} · Stock ${stock}</b></div><div class="generate-picker-actions"><button type="button" class="button primary small" data-order-add-product="${escapeHTML(product.id)}" data-mode="purchase">Agregar</button>${rental?`<button type="button" class="button secondary small" data-order-add-product="${escapeHTML(product.id)}" data-mode="rental">Alquiler</button>`:''}</div></article>`; }).join('') : '<div class="generate-empty-state"><span>⌕</span><strong>No encontramos productos</strong><small>Prueba con otro nombre, SKU o categoría.</small></div>';
+        wireImageFallback(target);
+        target.querySelectorAll('[data-order-add-product]').forEach(btn=>btn.addEventListener('click',()=>{
+          const product=orderProducts.find(p=>String(p.id)===String(btn.dataset.orderAddProduct)); if(!product) return;
+          const items=getDraft(order); const mode=btn.dataset.mode==='rental'?'rental':'purchase';
+          const found=items.find(item=>String(item.productId)===String(product.id)&&item.purchaseMode===mode);
+          if(found) found.quantity=Math.min(99,Number(found.quantity||1)+1);
+          else items.push({productId:product.id,name:product.name,sku:product.sku,purchaseMode:mode,quantity:1,rentalDays:mode==='rental'?1:1,unitPrice:Number(mode==='rental'?(product.rentalPrice??0):(product.salePrice??product.price??0)),subtotal:0});
+          syncOrderEditor(id);
+        }));
+      };
+      modal.querySelector('#orderProductSearch').addEventListener('input',drawPicker); modal.querySelector('#orderProductCategory').addEventListener('change',drawPicker);
+      drawPicker(); requestAnimationFrame(()=>modal.classList.add('is-open')); document.body.classList.add('generate-modal-open');
+    };
+
+    list.querySelectorAll('[data-order-items-edit]').forEach(button => button.addEventListener('click', () => {
+      if (button.disabled) return;
+      const id=button.dataset.orderItemsEdit; const order=orders.find(o=>o.id===id); if(!order) return;
+      getDraft(order); productEditorsOpen.add(id); syncOrderEditor(id); button.hidden=true;
     }));
 
-    list.querySelectorAll('[data-order-item-add]').forEach(button => button.addEventListener('click', () => {
-      const id = button.dataset.orderItemAdd;
-      const rows = list.querySelector(`[data-order-items-list="${id}"]`);
-      if (!rows) return;
-      if (!orderProducts.length) { alert('No hay productos disponibles para añadir.'); return; }
-      rows.insertAdjacentHTML('beforeend', editorRow());
-      const added = rows.lastElementChild;
-      const mode = added?.querySelector('.order-item-mode');
-      const days = added?.querySelector('.order-item-days');
-      mode?.addEventListener('change', () => { if (days) days.disabled = mode.value !== 'rental'; });
-    }));
-
-    list.querySelectorAll('.order-items-editor-list').forEach(editorList => {
-      editorList.addEventListener('click', event => {
-        const remove = event.target.closest('.order-item-remove');
-        if (!remove) return;
-        const rows = editorList.querySelectorAll('[data-order-item-row]');
-        if (rows.length <= 1) {
-          alert('Un pedido debe conservar al menos un producto.');
-          return;
-        }
-        remove.closest('[data-order-item-row]')?.remove();
-      });
-      editorList.addEventListener('change', event => {
-        const mode = event.target.closest('.order-item-mode');
-        if (!mode) return;
-        const row = mode.closest('[data-order-item-row]');
-        const days = row?.querySelector('.order-item-days');
-        if (days) days.disabled = mode.value !== 'rental';
-      });
+    list.addEventListener('click', event => {
+      const open=event.target.closest('[data-order-open-picker]');
+      if(open){ openOrderProductPicker(open.dataset.orderOpenPicker); return; }
+      const qty=event.target.closest('[data-order-draft-qty]');
+      if(qty){ const id=qty.closest('[data-order-items-editor]')?.dataset.orderItemsEditor; const order=orders.find(o=>o.id===id); if(!order)return; const items=getDraft(order); const i=Number(qty.dataset.orderDraftQty); if(!items[i])return; items[i].quantity=Math.max(1,Math.min(99,Number(items[i].quantity||1)+Number(qty.dataset.change||0))); syncOrderEditor(id); return; }
+      const rem=event.target.closest('[data-order-draft-remove]');
+      if(rem){ const id=rem.closest('[data-order-items-editor]')?.dataset.orderItemsEditor; const order=orders.find(o=>o.id===id); if(!order)return; const items=getDraft(order); const i=Number(rem.dataset.orderDraftRemove); if(items.length<=1){alert('Un pedido debe conservar al menos un producto.');return;} items.splice(i,1); syncOrderEditor(id); return; }
+      const editor=event.target.closest('[data-order-items-editor]');
+      if(editor && event.target.matches('[data-order-draft-days]')){ const id=editor.dataset.orderItemsEditor; const order=orders.find(o=>o.id===id); if(!order)return; const items=getDraft(order); const i=Number(event.target.dataset.orderDraftDays); if(items[i]) items[i].rentalDays=Math.max(1,Math.min(10,Number(event.target.value)||1)); syncOrderEditor(id); }
     });
 
-    list.querySelectorAll('[data-order-items-save]').forEach(button => button.addEventListener('click', async () => {
-      const id = button.dataset.orderItemsSave;
-      const editor = list.querySelector(`[data-order-items-editor="${id}"]`);
-      const order = orders.find(o => o.id === id);
-      if (!editor || !order) return;
-      const rows = [...editor.querySelectorAll('[data-order-item-row]')];
-      if (!rows.length) { alert('El pedido debe tener al menos un producto.'); return; }
-
-      const items = rows.map(row => ({
-        productId: row.querySelector('.order-item-product')?.value || '',
-        purchaseMode: row.querySelector('.order-item-mode')?.value || 'purchase',
-        quantity: Number(row.querySelector('.order-item-quantity')?.value || 0),
-        rentalDays: Number(row.querySelector('.order-item-days')?.value || 1)
-      }));
-
-      if (items.some(item => !item.productId || !Number.isInteger(item.quantity) || item.quantity < 1 || item.quantity > 99)) {
-        alert('Revisa las cantidades y los productos del pedido.');
-        return;
-      }
-      if (items.some(item => item.purchaseMode === 'rental' && (!Number.isInteger(item.rentalDays) || item.rentalDays < 1 || item.rentalDays > 10))) {
-        alert('Los alquileres deben tener entre 1 y 10 días.');
-        return;
-      }
-
-      const confirmed = await showYhorsConfirm(
-        '¿Guardar los productos del pedido?',
-        `Se actualizará el contenido del pedido #${escapeHTML(order.orderNumber)} y se recalcularán subtotal y total.`
-      );
-      if (!confirmed) return;
-
-      const originalText = button.textContent;
-      button.disabled = true;
-      button.textContent = 'Guardando…';
-      try {
-        const updated = await request(`/api/admin/orders/${id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ items })
-        });
-        orders = orders.map(o => o.id === updated.id ? updated : o);
-        drawOrders();
-        const details = document.querySelector(`#orderDetails-${id}`);
-        const toggle = document.querySelector(`[data-order-toggle="${id}"]`);
-        if (details && toggle) {
-          details.hidden = false;
-          toggle.setAttribute('aria-expanded', 'true');
-          toggle.closest('.admin-order')?.classList.add('is-open');
-        }
-      } catch (e) {
-        button.disabled = false;
-        button.textContent = originalText;
-        alert(e.message);
-      }
-    }));
-
+    list.querySelectorAll('[data-order-items-cancel]').forEach(button=>button.addEventListener('click',()=>{}));
     list.querySelectorAll('[data-order-note-edit]').forEach(button => button.addEventListener('click', () => {
       const id = button.dataset.orderNoteEdit;
       const textarea = list.querySelector(`[data-order-note="${id}"]`);
@@ -1410,9 +1386,13 @@ async function renderAdminOrders() {
       const statusSelect = list.querySelector(`[data-order-status="${id}"]`);
       const assignment = list.querySelector(`[data-order-assignment="${id}"]`);
       if (!textarea || !saveButton) return;
+      const order = orders.find(o => o.id === id);
+      if (order) { editingOrders.add(id); draftItems.set(id, cloneOrderItems(order.items)); }
       textarea.disabled = false;
       if (statusSelect) statusSelect.disabled = false;
       if (assignment) assignment.disabled = false;
+      const productsButton = list.querySelector(`[data-order-items-edit="${id}"]`);
+      if (productsButton) { productsButton.disabled = false; productsButton.hidden = false; }
       textarea.focus();
       button.disabled = true;
       button.textContent = 'Editando…';
@@ -1436,6 +1416,10 @@ async function renderAdminOrders() {
       const noteChanged = nextNote !== (order.internalNote || '');
       const assignmentChanged = String(nextSeller || '') !== String(order.assignedSellerId || '');
       const statusChanged = String(nextStatus) !== String(order.status || '');
+      const originalItems = cloneOrderItems(order.items).map(item => ({productId:String(item.productId||''),purchaseMode:item.purchaseMode,quantity:Number(item.quantity||1),rentalDays:item.purchaseMode==='rental'?Number(item.rentalDays||1):null}));
+      const draftForCompare = editingOrders.has(id) ? (draftItems.get(id)||[]) : originalItems;
+      const currentItems = draftForCompare.map(item => ({productId:String(item.productId||''),purchaseMode:item.purchaseMode,quantity:Number(item.quantity||1),rentalDays:item.purchaseMode==='rental'?Number(item.rentalDays||1):null}));
+      const itemsChanged = JSON.stringify(originalItems) !== JSON.stringify(currentItems);
 
       const sellerLabel = assignment
         ? (assignment.options[assignment.selectedIndex]?.textContent || 'Sin asignar').trim()
@@ -1444,6 +1428,7 @@ async function renderAdminOrders() {
       if (noteChanged) detailParts.push('la nota interna');
       if (assignmentChanged) detailParts.push(`el vendedor asignado a "${sellerLabel}"`);
       if (statusChanged) detailParts.push(`el estado a "${nextStatus}"`);
+      if (itemsChanged) detailParts.push('los productos del pedido');
       if (!detailParts.length) detailParts.push('ningún dato (no hay cambios nuevos)');
 
       const confirmed = await showYhorsConfirm(
@@ -1455,7 +1440,7 @@ async function renderAdminOrders() {
       const originalText=button.textContent;
       // Si no hubo cambios, no hacemos una escritura innecesaria: simplemente
       // salimos del modo edición después de la segunda confirmación.
-      if (!noteChanged && !assignmentChanged && !statusChanged) {
+      if (!noteChanged && !assignmentChanged && !statusChanged && !itemsChanged) {
         textarea.value = order.internalNote || '';
         textarea.disabled = true;
         if (statusSelect) {
@@ -1470,6 +1455,9 @@ async function renderAdminOrders() {
           editButton.disabled = false;
           editButton.textContent = 'Editar pedido';
         }
+        const productsButton = list.querySelector(`[data-order-items-edit="${id}"]`);
+        if (productsButton) { productsButton.disabled = true; productsButton.hidden = false; }
+        editingOrders.delete(id); draftItems.delete(id); productEditorsOpen.delete(id);
         delete button.dataset.editing;
         button.textContent='Sin cambios';
         button.disabled=true;
@@ -1483,6 +1471,13 @@ async function renderAdminOrders() {
         if (noteChanged) payload.internalNote = nextNote;
         if (assignment && canAssign) payload.assignedSellerId = nextSeller;
         if (statusChanged && statusSelect) payload.status = nextStatus;
+        if (editingOrders.has(id) && draftItems.has(id)) {
+          const draft = draftItems.get(id) || [];
+          if (!draft.length) { button.disabled=false; alert('El pedido debe tener al menos un producto.'); return; }
+          if (draft.some(item => !item.productId || !Number.isInteger(Number(item.quantity)) || Number(item.quantity)<1 || Number(item.quantity)>99)) { button.disabled=false; alert('Revisa las cantidades de los productos.'); return; }
+          if (draft.some(item => item.purchaseMode==='rental' && (!Number.isInteger(Number(item.rentalDays)) || Number(item.rentalDays)<1 || Number(item.rentalDays)>10))) { button.disabled=false; alert('Los alquileres deben tener entre 1 y 10 días.'); return; }
+          payload.items = draft.map(item => ({ productId:item.productId, purchaseMode:item.purchaseMode, quantity:Number(item.quantity), rentalDays:item.purchaseMode==='rental'?Number(item.rentalDays||1):null }));
+        }
         const updated=await request(`/api/admin/orders/${id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
         orders=orders.map(o=>o.id===updated.id?updated:o);
         const orderCard = button.closest('.admin-order');
@@ -1510,6 +1505,9 @@ async function renderAdminOrders() {
           editButton.disabled = false;
           editButton.textContent = 'Editar pedido';
         }
+        const productsButton = list.querySelector(`[data-order-items-edit="${id}"]`);
+        if (productsButton) { productsButton.disabled = true; productsButton.hidden = false; }
+        editingOrders.delete(id); draftItems.delete(id); productEditorsOpen.delete(id);
         delete button.dataset.editing;
         button.textContent='Cambios guardados ✓';
         setTimeout(()=>{button.textContent='Guardar cambios'; button.disabled=true;},1400);

@@ -2048,3 +2048,16 @@ body.generate-modal-open{overflow:hidden}
   .order-items-editor-actions { flex-wrap: wrap; }
   .order-items-editor-spacer { display: none; }
 }
+
+/* Edición de productos del pedido: misma experiencia visual que Generar Orden */
+.order-edit-products-card{margin:12px 0 4px;padding:18px 14px 8px;background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:none}
+.order-edit-products-card .generate-card-head{margin-bottom:16px}
+.order-edit-products-card .generate-products-table-head{grid-template-columns:minmax(250px,1fr) 150px 120px 120px 78px}
+.order-edit-products-card .generate-product-row{grid-template-columns:minmax(250px,1fr) 150px 120px 120px 78px}
+.order-edit-products-card .generate-qty{justify-content:flex-end;flex-wrap:wrap}
+.order-edit-products-card .generate-rental-days{width:88px;border:1px solid var(--line);border-radius:6px;padding:4px 6px;background:#fff;font:inherit;font-size:.72rem}
+.order-edit-remove{border:1px solid #e4b2ac;background:#fff;color:#9d3d35;border-radius:7px;padding:7px 9px;font:inherit;font-size:.72rem;font-weight:700;cursor:pointer;transition:.18s}
+.order-edit-remove:hover{background:#f8e9e6;border-color:#c9877e}
+.order-edit-products-note{padding:12px 8px 8px;color:var(--muted);font-size:.72rem;border-top:1px solid #eeeae2;margin-top:2px}
+.admin-order-items-actions .button:disabled{opacity:.45;cursor:not-allowed;transform:none}
+@media(max-width:900px){.order-edit-products-card .generate-products-table-head{display:none}.order-edit-products-card .generate-product-row{grid-template-columns:1fr auto auto 78px;gap:8px}.order-edit-products-card .generate-product-info{grid-column:1/-1}.order-edit-products-card .generate-qty{grid-column:1}.order-edit-products-card .generate-unit-price{grid-column:2}.order-edit-products-card .generate-line-total{grid-column:3}.order-edit-products-card .order-edit-remove{grid-column:4;grid-row:2}}
