@@ -2712,7 +2712,7 @@ function buildFinancialReportPdf(report) {
   section('GASTOS DEL PERÍODO');
   drawText(ops,'FECHA',margin,y,7,boldFont);
   drawText(ops,'CONCEPTO / DETALLE',margin+75,y,7,boldFont);
-  drawText(ops,'VALOR',right-28,y,7,boldFont,'center');
+  drawText(ops,'VALOR',right-23,y,7,boldFont,'center');
   y -= 10;
   for (const expense of (report.expenses || [])) {
     const lines = wrap(`${expense.description || 'Gasto'}${expense.note ? ` — ${expense.note}` : ''}`,62);
