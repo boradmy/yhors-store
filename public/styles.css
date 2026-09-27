@@ -2420,3 +2420,28 @@ body.generate-modal-open{overflow:hidden}
 .audit-user-agent{display:block;margin-top:10px;color:#777}
 @media(max-width:900px){.audit-filters{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:560px){.audit-filters{grid-template-columns:1fr}.audit-entry-details{padding-left:16px}.audit-meta{display:grid;grid-template-columns:1fr 1fr}}
+
+/* V15.1.1 · Navegación administrativa estable y siempre visible.
+   Evita que la barra de secciones quede detrás de bloques de contenido al
+   desplazarse por PÁGINA WEB y mantiene una sola navegación coherente en
+   todas las vistas administrativas. */
+.admin-section-nav{
+  position:sticky;
+  top:12px;
+  z-index:60;
+  max-width:100%;
+  overflow-x:auto;
+  overscroll-behavior-x:contain;
+  scrollbar-width:thin;
+  box-shadow:0 6px 18px rgba(30,25,18,.045);
+  background:rgba(244,241,234,.97);
+  backdrop-filter:blur(14px);
+  -webkit-backdrop-filter:blur(14px);
+}
+.admin-section-nav::-webkit-scrollbar{height:5px}
+.admin-section-nav::-webkit-scrollbar-thumb{background:#cfc8bc;border-radius:999px}
+.admin-section-link{flex:0 0 auto;white-space:nowrap}
+.admin-shell{isolation:isolate}
+@media(max-width:800px){
+  .admin-section-nav{top:8px;max-width:100%;box-shadow:0 5px 14px rgba(30,25,18,.06)}
+}
