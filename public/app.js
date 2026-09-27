@@ -1393,7 +1393,7 @@ async function renderAdminFinancial() {
       <div class="section-heading financial-heading"><div><span class="eyebrow">Finanzas</span><h2>Resumen del período</h2></div><p>Calcula el resultado del período usando las ventas activas, el precio de compra registrado en cada producto y los gastos del negocio.</p></div>
       <div class="financial-toolbar">
         <div class="financial-date-range"><label class="financial-date-filter"><span>Desde</span><input id="financialDateFrom" type="date" value="${monthStart}" aria-label="Fecha inicial"></label><label class="financial-date-filter"><span>Hasta</span><input id="financialDateTo" type="date" value="${today}" aria-label="Fecha final"></label></div>
-        <button type="button" class="button primary small" id="financialRefresh">Actualizar resumen</button>
+        <button type="button" class="button primary small" id="financialRefresh">Actualizar resumen</button><button type="button" class="button secondary small" id="financialPdf">PDF detallado</button>
       </div>
       <div class="financial-message" id="financialMessage" hidden></div>
       <div class="financial-summary" id="financialSummary"><div class="financial-loading">Calculando resumen…</div></div>
@@ -1456,6 +1456,16 @@ async function renderAdminFinancial() {
   };
 
   document.querySelector('#financialRefresh')?.addEventListener('click', renderFinancial);
+  document.querySelector('#financialPdf')?.addEventListener('click', () => {
+    const from = document.querySelector('#financialDateFrom')?.value || '';
+    const to = document.querySelector('#financialDateTo')?.value || '';
+    if (from && to && from > to) {
+      alert('La fecha inicial no puede ser posterior a la fecha final.');
+      return;
+    }
+    const url = `${ADMIN_PATH}/resumen-financiero/pdf?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&t=${Date.now()}`;
+    window.open(url, '_blank', 'noopener');
+  });
   document.querySelector('#financialDateFrom')?.addEventListener('change', renderFinancial);
   document.querySelector('#financialDateTo')?.addEventListener('change', renderFinancial);
   document.querySelector('#financialExpensesBody')?.addEventListener('click', event => {
@@ -1967,7 +1977,7 @@ function orderBackHref(role) {
 }
 
 function usersPanel(users = []) {
-  const rows = users.map(user => `<article class="admin-user-card ${user.active ? '' : 'is-disabled'}">
+  const rows = users.map(user => `<article class="admin-user-card ${user.active ? '' : 'is-disabled'}" data-user-search="${escapeHTML(`${user.name || ''} ${user.username || ''} ${userRoleLabel(user.role)}`)}" data-user-role="${escapeHTML(user.role)}">
     <div class="admin-user-main">
       <div class="admin-user-avatar">${escapeHTML((user.name || user.username || '?').slice(0,1).toUpperCase())}</div>
       <div>
@@ -2007,6 +2017,11 @@ function usersPanel(users = []) {
       </form>
       <div class="users-list-wrap">
         <div class="users-list-head"><div><span class="eyebrow">Cuentas existentes</span><strong id="usersCount">${users.length} usuario(s)</strong></div></div>
+        <div class="users-search-toolbar" aria-label="Buscar y filtrar usuarios">
+          <label class="users-search-field"><span>Buscar</span><input id="usersSearch" type="search" placeholder="Nombre, usuario o rol…" autocomplete="off"></label>
+          <label class="users-search-field"><span>Rol</span><select id="usersRoleFilter"><option value="">Todos los roles</option><option value="vendedor">Vendedores</option><option value="store_manager">Jefes de tienda</option><option value="admin">Administradores</option></select></label>
+          <button type="button" class="button secondary small" id="usersSearchClear">Limpiar</button>
+        </div>
         <div id="adminUsersList">${rows || '<p class="backup-empty">No hay usuarios registrados.</p>'}</div>
       </div>
     </div>
@@ -2029,6 +2044,33 @@ async function renderAdminUsers() {
   const message = document.querySelector('#userMessage');
   const submit = document.querySelector('#userSubmit');
   const cancel = document.querySelector('#userCancelEdit');
+
+  const filterUsers = () => {
+    const query = String(document.querySelector('#usersSearch')?.value || '').trim().toLocaleLowerCase('es');
+    const role = String(document.querySelector('#usersRoleFilter')?.value || '');
+    const cards = [...document.querySelectorAll('#adminUsersList .admin-user-card')];
+    let visible = 0;
+    cards.forEach(card => {
+      const text = String(card.dataset.userSearch || '').toLocaleLowerCase('es');
+      const matchesQuery = !query || text.includes(query);
+      const matchesRole = !role || String(card.dataset.userRole || '') === role;
+      const show = matchesQuery && matchesRole;
+      card.hidden = !show;
+      if (show) visible += 1;
+    });
+    const count = document.querySelector('#usersCount');
+    if (count) count.textContent = `${visible} de ${cards.length} usuario(s)`;
+  };
+  document.querySelector('#usersSearch')?.addEventListener('input', filterUsers);
+  document.querySelector('#usersRoleFilter')?.addEventListener('change', filterUsers);
+  document.querySelector('#usersSearchClear')?.addEventListener('click', () => {
+    const search = document.querySelector('#usersSearch');
+    const role = document.querySelector('#usersRoleFilter');
+    if (search) search.value = '';
+    if (role) role.value = '';
+    filterUsers();
+    search?.focus();
+  });
 
   const resetForm = () => {
     form.reset();

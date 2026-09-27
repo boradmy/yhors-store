@@ -2603,6 +2603,214 @@ app.get('/api/admin/resumen-financiero', requireAdmin, (req, res) => {
   });
 });
 
+
+// V14.26 · Reporte PDF del Resumen Financiero.
+// Se genera en cada solicitud con los datos actuales y sin cache para que
+// el botón siempre entregue una versión actualizada del período seleccionado.
+function buildFinancialReportPdf(report) {
+  const W = 595, H = 842, margin = 38, right = W - margin;
+  const normalFont = 1, boldFont = 2;
+  const pdfEscapeLocal = value => String(value ?? '')
+    .replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)')
+    .replace(/[\u2018\u2019]/g, "'").replace(/[\u201C\u201D]/g, '"')
+    .replace(/[\u2013\u2014]/g, '-').replace(/\u2022/g, '-')
+    .replace(/[^\x20-\xFF]/g, '?');
+  const money = value => `$${Number(value || 0).toFixed(2)}`;
+  const wrap = (text, maxChars) => {
+    const words = String(text ?? '').trim().split(/\s+/).filter(Boolean);
+    if (!words.length) return [''];
+    const out = []; let line = '';
+    for (const word of words) {
+      const next = line ? `${line} ${word}` : word;
+      if (line && next.length > maxChars) { out.push(line); line = word; }
+      else line = next;
+    }
+    if (line) out.push(line);
+    return out;
+  };
+  const drawText = (ops, text, x, y, size = 9, font = normalFont, align = 'left') => {
+    const raw = String(text ?? '');
+    const approx = raw.length * size * 0.52;
+    let tx = x;
+    if (align === 'right') tx = x - approx;
+    if (align === 'center') tx = x - approx / 2;
+    ops.push(`BT /F${font} ${size} Tf ${tx.toFixed(2)} ${y.toFixed(2)} Td (${pdfEscapeLocal(raw)}) Tj ET`);
+  };
+  const line = (ops,x1,y1,x2,y2,width=.7) => ops.push(`${width} w ${x1} ${y1} m ${x2} ${y2} l S`);
+  const rect = (ops,x,y,w,h,width=.7) => ops.push(`${width} w ${x} ${y} ${w} ${h} re S`);
+  const fill = (ops,x,y,w,h,r=.96,g=.95,b=.91) => ops.push(`${r} ${g} ${b} rg ${x} ${y} ${w} ${h} re f 0 0 0 rg`);
+  const pages = [];
+  let ops = [], y = H - margin;
+  const newPage = () => {
+    if (ops.length) pages.push(ops.join('\n'));
+    ops = []; y = H - margin;
+    drawText(ops, 'YHORS', margin, y - 4, 20, boldFont);
+    drawText(ops, 'REPORTE FINANCIERO', right, y - 2, 15, boldFont, 'right');
+    y -= 32;
+    line(ops, margin, y, right, y, 1);
+    y -= 18;
+  };
+  newPage();
+
+  const title = 'RESUMEN FINANCIERO YHORS';
+  drawText(ops, title, margin, y, 16, boldFont);
+  y -= 18;
+  drawText(ops, `Periodo: ${report.from || 'Todo'} → ${report.to || 'Todo'}`, margin, y, 9);
+  drawText(ops, `Generado: ${report.generatedAt}`, right, y, 8, normalFont, 'right');
+  y -= 24;
+
+  const metrics = [
+    ['VENTAS TOTALES', money(report.totals.sales)],
+    ['TOTAL COMPRAS', money(report.totals.purchases)],
+    ['GANANCIAS NETAS', money(report.totals.profit)],
+    ['TOTAL GASTOS', money(report.totals.expenses)]
+  ];
+  const gap = 10, mw = (right - margin - gap * 3) / 4;
+  metrics.forEach((m,i) => {
+    const x = margin + i * (mw + gap);
+    fill(ops,x,y-55,mw,55,0.97,0.96,0.93);
+    rect(ops,x,y-55,mw,55,.7);
+    drawText(ops,m[0],x+8,y-16,6.5,boldFont);
+    drawText(ops,m[1],x+8,y-37,11,boldFont);
+  });
+  y -= 75;
+  drawText(ops, `Pedidos activos: ${Number(report.totals.orderCount || 0)}   ·   Margen: ${Number(report.totals.margin || 0).toFixed(2)}%`, margin, y, 8);
+  y -= 22;
+
+  const section = (label) => {
+    if (y < 95) newPage();
+    drawText(ops,label,margin,y,10,boldFont);
+    y -= 10;
+    line(ops,margin,y,right,y,.8);
+    y -= 16;
+  };
+
+  section('VENTAS POR VENDEDOR');
+  drawText(ops,'VENDEDOR',margin,y,7,boldFont);
+  drawText(ops,'PEDIDOS',right-150,y,7,boldFont,'right');
+  drawText(ops,'TOTAL VENDIDO',right,y,7,boldFont,'right');
+  y -= 10;
+  for (const row of (report.salesBySeller || [])) {
+    if (y < 55) newPage(), section('VENTAS POR VENDEDOR (CONTINUACIÓN)');
+    drawText(ops,wrap(row.sellerName || 'Sin vendedor',38)[0],margin,y,8);
+    drawText(ops,String(row.orders || 0),right-150,y,8,normalFont,'right');
+    drawText(ops,money(row.total),right,y,8,boldFont,'right');
+    y -= 16; line(ops,margin,y,right,y,.35); y -= 7;
+  }
+
+  section('GASTOS DEL PERÍODO');
+  drawText(ops,'FECHA',margin,y,7,boldFont);
+  drawText(ops,'CONCEPTO / DETALLE',margin+75,y,7,boldFont);
+  drawText(ops,'VALOR',right,y,7,boldFont,'right');
+  y -= 10;
+  for (const expense of (report.expenses || [])) {
+    const lines = wrap(`${expense.description || 'Gasto'}${expense.note ? ` — ${expense.note}` : ''}`,62);
+    const h = Math.max(16, lines.length * 9);
+    if (y - h < 55) { newPage(); section('GASTOS DEL PERÍODO (CONTINUACIÓN)'); }
+    drawText(ops,String(expense.date || ''),margin,y,7);
+    lines.slice(0,3).forEach((t,i)=>drawText(ops,t,margin+75,y-i*9,7));
+    drawText(ops,money(expense.amount),right,y,7,boldFont,'right');
+    y -= h + 5;
+    line(ops,margin,y,right,y,.35); y -= 7;
+  }
+
+  if (y < 120) newPage();
+  y -= 8;
+  fill(ops,margin,y-74,right-margin,74,0.95,0.92,0.84);
+  rect(ops,margin,y-74,right-margin,74,.8);
+  drawText(ops,'DESGLOSE FINAL',margin+10,y-16,9,boldFont);
+  drawText(ops,'Ventas',margin+10,y-33,8); drawText(ops,money(report.totals.sales),right-10,y-33,8,normalFont,'right');
+  drawText(ops,'Compras',margin+10,y-47,8); drawText(ops,money(report.totals.purchases),right-10,y-47,8,normalFont,'right');
+  drawText(ops,'Gastos',margin+10,y-61,8); drawText(ops,money(report.totals.expenses),right-10,y-61,8,normalFont,'right');
+  drawText(ops,'GANANCIA NETA',right-150,y-61,8,boldFont,'right'); drawText(ops,money(report.totals.profit),right-10,y-61,8,boldFont,'right');
+
+  pages.push(ops.join('\n'));
+
+  const objects = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    `<< /Type /Pages /Kids [${pages.map((_,i)=>`${3+i*2} 0 R`).join(' ')}] /Count ${pages.length} >>`
+  ];
+  const fontNormal = 3 + pages.length * 2;
+  const fontBold = fontNormal + 1;
+  pages.forEach((stream,i)=>{
+    const pageNo=3+i*2, contentNo=pageNo+1;
+    objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] /Resources << /ProcSet [/PDF /Text] /Font << /F1 ${fontNormal} 0 R /F2 ${fontBold} 0 R >> >> /Contents ${contentNo} 0 R >>`);
+    objects.push(`<< /Length ${Buffer.byteLength(stream,'latin1')} >>\nstream\n${stream}\nendstream`);
+  });
+  objects.push('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>');
+  objects.push('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>');
+  let pdf='%PDF-1.4\n', offsets=[0];
+  objects.forEach((object,index)=>{ offsets.push(Buffer.byteLength(pdf,'latin1')); pdf+=`${index+1} 0 obj\n${object}\nendobj\n`; });
+  const xref=Buffer.byteLength(pdf,'latin1');
+  pdf+=`xref\n0 ${objects.length+1}\n0000000000 65535 f \n`;
+  for(let i=1;i<offsets.length;i++) pdf+=`${String(offsets[i]).padStart(10,'0')} 00000 n \n`;
+  pdf+=`trailer\n<< /Size ${objects.length+1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+  return Buffer.from(pdf,'latin1');
+}
+
+
+app.get('/api/admin/resumen-financiero/pdf', requireAdmin, (req, res) => {
+  const orders = readOrders();
+  const products = readProducts().map(normalizeProduct);
+  const users = readUsers();
+  const expenses = readExpenses();
+  const from = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.from || '')) ? String(req.query.from) : '';
+  const to = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.to || '')) ? String(req.query.to) : '';
+  const localDate = value => {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    return date.toLocaleDateString('en-CA', { timeZone: 'America/Guayaquil' });
+  };
+  const activeStatuses = new Set(['Pendiente', 'Confirmado', 'Preparado', 'Enviado', 'Entregado']);
+  const productMap = new Map(products.map(product => [String(product.id), product]));
+  const sellerMap = new Map(users.filter(user => isSellerRole(user.role)).map(user => [String(user.id), user]));
+  const filteredOrders = orders.filter(order => {
+    const date = localDate(order.createdAt);
+    return date && (!from || date >= from) && (!to || date <= to) && activeStatuses.has(String(order.status || 'Pendiente'));
+  });
+  const filteredExpenses = expenses.filter(expense => {
+    const date = String(expense.date || '');
+    return /^\d{4}-\d{2}-\d{2}$/.test(date) && (!from || date >= from) && (!to || date <= to);
+  });
+  const round = value => Math.round(Number(value || 0) * 100) / 100;
+  let sales=0,purchases=0,shipping=0;
+  const salesBySeller=new Map();
+  for (const order of filteredOrders) {
+    sales += Number(order.total || 0);
+    shipping += Number(order.shippingCost ?? order.delivery?.cost ?? 0);
+    for (const item of Array.isArray(order.items) ? order.items : []) {
+      if (item.purchaseMode !== 'purchase') continue;
+      const fallback = productMap.get(String(item.productId || ''));
+      const cost = Number.isFinite(Number(item.purchaseCost)) ? Number(item.purchaseCost) : Number(fallback?.purchasePrice || 0);
+      purchases += Math.max(0,cost) * Math.max(0,Number(item.quantity || 0));
+    }
+    const sellerId=order.assignedSellerId || 'unassigned';
+    const sellerName=order.assignedSellerName || sellerMap.get(String(order.assignedSellerId || ''))?.name || (sellerId==='unassigned'?'Sin vendedor':'Vendedor');
+    const row=salesBySeller.get(sellerId)||{sellerId,sellerName,total:0,orders:0};
+    row.total += Number(order.total || 0); row.orders += 1; salesBySeller.set(sellerId,row);
+  }
+  const manualExpenses=filteredExpenses.reduce((sum,e)=>sum+Number(e.amount||0),0);
+  const totalExpenses=shipping+manualExpenses;
+  const totalSales=round(sales), totalPurchases=round(purchases), totalShipping=round(shipping);
+  const totalManualExpenses=round(manualExpenses), totalExpensesRounded=round(totalExpenses);
+  const profit=round(totalSales-totalPurchases-totalExpensesRounded);
+  const margin=totalSales>0?round(profit/totalSales*100):0;
+  const report={
+    from,to,
+    generatedAt:new Intl.DateTimeFormat('es-EC',{timeZone:'America/Guayaquil',dateStyle:'short',timeStyle:'medium'}).format(new Date()),
+    totals:{sales:totalSales,purchases:totalPurchases,shipping:totalShipping,manualExpenses:totalManualExpenses,expenses:totalExpensesRounded,profit,margin,orderCount:filteredOrders.length},
+    expenses:filteredExpenses.map(e=>({...e,amount:round(e.amount)})).sort((a,b)=>String(b.date).localeCompare(String(a.date))),
+    salesBySeller:[...salesBySeller.values()].sort((a,b)=>b.total-a.total).map(r=>({...r,total:round(r.total)}))
+  };
+  const pdf=buildFinancialReportPdf(report);
+  res.setHeader('Content-Type','application/pdf');
+  res.setHeader('Content-Disposition',`inline; filename="YHORS-Resumen-Financiero-${from||'todo'}-${to||'todo'}.pdf"`);
+  res.setHeader('Content-Length',pdf.length);
+  res.setHeader('Cache-Control','no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+  res.setHeader('Pragma','no-cache'); res.setHeader('Expires','0');
+  res.end(pdf);
+});
+
 app.post('/api/admin/gastos', requireAdmin, (req, res) => {
   const date = /^\d{4}-\d{2}-\d{2}$/.test(String(req.body?.date || '')) ? String(req.body.date) : '';
   const description = cleanText(req.body?.description, 120);
@@ -2738,11 +2946,16 @@ app.post('/api/admin/calculo-comision/pagar', requireAdmin, (req, res) => {
   if (!Number.isFinite(rate) || rate <= 0 || rate > 100) return res.status(400).json({ error: 'El porcentaje debe estar entre 0,01% y 100%.' });
 
   const users = readUsers();
-  const isManager = userId === 'store_manager';
+  // El Jefe de Tienda puede tener un ID real (como cualquier otra cuenta).
+  // Aceptamos tanto el identificador histórico "store_manager" como su ID real.
+  const managerUser = users.find(item =>
+    String(item.id) === userId && isStoreManager(item.role) && item.active !== false
+  );
+  const isManager = userId === 'store_manager' || Boolean(managerUser);
   const user = isManager
-    ? users.find(item => isStoreManager(item.role) && item.active !== false)
+    ? (managerUser || users.find(item => isStoreManager(item.role) && item.active !== false))
     : users.find(item => String(item.id) === userId && isSellerRole(item.role) && item.active !== false);
-  if (!user && !isManager) return res.status(404).json({ error: 'Vendedor no encontrado.' });
+  if (!user && !isManager) return res.status(404).json({ error: 'Usuario no encontrado.' });
 
   const orders = readOrders();
   const qualifyingStatuses = new Set(['Enviado', 'Entregado']);
