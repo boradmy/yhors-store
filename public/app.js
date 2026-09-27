@@ -421,16 +421,17 @@ function wireCart(products, storefront) {
   const count = document.querySelector('#cartCount'); const area = document.querySelector('#cartItems');
   const updateCartCount = () => { if (count) count.textContent = cart.reduce((sum, line) => sum + Number(line.quantity || 0), 0); };
   const getProductForLine = line => products.find(item => item.id === (line.productId || line.id || line.cartKey));
+  // El catálogo público solo conoce si hay disponibilidad, nunca la cantidad exacta.
+  // La cantidad solicitada se valida nuevamente en el servidor al crear el pedido.
   const getAvailableStock = line => {
     const product = getProductForLine(line);
-    const stock = product ? Number(product.availableStock ?? product.stock) : Number(line.availableStock);
-    return Number.isInteger(stock) && stock >= 0 ? stock : 0;
+    const available = product ? product.inStock === true : line.inStock === true;
+    return available ? Number.POSITIVE_INFINITY : 0;
   };
   const clampQuantity = (line, requested) => {
     const minimum = Math.max(1, Number.parseInt(requested, 10) || 1);
     if (line.purchaseMode !== 'purchase') return minimum;
-    const max = getAvailableStock(line);
-    return max > 0 ? Math.min(minimum, max) : 0;
+    return getAvailableStock(line) > 0 ? minimum : 0;
   };
   const drawCart = () => {
     if (!area) return;
@@ -442,10 +443,8 @@ function wireCart(products, storefront) {
     area.innerHTML = cart.length ? cart.map(line => {
       const isRental = line.purchaseMode === 'rental';
       const days = isRental ? rentalDaysValue(line.rentalDays) : 1;
-      const maxStock = isRental ? null : getAvailableStock(line);
       const quantity = Math.max(1, Number(line.quantity) || 1);
-      const atMax = !isRental && quantity >= maxStock;
-      return `<div class="cart-item"><img data-fallback src="${escapeHTML(productImages(line)[0])}" alt=""><div class="cart-item-main"><h4>${escapeHTML(line.name)}</h4>${line.purchaseMode ? `<span class="cart-mode">${isRental ? `Alquiler · ${days} día${days === 1 ? '' : 's'}` : 'Compra'}</span>` : ''}${!isRental ? `<small class="cart-stock">Disponible: ${maxStock}</small>` : ''}${isRental ? `<label class="cart-rental-days">Días de alquiler<select data-rental-days="${escapeHTML(line.id)}">${Array.from({length:10},(_,i)=>i+1).map(day => `<option value="${day}" ${day === days ? 'selected' : ''}>${day} día${day === 1 ? '' : 's'}</option>`).join('')}</select></label>` : ''}<p class="cart-line-price">${money(Number(line.price) * (isRental ? days : 1))}${isRental ? ' <small>/ día × duración</small>' : ''}</p><div class="quantity-control"><button type="button" data-qty="${escapeHTML(line.id)}" data-change="-1" ${quantity <= 1 ? 'disabled' : ''}>−</button><input type="number" min="1" ${!isRental ? `max="${maxStock}"` : ''} value="${quantity}" data-input="${escapeHTML(line.id)}"><button type="button" data-qty="${escapeHTML(line.id)}" data-change="1" ${atMax ? 'disabled' : ''}>+</button></div></div><button class="remove" data-remove="${escapeHTML(line.id)}">Quitar</button></div>`;
+      return `<div class="cart-item"><img data-fallback src="${escapeHTML(productImages(line)[0])}" alt=""><div class="cart-item-main"><h4>${escapeHTML(line.name)}</h4>${line.purchaseMode ? `<span class="cart-mode">${isRental ? `Alquiler · ${days} día${days === 1 ? '' : 's'}` : 'Compra'}</span>` : ''}${isRental ? `<label class="cart-rental-days">Días de alquiler<select data-rental-days="${escapeHTML(line.id)}">${Array.from({length:10},(_,i)=>i+1).map(day => `<option value="${day}" ${day === days ? 'selected' : ''}>${day} día${day === 1 ? '' : 's'}</option>`).join('')}</select></label>` : ''}<p class="cart-line-price">${money(Number(line.price) * (isRental ? days : 1))}${isRental ? ' <small>/ día × duración</small>' : ''}</p><div class="quantity-control"><button type="button" data-qty="${escapeHTML(line.id)}" data-change="-1" ${quantity <= 1 ? 'disabled' : ''}>−</button><input type="number" min="1" value="${quantity}" data-input="${escapeHTML(line.id)}"><button type="button" data-qty="${escapeHTML(line.id)}" data-change="1">+</button></div></div><button class="remove" data-remove="${escapeHTML(line.id)}">Quitar</button></div>`;
     }).join('') : '<div class="empty cart-empty">Tu carrito está vacío.<br><small>Agrega algo que te guste.</small></div>';
     const total = cart.reduce((sum, line) => sum + cartLineTotal(line), 0);
     const totalEl = document.querySelector('#cartTotal'); if (totalEl) totalEl.textContent = money(total);
@@ -473,8 +472,7 @@ function wireCart(products, storefront) {
   };
   const addToCart = (product, button, purchaseMode = 'purchase', rentalDays = 1) => {
     const days = purchaseMode === 'rental' ? rentalDaysValue(rentalDays) : null;
-    const availableStock = Number(product.availableStock ?? product.stock ?? 0);
-    const inStock = product.inStock === true && availableStock > 0;
+    const inStock = product.inStock === true;
     const price = purchaseMode === 'rental' ? Number(product.rentalPrice) : (product.category === 'cosplay' && Number.isFinite(Number(product.salePrice)) ? Number(product.salePrice) : Number(product.price));
     const cartKey = `${product.id}::${purchaseMode}::${days || ''}`;
     const existing = cart.find(item => (item.cartKey || item.id) === cartKey);
@@ -485,16 +483,9 @@ function wireCart(products, storefront) {
     }
     if (existing) {
       const currentQuantity = Number(existing.quantity) || 0;
-      if (purchaseMode === 'purchase' && currentQuantity >= availableStock) {
-        const original = button.innerHTML;
-        button.disabled = true;
-        button.innerHTML = '<span>Stock máximo</span><span>✓</span>';
-        setTimeout(() => { button.innerHTML = original; button.disabled = false; }, 900);
-        return;
-      }
-      existing.quantity = purchaseMode === 'purchase' ? Math.min(currentQuantity + 1, availableStock) : currentQuantity + 1;
+      existing.quantity = currentQuantity + 1;
     } else {
-      cart.push({ ...product, id: cartKey, cartKey, productId: product.id, price, purchaseMode, rentalDays: days, quantity: 1, availableStock });
+      cart.push({ ...product, id: cartKey, cartKey, productId: product.id, price, purchaseMode, rentalDays: days, quantity: 1 });
     }
     setCart(cart); updateCartCount(); drawCart();
     button.disabled = true;
@@ -2876,28 +2867,7 @@ async function renderMyAccount() {
   document.querySelectorAll('[data-delete-passkey]').forEach(btn => btn.addEventListener('click', async () => { if (!confirm('¿Revocar esta Passkey?')) return; try { await request(`/api/me/passkeys/${encodeURIComponent(btn.dataset.deletePasskey)}`, { method: 'DELETE' }); await renderMyAccount(); } catch (e) { alert(e.message); } }));
 }
 
-function renderLogin(twoFactorMode = false) {
-  if (twoFactorMode) {
-    app.innerHTML = `<main class="login-page"><section class="login-card"><a class="brand" href="/">YHORS</a><span class="eyebrow">Verificación en dos pasos</span><h1>Confirma tu acceso</h1><p>Abre tu aplicación autenticadora e ingresa el código de 6 dígitos.</p><form id="twoFactorForm" class="form-grid"><div class="field full"><label for="twoFactorCode">Código 2FA</label><input id="twoFactorCode" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" minlength="6" required autofocus></div><div class="form-actions"><button class="button" type="submit">Verificar acceso</button><span class="message" id="loginMessage"></span></div></form></section></main>`;
-    document.querySelector('#twoFactorForm').addEventListener('submit', async e => {
-      e.preventDefault();
-      const message = document.querySelector('#loginMessage');
-      try {
-        const result = await request('/api/login/2fa', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(Object.fromEntries(new FormData(e.currentTarget)))
-        });
-        const session = await request('/api/admin/session');
-        (isSellerRole(session.role) || session.role === 'store_manager') ? renderAdminOrders() : renderAdmin();
-      } catch (error) {
-        message.className = 'message error';
-        message.textContent = error.message;
-      }
-    });
-    return;
-  }
-
+function renderLogin() {
   app.innerHTML = `<main class="login-page"><section class="login-card"><a class="brand" href="/">YHORS</a><span class="eyebrow">Panel privado</span><h1>Acceso a YHORS</h1><p>Ingresa con tu cuenta autorizada.</p><form id="loginForm" class="form-grid"><div class="field full"><label for="username">Usuario</label><input id="username" name="username" autocomplete="username webauthn" required></div><div class="field full"><label for="password">Contraseña</label><input id="password" name="password" type="password" autocomplete="current-password" required></div><div class="login-attempts" id="loginAttempts" aria-live="polite"></div><div class="form-actions"><button class="button" id="loginSubmit" type="submit">Iniciar sesión</button><button class="button secondary" id="passkeyLogin" type="button">🔐 Iniciar con Passkey</button><span class="message" id="loginMessage"></span></div></form></section></main>`;
   let loginLockTimer = null;
   const attemptsBox = document.querySelector('#loginAttempts');
@@ -2927,7 +2897,6 @@ function renderLogin(twoFactorMode = false) {
     e.preventDefault();
     try {
       const result = await request('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.fromEntries(new FormData(e.currentTarget))) });
-      if (result.requiresTwoFactor) return renderLogin(true);
       const session = await request('/api/admin/session');
       await renderAdminAfterLogin(session);
     } catch (error) {

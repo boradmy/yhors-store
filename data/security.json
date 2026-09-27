@@ -1,3 +1,5 @@
 {
-  "twoFactor": {}
+  "passkeys": {},
+  "passkeyPolicy": {},
+  "loginProtection": {}
 }
