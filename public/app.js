@@ -1146,10 +1146,10 @@ function adminSectionNav(session = {}, active = '') {
   const link = (key, href, label) => `<a href="${href}" class="admin-section-link${active === key ? ' active' : ''}" data-smooth-route>${label}</a>`;
   if (limitedOperations) {
     return `<nav class="admin-section-nav admin-section-nav--compact" id="adminSectionNav" aria-label="Secciones operativas">
-      <details class="admin-nav-group" open><summary>Operación</summary><div class="admin-nav-group-links">${link('ventas-generales', `${ADMIN_PATH}/ventas-generales`, 'VENTAS GENERALES')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('generar-orden', `${ADMIN_PATH}/generar-orden`, 'GENERAR ORDEN')}</div></details>
+      <details class="admin-nav-group"><summary>Operación</summary><div class="admin-nav-group-links">${link('ventas-generales', `${ADMIN_PATH}/ventas-generales`, 'VENTAS GENERALES')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('generar-orden', `${ADMIN_PATH}/generar-orden`, 'GENERAR ORDEN')}</div></details>
     </nav>`;
   }
-  const group = (label, activeKeys, items, open = false) => `<details class="admin-nav-group${activeKeys.includes(active) ? ' has-active' : ''}"${open || activeKeys.includes(active) ? ' open' : ''}><summary><span>${label}</span>${activeKeys.includes(active) ? '<i aria-hidden="true"></i>' : ''}</summary><div class="admin-nav-group-links">${items}</div></details>`;
+  const group = (label, activeKeys, items, open = false) => `<details class="admin-nav-group${activeKeys.includes(active) ? ' has-active' : ''}"${open ? ' open' : ''}><summary><span>${label}</span>${activeKeys.includes(active) ? '<i aria-hidden="true"></i>' : ''}</summary><div class="admin-nav-group-links">${items}</div></details>`;
   return `<nav class="admin-section-nav" id="adminSectionNav" aria-label="Administración YHORS">
     ${group('Operación', ['web','inventario','pedidos','generar-orden'], `${link('web', ADMIN_PATH, 'PÁGINA WEB')}${link('inventario', `${ADMIN_PATH}/inventario`, 'INVENTARIO')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('generar-orden', `${ADMIN_PATH}/generar-orden`, 'GENERAR ORDEN')}`)}
     ${group('Gestión', ['usuarios','auditoria'], `${link('usuarios', `${ADMIN_PATH}/usuarios`, 'USUARIOS')}${link('auditoria', `${ADMIN_PATH}/auditoria`, 'AUDITORÍA')}`)}
@@ -1984,7 +1984,7 @@ async function renderAdminSecurity(embedded = false) {
 
   let data = await request('/api/admin/security/overview').catch(() => null);
   if (!data) {
-    app.innerHTML = `<main class="admin-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">${embedded ? 'Usuarios' : 'Seguridad'}</h1><p class="admin-subtitle">No se pudo cargar el centro de seguridad.</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>${embedded ? `<div class="users-module-switch" role="tablist" aria-label="Usuarios y seguridad"><a class="users-module-tab" href="${ADMIN_PATH}/usuarios" data-smooth-route>Usuarios</a><a class="users-module-tab is-active" href="${ADMIN_PATH}/usuarios?panel=seguridad" data-smooth-route>Seguridad</a></div>` : adminSectionNav(session, 'usuarios')}<section class="admin-panel"><div class="message error">Intenta recargar esta sección.</div></section></div></main>`;
+    app.innerHTML = `<main class="admin-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">${embedded ? 'Usuarios' : 'Seguridad'}</h1><p class="admin-subtitle">No se pudo cargar el centro de seguridad.</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>${adminSectionNav(session, 'usuarios')}${embedded ? `<div class="users-module-switch" role="tablist" aria-label="Usuarios y seguridad"><a class="users-module-tab" href="${ADMIN_PATH}/usuarios" data-smooth-route>Usuarios</a><a class="users-module-tab is-active" href="${ADMIN_PATH}/usuarios?panel=seguridad" data-smooth-route>Seguridad</a></div>` : ''}<section class="admin-panel"><div class="message error">Intenta recargar esta sección.</div></section></div></main>`;
     return;
   }
 
@@ -2015,6 +2015,7 @@ async function renderAdminSecurity(embedded = false) {
 
   app.innerHTML = `<main class="admin-shell"><div class="admin-wrap">
     <div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">${embedded ? 'Usuarios' : 'Seguridad'}</h1><p class="admin-subtitle">${embedded ? 'Cuentas, acceso y protección de YHORS' : 'Centro de control de acceso de YHORS'}</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>
+    ${adminSectionNav(session, 'usuarios')}
     ${embedded ? `<div class="users-module-switch" role="tablist" aria-label="Usuarios y seguridad"><a class="users-module-tab" href="${ADMIN_PATH}/usuarios" data-smooth-route>Usuarios</a><a class="users-module-tab is-active" href="${ADMIN_PATH}/usuarios?panel=seguridad" data-smooth-route>Seguridad</a></div>` : ''}
     <section class="admin-panel security-panel">
       <div class="security-hero">
@@ -2030,7 +2031,7 @@ async function renderAdminSecurity(embedded = false) {
 
   const refresh = async () => {
     const fresh = await request('/api/admin/security/overview').catch(() => null);
-    if (fresh) renderAdminSecurity();
+    if (fresh) renderAdminSecurity(true);
   };
   document.querySelectorAll('[data-security-reset]').forEach(button => button.addEventListener('click', async () => {
     if (!confirm('¿Seguro que quieres desbloquear esta cuenta?')) return;
@@ -2047,6 +2048,7 @@ async function renderAdminSecurity(embedded = false) {
     try { await request(`/api/admin/users/${encodeURIComponent(button.dataset.securityPasskeys)}/passkeys`, { method:'DELETE' }); alert('Passkeys revocadas.'); await refresh(); }
     catch (error) { alert(error.message); }
   }));
+  wireAccountMenu();
 }
 
 async function renderAdminAudit() {
@@ -2175,6 +2177,7 @@ async function renderAdminAudit() {
     draw();
   });
   bind();
+  wireAccountMenu();
   draw();
 }
 
@@ -3134,6 +3137,7 @@ document.addEventListener('click', event => {
   if (!link || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
   const href = link.getAttribute('href');
   if (!href) return;
+  document.querySelectorAll('.admin-nav-group[open]').forEach(group => { group.open = false; });
   const target = new URL(href, window.location.origin);
   if (target.origin !== window.location.origin) return;
   event.preventDefault();
@@ -3144,6 +3148,16 @@ document.addEventListener('click', event => {
     // Si una vista falla por una sesión recién creada o por una respuesta
     // incompleta, un segundo intento controlado evita dejar la pestaña congelada.
     setTimeout(() => renderCurrentRoute(), 0);
+  });
+});
+
+// El header YHORS mantiene un solo menú de navegación abierto a la vez.
+document.addEventListener('click', event => {
+  const summary = event.target.closest('.admin-nav-group > summary');
+  if (!summary) return;
+  const current = summary.closest('.admin-nav-group');
+  document.querySelectorAll('.admin-nav-group[open]').forEach(group => {
+    if (group !== current) group.open = false;
   });
 });
 
