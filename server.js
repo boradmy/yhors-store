@@ -2610,6 +2610,12 @@ app.get('/api/admin/resumen-financiero', requireAdmin, (req, res) => {
 function buildFinancialReportPdf(report) {
   const W = 595, H = 842, margin = 38, right = W - margin;
   const normalFont = 1, boldFont = 2;
+  // Mismo logo oficial utilizado en los PDF de órdenes de YHORS.
+  const logoPath = path.join(__dirname, 'public', 'assets', 'yhors-logo-pdf.jpg');
+  let logoJpeg = null;
+  try { logoJpeg = fs.readFileSync(logoPath); } catch { logoJpeg = null; }
+  const logoWidth = 150;
+  const logoHeight = 33;
   const pdfEscapeLocal = value => String(value ?? '')
     .replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)')
     .replace(/[\u2018\u2019]/g, "'").replace(/[\u201C\u201D]/g, '"')
@@ -2644,8 +2650,13 @@ function buildFinancialReportPdf(report) {
   const newPage = () => {
     if (ops.length) pages.push(ops.join('\n'));
     ops = []; y = H - margin;
-    drawText(ops, 'YHORS', margin, y - 4, 20, boldFont);
-    drawText(ops, 'REPORTE FINANCIERO', right, y - 2, 15, boldFont, 'right');
+    if (logoJpeg) {
+      ops.push(`q ${logoWidth} 0 0 ${logoHeight} ${margin} ${y - logoHeight + 4} cm /Im1 Do Q`);
+    } else {
+      drawText(ops, 'YHORS', margin, y - 4, 20, boldFont);
+    }
+    // El título se desplaza 10 puntos hacia la izquierda; no afecta al logo.
+    drawText(ops, 'REPORTE FINANCIERO', right - 10, y - 2, 15, boldFont, 'right');
     y -= 32;
     line(ops, margin, y, right, y, 1);
     y -= 18;
@@ -2687,7 +2698,7 @@ function buildFinancialReportPdf(report) {
 
   section('VENTAS POR VENDEDOR');
   drawText(ops,'VENDEDOR',margin,y,7,boldFont);
-  drawText(ops,'PEDIDOS',right-150,y,7,boldFont,'right');
+  drawText(ops,'VENTAS CONFIRMADAS',right-150,y,7,boldFont,'right');
   drawText(ops,'TOTAL VENDIDO',right,y,7,boldFont,'right');
   y -= 10;
   for (const row of (report.salesBySeller || [])) {
@@ -2701,7 +2712,7 @@ function buildFinancialReportPdf(report) {
   section('GASTOS DEL PERÍODO');
   drawText(ops,'FECHA',margin,y,7,boldFont);
   drawText(ops,'CONCEPTO / DETALLE',margin+75,y,7,boldFont);
-  drawText(ops,'VALOR',right,y,7,boldFont,'right');
+  drawText(ops,'VALOR',right-28,y,7,boldFont,'center');
   y -= 10;
   for (const expense of (report.expenses || [])) {
     const lines = wrap(`${expense.description || 'Gasto'}${expense.note ? ` — ${expense.note}` : ''}`,62);
@@ -2726,17 +2737,23 @@ function buildFinancialReportPdf(report) {
 
   pages.push(ops.join('\n'));
 
+  const imageObjectNumber = 3 + pages.length * 2;
+  const fontNormal = imageObjectNumber + 1;
+  const fontBold = fontNormal + 1;
   const objects = [
     '<< /Type /Catalog /Pages 2 0 R >>',
     `<< /Type /Pages /Kids [${pages.map((_,i)=>`${3+i*2} 0 R`).join(' ')}] /Count ${pages.length} >>`
   ];
-  const fontNormal = 3 + pages.length * 2;
-  const fontBold = fontNormal + 1;
   pages.forEach((stream,i)=>{
     const pageNo=3+i*2, contentNo=pageNo+1;
-    objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] /Resources << /ProcSet [/PDF /Text] /Font << /F1 ${fontNormal} 0 R /F2 ${fontBold} 0 R >> >> /Contents ${contentNo} 0 R >>`);
+    objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] /Resources << /ProcSet [/PDF /Text /ImageC] /Font << /F1 ${fontNormal} 0 R /F2 ${fontBold} 0 R >> /XObject << /Im1 ${imageObjectNumber} 0 R >> >> /Contents ${contentNo} 0 R >>`);
     objects.push(`<< /Length ${Buffer.byteLength(stream,'latin1')} >>\nstream\n${stream}\nendstream`);
   });
+  if (logoJpeg) {
+    objects.push(`<< /Type /XObject /Subtype /Image /Width 839 /Height 184 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${logoJpeg.length} >>\nstream\n${logoJpeg.toString('latin1')}\nendstream`);
+  } else {
+    objects.push('<< /Type /XObject /Subtype /Image /Width 1 /Height 1 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Length 3 >>\nstream\n\xff\xff\xff\nendstream');
+  }
   objects.push('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>');
   objects.push('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>');
   let pdf='%PDF-1.4\n', offsets=[0];
