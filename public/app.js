@@ -1463,7 +1463,7 @@ async function renderAdminFinancial() {
       alert('La fecha inicial no puede ser posterior a la fecha final.');
       return;
     }
-    const url = `${ADMIN_PATH}/resumen-financiero/pdf?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&t=${Date.now()}`;
+    const url = `/api/admin/resumen-financiero/pdf?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&t=${Date.now()}`;
     window.open(url, '_blank', 'noopener');
   });
   document.querySelector('#financialDateFrom')?.addEventListener('change', renderFinancial);
