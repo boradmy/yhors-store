@@ -2544,13 +2544,114 @@ app.get('/api/admin/orders', requireOrdersAccess, (req, res) => {
   return res.json(orders.map(decorateOrderAssignment));
 });
 
+
+function buildEditedOrderItems(requestedItems, products) {
+  if (!Array.isArray(requestedItems) || requestedItems.length < 1 || requestedItems.length > 50) {
+    throw new Error('El pedido debe contener entre 1 y 50 productos.');
+  }
+
+  const byId = new Map(products.map(product => [String(product.id), product]));
+  const items = [];
+
+  for (const requested of requestedItems) {
+    const product = byId.get(String(requested?.productId || ''));
+    const quantity = Number.parseInt(requested?.quantity, 10);
+    if (!product) throw new Error('Uno de los productos seleccionados ya no existe en el inventario.');
+    if (!Number.isInteger(quantity) || quantity < 1 || quantity > 99) {
+      throw new Error(`La cantidad de “${product.name}” debe estar entre 1 y 99.`);
+    }
+
+    const purchaseMode = requested?.purchaseMode === 'rental' ? 'rental' : 'purchase';
+    const rentalDays = purchaseMode === 'rental' ? Number.parseInt(requested?.rentalDays, 10) : null;
+    if (purchaseMode === 'rental' && (!Number.isInteger(rentalDays) || rentalDays < 1 || rentalDays > 10)) {
+      throw new Error(`El alquiler de “${product.name}” debe tener entre 1 y 10 días.`);
+    }
+
+    const price = purchaseMode === 'rental'
+      ? Number(product.rentalPrice)
+      : Number(product.salePrice ?? product.price);
+
+    if (!Number.isFinite(price) || price < 0 || (purchaseMode === 'rental' && product.rentalPrice === null)) {
+      throw new Error(`El producto “${product.name}” no tiene un precio válido para ${purchaseMode === 'rental' ? 'alquiler' : 'compra'}.`);
+    }
+
+    const durationMultiplier = purchaseMode === 'rental' ? rentalDays : 1;
+    items.push({
+      productId: product.id,
+      sku: product.sku || '',
+      name: product.name,
+      category: product.category,
+      purchaseMode,
+      rentalDays,
+      quantity,
+      unitPrice: Math.round(price * 100) / 100,
+      subtotal: Math.round(price * quantity * durationMultiplier * 100) / 100
+    });
+  }
+
+  // Evita líneas duplicadas idénticas y conserva separadas las modalidades/duraciones distintas.
+  const merged = new Map();
+  for (const item of items) {
+    const key = `${item.productId}|${item.purchaseMode}|${item.rentalDays || ''}|${item.unitPrice}`;
+    const existing = merged.get(key);
+    if (existing) {
+      existing.quantity += item.quantity;
+      existing.subtotal = Math.round(existing.unitPrice * existing.quantity * (existing.purchaseMode === 'rental' ? existing.rentalDays : 1) * 100) / 100;
+      if (existing.quantity > 99) throw new Error(`La cantidad total de “${item.name}” no puede superar 99.`);
+    } else {
+      merged.set(key, { ...item });
+    }
+  }
+
+  return [...merged.values()];
+}
+
+function applyOrderItemStockDelta(currentOrder, nextItems) {
+  if (!orderStatusUsesStock(currentOrder.status || 'Pendiente')) return;
+
+  const currentDemand = getStockDemand(currentOrder);
+  const nextDemand = getStockDemand({ items: nextItems });
+  const products = readProducts().map(normalizeProduct);
+  const ids = new Set([...currentDemand.keys(), ...nextDemand.keys()]);
+
+  for (const productId of ids) {
+    const before = Number(currentDemand.get(productId) || 0);
+    const after = Number(nextDemand.get(productId) || 0);
+    const delta = after - before;
+    if (delta <= 0) continue;
+    const product = products.find(p => String(p.id) === String(productId));
+    if (!product) throw new Error(`El producto del pedido ya no existe: ${productId}`);
+    const available = Number(product.stock || 0);
+    if (!Number.isInteger(available) || available < delta) {
+      throw new Error(`No hay suficiente stock de “${product.name}”. Disponible: ${available}, adicional requerido: ${delta}.`);
+    }
+  }
+
+  let changed = false;
+  const updated = products.map(product => {
+    const before = Number(currentDemand.get(String(product.id)) || 0);
+    const after = Number(nextDemand.get(String(product.id)) || 0);
+    const delta = after - before;
+    if (!delta) return product;
+    changed = true;
+    return normalizeProduct({
+      ...product,
+      stock: Math.max(0, Number(product.stock || 0) - delta),
+      updatedAt: new Date().toISOString()
+    });
+  });
+
+  if (changed) writeProducts(updated);
+}
+
 app.put('/api/admin/orders/:id', requireOrdersAccess, (req, res) => {
   const allowed = ['Pendiente', 'Confirmado', 'Preparado', 'Enviado', 'Entregado', 'Cancelado'];
   const body = req.body || {};
   const hasStatus = Object.prototype.hasOwnProperty.call(body, 'status');
   const hasInternalNote = Object.prototype.hasOwnProperty.call(body, 'internalNote');
   const hasAssignment = Object.prototype.hasOwnProperty.call(body, 'assignedSellerId');
-  if (!hasStatus && !hasInternalNote && !hasAssignment) return res.status(400).json({ error: 'No hay cambios para guardar.' });
+  const hasItems = Object.prototype.hasOwnProperty.call(body, 'items');
+  if (!hasStatus && !hasInternalNote && !hasAssignment && !hasItems) return res.status(400).json({ error: 'No hay cambios para guardar.' });
 
   const session = getSession(req);
   const orders = readOrders();
@@ -2559,6 +2660,16 @@ app.put('/api/admin/orders/:id', requireOrdersAccess, (req, res) => {
   const currentOrder = orders[index];
   if (isSellerRole(session.role) && currentOrder.assignedSellerId !== session.accountId) {
     return res.status(403).json({ error: 'Este pedido no está asignado a tu usuario.' });
+  }
+
+  let nextItems = currentOrder.items || [];
+  if (hasItems) {
+    try {
+      const products = readProducts().map(normalizeProduct);
+      nextItems = buildEditedOrderItems(body.items, products);
+    } catch (error) {
+      return res.status(400).json({ error: error.message || 'No se pudieron validar los productos del pedido.' });
+    }
   }
 
   if (hasAssignment && !isStoreManager(session.role) && !isAdmin(session.role)) {
@@ -2591,20 +2702,30 @@ app.put('/api/admin/orders/:id', requireOrdersAccess, (req, res) => {
   const statusChanged = previousStatus.toLocaleLowerCase('es-EC') !== nextStatus.toLocaleLowerCase('es-EC');
 
   // El stock representa exactamente los pedidos cuyo estado está activo.
+  // Al editar productos de un pedido activo, solo se aplica la diferencia:
+  // productos añadidos descuentan stock y productos quitados/devueltos lo recuperan.
+  // Los alquileres no reservan stock.
   // Al pasar de cualquier estado activo -> Cancelado: devuelve unidades.
   // Al pasar de Cancelado -> cualquier estado activo: descuenta unidades.
-  // Guardar sin cambiar estado no modifica stock.
   try {
+    if (hasItems && previousUsesStock === nextUsesStock) applyOrderItemStockDelta(currentOrder, nextItems);
     if (statusChanged && previousUsesStock && !nextUsesStock) {
       restoreOrderPurchaseStock(currentOrder);
     } else if (statusChanged && !previousUsesStock && nextUsesStock) {
-      reserveOrderStock(currentOrder);
+      reserveOrderStock(hasItems ? { ...currentOrder, items: nextItems } : currentOrder);
     }
   } catch (error) {
     return res.status(400).json({ error: error.message || 'No se pudo sincronizar el inventario con el pedido.' });
   }
 
   const updated = { ...currentOrder, assignedSellerId, updatedAt: new Date().toISOString() };
+  if (hasItems) {
+    updated.items = nextItems;
+    updated.subtotal = Math.round(nextItems.reduce((sum, item) => sum + Number(item.subtotal || 0), 0) * 100) / 100;
+    updated.shippingCost = Number(currentOrder.shippingCost ?? currentOrder.delivery?.cost ?? 0) || 0;
+    updated.total = Math.round((updated.subtotal + updated.shippingCost) * 100) / 100;
+    updated.delivery = { ...(currentOrder.delivery || {}), cost: updated.shippingCost };
+  }
   if (hasStatus) updated.status = normalizedStatus;
   if (orderStatusUsesStock(normalizedStatus)) {
     updated.stockReservedAt = currentOrder.stockReservedAt || new Date().toISOString();
