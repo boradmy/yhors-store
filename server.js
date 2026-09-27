@@ -2716,13 +2716,13 @@ function buildFinancialReportPdf(report) {
 
   if (y < 120) newPage();
   y -= 8;
-  fill(ops,margin,y-74,right-margin,74,0.95,0.92,0.84);
-  rect(ops,margin,y-74,right-margin,74,.8);
+  fill(ops,margin,y-88,right-margin,88,0.95,0.92,0.84);
+  rect(ops,margin,y-88,right-margin,88,.8);
   drawText(ops,'DESGLOSE FINAL',margin+10,y-16,9,boldFont);
   drawText(ops,'Ventas',margin+10,y-33,8); drawText(ops,money(report.totals.sales),right-10,y-33,8,normalFont,'right');
   drawText(ops,'Compras',margin+10,y-47,8); drawText(ops,money(report.totals.purchases),right-10,y-47,8,normalFont,'right');
   drawText(ops,'Gastos',margin+10,y-61,8); drawText(ops,money(report.totals.expenses),right-10,y-61,8,normalFont,'right');
-  drawText(ops,'GANANCIA NETA',right-150,y-61,8,boldFont,'right'); drawText(ops,money(report.totals.profit),right-10,y-61,8,boldFont,'right');
+  drawText(ops,'GANANCIA NETA',right-150,y-75,8,boldFont,'right'); drawText(ops,money(report.totals.profit),right-10,y-75,8,boldFont,'right');
 
   pages.push(ops.join('\n'));
 
