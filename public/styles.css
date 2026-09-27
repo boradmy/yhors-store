@@ -2282,13 +2282,23 @@ body.generate-modal-open{overflow:hidden}
     font-size: .68rem;
   }
 
+  /* En celular separamos claramente cantidad, precio unitario y total.
+     Antes los cuatro bloques intentaban caber en una sola línea y
+     especialmente en alquiler el "/ día" terminaba encima del total. */
+  .order-edit-products-card .order-edit-product-row {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-rows: auto auto;
+    gap: 7px 10px;
+    align-items: center;
+  }
+
   .order-edit-products-card .generate-qty {
     grid-column: 1;
-    grid-row: 2;
+    grid-row: 2 / span 2;
     min-width: 0;
     justify-content: flex-start;
     align-items: center;
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
     gap: 5px;
   }
 
@@ -2315,23 +2325,29 @@ body.generate-modal-open{overflow:hidden}
 
   .order-edit-products-card .generate-unit-price,
   .order-edit-products-card .generate-line-total {
-    grid-row: 2;
-    align-self: center;
     white-space: nowrap;
     font-size: .82rem;
+    min-width: 0;
   }
 
   .order-edit-products-card .generate-unit-price {
     grid-column: 2;
+    grid-row: 2;
+    justify-self: end;
+    align-self: end;
   }
 
   .order-edit-products-card .generate-line-total {
-    grid-column: 3;
+    grid-column: 2;
+    grid-row: 3;
+    justify-self: end;
+    align-self: start;
+    font-size: .88rem;
   }
 
   .order-edit-products-card .order-edit-remove {
-    grid-column: 4;
-    grid-row: 2;
+    grid-column: 3;
+    grid-row: 2 / span 2;
     align-self: center;
     min-height: 34px;
     padding: 6px 8px;
