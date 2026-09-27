@@ -2689,7 +2689,7 @@ function buildFinancialReportPdf(report) {
     drawText(ops,m[1],x+8,y-37,11,boldFont);
   });
   y -= 75;
-  drawText(ops, `Pedidos activos: ${Number(report.totals.orderCount || 0)}   ·   Margen: ${Number(report.totals.margin || 0).toFixed(2)}%`, margin, y, 8);
+  drawText(ops, `Ventas Totales: ${Number(report.totals.orderCount || 0)}   ·   Margen: ${Number(report.totals.margin || 0).toFixed(2)}%`, margin, y, 8);
   y -= 22;
 
   const section = (label) => {
@@ -2703,7 +2703,7 @@ function buildFinancialReportPdf(report) {
   section('VENTAS POR VENDEDOR');
   y -= 5;
   drawText(ops,'VENDEDOR',margin,y,7,boldFont);
-  drawText(ops,'VENTAS CONFIRMADAS',right-150,y,7,boldFont,'right');
+  drawText(ops,'VENTAS TOTALES',right-150,y,7,boldFont,'right');
   drawText(ops,'TOTAL VENDIDO',right,y,7,boldFont,'right');
   y -= 10;
   for (const row of (report.salesBySeller || [])) {
