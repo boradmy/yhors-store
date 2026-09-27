@@ -876,8 +876,8 @@ function buildOrderPdf(order) {
     // Ajustes finos del encabezado:
     // cada línea tiene su propio desplazamiento horizontal para conservar
     // el centrado visual solicitado sin mover el recuadro PENDIENTE.
-    const titleRight = headerRight + 6;
-    const orderRight = headerRight + 4;
+    const titleRight = headerRight - 10;
+    const orderRight = headerRight + 0;
     const dateRight = headerRight + 4;
     drawText(ops, 'ORDEN DE PEDIDO', titleRight, y - 8, 18, boldFont, 'right');
     drawText(ops, `N. ORDEN  ${orderNo}`, orderRight, y - 29, 9, boldFont, 'right');
