@@ -872,11 +872,14 @@ function buildOrderPdf(order) {
     // generador PDF usa un cálculo aproximado del ancho de las fuentes.
     // Así ningún texto del encabezado puede quedar recortado.
     const headerRight = right - 18;
-    drawText(ops, 'ORDEN DE PEDIDO', headerRight, y - 8, 18, boldFont, 'right');
-    drawText(ops, `N. ORDEN  ${orderNo}`, headerRight, y - 29, 9, boldFont, 'right');
-    drawText(ops, `FECHA  ${date}`, headerRight, y - 44, 8, normalFont, 'right');
     const statusW = 116;
     const statusX = right - statusW;
+    // Los tres textos del encabezado comparten exactamente el mismo centro
+    // vertical del recuadro de estado. El recuadro PENDIENTE NO se mueve.
+    const headerCenter = statusX + statusW / 2;
+    drawText(ops, 'ORDEN DE PEDIDO', headerCenter, y - 8, 18, boldFont, 'center');
+    drawText(ops, `N. ORDEN  ${orderNo}`, headerCenter, y - 29, 9, boldFont, 'center');
+    drawText(ops, `FECHA  ${date}`, headerCenter, y - 44, 8, normalFont, 'center');
     setFill(ops, 0.78, 0.60, 0.24);
     ops.push(`0.78 0.60 0.24 rg ${statusX} ${y - 68} ${statusW} 18 re f 0 0 0 rg`);
     drawText(ops, safeStatus, statusX + statusW / 2, y - 62, 8, boldFont, 'center');
