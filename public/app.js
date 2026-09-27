@@ -1709,21 +1709,26 @@ async function renderAdminOrders() {
       getDraft(order); productEditorsOpen.add(id); syncOrderEditor(id); button.hidden=true;
     }));
 
-    list.addEventListener('click', event => {
-      const open=event.target.closest('[data-order-open-picker]');
-      if(open){ openOrderProductPicker(open.dataset.orderOpenPicker); return; }
-      const qty=event.target.closest('[data-order-draft-qty]');
-      if(qty){ const id=qty.closest('[data-order-items-editor]')?.dataset.orderItemsEditor; const order=orders.find(o=>o.id===id); if(!order)return; const items=getDraft(order); const i=Number(qty.dataset.orderDraftQty); if(!items[i])return; items[i].quantity=Math.max(1,Math.min(99,Number(items[i].quantity||1)+Number(qty.dataset.change||0))); syncOrderEditor(id); return; }
-      const rem=event.target.closest('[data-order-draft-remove]');
-      if(rem){ const id=rem.closest('[data-order-items-editor]')?.dataset.orderItemsEditor; const order=orders.find(o=>o.id===id); if(!order)return; const items=getDraft(order); const i=Number(rem.dataset.orderDraftRemove); if(items.length<=1){alert('Un pedido debe conservar al menos un producto.');return;} items.splice(i,1); syncOrderEditor(id); return; }
-      // Los días de alquiler se manejan en `change`, no en `click`.
-      // Si se redibuja el editor durante el click de un <select>, el navegador
-      // cierra inmediatamente el menú y obliga a mantener el mouse pulsado.
-    });
+    // Estos listeners se delegan una sola vez sobre la lista. drawOrders()
+    // puede ejecutarse muchas veces (filtros, fechas, guardados, etc.); si
+    // volviéramos a registrarlos en cada redibujado, un click en "Quitar"
+    // dispararía varios manejadores y mostraría el mismo aviso repetido.
+    if (!list.dataset.orderEditorEventsBound) {
+      list.addEventListener('click', event => {
+        const open=event.target.closest('[data-order-open-picker]');
+        if(open){ openOrderProductPicker(open.dataset.orderOpenPicker); return; }
+        const qty=event.target.closest('[data-order-draft-qty]');
+        if(qty){ const id=qty.closest('[data-order-items-editor]')?.dataset.orderItemsEditor; const order=orders.find(o=>o.id===id); if(!order)return; const items=getDraft(order); const i=Number(qty.dataset.orderDraftQty); if(!items[i])return; items[i].quantity=Math.max(1,Math.min(99,Number(items[i].quantity||1)+Number(qty.dataset.change||0))); syncOrderEditor(id); return; }
+        const rem=event.target.closest('[data-order-draft-remove]');
+        if(rem){ const id=rem.closest('[data-order-items-editor]')?.dataset.orderItemsEditor; const order=orders.find(o=>o.id===id); if(!order)return; const items=getDraft(order); const i=Number(rem.dataset.orderDraftRemove); if(items.length<=1){alert('Un pedido debe conservar al menos un producto.');return;} items.splice(i,1); syncOrderEditor(id); return; }
+        // Los días de alquiler se manejan en `change`, no en `click`.
+        // Si se redibuja el editor durante el click de un <select>, el navegador
+        // cierra inmediatamente el menú y obliga a mantener el mouse pulsado.
+      });
 
-    // Cambiar los días no debe reconstruir todo el editor: así el <select>
-    // conserva su comportamiento nativo y el menú permanece abierto normalmente.
-    list.addEventListener('change', event => {
+      // Cambiar los días no debe reconstruir todo el editor: así el <select>
+      // conserva su comportamiento nativo y el menú permanece abierto normalmente.
+      list.addEventListener('change', event => {
       const select = event.target.closest('[data-order-draft-days]');
       if (!select) return;
       const editor = select.closest('[data-order-items-editor]');
@@ -1742,15 +1747,17 @@ async function renderAdminOrders() {
       const quantity = Math.max(1, Number(item.quantity || 1));
       const total = unit * quantity * item.rentalDays;
       const row = select.closest('.order-edit-product-row');
-      if (row) {
-        const info = row.querySelector('.generate-product-info small');
-        const totalEl = row.querySelector('.generate-line-total');
-        const unitEl = row.querySelector('.generate-unit-price');
-        if (info) info.textContent = `SKU: ${product?.sku || item.sku || '—'} · Alquiler · ${item.rentalDays} día${item.rentalDays === 1 ? '' : 's'}`;
-        if (unitEl) unitEl.textContent = `${money(unit)} / día`;
-        if (totalEl) totalEl.textContent = money(total);
-      }
-    });
+        if (row) {
+          const info = row.querySelector('.generate-product-info small');
+          const totalEl = row.querySelector('.generate-line-total');
+          const unitEl = row.querySelector('.generate-unit-price');
+          if (info) info.textContent = `SKU: ${product?.sku || item.sku || '—'} · Alquiler · ${item.rentalDays} día${item.rentalDays === 1 ? '' : 's'}`;
+          if (unitEl) unitEl.textContent = `${money(unit)} / día`;
+          if (totalEl) totalEl.textContent = money(total);
+        }
+      });
+      list.dataset.orderEditorEventsBound = 'true';
+    }
 
     list.querySelectorAll('[data-order-items-cancel]').forEach(button=>button.addEventListener('click',()=>{}));
     list.querySelectorAll('[data-order-note-edit]').forEach(button => button.addEventListener('click', () => {
