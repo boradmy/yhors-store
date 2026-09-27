@@ -2396,3 +2396,27 @@ body.generate-modal-open{overflow:hidden}
 .audit-detail-modal{max-width:760px}
 .audit-detail-modal pre{max-height:60vh;overflow:auto;white-space:pre-wrap;word-break:break-word;background:#f7f7f8;padding:16px;border-radius:10px}
 @media (max-width:800px){.audit-filters{grid-template-columns:1fr 1fr}.audit-table{min-width:850px}}
+
+/* V15.1 Auditoría */
+.audit-panel{margin-top:20px}
+.audit-filters{display:grid;grid-template-columns:repeat(6,minmax(120px,1fr));gap:12px;align-items:end;margin:18px 0}
+.audit-summary{padding:10px 0;color:var(--muted,#6b7280)}
+.audit-list{display:grid;gap:10px}
+.audit-entry{border:1px solid rgba(0,0,0,.08);border-radius:14px;background:#fff;overflow:hidden}
+.audit-entry.audit-failure{border-left:4px solid #c0392b}
+.audit-entry-head{width:100%;display:flex;align-items:center;gap:12px;padding:15px 16px;border:0;background:transparent;text-align:left;cursor:pointer}
+.audit-entry-icon{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;background:#edf7ef;color:#247a3b;font-weight:800}
+.audit-failure .audit-entry-icon{background:#fdecec;color:#b42318}
+.audit-entry-main{display:grid;gap:3px;flex:1}
+.audit-entry-main small{color:var(--muted,#6b7280)}
+.audit-entry-arrow{font-size:24px;transition:transform .2s}
+.audit-entry.is-open .audit-entry-arrow{transform:rotate(90deg)}
+.audit-entry-details{padding:0 16px 16px 58px}
+.audit-meta{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.audit-meta span{display:grid;gap:3px;padding:8px 10px;border-radius:9px;background:#f7f7f8;font-size:12px}
+.audit-meta b{font-size:10px;text-transform:uppercase;color:#777}
+.audit-detail-box{padding:14px;border-radius:10px;background:#f8f9fb;overflow:auto}
+.audit-json{margin:0;white-space:pre-wrap;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace}
+.audit-user-agent{display:block;margin-top:10px;color:#777}
+@media(max-width:900px){.audit-filters{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:560px){.audit-filters{grid-template-columns:1fr}.audit-entry-details{padding-left:16px}.audit-meta{display:grid;grid-template-columns:1fr 1fr}}

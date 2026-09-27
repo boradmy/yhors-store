@@ -27,6 +27,96 @@ const STOREFRONT_FILE = path.join(DATA_DIR, 'storefront.json');
 const CLASSIFICATIONS_FILE = path.join(DATA_DIR, 'classifications.json');
 const ORDERS_FILE = path.join(DATA_DIR, 'orders.json');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
+const AUDIT_FILE = path.join(DATA_DIR, 'audit.json');
+const AUDIT_MAX_RECORDS = 50000;
+
+function readAudit() {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(AUDIT_FILE, 'utf8'));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeAudit(entries) {
+  fs.writeFileSync(AUDIT_FILE, `${JSON.stringify(entries.slice(-AUDIT_MAX_RECORDS), null, 2)}\n`, 'utf8');
+}
+
+function auditValue(value) {
+  if (value === undefined) return null;
+  if (value === null) return null;
+  if (typeof value === 'string') return value.length > 1000 ? `${value.slice(0, 1000)}…` : value;
+  if (typeof value === 'number' || typeof value === 'boolean') return value;
+  if (Array.isArray(value)) return value.slice(0, 100).map(auditValue);
+  if (typeof value === 'object') {
+    const safe = {};
+    for (const [key, val] of Object.entries(value)) {
+      if (/password|token|secret|cookie|authorization|hash/i.test(key)) continue;
+      safe[key] = auditValue(val);
+    }
+    return safe;
+  }
+  return String(value);
+}
+
+function auditDiff(before, after, fields) {
+  const changes = {};
+  for (const field of fields) {
+    const a = auditValue(before?.[field]);
+    const b = auditValue(after?.[field]);
+    if (JSON.stringify(a) !== JSON.stringify(b)) changes[field] = { before: a, after: b };
+  }
+  return changes;
+}
+
+function auditLog(req, action, module, details = {}, result = 'success') {
+  try {
+    const session = req ? getSession(req) : null;
+    const entry = {
+      id: `AUD-${new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`,
+      createdAt: new Date().toISOString(),
+      username: session?.username || details.username || null,
+      accountId: session?.accountId || null,
+      role: session?.role || null,
+      module,
+      action,
+      result,
+      ip: req?.ip || req?.socket?.remoteAddress || null,
+      userAgent: req?.get?.('user-agent')?.slice(0, 300) || null,
+      details: auditValue(details)
+    };
+    const entries = readAudit();
+    entries.push(entry);
+    writeAudit(entries);
+  } catch (error) {
+    console.error('[YHORS AUDIT] No se pudo registrar evento:', error.message);
+  }
+}
+
+function auditOrderSnapshot(order) {
+  if (!order) return null;
+  return {
+    orderNumber: order.orderNumber,
+    status: order.status,
+    assignedSellerId: order.assignedSellerId || null,
+    assignedSellerName: order.assignedSellerName || null,
+    internalNote: order.internalNote || '',
+    total: Number(order.total || 0),
+    items: (order.items || []).map(item => ({
+      productId: item.productId,
+      name: item.name,
+      sku: item.sku,
+      purchaseMode: item.purchaseMode,
+      quantity: Number(item.quantity || 0),
+      rentalDays: item.rentalDays || null,
+      unitPrice: Number(item.unitPrice || 0),
+      subtotal: Number(item.subtotal || 0)
+    }))
+  };
+}
+
+
 const EXPENSES_FILE = path.join(DATA_DIR, 'expenses.json');
 const UPLOADS_DIR = process.env.YHORS_STORAGE_DIR ? path.join(STORAGE_ROOT, 'uploads') : path.join(__dirname, 'uploads');
 const BACKUPS_DIR = process.env.YHORS_STORAGE_DIR ? path.join(STORAGE_ROOT, 'backups') : path.join(__dirname, 'data', 'backups');
@@ -2071,7 +2161,10 @@ app.post('/api/login', async (req, res) => {
   const password = String(req.body?.password || '');
   const ip = clientIp(req);
 
-  if (!username || !password) return res.status(401).json({ error: 'Usuario o contraseña incorrectos.' });
+  if (!username || !password) {
+    auditLog(req, 'Inicio de sesión fallido', 'Seguridad', { username, reason: 'Credenciales incompletas' }, 'failure');
+    return res.status(401).json({ error: 'Usuario o contraseña incorrectos.' });
+  }
 
   const key = rateLimitKey(ip, username);
   const ipKey = `login-ip:${ip}`;
@@ -2104,13 +2197,16 @@ app.post('/api/login', async (req, res) => {
         const minutes = Math.ceil(protection.remainingSeconds / 60);
         return res.status(423).json({ error: `Demasiados intentos. Tu acceso se bloqueará durante ${minutes} minutos.`, lockoutSeconds: protection.remainingSeconds, lockoutStage: protection.stage });
       }
+      auditLog(req, 'Inicio de sesión fallido', 'Seguridad', { username, attemptsRemaining: protection.attemptsRemaining, attemptsUsed: protection.failures }, 'failure');
       return res.status(401).json({ error: 'Usuario o contraseña incorrectos.', attemptsRemaining: protection.attemptsRemaining, attemptsUsed: protection.failures, attemptsLimit: ACCOUNT_LOGIN_ATTEMPTS_BEFORE_LOCK });
     }
+    auditLog(req, 'Inicio de sesión fallido', 'Seguridad', { username, reason: 'Credenciales incorrectas' }, 'failure');
     return res.status(401).json({ error: 'Usuario o contraseña incorrectos.' });
   }
 
   clearFailedAttempts(ip, username);
   clearLoginProtection(account.id);
+  auditLog(req, 'Inicio de sesión exitoso', 'Seguridad', { username: account.username, accountId: account.id, role: account.role });
   const session = makeSession(account.username, account.role, account.id);
   res.cookie(SESSION_COOKIE, session.id, {
     httpOnly: true,
@@ -2129,6 +2225,7 @@ app.post('/api/login', async (req, res) => {
 });
 
 app.post('/api/logout', (req, res) => {
+  auditLog(req, 'Cierre de sesión', 'Seguridad');
   destroySession(req);
   res.clearCookie(SESSION_COOKIE, { httpOnly: true, sameSite: 'strict', secure: COOKIE_SECURE, path: '/' });
   res.json({ ok: true });
@@ -2171,6 +2268,7 @@ app.post('/api/orders', async (req, res) => {
     return res.status(500).json({ error: 'No se pudo registrar el pedido. No se realizó el descuento de inventario.' });
   }
 
+  auditLog(req, 'Pedido creado', 'Pedidos', { orderId: order.id, orderNumber: order.orderNumber, source: 'public', order: auditOrderSnapshot(order) });
   try { await sendOrderConfirmationEmail(order); } catch (emailError) { console.error('[YHORS] No se pudo enviar la confirmación por correo:', emailError.message); }
   return res.status(201).json({ orderNumber: order.orderNumber, status: order.status, total: order.total });
 });
@@ -2246,6 +2344,7 @@ app.post('/api/admin/users', requireAdmin, async (req, res) => {
   };
   users.push(user);
   writeUsers(users);
+  auditLog(req, 'Usuario creado', 'Usuarios', { accountId: user.id, username: user.username, role: user.role, active: user.active });
   return res.status(201).json(publicUser(user));
 });
 
@@ -2279,6 +2378,15 @@ app.put('/api/admin/users/:id', requireAdmin, async (req, res) => {
   if (result.user.password) updated.passwordHash = await bcrypt.hash(result.user.password, 12);
   users[index] = updated;
   writeUsers(users);
+  auditLog(req, 'Usuario actualizado', 'Usuarios', {
+    accountId: updated.id,
+    username: updated.username,
+    changes: auditDiff(
+      { name: current.name, username: current.username, role: current.role, active: current.active, passwordChanged: false },
+      { name: updated.name, username: updated.username, role: updated.role, active: updated.active, passwordChanged: Boolean(result.user.password) },
+      ['name','username','role','active','passwordChanged']
+    )
+  });
   if (current.role !== updated.role || current.active !== updated.active || Boolean(result.user.password)) {
     destroySessionsForAccount(current.id);
   }
@@ -2298,6 +2406,7 @@ app.delete('/api/admin/users/:id', requireAdmin, (req, res) => {
   }
   users.splice(index, 1);
   writeUsers(users);
+  auditLog(req, 'Usuario eliminado', 'Usuarios', { accountId: target.id, username: target.username, role: target.role });
   if (isSellerRole(target.role)) {
     const orders = readOrders();
     const changed = orders.map(order => order.assignedSellerId === target.id
@@ -3112,6 +3221,11 @@ app.put('/api/admin/orders/:id', requireOrdersAccess, (req, res) => {
   if (hasInternalNote) updated.internalNote = cleanText(body.internalNote, 5000);
   orders[index] = updated;
   writeOrders(orders);
+  auditLog(req, 'Pedido actualizado', 'Pedidos', {
+    orderId: updated.id,
+    orderNumber: updated.orderNumber,
+    changes: auditDiff(auditOrderSnapshot(currentOrder), auditOrderSnapshot(updated), ['status','assignedSellerId','internalNote','total','items'])
+  });
   return res.json(decorateOrderAssignment(updated));
 });
 
@@ -3131,9 +3245,43 @@ app.delete('/api/admin/orders/:id', requireStoreManagerOrAdmin, (req, res) => {
   }
 
   writeOrders(orders.filter(item => item.id !== req.params.id));
+  auditLog(req, 'Pedido eliminado', 'Pedidos', {
+    orderId: order.id,
+    orderNumber: order.orderNumber,
+    status: order.status,
+    stockReturned: Boolean(order.stockReservedAt && !order.stockRestoredAt),
+    order: auditOrderSnapshot(order)
+  });
   return res.status(204).end();
 });
 
+
+app.get('/api/admin/audit', requireAdmin, (req, res) => {
+  const entries = readAudit().slice().reverse();
+  const q = String(req.query.q || '').trim().toLowerCase();
+  const module = String(req.query.module || '').trim();
+  const action = String(req.query.action || '').trim();
+  const username = String(req.query.username || '').trim().toLowerCase();
+  const from = String(req.query.from || '').trim();
+  const to = String(req.query.to || '').trim();
+  const filtered = entries.filter(entry => {
+    const date = String(entry.createdAt || '').slice(0, 10);
+    const hay = JSON.stringify(entry).toLowerCase();
+    return (!q || hay.includes(q))
+      && (!module || entry.module === module)
+      && (!action || entry.action === action)
+      && (!username || String(entry.username || '').toLowerCase() === username)
+      && (!from || date >= from)
+      && (!to || date <= to);
+  });
+  res.json({
+    entries: filtered.slice(0, 1000),
+    total: filtered.length,
+    availableModules: [...new Set(entries.map(e => e.module).filter(Boolean))].sort(),
+    availableActions: [...new Set(entries.map(e => e.action).filter(Boolean))].sort(),
+    availableUsers: [...new Set(entries.map(e => e.username).filter(Boolean))].sort()
+  });
+});
 
 app.get('/api/admin/backups', requireAdmin, (_, res) => {
   return res.json({
@@ -3316,6 +3464,7 @@ app.post('/api/admin/products', requireAdmin, (req, res) => {
   const product = normalizeProduct({ ...result.product, id: crypto.randomUUID(), createdAt: new Date().toISOString() });
   products.unshift(product);
   writeProducts(products);
+  auditLog(req, 'Producto creado', 'Inventario', { productId: product.id, sku: product.sku, name: product.name, after: auditValue(product) });
   return res.status(201).json(product);
 });
 
@@ -3331,6 +3480,11 @@ app.put('/api/admin/products/:id', requireAdmin, (req, res) => {
   const currentImages = new Set(products[index].images || []);
   previousImages.forEach(imageUrl => { if (!currentImages.has(imageUrl)) deleteUploadedImage(imageUrl); });
   writeProducts(products);
+  auditLog(req, 'Producto actualizado', 'Inventario', {
+    productId: products[index].id,
+    sku: products[index].sku,
+    changes: auditDiff(previous, products[index], ['name','sku','category','stock','purchasePrice','salePrice','rentalPrice','published','description'])
+  });
   return res.json(products[index]);
 });
 
