@@ -2703,13 +2703,13 @@ function buildFinancialReportPdf(report) {
   section('VENTAS POR VENDEDOR');
   y -= 5;
   drawText(ops,'VENDEDOR',margin,y,7,boldFont);
-  drawText(ops,'VENTAS TOTALES',right-150,y,7,boldFont,'right');
+  drawText(ops,'VENTAS TOTALES',right-140,y,7,boldFont,'right');
   drawText(ops,'TOTAL VENDIDO',right,y,7,boldFont,'right');
   y -= 10;
   for (const row of (report.salesBySeller || [])) {
     if (y < 55) newPage(), section('VENTAS POR VENDEDOR (CONTINUACIÓN)');
     drawText(ops,wrap(row.sellerName || 'Sin vendedor',38)[0],margin,y,8);
-    drawText(ops,String(row.orders || 0),right-150,y,8,normalFont,'right');
+    drawText(ops,String(row.orders || 0),right-140,y,8,normalFont,'right');
     drawText(ops,money(row.total),right,y,8,boldFont,'right');
     y -= 16; line(ops,margin,y,right,y,.35); y -= 7;
   }
@@ -2719,7 +2719,7 @@ function buildFinancialReportPdf(report) {
   section('GASTOS DEL PERÍODO');
   drawText(ops,'FECHA',margin,y,7,boldFont);
   drawText(ops,'CONCEPTO / DETALLE',margin+75,y,7,boldFont);
-  drawText(ops,'VALOR',right-18,y,7,boldFont,'center');
+  drawText(ops,'VALOR',right-16,y,7,boldFont,'center');
   y -= 10;
   for (const expense of (report.expenses || [])) {
     const lines = wrap(`${expense.description || 'Gasto'}${expense.note ? ` — ${expense.note}` : ''}`,62);
