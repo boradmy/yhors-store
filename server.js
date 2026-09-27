@@ -868,15 +868,15 @@ function buildOrderPdf(order) {
     }
     // Identidad del documento centrada en un mismo eje para que el encabezado
     // no quede desalineado entre título, número, fecha y estado.
-    const headerCenter = margin + contentWidth * 0.78;
-    drawText(ops, 'ORDEN DE PEDIDO', headerCenter, y - 8, 18, boldFont, 'center');
-    drawText(ops, `N. ORDEN  ${orderNo}`, headerCenter, y - 29, 9, boldFont, 'center');
-    drawText(ops, `FECHA  ${date}`, headerCenter, y - 44, 8, normalFont, 'center');
+    const headerRight = right;
+    drawText(ops, 'ORDEN DE PEDIDO', headerRight, y - 8, 18, boldFont, 'right');
+    drawText(ops, `N. ORDEN  ${orderNo}`, headerRight, y - 29, 9, boldFont, 'right');
+    drawText(ops, `FECHA  ${date}`, headerRight, y - 44, 8, normalFont, 'right');
     const statusW = 116;
-    const statusX = headerCenter - statusW / 2;
+    const statusX = right - statusW;
     setFill(ops, 0.78, 0.60, 0.24);
     ops.push(`0.78 0.60 0.24 rg ${statusX} ${y - 68} ${statusW} 18 re f 0 0 0 rg`);
-    drawText(ops, safeStatus, headerCenter, y - 62, 8, boldFont, 'center');
+    drawText(ops, safeStatus, statusX + statusW / 2, y - 62, 8, boldFont, 'center');
     y -= 85;
     line(ops, margin, y, right, y, 1.1);
     y -= 14;
@@ -891,28 +891,27 @@ function buildOrderPdf(order) {
     drawText(ops, `ESTADO DE DESPACHO: ${status === 'Pendiente' ? 'PENDIENTE' : safeStatus}`, margin + 9, y - 42, 7, boldFont);
     y -= sellerBoxH + 13;
 
-    // Customer block, split into two columns like a commercial invoice.
+    // Customer block: compact label/value spacing for a cleaner commercial document.
     const customerBoxH = 90;
     rect(ops, margin, y - customerBoxH, contentWidth, customerBoxH, 0.8);
     const mid = margin + contentWidth * 0.55;
     line(ops, mid, y, mid, y - customerBoxH, 0.6);
     drawText(ops, 'DATOS DEL CLIENTE', margin + 9, y - 14, 9, boldFont);
-    drawText(ops, 'Nombre / Razon social:', margin + 9, y - 31, 7, normalFont);
-    drawText(ops, customer.name || '-', margin + 105, y - 31, 8, boldFont);
-    drawText(ops, 'Cedula / RUC:', margin + 9, y - 46, 7, normalFont);
-    drawText(ops, customer.cedula || '-', margin + 75, y - 46, 8, boldFont);
-    drawText(ops, 'Telefono:', margin + 9, y - 61, 7, normalFont);
-    drawText(ops, customer.phone || '-', margin + 55, y - 61, 8, normalFont);
-    drawText(ops, 'Correo:', margin + 9, y - 76, 7, normalFont);
-    drawText(ops, customer.email || '-', margin + 48, y - 76, 7, normalFont);
-
-    drawText(ops, 'Ciudad:', mid + 9, y - 31, 7, normalFont);
-    drawText(ops, customer.city || '-', mid + 50, y - 31, 8, boldFont);
-    drawText(ops, 'Direccion:', mid + 9, y - 46, 7, normalFont);
-    const addressLines = wrap(customer.address || 'No registrada', 33);
-    addressLines.slice(0, 2).forEach((t, i) => drawText(ops, t, mid + 58, y - 46 - i * 10, 7, normalFont));
-    drawText(ops, 'Referencia:', mid + 9, y - 71, 7, normalFont);
-    drawText(ops, deliveryLabel, mid + 58, y - 71, 7, normalFont);
+    const labelValue = (label, value, x, baseY, labelSize = 7, valueSize = 8, valueFont = normalFont, maxX = right) => {
+      const labelWidth = String(label).length * labelSize * 0.52;
+      const valueX = x + labelWidth + 6;
+      const maxChars = Math.max(10, Math.floor((maxX - valueX) / (valueSize * 0.52)));
+      const lines = wrap(value || '-', maxChars);
+      drawText(ops, label, x, baseY, labelSize, normalFont);
+      lines.slice(0, 2).forEach((text, i) => drawText(ops, text, valueX, baseY - i * 10, valueSize, valueFont));
+    };
+    labelValue('Nombre / Razon social:', customer.name, margin + 9, y - 31, 7, 7.8, boldFont, mid - 8);
+    labelValue('Cedula / RUC:', customer.cedula, margin + 9, y - 46, 7, 7.8, boldFont, mid - 8);
+    labelValue('Telefono:', customer.phone, margin + 9, y - 61, 7, 7.8, normalFont, mid - 8);
+    labelValue('Correo:', customer.email, margin + 9, y - 76, 7, 7.8, normalFont, mid - 8);
+    labelValue('Ciudad:', customer.city, mid + 9, y - 31, 7, 7.8, boldFont, right - 8);
+    labelValue('Direccion:', customer.address || 'No registrada', mid + 9, y - 46, 7, 7.5, normalFont, right - 8);
+    labelValue('Referencia:', deliveryLabel, mid + 9, y - 71, 7, 7.5, normalFont, right - 8);
     y -= customerBoxH + 14;
 
     // Products table.
@@ -921,10 +920,11 @@ function buildOrderPdf(order) {
     const headerH = 22;
     fillRect(ops, margin, y - headerH, contentWidth, headerH, 0.94, 0.93, 0.89);
     rect(ops, margin, y - headerH, contentWidth, headerH, 0.75);
-    const cols = [margin, margin + 62, margin + 92, margin + 335, margin + 405, right];
+    const cols = [margin, margin + 70, margin + 104, margin + 355, margin + 430, right];
     ['CODIGO', 'CANT', 'DESCRIPCION', 'P. UNIT.', 'TOTAL'].forEach((label, i) => {
-      const x = i === 0 ? cols[0] + 5 : i === 1 ? cols[1] + 15 : i === 2 ? cols[2] + 5 : i === 3 ? cols[3] + 31 : cols[4] + 42;
-      drawText(ops, label, x, y - 14, i === 1 ? 6.2 : 7, boldFont, i >= 3 ? 'center' : 'left');
+      const centers = [null, (cols[1] + cols[2]) / 2, null, (cols[3] + cols[4]) / 2, (cols[4] + cols[5]) / 2];
+      if (i === 0 || i === 2) drawText(ops, label, i === 0 ? cols[0] + 5 : cols[2] + 5, y - 14, 7, boldFont, 'left');
+      else drawText(ops, label, centers[i], y - 14, i === 1 ? 7 : 7, boldFont, 'center');
     });
     cols.slice(1, -1).forEach(x => line(ops, x, y, x, y - headerH, 0.5));
     y -= headerH;
@@ -935,9 +935,9 @@ function buildOrderPdf(order) {
       line(ops, margin, y - rowH, right, y - rowH, 0.5);
       cols.slice(1, -1).forEach(x => line(ops, x, y, x, y - rowH, 0.5));
       drawText(ops, row.sku, margin + 5, top - 14, 6.5, normalFont);
-      drawText(ops, String(row.qty), cols[1] + 15, top - 14, 7.5, boldFont, 'center');
+      drawText(ops, String(row.qty), (cols[1] + cols[2]) / 2, top - 14, 7.5, boldFont, 'center');
       row.descLines.forEach((text, i) => drawText(ops, text, cols[2] + 5, top - 12 - i * 10, 7.5, i === 0 ? boldFont : normalFont));
-      drawText(ops, moneyPdf(row.price), cols[4] - 35, top - 14, 7.5, normalFont, 'right');
+      drawText(ops, moneyPdf(row.price), cols[4] - 8, top - 14, 7.5, normalFont, 'right');
       drawText(ops, moneyPdf(row.lineTotal), right - 7, top - 14, 7.5, boldFont, 'right');
       y -= rowH;
     }
@@ -1031,7 +1031,7 @@ app.get('/robots.txt', (_, res) => {
 });
 
 app.get('/sitemap.xml', (_, res) => {
-  const products = readProducts().map(normalizeProduct);
+  const products = readProducts().map(normalizeProduct).filter(product => product.published !== false);
   const urls = [
     { loc: `${SITE_URL}/` },
     { loc: `${SITE_URL}/yhors-corp` },
@@ -1060,7 +1060,7 @@ app.get('/sitemap.xml', (_, res) => {
 
 // SEO-friendly public routes are rendered server-side so search engines receive useful HTML on first response.
 app.get('/producto/:slug', (req, res) => {
-  const products = readProducts().map(normalizeProduct);
+  const products = readProducts().map(normalizeProduct).filter(product => product.published !== false);
   const product = findProductBySlug(products, req.params.slug);
   if (!product) return res.status(404).send(layout({
     title: 'Producto no encontrado | YHORS-STORE',
@@ -1093,7 +1093,7 @@ app.get('/categoria/:category', (req, res, next) => {
   const key = String(req.params.category || '').toLowerCase();
   if (key === 'principal') return next();
   if (!VALID_PUBLIC_CATEGORIES.includes(key)) return next();
-  const products = readProducts().map(normalizeProduct);
+  const products = readProducts().map(normalizeProduct).filter(product => product.published !== false);
   const label = CATEGORY_LABELS[key];
   const canonical = `${SITE_URL}/categoria/${key}`;
   const description = CATEGORY_DESCRIPTIONS[key];
@@ -1109,7 +1109,7 @@ app.get('/categoria/:category', (req, res, next) => {
 app.get('/categoria/todo', (_, res) => res.redirect(301, '/categoria/principal'));
 
 app.get('/categoria/principal', (_, res) => {
-  const products = readProducts().map(normalizeProduct);
+  const products = readProducts().map(normalizeProduct).filter(product => product.published !== false);
   const canonical = `${SITE_URL}/categoria/principal`;
   const itemList = products.slice(0,100).map((p,i)=>({ '@type':'ListItem', position:i+1, name:p.name, url:productUrl(p) }));
   return res.send(layout({ title:'Catálogo | YHORS-STORE', description:CATEGORY_DESCRIPTIONS.principal, canonical, json:[
@@ -1129,7 +1129,7 @@ app.get('/yhors-corp', (_, res) => {
 app.get('/', (req, res, next) => {
   // Redirect legacy product query URLs to their permanent, descriptive URL.
   if (req.query.producto) {
-    const product = readProducts().map(normalizeProduct).find(item => item.id === String(req.query.producto));
+    const product = readProducts().map(normalizeProduct).find(item => item.id === String(req.query.producto) && item.published !== false);
     if (product) return res.redirect(301, productUrl(product));
   }
   // Search result pages are useful to users but should not become an indexable URL for every query.
@@ -1138,7 +1138,7 @@ app.get('/', (req, res, next) => {
     const products = readProducts().map(normalizeProduct);
     return res.send(layout({ title: `Resultados para ${query} | YHORS-STORE`, description: `Resultados de búsqueda de ${query} en YHORS-STORE.`, canonical: `${SITE_URL}/`, robots: 'noindex,follow', json: [], body: `<main class="section"><div class="section-heading"><div><span class="eyebrow">Búsqueda YHORS</span><h1>Resultados para “${esc(query)}”</h1></div><p>Usa el buscador para explorar productos, marcas y categorías de YHORS-STORE.</p></div><p><a class="button" href="/">Volver al catálogo <span>→</span></a></p></main>` }));
   }
-  const products = readProducts().map(normalizeProduct);
+  const products = readProducts().map(normalizeProduct).filter(product => product.published !== false);
   const canonical = `${SITE_URL}/`;
   const organization = { '@context':'https://schema.org', '@type':'Organization', name:CORPORATE_NAME, url:`${SITE_URL}/yhors-corp`, brand:{ '@type':'Brand', name:'YHORS' }, subOrganization:{ '@type':'OnlineStore', name:SITE_NAME, url:canonical } };
   const website = { '@context':'https://schema.org', '@type':'WebSite', name:SITE_NAME, alternateName:['YHORS','YHORS-STORE'], url:canonical, potentialAction:{ '@type':'SearchAction', target:`${SITE_URL}/?buscar={search_term_string}`, 'query-input':'required name=search_term_string' } };
@@ -1988,6 +1988,7 @@ function validateProduct(input, current = {}, allProducts = []) {
     rentalPrice: category === 'cosplay' ? Math.round(rentalPrice * 100) / 100 : null,
     price: Math.round(salePrice * 100) / 100,
     image: finalImages[0] || '', images: finalImages,
+    published: input.published === undefined ? (current.published !== false) : (input.published === true || input.published === 'true'),
     featured: input.featured === true || input.featured === 'true',
     hero: input.hero === true || input.hero === 'true',
     heroOrder: Number.isFinite(Number(input.heroOrder)) ? Math.max(0, Math.min(999, Number(input.heroOrder))) : (Number(current.heroOrder) || 0)
@@ -2014,17 +2015,18 @@ function normalizeProduct(product) {
     purchasePrice: Number.isFinite(purchasePrice) && purchasePrice >= 0 ? Math.round(purchasePrice * 100) / 100 : 0,
     salePrice: Number.isFinite(Number(product.salePrice ?? product.price)) && Number(product.salePrice ?? product.price) >= 0 ? Math.round(Number(product.salePrice ?? product.price) * 100) / 100 : 0,
     price: Number.isFinite(Number(product.salePrice ?? product.price)) && Number(product.salePrice ?? product.price) >= 0 ? Math.round(Number(product.salePrice ?? product.price) * 100) / 100 : 0,
-    stock: Number.isInteger(stock) && stock >= 0 ? stock : 0
+    stock: Number.isInteger(stock) && stock >= 0 ? stock : 0,
+    published: product.published !== false
   };
 }
 
 function publicProduct(product) {
   const normalized = normalizeProduct(product);
-  const { stock, purchasePrice, ...safe } = normalized;
+  const { stock, purchasePrice, published, ...safe } = normalized;
   return { ...safe, availableStock: stock, inStock: stock > 0 };
 }
 
-app.get('/api/products', (_, res) => res.json(readProducts().map(publicProduct)));
+app.get('/api/products', (_, res) => res.json(readProducts().map(normalizeProduct).filter(product => product.published !== false).map(publicProduct)));
 app.get('/api/classifications', (_, res) => res.json(readClassifications()));
 app.get('/api/storefront', (_, res) => {
   const settings = readStorefront();
