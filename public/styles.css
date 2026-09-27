@@ -2587,7 +2587,7 @@ body.generate-modal-open{overflow:hidden}
 .security-hero p{margin:0;color:var(--muted);max-width:680px}
 .security-live{display:inline-flex;align-items:center;gap:8px;border:1px solid #cfe4d6;background:#f2faf4;color:#34734a;border-radius:999px;padding:9px 13px;font-size:.74rem;font-weight:800;white-space:nowrap}
 .security-live span{width:7px;height:7px;border-radius:50%;background:#4c9a64;box-shadow:0 0 0 4px rgba(76,154,100,.1)}
-.security-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:20px 0 30px}
+.security-metrics{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin:20px 0 30px}
 .security-metric{padding:17px 18px;border:1px solid var(--line);border-radius:12px;background:#fbfaf7;display:grid;gap:5px}
 .security-metric span{font-size:.66rem;letter-spacing:.1em;font-weight:800;color:#777}
 .security-metric strong{font-size:1.7rem;line-height:1}
@@ -2853,4 +2853,30 @@ body.generate-modal-open{overflow:hidden}
   .audit-filters{grid-template-columns:1fr}
   .audit-filters > .users-search-field:first-child{grid-column:auto}
   .audit-filters #auditClear{grid-column:auto;width:100%}
+}
+
+
+/* V15.5 · Alertas de comportamiento + contador de bloqueo */
+.security-alerts-section{margin-top:30px;padding-top:24px;border-top:1px solid var(--line)}
+.security-alerts-list{display:grid;gap:10px}
+.security-alert-card{display:grid;grid-template-columns:38px minmax(0,1fr);gap:12px;align-items:start;border:1px solid var(--line);border-radius:12px;padding:14px 15px;background:#fff}
+.security-alert-icon{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;font-weight:900;background:#f3f1ed;color:#6f6b64}
+.security-alert-card.critical{border-color:#e3b4ae;background:#fff8f7}
+.security-alert-card.critical .security-alert-icon,.security-alert-card.high .security-alert-icon{background:#fff0ee;color:#a13b31}
+.security-alert-card.medium .security-alert-icon{background:#fbf4e5;color:#8d6b2f}
+.security-alert-top{display:flex;align-items:center;gap:9px;justify-content:space-between}
+.security-alert-top strong{font-size:.82rem}
+.security-alert-top span{font-size:.62rem;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:#777;border:1px solid #e3dfd6;border-radius:999px;padding:4px 7px}
+.security-alert-content p{margin:5px 0 6px;color:var(--muted);font-size:.73rem;line-height:1.45}
+.security-alert-content small{color:#8b877f;font-size:.65rem}
+.security-alert-empty{display:flex;align-items:center;justify-content:space-between;gap:20px;border:1px solid #dce8df;border-radius:12px;background:#f5faf6;padding:15px 16px}
+.security-alert-empty strong{font-size:.78rem;color:#34734a}
+.security-alert-empty span{font-size:.7rem;color:var(--muted)}
+.login-attempts.countdown{display:grid;gap:6px}
+.login-countdown-label{display:block}
+.login-countdown-track{display:block;width:100%;height:4px;border-radius:999px;background:#eadfda;overflow:hidden}
+.login-countdown-track span{display:block;height:100%;border-radius:999px;background:#9b352b;transition:width .25s linear}
+@media(max-width:700px){
+  .security-alert-empty{display:grid;gap:5px}
+  .security-alert-top{align-items:flex-start}
 }

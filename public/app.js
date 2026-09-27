@@ -1983,8 +1983,23 @@ async function renderAdminSecurity(embedded = false) {
   if (session.role !== 'admin') return renderAdminOrders();
 
   let data = await request('/api/admin/security/overview').catch(() => null);
+  const alertData = await request('/api/admin/security/alerts').catch(() => ({ alerts: [], summary: { total: 0 } }));
   if (!data) {
-    app.innerHTML = `<main class="admin-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">${embedded ? 'Usuarios' : 'Seguridad'}</h1><p class="admin-subtitle">No se pudo cargar el centro de seguridad.</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>${adminSectionNav(session, 'usuarios')}${embedded ? `<div class="users-module-switch" role="tablist" aria-label="Usuarios y seguridad"><a class="users-module-tab" href="${ADMIN_PATH}/usuarios" data-smooth-route>Usuarios</a><a class="users-module-tab is-active" href="${ADMIN_PATH}/usuarios?panel=seguridad" data-smooth-route>Seguridad</a></div>` : ''}<section class="admin-panel"><div class="message error">Intenta recargar esta sección.</div></section></div></main>`;
+    const alertSeverityLabel = severity => ({ critical:'Crítica', high:'Alta', medium:'Media', low:'Baja' }[severity] || 'Aviso');
+  const alertIcon = severity => ({ critical:'!', high:'!', medium:'•', low:'i' }[severity] || 'i');
+  const alerts = Array.isArray(alertData.alerts) ? alertData.alerts : [];
+  const alertMarkup = alerts.length
+    ? alerts.map(alert => `<article class="security-alert-card ${escapeHTML(alert.severity)}">
+        <div class="security-alert-icon">${alertIcon(alert.severity)}</div>
+        <div class="security-alert-content">
+          <div class="security-alert-top"><strong>${escapeHTML(alert.title)}</strong><span>${escapeHTML(alertSeverityLabel(alert.severity))}</span></div>
+          <p>${escapeHTML(alert.description)}</p>
+          <small>${alert.username ? `Usuario: ${escapeHTML(alert.username)} · ` : ''}${alert.ip ? `IP: ${escapeHTML(alert.ip)} · ` : ''}${alert.windowMinutes ? `Ventana: ${alert.windowMinutes} min` : ''}</small>
+        </div>
+      </article>`).join('')
+    : `<div class="security-alert-empty"><strong>Sin alertas activas</strong><span>No se detectaron patrones anormales en la actividad reciente.</span></div>`;
+
+  app.innerHTML = `<main class="admin-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">${embedded ? 'Usuarios' : 'Seguridad'}</h1><p class="admin-subtitle">No se pudo cargar el centro de seguridad.</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>${adminSectionNav(session, 'usuarios')}${embedded ? `<div class="users-module-switch" role="tablist" aria-label="Usuarios y seguridad"><a class="users-module-tab" href="${ADMIN_PATH}/usuarios" data-smooth-route>Usuarios</a><a class="users-module-tab is-active" href="${ADMIN_PATH}/usuarios?panel=seguridad" data-smooth-route>Seguridad</a></div>` : ''}<section class="admin-panel"><div class="message error">Intenta recargar esta sección.</div></section></div></main>`;
     return;
   }
 
@@ -1993,7 +2008,8 @@ async function renderAdminSecurity(embedded = false) {
     ['USUARIOS ACTIVOS', data.totals.activeUsers, 'Cuentas con acceso permitido'],
     ['SESIONES ACTIVAS', data.totals.activeSessions, 'Sesiones en este servidor'],
     ['PASSKEYS', data.totals.passkeys, 'Credenciales registradas'],
-    ['CUENTAS BLOQUEADAS', data.totals.lockedUsers, 'Requieren revisión']
+    ['CUENTAS BLOQUEADAS', data.totals.lockedUsers, 'Requieren revisión'],
+    ['ALERTAS ACTIVAS', Number(alertData.summary?.total || 0), 'Patrones que requieren atención']
   ];
   const rows = data.users.map(row => `<article class="security-user-card" data-security-user="${escapeHTML(row.id)}">
     <div class="security-user-main">
@@ -2025,6 +2041,13 @@ async function renderAdminSecurity(embedded = false) {
       <div class="security-metrics">${cards.map(([label,value,help]) => `<div class="security-metric"><span>${label}</span><strong>${value}</strong><small>${help}</small></div>`).join('')}</div>
       <div class="section-heading security-section-heading"><div><span class="eyebrow">CUENTAS</span><h3>Estado de acceso</h3></div><p>Las acciones sensibles quedan registradas automáticamente en Auditoría.</p></div>
       <div class="security-users-list">${rows || '<p class="backup-empty">No hay cuentas registradas.</p>'}</div>
+      <div class="security-alerts-section">
+        <div class="section-heading security-section-heading">
+          <div><span class="eyebrow">V15.5 · ALERTAS</span><h3>Actividad que requiere atención</h3></div>
+          <p>${Number(alertData.summary?.total || 0)} alerta(s) detectada(s) en la actividad reciente.</p>
+        </div>
+        <div class="security-alerts-list">${alertMarkup}</div>
+      </div>
       <div class="security-note"><strong>Protección activa</strong><span>Contraseñas con hash · sesiones del lado del servidor · límite de intentos · bloqueo progresivo · WebAuthn / Passkeys · auditoría de seguridad</span></div>
     </section>
   </div></main>`;
@@ -3101,10 +3124,12 @@ function renderLogin() {
       return;
     }
     let remaining = Math.max(0, Number(seconds || 0));
+    const total = Math.max(1, Number(seconds || 1));
     const paint = () => {
       const mins = Math.floor(remaining / 60); const secs = remaining % 60;
-      attemptsBox.textContent = `Acceso bloqueado por seguridad. Tiempo restante: ${mins}:${String(secs).padStart(2,'0')}`;
-      attemptsBox.className = 'login-attempts locked';
+      const percent = Math.max(0, Math.min(100, (remaining / total) * 100));
+      attemptsBox.innerHTML = `<span class="login-countdown-label">Acceso bloqueado por seguridad · <strong>${mins}:${String(secs).padStart(2,'0')}</strong></span><span class="login-countdown-track"><span style="width:${percent}%"></span></span>`;
+      attemptsBox.className = 'login-attempts locked countdown';
       submitButton.disabled = true; passkeyButton.disabled = true;
       if (remaining <= 0) { clearInterval(loginLockTimer); attemptsBox.textContent = 'Puedes volver a intentarlo.'; attemptsBox.className = 'login-attempts'; submitButton.disabled = false; passkeyButton.disabled = false; message.textContent = ''; }
       remaining -= 1;
@@ -3123,7 +3148,7 @@ function renderLogin() {
       if (error.data?.lockoutSeconds) { setLockedUI(error.data.lockoutSeconds); message.textContent = error.message; return; }
       if (typeof error.data?.attemptsRemaining === 'number') {
         const left = error.data.attemptsRemaining;
-        attemptsBox.textContent = left > 0 ? `Intentos restantes: ${left} de 4` : 'El próximo intento incorrecto bloqueará el acceso durante 3 minutos.';
+        attemptsBox.textContent = left > 0 ? `Intentos restantes: ${left} de 4` : 'El 4.º intento incorrecto bloqueará el acceso durante 1 minuto.';
         attemptsBox.className = 'login-attempts warning';
       }
       message.textContent = error.message;

@@ -166,7 +166,8 @@ const LOGIN_LIMIT_WINDOW_MS = 15 * 60 * 1000;
 const LOGIN_LIMIT_MAX_ATTEMPTS = 5;
 const LOGIN_IP_LIMIT_MAX_ATTEMPTS = 100;
 const ACCOUNT_LOGIN_ATTEMPTS_BEFORE_LOCK = 4;
-const ACCOUNT_LOCKOUT_STAGES_MS = [3 * 60 * 1000, 5 * 60 * 1000, 10 * 60 * 1000, 15 * 60 * 1000];
+// V15.5: 4 fallos por cuenta; después bloqueo progresivo de 1, 5, 10 y 15 minutos.
+const ACCOUNT_LOCKOUT_STAGES_MS = [1 * 60 * 1000, 5 * 60 * 1000, 10 * 60 * 1000, 15 * 60 * 1000];
 const loginAttempts = new Map();
 const pendingWebAuthn = new Map();
 const SESSION_TTL_MS = Math.max(30 * 60 * 1000, Number.parseInt(process.env.SESSION_TTL_MINUTES || '720', 10) * 60 * 1000);
@@ -453,6 +454,115 @@ function registerAccountPasswordFailure(accountId) {
   record.lockedUntil = now + duration;
   writeLoginProtection(accountId, record);
   return { locked: true, permanent: false, remainingSeconds: Math.ceil(duration / 1000), failures: 0, stage: record.stage };
+}
+
+
+// V15.5 · Motor de alertas de seguridad.
+// Detecta patrones anormales a partir de la auditoría existente sin guardar
+// contraseñas ni datos sensibles adicionales.
+function buildSecurityAlerts(entries, users = []) {
+  const now = Date.now();
+  const WINDOW_15M = 15 * 60 * 1000;
+  const WINDOW_30M = 30 * 60 * 1000;
+  const WINDOW_10M = 10 * 60 * 1000;
+  const recent = entries
+    .map(entry => ({ ...entry, _ts: Date.parse(entry.createdAt || '') }))
+    .filter(entry => Number.isFinite(entry._ts));
+
+  const alerts = [];
+  const roleByUsername = new Map(users.map(user => [String(user.username || '').toLowerCase(), normalizeRole(user.role)]));
+
+  const addAlert = (severity, title, description, meta = {}) => {
+    alerts.push({
+      id: crypto.createHash('sha256').update(`${severity}|${title}|${description}|${meta.username || ''}|${meta.ip || ''}`).digest('hex').slice(0, 16),
+      severity, title, description,
+      username: meta.username || null,
+      role: meta.username ? (roleByUsername.get(String(meta.username).toLowerCase()) || meta.role || null) : (meta.role || null),
+      ip: meta.ip || null,
+      count: meta.count || null,
+      windowMinutes: meta.windowMinutes || null,
+      createdAt: new Date(now).toISOString()
+    });
+  };
+
+  // 1. Varios intentos fallidos sobre una misma cuenta.
+  const failedByUser = new Map();
+  recent.filter(e => now - e._ts <= WINDOW_15M && e.action === 'Inicio de sesión fallido')
+    .forEach(e => {
+      const username = String(e.username || '').toLowerCase();
+      if (!username) return;
+      if (!failedByUser.has(username)) failedByUser.set(username, []);
+      failedByUser.get(username).push(e);
+    });
+  for (const [username, items] of failedByUser) {
+    if (items.length >= 3) {
+      addAlert(items.length >= 4 ? 'high' : 'medium',
+        'Múltiples intentos de acceso fallidos',
+        `Se detectaron ${items.length} intentos fallidos para esta cuenta durante los últimos 15 minutos.`,
+        { username, count: items.length, windowMinutes: 15 });
+    }
+  }
+
+  // 2. Una misma IP intentando entrar con varias cuentas.
+  const failedByIp = new Map();
+  recent.filter(e => now - e._ts <= WINDOW_15M && e.action === 'Inicio de sesión fallido' && e.ip)
+    .forEach(e => {
+      const ip = String(e.ip);
+      if (!failedByIp.has(ip)) failedByIp.set(ip, []);
+      failedByIp.get(ip).push(e);
+    });
+  for (const [ip, items] of failedByIp) {
+    const usernames = new Set(items.map(e => String(e.username || '').toLowerCase()).filter(Boolean));
+    if (items.length >= 5 && usernames.size >= 2) {
+      addAlert('high',
+        'Actividad de acceso inusual',
+        `Se detectaron ${items.length} intentos fallidos desde la misma IP sobre ${usernames.size} cuentas distintas.`,
+        { ip, count: items.length, windowMinutes: 15 });
+    }
+  }
+
+  // 3. Bloqueos repetidos.
+  const lockEvents = recent.filter(e => now - e._ts <= WINDOW_30M && (
+    e.action === 'Cuenta bloqueada temporalmente' ||
+    e.action === 'Acceso bloqueado' ||
+    e.action === 'Cuenta bloqueada permanentemente'
+  ));
+  if (lockEvents.length >= 2) {
+    addAlert(lockEvents.some(e => e.action === 'Cuenta bloqueada permanentemente') ? 'critical' : 'high',
+      'Bloqueos de seguridad detectados',
+      `Se registraron ${lockEvents.length} eventos de bloqueo durante los últimos 30 minutos.`,
+      { count: lockEvents.length, windowMinutes: 30 });
+  }
+
+  // 4. Volumen anormal de cambios administrativos en poco tiempo.
+  const sensitiveActions = recent.filter(e => now - e._ts <= WINDOW_10M && e.module !== 'Seguridad' && e.action);
+  const byUser = new Map();
+  sensitiveActions.forEach(e => {
+    const username = String(e.username || '').toLowerCase();
+    if (!username) return;
+    if (!byUser.has(username)) byUser.set(username, []);
+    byUser.get(username).push(e);
+  });
+  for (const [username, items] of byUser) {
+    if (items.length >= 12) {
+      addAlert('medium',
+        'Actividad administrativa elevada',
+        `La cuenta realizó ${items.length} acciones administrativas durante los últimos 10 minutos.`,
+        { username, count: items.length, windowMinutes: 10 });
+    }
+  }
+
+  // 5. Muchos cambios de inventario en una ventana corta.
+  const inventoryEvents = recent.filter(e => now - e._ts <= WINDOW_10M && e.module === 'Inventario');
+  if (inventoryEvents.length >= 10) {
+    addAlert('medium',
+      'Movimiento elevado de inventario',
+      `Se registraron ${inventoryEvents.length} movimientos de inventario durante los últimos 10 minutos.`,
+      { count: inventoryEvents.length, windowMinutes: 10 });
+  }
+
+  const rank = { critical: 0, high: 1, medium: 2, low: 3 };
+  return alerts.sort((a, b) => (rank[a.severity] ?? 9) - (rank[b.severity] ?? 9));
 }
 
 function rateLimitResponse(res, resetAt) {
@@ -3463,6 +3573,24 @@ app.delete('/api/admin/orders/:id', requireStoreManagerOrAdmin, (req, res) => {
   return res.status(204).end();
 });
 
+
+
+app.get('/api/admin/security/alerts', requireAdmin, (req, res) => {
+  const entries = readAudit();
+  const users = readUsers();
+  const alerts = buildSecurityAlerts(entries, users);
+  return res.json({
+    version: 'V15.5',
+    generatedAt: new Date().toISOString(),
+    alerts,
+    summary: {
+      critical: alerts.filter(item => item.severity === 'critical').length,
+      high: alerts.filter(item => item.severity === 'high').length,
+      medium: alerts.filter(item => item.severity === 'medium').length,
+      total: alerts.length
+    }
+  });
+});
 
 app.get('/api/admin/audit', requireAdmin, (req, res) => {
   const entries = readAudit().slice().reverse();
