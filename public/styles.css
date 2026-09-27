@@ -2629,3 +2629,228 @@ body.generate-modal-open{overflow:hidden}
 @media(max-width:520px){
   .security-metrics{grid-template-columns:1fr}
 }
+
+
+/* V15.4.1 · Navegación administrativa compacta y clasificada */
+.admin-section-nav{
+  width:100%;
+  max-width:100%;
+  box-sizing:border-box;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding:7px;
+  margin:0 0 24px;
+  background:rgba(247,244,238,.92);
+  border:1px solid var(--line,#ded8cc);
+  border-radius:16px;
+  box-shadow:0 5px 18px rgba(30,25,18,.04);
+}
+.admin-nav-group{
+  position:relative;
+  min-width:0;
+  flex:1 1 0;
+}
+.admin-nav-group summary{
+  list-style:none;
+  cursor:pointer;
+  min-height:42px;
+  padding:0 15px;
+  border-radius:11px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  color:#6e6a63;
+  font-size:.72rem;
+  font-weight:800;
+  letter-spacing:.1em;
+  text-transform:uppercase;
+  transition:background .18s ease,color .18s ease,box-shadow .18s ease;
+  user-select:none;
+}
+.admin-nav-group summary::-webkit-details-marker{display:none}
+.admin-nav-group summary::after{content:"⌄";font-size:.82rem;line-height:1;transition:transform .18s ease}
+.admin-nav-group[open] summary::after{transform:rotate(180deg)}
+.admin-nav-group summary:hover{background:#eeeae2;color:var(--ink,#171717)}
+.admin-nav-group.has-active summary{
+  color:var(--ink,#171717);
+  background:#fff;
+  box-shadow:0 2px 9px rgba(30,25,18,.07);
+}
+.admin-nav-group summary i{
+  width:6px;height:6px;border-radius:50%;background:var(--gold,#b18a45);display:inline-block;
+}
+.admin-nav-group-links{
+  position:absolute;
+  z-index:1200;
+  top:calc(100% + 7px);
+  left:0;
+  min-width:210px;
+  padding:7px;
+  display:grid;
+  gap:3px;
+  background:#fff;
+  border:1px solid var(--line,#ded8cc);
+  border-radius:13px;
+  box-shadow:0 18px 42px rgba(30,25,18,.14);
+}
+.admin-section-link{
+  width:100%;
+  box-sizing:border-box;
+  justify-content:flex-start;
+  padding:10px 12px;
+  border-radius:9px;
+  white-space:nowrap;
+}
+.admin-section-link.active{background:#111;color:#fff}
+.admin-section-nav--compact .admin-nav-group{max-width:420px}
+.admin-section-nav--compact .admin-nav-group-links{position:static;display:flex;flex-wrap:wrap;margin-top:7px;background:transparent;border:0;box-shadow:none;padding:0}
+.admin-section-nav--compact .admin-nav-group summary{justify-content:flex-start}
+@media(max-width:900px){
+  .admin-section-nav{overflow:visible;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));}
+  .admin-nav-group-links{left:0;right:0;min-width:0}
+}
+@media(max-width:620px){
+  .admin-section-nav{grid-template-columns:1fr;padding:6px}
+  .admin-nav-group summary{justify-content:space-between;padding:0 13px}
+  .admin-nav-group-links{position:static;margin-top:5px;box-shadow:none;background:#f8f6f1}
+  .admin-section-link{justify-content:center}
+}
+
+/* V15.4.1 · Usuarios + Seguridad como un solo módulo */
+.users-module-switch{
+  display:inline-flex;
+  align-items:center;
+  gap:4px;
+  padding:4px;
+  margin:0 0 20px;
+  background:#f3f0e9;
+  border:1px solid var(--line,#ded8cc);
+  border-radius:12px;
+}
+.users-module-tab{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-width:112px;
+  padding:9px 15px;
+  border-radius:9px;
+  text-decoration:none;
+  color:var(--muted,#777);
+  font-size:.74rem;
+  font-weight:800;
+  letter-spacing:.07em;
+  text-transform:uppercase;
+  transition:.18s ease;
+}
+.users-module-tab:hover{color:var(--ink,#171717);background:#e9e5dd}
+.users-module-tab.is-active{
+  background:#111;
+  color:#fff;
+  box-shadow:0 2px 8px rgba(0,0,0,.1);
+}
+.security-panel{margin-top:0}
+@media(max-width:620px){
+  .users-module-switch{width:100%;box-sizing:border-box}
+  .users-module-tab{flex:1;min-width:0}
+}
+
+/* V15.4.1 · Cuenta administrativa más elegante y utilizable */
+.account-menu-wrap{position:relative;z-index:1300}
+.account-menu-trigger{
+  min-width:0;
+  width:auto;
+  height:46px;
+  padding:4px 10px 4px 5px;
+  border:1px solid var(--line,#ded8cc);
+  border-radius:999px;
+  background:rgba(255,255,255,.92);
+  color:var(--ink,#171717);
+  display:inline-flex;
+  align-items:center;
+  gap:9px;
+  cursor:pointer;
+  box-shadow:0 4px 16px rgba(30,25,18,.07);
+  transition:.18s ease;
+}
+.account-menu-trigger:hover,
+.account-menu-trigger[aria-expanded="true"]{
+  border-color:#c9b78f;
+  background:#fff;
+  box-shadow:0 7px 20px rgba(30,25,18,.1);
+  transform:translateY(-1px);
+}
+.account-menu-avatar{
+  width:35px;height:35px;border-radius:50%;
+  display:grid;place-items:center;
+  background:#171717;color:#fff;
+  font-size:.78rem;font-weight:850;
+  letter-spacing:.04em;
+}
+.account-menu-trigger-copy{
+  display:grid;
+  gap:1px;
+  text-align:left;
+  line-height:1.1;
+  max-width:130px;
+}
+.account-menu-trigger-copy strong{font-size:.76rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.account-menu-trigger-copy small{font-size:.62rem;color:var(--muted,#777);text-transform:uppercase;letter-spacing:.07em}
+.account-menu-caret{font-size:.72rem;color:#777;margin-left:2px}
+.account-menu{
+  min-width:235px;
+  padding:8px;
+  top:calc(100% + 10px);
+  border-radius:14px;
+  box-shadow:0 18px 45px rgba(30,25,18,.16);
+}
+.account-menu-user{
+  padding:11px 11px 12px;
+  border-radius:10px;
+  background:#f7f5ef;
+  border-bottom:0;
+  margin-bottom:6px;
+}
+.account-menu-user-label{font-size:.58rem;letter-spacing:.13em;color:#9a783f;font-weight:850}
+.account-menu-user strong{font-size:.88rem}
+.account-menu-user small{font-size:.68rem}
+.account-menu a,.account-menu button{
+  min-height:42px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:10px 11px;
+  border-radius:9px;
+}
+@media(max-width:620px){
+  .account-menu-trigger-copy{display:none}
+  .account-menu-trigger{width:46px;padding:4px;justify-content:center}
+  .account-menu-caret{display:none}
+}
+
+/* V15.4.1 · Filtros de auditoría: cada campo conserva su columna */
+.audit-filters{
+  grid-template-columns:minmax(220px,1.55fr) repeat(3,minmax(145px,1fr)) repeat(2,minmax(145px,.9fr));
+}
+.audit-filters > .users-search-field{
+  display:grid;
+  min-width:0;
+  width:100%;
+  box-sizing:border-box;
+}
+.audit-filters > .users-search-field > input,
+.audit-filters > .users-search-field > select{
+  box-sizing:border-box;
+  width:100%;
+  min-width:0;
+}
+@media(max-width:1100px){
+  .audit-filters{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .audit-filters > .users-search-field:first-child{grid-column:span 3}
+}
+@media(max-width:720px){
+  .audit-filters{grid-template-columns:1fr}
+  .audit-filters > .users-search-field:first-child{grid-column:auto}
+  .audit-filters #auditClear{grid-column:auto;width:100%}
+}

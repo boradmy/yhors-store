@@ -59,7 +59,7 @@ function accountMenu(account = {}) {
     </button>
     <div class="account-menu" id="accountMenu" role="menu" hidden>
       <div class="account-menu-user"><span class="account-menu-user-label">CUENTA YHORS</span><strong>${username}</strong><small>${role}</small></div>
-      <a href="/mi-cuenta" role="menuitem">Mi cuenta <span>→</span></a>
+      <a href="/mi-cuenta" data-smooth-route role="menuitem">Mi cuenta <span>→</span></a>
       <button type="button" role="menuitem" id="accountMenuLogout">Cerrar sesión <span>↗</span></button>
     </div>
   </div>`;
@@ -611,8 +611,8 @@ async function renderCurrentRoute() {
   if (path === `${ADMIN_PATH}/pedidos` || path === `${ADMIN_PATH}/pedidos/`) return renderAdminOrders();
   if (path === `${ADMIN_PATH}/generar-orden` || path === `${ADMIN_PATH}/generar-orden/`) return renderAdminGenerateOrder();
     if (path === `${ADMIN_PATH}/auditoria` || path === `${ADMIN_PATH}/auditoria/`) return renderAdminAudit();
-  if (path === `${ADMIN_PATH}/seguridad` || path === `${ADMIN_PATH}/seguridad/`) return renderAdminSecurity();
-if (path === `${ADMIN_PATH}/usuarios` || path === `${ADMIN_PATH}/usuarios/`) return renderAdminUsers();
+  if (path === `${ADMIN_PATH}/seguridad` || path === `${ADMIN_PATH}/seguridad/`) return renderAdminSecurity(true);
+if (path === `${ADMIN_PATH}/usuarios` || path === `${ADMIN_PATH}/usuarios/`) return renderAdminUsers(new URLSearchParams(window.location.search).get('panel') || 'usuarios');
   if (path === `${ADMIN_PATH}/inventario` || path === `${ADMIN_PATH}/inventario/`) return renderAdminInventory();
   if (path === '/mi-cuenta' || path === '/mi-cuenta/') return renderMyAccount();
   if (path === '/pedido' || path === '/pedido/') return checkoutPage();
@@ -1145,9 +1145,16 @@ function adminSectionNav(session = {}, active = '') {
   const limitedOperations = role === 'vendedor' || role === 'orders' || role === 'store_manager';
   const link = (key, href, label) => `<a href="${href}" class="admin-section-link${active === key ? ' active' : ''}" data-smooth-route>${label}</a>`;
   if (limitedOperations) {
-    return `<nav class="admin-section-nav admin-section-nav--compact" id="adminSectionNav" aria-label="Secciones operativas">${link('ventas-generales', `${ADMIN_PATH}/ventas-generales`, 'VENTAS GENERALES')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('generar-orden', `${ADMIN_PATH}/generar-orden`, 'GENERAR ORDEN')}</nav>`;
+    return `<nav class="admin-section-nav admin-section-nav--compact" id="adminSectionNav" aria-label="Secciones operativas">
+      <details class="admin-nav-group" open><summary>Operación</summary><div class="admin-nav-group-links">${link('ventas-generales', `${ADMIN_PATH}/ventas-generales`, 'VENTAS GENERALES')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('generar-orden', `${ADMIN_PATH}/generar-orden`, 'GENERAR ORDEN')}</div></details>
+    </nav>`;
   }
-  return `<nav class="admin-section-nav" id="adminSectionNav" aria-label="Secciones de administración">${link('web', ADMIN_PATH, 'PÁGINA WEB')}${link('usuarios', `${ADMIN_PATH}/usuarios`, 'USUARIOS')}${link('seguridad', `${ADMIN_PATH}/seguridad`, 'SEGURIDAD')}${link('auditoria', `${ADMIN_PATH}/auditoria`, 'AUDITORÍA')}${link('inventario', `${ADMIN_PATH}/inventario`, 'INVENTARIO')}${link('resumen-financiero', `${ADMIN_PATH}/resumen-financiero`, 'RESUMEN FINANCIERO')}${link('ventas-generales', `${ADMIN_PATH}/ventas-generales`, 'VENTAS GENERALES')}${link('calculo-comision', `${ADMIN_PATH}/calculo-comision`, 'CÁLCULO DE COMISIÓN')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('generar-orden', `${ADMIN_PATH}/generar-orden`, 'GENERAR ORDEN')}</nav>`;
+  const group = (label, activeKeys, items, open = false) => `<details class="admin-nav-group${activeKeys.includes(active) ? ' has-active' : ''}"${open || activeKeys.includes(active) ? ' open' : ''}><summary><span>${label}</span>${activeKeys.includes(active) ? '<i aria-hidden="true"></i>' : ''}</summary><div class="admin-nav-group-links">${items}</div></details>`;
+  return `<nav class="admin-section-nav" id="adminSectionNav" aria-label="Administración YHORS">
+    ${group('Operación', ['web','inventario','pedidos','generar-orden'], `${link('web', ADMIN_PATH, 'PÁGINA WEB')}${link('inventario', `${ADMIN_PATH}/inventario`, 'INVENTARIO')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('generar-orden', `${ADMIN_PATH}/generar-orden`, 'GENERAR ORDEN')}`)}
+    ${group('Gestión', ['usuarios','auditoria'], `${link('usuarios', `${ADMIN_PATH}/usuarios`, 'USUARIOS')}${link('auditoria', `${ADMIN_PATH}/auditoria`, 'AUDITORÍA')}`)}
+    ${group('Finanzas', ['resumen-financiero','ventas-generales','calculo-comision'], `${link('resumen-financiero', `${ADMIN_PATH}/resumen-financiero`, 'RESUMEN FINANCIERO')}${link('ventas-generales', `${ADMIN_PATH}/ventas-generales`, 'VENTAS GENERALES')}${link('calculo-comision', `${ADMIN_PATH}/calculo-comision`, 'CÁLCULO DE COMISIÓN')}`)}
+  </nav>`;
 }
 
 function generateOrderNav(session) {
@@ -1970,14 +1977,14 @@ function securityStatusPill(row) {
   return `<span class="security-pill success">Acceso activo</span>`;
 }
 
-async function renderAdminSecurity() {
+async function renderAdminSecurity(embedded = false) {
   const session = await request('/api/admin/session').catch(() => ({ authenticated: false }));
   if (!session.authenticated) return renderLogin();
   if (session.role !== 'admin') return renderAdminOrders();
 
   let data = await request('/api/admin/security/overview').catch(() => null);
   if (!data) {
-    app.innerHTML = `<main class="admin-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Seguridad</h1><p class="admin-subtitle">No se pudo cargar el centro de seguridad.</p></div>${accountMenu(session)}</div>${adminSectionNav(session, 'seguridad')}<section class="admin-panel"><div class="message error">Intenta recargar esta sección.</div></section></div></main>`;
+    app.innerHTML = `<main class="admin-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">${embedded ? 'Usuarios' : 'Seguridad'}</h1><p class="admin-subtitle">No se pudo cargar el centro de seguridad.</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>${embedded ? `<div class="users-module-switch" role="tablist" aria-label="Usuarios y seguridad"><a class="users-module-tab" href="${ADMIN_PATH}/usuarios" data-smooth-route>Usuarios</a><a class="users-module-tab is-active" href="${ADMIN_PATH}/usuarios?panel=seguridad" data-smooth-route>Seguridad</a></div>` : adminSectionNav(session, 'usuarios')}<section class="admin-panel"><div class="message error">Intenta recargar esta sección.</div></section></div></main>`;
     return;
   }
 
@@ -2007,8 +2014,8 @@ async function renderAdminSecurity() {
   </article>`).join('');
 
   app.innerHTML = `<main class="admin-shell"><div class="admin-wrap">
-    <div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Seguridad</h1><p class="admin-subtitle">Centro de control de acceso de YHORS</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>
-    ${adminSectionNav(session, 'seguridad')}
+    <div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">${embedded ? 'Usuarios' : 'Seguridad'}</h1><p class="admin-subtitle">${embedded ? 'Cuentas, acceso y protección de YHORS' : 'Centro de control de acceso de YHORS'}</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>
+    ${embedded ? `<div class="users-module-switch" role="tablist" aria-label="Usuarios y seguridad"><a class="users-module-tab" href="${ADMIN_PATH}/usuarios" data-smooth-route>Usuarios</a><a class="users-module-tab is-active" href="${ADMIN_PATH}/usuarios?panel=seguridad" data-smooth-route>Seguridad</a></div>` : ''}
     <section class="admin-panel security-panel">
       <div class="security-hero">
         <div><span class="eyebrow">V15.4 · PROTECCIÓN DE ACCESO</span><h2>Seguridad y sesiones</h2><p>Controla cuentas, bloqueos, Passkeys y sesiones activas desde un solo lugar.</p></div>
@@ -2201,8 +2208,12 @@ function usersPanel(users = []) {
   </article>`).join('');
 
   return `<section class="admin-panel users-panel" id="usersPanel">
+    <div class="users-module-switch" role="tablist" aria-label="Usuarios y seguridad">
+      <a class="users-module-tab is-active" href="${ADMIN_PATH}/usuarios" data-smooth-route role="tab" aria-selected="true">Usuarios</a>
+      <a class="users-module-tab" href="${ADMIN_PATH}/usuarios?panel=seguridad" data-smooth-route role="tab" aria-selected="false">Seguridad</a>
+    </div>
     <div class="section-heading">
-      <div><span class="eyebrow">Seguridad y acceso</span><h2>Usuarios</h2></div>
+      <div><span class="eyebrow">Cuentas y acceso</span><h2>Usuarios</h2></div>
       <p>Crea y administra las cuentas que pueden entrar al panel de YHORS.</p>
     </div>
     <div class="users-layout">
@@ -2235,10 +2246,11 @@ function usersPanel(users = []) {
   </section>`;
 }
 
-async function renderAdminUsers() {
+async function renderAdminUsers(panel = 'usuarios') {
   const session = await request('/api/admin/session').catch(() => ({ authenticated: false }));
   if (!session.authenticated) return renderLogin();
   if (session.role !== 'admin') return renderAdminOrders();
+  if (panel === 'seguridad') return renderAdminSecurity(true);
 
   let users = await request('/api/admin/users').catch(() => []);
   app.innerHTML = `<main class="admin-shell"><div class="admin-wrap">
