@@ -868,7 +868,10 @@ function buildOrderPdf(order) {
     }
     // Identidad del documento centrada en un mismo eje para que el encabezado
     // no quede desalineado entre título, número, fecha y estado.
-    const headerRight = right;
+    // Dejamos un pequeño margen de seguridad a la derecha porque el
+    // generador PDF usa un cálculo aproximado del ancho de las fuentes.
+    // Así ningún texto del encabezado puede quedar recortado.
+    const headerRight = right - 18;
     drawText(ops, 'ORDEN DE PEDIDO', headerRight, y - 8, 18, boldFont, 'right');
     drawText(ops, `N. ORDEN  ${orderNo}`, headerRight, y - 29, 9, boldFont, 'right');
     drawText(ops, `FECHA  ${date}`, headerRight, y - 44, 8, normalFont, 'right');
@@ -887,7 +890,7 @@ function buildOrderPdf(order) {
     rect(ops, margin, y - sellerBoxH, contentWidth, sellerBoxH, 0.8);
     drawText(ops, 'CONTROL DE DESPACHO', margin + 9, y - 14, 8, boldFont);
     drawText(ops, `VENDEDOR: ${seller}`, margin + 9, y - 29, 8, normalFont);
-    drawText(ops, `ENTREGA: ${deliveryLabel}`, right - 9, y - 29, 8, normalFont, 'right');
+    drawText(ops, `ENTREGA: ${deliveryLabel}`, right - 18, y - 29, 8, normalFont, 'right');
     drawText(ops, `ESTADO DE DESPACHO: ${status === 'Pendiente' ? 'PENDIENTE' : safeStatus}`, margin + 9, y - 42, 7, boldFont);
     y -= sellerBoxH + 13;
 
