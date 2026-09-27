@@ -1055,14 +1055,45 @@ function ordersListMarkup(orders = [], options = {}) {
   const canAssign = options.canAssign === true;
   const sellers = Array.isArray(options.sellers) ? options.sellers : [];
   const products = Array.isArray(options.products) ? options.products : [];
-  const editingOrders = options.editingOrders instanceof Set ? options.editingOrders : new Set();
   const currentRole = options.role || '';
   const date = value => { const d = new Date(value); return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString('es-EC', { dateStyle: 'medium', timeStyle: 'short' }); };
   const shortDate = value => { const d = new Date(value); return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString('es-EC', { day:'2-digit', month:'short', year:'numeric' }); };
   const statuses = ['Pendiente', 'Confirmado', 'Preparado', 'Enviado', 'Entregado', 'Cancelado'];
   const sellerName = order => sellers.find(s => s.id === order.assignedSellerId)?.name || order.assignedSellerName || 'Sin asignar';
+  const productOptionList = (selectedId = '', fallbackItem = null) => {
+    const list = [...products];
+    if (fallbackItem && !list.some(p => String(p.id) === String(selectedId))) {
+      list.unshift({ id: selectedId, name: fallbackItem.name || 'Producto actual', sku: fallbackItem.sku || '' });
+    }
+    return list.map(p => `<option value="${escapeHTML(p.id)}" ${String(p.id) === String(selectedId) ? 'selected' : ''}>${escapeHTML(p.name || 'Producto')} · ${escapeHTML(p.sku || 'sin SKU')}</option>`).join('');
+  };
+  const itemEditorRow = (item = {}) => {
+    const selectedProduct = products.find(p => String(p.id) === String(item.productId));
+    const productId = item.productId || '';
+    const mode = item.purchaseMode === 'rental' ? 'rental' : 'purchase';
+    const days = Number(item.rentalDays || 1);
+    const quantity = Math.max(1, Number(item.quantity || 1));
+    const image = selectedProduct ? productImages(selectedProduct)[0] : '';
+    return `<div class="order-item-editor-row" data-order-item-row>
+      <div class="order-edit-product-cell">
+        <img src="${escapeHTML(image || '/assets/yhors-logo-pdf.jpg')}" data-fallback alt="">
+        <select class="order-item-product" aria-label="Producto">${productOptionList(productId, selectedProduct ? null : item)}</select>
+      </div>
+      <select class="order-item-mode" aria-label="Modalidad">
+        <option value="purchase" ${mode === 'purchase' ? 'selected' : ''}>Compra</option>
+        <option value="rental" ${mode === 'rental' ? 'selected' : ''}>Alquiler</option>
+      </select>
+      <div class="order-edit-qty">
+        <button type="button" class="order-item-qty-btn" data-order-item-qty="-1" aria-label="Disminuir cantidad">−</button>
+        <input class="order-item-quantity" type="number" min="1" max="99" step="1" value="${quantity}" aria-label="Cantidad">
+        <button type="button" class="order-item-qty-btn" data-order-item-qty="1" aria-label="Aumentar cantidad">+</button>
+      </div>
+      <input class="order-item-days" type="number" min="1" max="10" step="1" value="${days}" aria-label="Días de alquiler" ${mode === 'rental' ? '' : 'disabled'}>
+      <button class="button danger small order-item-remove" type="button" title="Quitar producto">Quitar</button>
+    </div>`;
+  };
   if (!orders.length) return '<div class="empty">No hay pedidos que coincidan con los filtros.</div>';
- const renderOrder = order => `<article class="admin-order admin-order-compact${order.assignedSellerId ? '' : ' admin-order-unassigned'}" data-order-search="${escapeHTML(`${order.orderNumber} ${order.customer?.name || ''} ${order.customer?.cedula || ''} ${order.customer?.phone || ''} ${order.customer?.email || ''} ${(order.items || []).map(i => `${i.sku} ${i.name}`).join(' ')}`.toLowerCase())}" data-order-status="${escapeHTML(order.status || '')}" data-order-date="${escapeHTML(String(order.createdAt || '').slice(0,10))}">
+  const renderOrder = order => `<article class="admin-order admin-order-compact${order.assignedSellerId ? '' : ' admin-order-unassigned'}" data-order-search="${escapeHTML(`${order.orderNumber} ${order.customer?.name || ''} ${order.customer?.cedula || ''} ${order.customer?.phone || ''} ${order.customer?.email || ''} ${(order.items || []).map(i => `${i.sku} ${i.name}`).join(' ')}`.toLowerCase())}" data-order-status="${escapeHTML(order.status || '')}" data-order-date="${escapeHTML(String(order.createdAt || '').slice(0,10))}">
     <button type="button" class="admin-order-summary" data-order-toggle="${escapeHTML(order.id)}" aria-expanded="false">
       <span class="order-summary-date">${escapeHTML(shortDate(order.createdAt))}</span>
       <span class="order-summary-main"><strong>#${escapeHTML(order.orderNumber)}</strong><b>${escapeHTML(order.customer?.name || 'Cliente')}</b><small class="order-summary-item">${escapeHTML((order.items?.[0]?.quantity || 1) + '× ' + (order.items?.[0]?.name || 'Sin productos'))}${(order.items?.length || 0) > 1 ? ` · +${order.items.length - 1} más` : ''}</small></span>
@@ -1075,7 +1106,17 @@ function ordersListMarkup(orders = [], options = {}) {
       <div class="admin-order-grid"><div><span class="order-label">Contacto</span><p>${escapeHTML(order.customer?.phone || '—')}${order.customer?.email ? `<br>${escapeHTML(order.customer.email)}` : ''}<br><strong>Cédula / RUC:</strong> ${escapeHTML(order.customer?.cedula || '—')}</p></div><div><span class="order-label">Entrega</span><p><strong>${escapeHTML(order.delivery?.label || '—')}</strong><br>${escapeHTML(order.customer?.city || '—')}${order.customer?.address ? ` · ${escapeHTML(order.customer.address)}` : ''}${order.customer?.mapsUrl ? `<br><a href="${escapeHTML(order.customer.mapsUrl)}" target="_blank" rel="noopener">📍 Abrir ubicación en Google Maps</a>` : ''}</p></div><div><span class="order-label">Total</span><p class="order-total">${money(order.total)}</p><small>Subtotal ${money(order.subtotal ?? order.total)} · Envío ${money(order.shippingCost ?? 0)}</small></div></div>
       <div class="admin-order-items" data-order-items-view="${escapeHTML(order.id)}">${(order.items || []).map(item => { const isRental=item.purchaseMode==='rental'; const days=Number(item.rentalDays||1); return `<div class="admin-order-item"><span><strong>${escapeHTML(item.quantity)}×</strong> ${escapeHTML(item.name)} <small>SKU: ${escapeHTML(item.sku || '—')} · ${isRental ? `Alquiler · ${days} día${days===1?'':'s'} · ${money(item.unitPrice)}/día` : 'Compra'}</small></span><strong>${money(item.subtotal)}</strong></div>`; }).join('')}</div>
       <div class="admin-order-items-actions">
-        <button class="button primary small" type="button" data-order-items-edit="${escapeHTML(order.id)}" ${editingOrders.has(order.id) ? '' : 'disabled'} title="${editingOrders.has(order.id) ? 'Agregar o modificar productos del pedido' : 'Activa «Editar pedido» primero'}">+ Agregar productos</button>
+        <button class="button edit-note small" type="button" data-order-items-edit="${escapeHTML(order.id)}" disabled title="Activa “Editar pedido” para modificar productos">Editar productos</button>
+      </div>
+      <div class="order-items-editor" data-order-items-editor="${escapeHTML(order.id)}" hidden>
+        <div class="order-items-editor-head"><div><strong>03 · Productos</strong><small>Añade o quita productos, cambia cantidades y selecciona compra o alquiler. Los cambios solo se pueden hacer mientras “Editar pedido” esté activo.</small></div></div>
+        <div class="order-items-editor-list" data-order-items-list="${escapeHTML(order.id)}">${(order.items || []).map(itemEditorRow).join('')}</div>
+        <div class="order-items-editor-actions">
+          <button class="button small" type="button" data-order-item-add="${escapeHTML(order.id)}">+ Agregar producto</button>
+          <span class="order-items-editor-spacer"></span>
+          <button class="button small" type="button" data-order-items-cancel="${escapeHTML(order.id)}">Cancelar</button>
+          <button class="button success small" type="button" data-order-items-save="${escapeHTML(order.id)}">Guardar productos</button>
+        </div>
       </div>
       ${order.customer?.notes ? `<div class="order-notes"><span>Nota</span><p>${escapeHTML(order.customer.notes)}</p></div>` : ''}
       <div class="admin-order-internal-note">
@@ -1231,45 +1272,33 @@ async function renderAdminOrders() {
   const canDelete = session.role === 'store_manager' || session.role === 'admin';
   let sellers = [];
   if (canAssign) sellers = await request('/api/admin/order-sellers').catch(() => []);
-  const editingOrders = new Set();
-  let orderProductEditorId = null;
-  let orderProductEditorLines = [];
 
   const sectionNav = (session.role === 'vendedor' || session.role === 'store_manager')
     ? `<nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}/pedidos" class="admin-section-link active" data-smooth-route>PEDIDOS</a><a href="${ADMIN_PATH}/generar-orden" class="admin-section-link" data-smooth-route>GENERAR ORDEN</a></nav>`
     : `<nav class="admin-section-nav" aria-label="Secciones de administración"><a href="${ADMIN_PATH}" class="admin-section-link" data-smooth-route>PÁGINA WEB</a><a href="${ADMIN_PATH}/usuarios" class="admin-section-link" data-smooth-route>USUARIOS</a><a href="${ADMIN_PATH}/inventario" class="admin-section-link" data-smooth-route>INVENTARIO</a><a href="${ADMIN_PATH}/pedidos" class="admin-section-link active" data-smooth-route>PEDIDOS</a><a href="${ADMIN_PATH}/generar-orden" class="admin-section-link" data-smooth-route>GENERAR ORDEN</a></nav>`;
   const title = session.role === 'vendedor' ? 'Mis pedidos asignados' : 'Gestión de pedidos';
   const subtitle = session.role === 'store_manager' ? 'Jefe de tienda · pedidos, asignaciones y control operativo' : (session.role === 'vendedor' ? 'Pedidos asignados a tu usuario · consulta y gestión operativa' : 'Gestión de YHORS STORE');
-  app.innerHTML = `<main class="admin-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">${title}</h1><p class="admin-subtitle">${subtitle}</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>${sectionNav}${ordersPanel(orders, canDelete)}
-    <div class="generate-modal" id="orderProductEditorModal" hidden>
-      <div class="generate-modal-backdrop" data-close-order-product-editor></div>
-      <div class="generate-modal-dialog generate-product-picker order-product-editor-dialog" role="dialog" aria-modal="true" aria-labelledby="orderProductEditorTitle">
-        <div class="generate-modal-head">
-          <div><span class="eyebrow">Catálogo YHORS</span><h2 id="orderProductEditorTitle">Agregar productos</h2><small id="orderProductEditorSubtitle" class="order-product-editor-subtitle">Edita los productos de esta orden.</small></div>
-          <button type="button" class="generate-modal-close" data-close-order-product-editor>×</button>
-        </div>
-        <div class="generate-picker-toolbar">
-          <input id="orderEditProductSearch" type="search" placeholder="Buscar por nombre, SKU, marca…">
-          <select id="orderEditProductCategory">
-            <option value="">Todas las categorías</option>
-            <option value="elegant">Elegante</option><option value="sports">Deportes</option><option value="tech">Tech</option>
-            <option value="cosplay">Cosplay</option><option value="pets">Mascotas</option><option value="details">Details</option><option value="collectibles">Coleccionables</option>
-          </select>
-        </div>
-        <div class="generate-picker-list order-edit-catalog-list" id="orderEditPickerList"></div>
-        <section class="order-edit-selected">
-          <div class="order-edit-selected-head"><div><span class="eyebrow">Detalle de la orden</span><strong>Productos seleccionados</strong></div><span id="orderEditSelectedCount">0 productos</span></div>
-          <div id="orderEditSelectedList"></div>
-        </section>
-        <div class="generate-modal-actions">
-          <span class="generate-picker-hint">Puedes añadir, quitar, cambiar cantidades y elegir compra o alquiler.</span>
-          <button type="button" class="button secondary" data-close-order-product-editor>Cancelar</button>
-          <button type="button" class="button primary" id="orderEditProductsSave">Guardar productos</button>
-        </div>
-      </div>
-    </div>
-  </div></main>`;
+  app.innerHTML = `<main class="admin-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">${title}</h1><p class="admin-subtitle">${subtitle}</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>${sectionNav}${ordersPanel(orders, canDelete)}</div></main>`;
 
+  const editorProductOptions = (selectedId = '') => `<option value="" ${selectedId ? '' : 'selected'}>Selecciona un producto…</option>${orderProducts.map(p => `<option value="${escapeHTML(p.id)}" ${String(p.id) === String(selectedId) ? 'selected' : ''}>${escapeHTML(p.name || 'Producto')} · ${escapeHTML(p.sku || 'sin SKU')}</option>`).join('')}`;
+  const editorRow = (productId = '', mode = 'purchase', quantity = 1, days = 1) => {
+    const product = orderProducts.find(p => String(p.id) === String(productId));
+    const image = product ? productImages(product)[0] : '';
+    return `<div class="order-item-editor-row" data-order-item-row>
+      <div class="order-edit-product-cell">
+        <img src="${escapeHTML(image || '/assets/yhors-logo-pdf.jpg')}" data-fallback alt="">
+        <select class="order-item-product" aria-label="Producto">${editorProductOptions(productId)}</select>
+      </div>
+      <select class="order-item-mode" aria-label="Modalidad"><option value="purchase" ${mode === 'purchase' ? 'selected' : ''}>Compra</option><option value="rental" ${mode === 'rental' ? 'selected' : ''}>Alquiler</option></select>
+      <div class="order-edit-qty">
+        <button type="button" class="order-item-qty-btn" data-order-item-qty="-1" aria-label="Disminuir cantidad">−</button>
+        <input class="order-item-quantity" type="number" min="1" max="99" step="1" value="${escapeHTML(quantity)}" aria-label="Cantidad">
+        <button type="button" class="order-item-qty-btn" data-order-item-qty="1" aria-label="Aumentar cantidad">+</button>
+      </div>
+      <input class="order-item-days" type="number" min="1" max="10" step="1" value="${escapeHTML(days)}" aria-label="Días de alquiler" ${mode === 'rental' ? '' : 'disabled'}>
+      <button class="button danger small order-item-remove" type="button" title="Quitar producto">Quitar</button>
+    </div>`;
+  };
   const drawOrders = () => {
     const list=document.querySelector('#adminOrdersList'); if(!list) return;
     const query=(document.querySelector('#ordersSearch')?.value||'').trim().toLowerCase();
@@ -1282,194 +1311,138 @@ async function renderAdminOrders() {
       const inRange=(!dateFrom||orderDate>=dateFrom)&&(!dateTo||orderDate<=dateTo);
       return inRange&&(!status||order.status===status)&&(!query||`${order.orderNumber} ${order.customer?.name||''} ${order.customer?.cedula||''} ${order.customer?.phone||''} ${order.customer?.email||''} ${(order.items||[]).map(i=>`${i.sku} ${i.name}`).join(' ')}`.toLowerCase().includes(query));
     });
-    list.innerHTML=ordersListMarkup(filtered, { canDelete, canAssign, sellers, role: session.role, products: orderProducts, editingOrders });
+    list.innerHTML=ordersListMarkup(filtered, { canDelete, canAssign, sellers, role: session.role, products: orderProducts });
 
     // Los campos del pedido permanecen bloqueados hasta pulsar "Editar pedido".
     // Los cambios de estado se guardan junto con nota y asignación.
     list.querySelectorAll('[data-order-toggle]').forEach(button=>button.addEventListener('click',()=>{ const details=document.querySelector(`#orderDetails-${button.dataset.orderToggle}`); if(!details) return; const opening=details.hidden; details.hidden=!opening; button.setAttribute('aria-expanded',String(opening)); button.closest('.admin-order')?.classList.toggle('is-open',opening); }));
-
-    const orderProductEditorModal = document.querySelector('#orderProductEditorModal');
-    const closeOrderProductEditor = () => {
-      if (!orderProductEditorModal) return;
-      orderProductEditorModal.classList.remove('is-open');
-      setTimeout(() => {
-        orderProductEditorModal.hidden = true;
-        document.body.classList.remove('generate-modal-open');
-      }, 180);
-      orderProductEditorId = null;
-      orderProductEditorLines = [];
-    };
-    const openOrderProductEditor = (order) => {
-      if (!orderProductEditorModal || !editingOrders.has(order.id)) return;
-      orderProductEditorId = order.id;
-      orderProductEditorLines = (order.items || []).map(item => ({
-        productId: item.productId,
-        name: item.name,
-        sku: item.sku || '',
-        category: item.category || '',
-        purchaseMode: item.purchaseMode === 'rental' ? 'rental' : 'purchase',
-        rentalDays: Number(item.rentalDays || 1),
-        quantity: Number(item.quantity || 1),
-        price: Number(item.unitPrice || 0),
-        image: productImages(item)[0]
-      }));
-      document.querySelector('#orderProductEditorTitle').textContent = `Agregar productos`;
-      document.querySelector('#orderProductEditorSubtitle').textContent = `Editando la orden #${order.orderNumber}`;
-      document.querySelector('#orderEditProductSearch').value = '';
-      document.querySelector('#orderEditProductCategory').value = '';
-      drawOrderProductEditorCatalog();
-      drawOrderProductEditorSelected();
-      orderProductEditorModal.hidden = false;
-      requestAnimationFrame(() => orderProductEditorModal.classList.add('is-open'));
-      document.body.classList.add('generate-modal-open');
-    };
-    const mergeOrderEditorLine = (product, mode = 'purchase') => {
-      const rental = mode === 'rental';
-      if (rental && (product.rentalPrice === null || product.rentalPrice === undefined || product.rentalPrice === '')) return;
-      const key = `${product.id}::${mode}`;
-      const existing = orderProductEditorLines.find(line => `${line.productId}::${line.purchaseMode}` === key);
-      if (existing) {
-        existing.quantity = Math.min(99, Number(existing.quantity || 0) + 1);
-      } else {
-        orderProductEditorLines.push({
-          productId: product.id,
-          name: product.name,
-          sku: product.sku || '',
-          category: product.category || '',
-          purchaseMode: mode,
-          rentalDays: rental ? 1 : null,
-          quantity: 1,
-          price: Number(rental ? product.rentalPrice : (product.salePrice ?? product.price ?? 0)),
-          image: productImages(product)[0]
-        });
-      }
-      drawOrderProductEditorSelected();
-      drawOrderProductEditorCatalog();
-    };
-    const drawOrderProductEditorCatalog = () => {
-      const query = (document.querySelector('#orderEditProductSearch')?.value || '').trim().toLowerCase();
-      const category = document.querySelector('#orderEditProductCategory')?.value || '';
-      const list = document.querySelector('#orderEditPickerList');
-      if (!list) return;
-      const filtered = orderProducts.filter(product => {
-        const hay = `${product.name || ''} ${product.sku || ''} ${product.brand || ''} ${product.productType || ''}`.toLowerCase();
-        return (!query || hay.includes(query)) && (!category || product.category === category);
-      });
-      list.innerHTML = filtered.length ? filtered.map(product => {
-        const stock = Number(product.stock || 0);
-        const rental = product.category === 'cosplay' && product.rentalPrice !== null && product.rentalPrice !== undefined && product.rentalPrice !== '';
-        const purchaseLine = orderProductEditorLines.find(line => String(line.productId) === String(product.id) && line.purchaseMode === 'purchase');
-        const rentalLine = orderProductEditorLines.find(line => String(line.productId) === String(product.id) && line.purchaseMode === 'rental');
-        return `<article class="generate-picker-product">
-          <img src="${escapeHTML(productImages(product)[0])}" data-fallback alt="">
-          <div class="generate-picker-info"><strong>${escapeHTML(product.name)}</strong><small>SKU: ${escapeHTML(product.sku || '—')} · ${escapeHTML(categories[product.category] || product.category || 'Producto')}</small><b>${money(product.salePrice ?? product.price ?? 0)} · Stock ${stock}${purchaseLine ? ` · En orden: ${purchaseLine.quantity}` : ''}</b></div>
-          <div class="generate-picker-actions">
-            <button type="button" class="button primary small" data-order-editor-add="${escapeHTML(product.id)}" data-mode="purchase">${purchaseLine ? '+ Añadir' : 'Agregar'}</button>
-            ${rental ? `<button type="button" class="button secondary small" data-order-editor-add="${escapeHTML(product.id)}" data-mode="rental">${rentalLine ? '+ Alquiler' : 'Alquiler'}</button>` : ''}
-          </div>
-        </article>`;
-      }).join('') : '<div class="generate-empty-state"><span>⌕</span><strong>No encontramos productos</strong><small>Prueba con otro nombre, SKU o categoría.</small></div>';
-      wireImageFallback(list);
-      list.querySelectorAll('[data-order-editor-add]').forEach(button => button.addEventListener('click', () => {
-        const product = orderProducts.find(item => item.id === button.dataset.orderEditorAdd);
-        if (product) mergeOrderEditorLine(product, button.dataset.mode);
-      }));
-    };
-    const drawOrderProductEditorSelected = () => {
-      const list = document.querySelector('#orderEditSelectedList');
-      const count = document.querySelector('#orderEditSelectedCount');
-      if (!list) return;
-      const totalUnits = orderProductEditorLines.reduce((sum, line) => sum + Number(line.quantity || 0), 0);
-      if (count) count.textContent = `${orderProductEditorLines.length} línea${orderProductEditorLines.length === 1 ? '' : 's'} · ${totalUnits} unidad${totalUnits === 1 ? '' : 'es'}`;
-      list.innerHTML = orderProductEditorLines.length ? orderProductEditorLines.map((line, index) => {
-        const rental = line.purchaseMode === 'rental';
-        const days = Math.max(1, Number(line.rentalDays || 1));
-        const total = Number(line.price || 0) * Number(line.quantity || 0) * (rental ? days : 1);
-        return `<div class="order-edit-selected-row" data-order-edit-line="${index}">
-          <img src="${escapeHTML(line.image || '')}" data-fallback alt="">
-          <div class="order-edit-selected-info"><strong>${escapeHTML(line.name)}</strong><small>SKU: ${escapeHTML(line.sku || '—')} · ${rental ? 'Alquiler' : 'Compra'} · ${money(line.price)}${rental ? '/día' : ''}</small></div>
-          <div class="order-edit-line-controls">
-            <button type="button" data-order-edit-qty="${index}" data-change="-1">−</button><strong>${line.quantity}</strong><button type="button" data-order-edit-qty="${index}" data-change="1">+</button>
-            ${rental ? `<select data-order-edit-days="${index}" aria-label="Días de alquiler">${Array.from({length:10},(_,i)=>i+1).map(day => `<option value="${day}" ${day === days ? 'selected' : ''}>${day} día${day===1?'':'s'}</option>`).join('')}</select>` : ''}
-          </div>
-          <strong class="order-edit-line-total">${money(total)}</strong>
-          <button type="button" class="generate-remove" data-order-edit-remove="${index}" aria-label="Quitar producto">×</button>
-        </div>`;
-      }).join('') : '<div class="generate-empty-state"><span>+</span><strong>No hay productos en la orden</strong><small>Agrega productos desde el catálogo de arriba.</small></div>';
-      wireImageFallback(list);
-    };
-
-    if (orderProductEditorModal && orderProductEditorModal.dataset.wired !== 'true') {
-      orderProductEditorModal.dataset.wired = 'true';
-      document.querySelectorAll('[data-close-order-product-editor]').forEach(el => el.addEventListener('click', closeOrderProductEditor));
-      document.querySelector('#orderEditProductSearch')?.addEventListener('input', drawOrderProductEditorCatalog);
-      document.querySelector('#orderEditProductCategory')?.addEventListener('change', drawOrderProductEditorCatalog);
-      document.querySelector('#orderEditSelectedList')?.addEventListener('click', event => {
-      const qty = event.target.closest('[data-order-edit-qty]');
-      const remove = event.target.closest('[data-order-edit-remove]');
-      if (qty) {
-        const index = Number(qty.dataset.orderEditQty);
-        const line = orderProductEditorLines[index];
-        if (!line) return;
-        line.quantity = Math.max(0, Math.min(99, Number(line.quantity || 0) + Number(qty.dataset.change || 0)));
-        if (line.quantity === 0) orderProductEditorLines.splice(index, 1);
-        drawOrderProductEditorSelected();
-        drawOrderProductEditorCatalog();
-      } else if (remove) {
-        orderProductEditorLines.splice(Number(remove.dataset.orderEditRemove), 1);
-        if (!orderProductEditorLines.length) {
-          drawOrderProductEditorSelected();
-        } else {
-          drawOrderProductEditorSelected();
-        }
-        drawOrderProductEditorCatalog();
-      }
-    });
-    document.querySelector('#orderEditSelectedList')?.addEventListener('change', event => {
-      const select = event.target.closest('[data-order-edit-days]');
-      if (!select) return;
-      const line = orderProductEditorLines[Number(select.dataset.orderEditDays)];
-      if (line) line.rentalDays = Math.max(1, Math.min(10, Number(select.value) || 1));
-      drawOrderProductEditorSelected();
-    });
-    document.querySelector('#orderEditProductsSave')?.addEventListener('click', async () => {
-      if (!orderProductEditorId) return;
-      const order = orders.find(o => o.id === orderProductEditorId);
-      if (!order) return;
-      if (!orderProductEditorLines.length) { alert('El pedido debe tener al menos un producto.'); return; }
-      const items = orderProductEditorLines.map(line => ({
-        productId: line.productId,
-        purchaseMode: line.purchaseMode,
-        quantity: Number(line.quantity),
-        rentalDays: line.purchaseMode === 'rental' ? Math.max(1, Number(line.rentalDays || 1)) : null
-      }));
-      if (items.some(item => !item.productId || !Number.isInteger(item.quantity) || item.quantity < 1 || item.quantity > 99)) {
-        alert('Revisa las cantidades de los productos.');
-        return;
-      }
-      const confirmed = await showYhorsConfirm('¿Guardar los productos del pedido?', `Se actualizará el contenido del pedido #${escapeHTML(order.orderNumber)} y se recalcularán subtotal, total e inventario.`);
-      if (!confirmed) return;
-      const button = document.querySelector('#orderEditProductsSave');
-      if (button) { button.disabled = true; button.textContent = 'Guardando…'; }
-      try {
-        const updated = await request(`/api/admin/orders/${order.id}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ items }) });
-        orders = orders.map(o => o.id === updated.id ? updated : o);
-        closeOrderProductEditor();
-        drawOrders();
-        const details = document.querySelector(`#orderDetails-${order.id}`);
-        const toggle = document.querySelector(`[data-order-toggle="${order.id}"]`);
-        if (details && toggle) { details.hidden = false; toggle.setAttribute('aria-expanded','true'); toggle.closest('.admin-order')?.classList.add('is-open'); }
-      } catch (e) {
-        if (button) { button.disabled = false; button.textContent = 'Guardar productos'; }
-        alert(e.message);
-      }
-      });
-    }
-
     list.querySelectorAll('[data-order-items-edit]').forEach(button => button.addEventListener('click', () => {
       if (button.disabled) return;
-      const order = orders.find(o => o.id === button.dataset.orderItemsEdit);
-      if (order) openOrderProductEditor(order);
+      const id = button.dataset.orderItemsEdit;
+      const editor = list.querySelector(`[data-order-items-editor="${id}"]`);
+      const view = list.querySelector(`[data-order-items-view="${id}"]`);
+      if (!editor) return;
+      editor.hidden = false;
+      if (view) view.hidden = true;
+      button.hidden = true;
+    }));
+
+    list.querySelectorAll('[data-order-items-cancel]').forEach(button => button.addEventListener('click', () => {
+      const id = button.dataset.orderItemsCancel;
+      const editor = list.querySelector(`[data-order-items-editor="${id}"]`);
+      const view = list.querySelector(`[data-order-items-view="${id}"]`);
+      const editButton = list.querySelector(`[data-order-items-edit="${id}"]`);
+      if (editor) editor.hidden = true;
+      if (view) view.hidden = false;
+      if (editButton) editButton.hidden = false;
+    }));
+
+    list.querySelectorAll('[data-order-item-add]').forEach(button => button.addEventListener('click', () => {
+      const id = button.dataset.orderItemAdd;
+      const rows = list.querySelector(`[data-order-items-list="${id}"]`);
+      if (!rows) return;
+      if (!orderProducts.length) { alert('No hay productos disponibles para añadir.'); return; }
+      rows.insertAdjacentHTML('beforeend', editorRow());
+      const added = rows.lastElementChild;
+      const mode = added?.querySelector('.order-item-mode');
+      const days = added?.querySelector('.order-item-days');
+      mode?.addEventListener('change', () => { if (days) days.disabled = mode.value !== 'rental'; });
+    }));
+
+    list.querySelectorAll('.order-items-editor-list').forEach(editorList => {
+      editorList.addEventListener('click', event => {
+        const remove = event.target.closest('.order-item-remove');
+        if (remove) {
+          const rows = editorList.querySelectorAll('[data-order-item-row]');
+          if (rows.length <= 1) {
+            alert('Un pedido debe conservar al menos un producto.');
+            return;
+          }
+          remove.closest('[data-order-item-row]')?.remove();
+          return;
+        }
+        const qtyButton = event.target.closest('[data-order-item-qty]');
+        if (qtyButton) {
+          const row = qtyButton.closest('[data-order-item-row]');
+          const input = row?.querySelector('.order-item-quantity');
+          if (!input) return;
+          const delta = Number(qtyButton.dataset.orderItemQty || 0);
+          const next = Math.min(99, Math.max(1, Number(input.value || 1) + delta));
+          input.value = String(next);
+        }
+      });
+      editorList.addEventListener('change', event => {
+        const mode = event.target.closest('.order-item-mode');
+        if (mode) {
+          const row = mode.closest('[data-order-item-row]');
+          const days = row?.querySelector('.order-item-days');
+          if (days) days.disabled = mode.value !== 'rental';
+        }
+        const productSelect = event.target.closest('.order-item-product');
+        if (productSelect) {
+          const row = productSelect.closest('[data-order-item-row]');
+          const product = products.find(p => String(p.id) === String(productSelect.value));
+          const img = row?.querySelector('.order-edit-product-cell img');
+          if (img && product) {
+            img.src = productImages(product)[0] || '/assets/yhors-logo-pdf.jpg';
+          }
+        }
+      });
+    });
+
+    list.querySelectorAll('[data-order-items-save]').forEach(button => button.addEventListener('click', async () => {
+      const id = button.dataset.orderItemsSave;
+      const editor = list.querySelector(`[data-order-items-editor="${id}"]`);
+      const order = orders.find(o => o.id === id);
+      if (!editor || !order) return;
+      const rows = [...editor.querySelectorAll('[data-order-item-row]')];
+      if (!rows.length) { alert('El pedido debe tener al menos un producto.'); return; }
+
+      const items = rows.map(row => ({
+        productId: row.querySelector('.order-item-product')?.value || '',
+        purchaseMode: row.querySelector('.order-item-mode')?.value || 'purchase',
+        quantity: Number(row.querySelector('.order-item-quantity')?.value || 0),
+        rentalDays: Number(row.querySelector('.order-item-days')?.value || 1)
+      }));
+
+      if (items.some(item => !item.productId || !Number.isInteger(item.quantity) || item.quantity < 1 || item.quantity > 99)) {
+        alert('Revisa las cantidades y los productos del pedido.');
+        return;
+      }
+      if (items.some(item => item.purchaseMode === 'rental' && (!Number.isInteger(item.rentalDays) || item.rentalDays < 1 || item.rentalDays > 10))) {
+        alert('Los alquileres deben tener entre 1 y 10 días.');
+        return;
+      }
+
+      const confirmed = await showYhorsConfirm(
+        '¿Guardar los productos del pedido?',
+        `Se actualizará el contenido del pedido #${escapeHTML(order.orderNumber)} y se recalcularán subtotal y total.`
+      );
+      if (!confirmed) return;
+
+      const originalText = button.textContent;
+      button.disabled = true;
+      button.textContent = 'Guardando…';
+      try {
+        const updated = await request(`/api/admin/orders/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ items })
+        });
+        orders = orders.map(o => o.id === updated.id ? updated : o);
+        drawOrders();
+        const details = document.querySelector(`#orderDetails-${id}`);
+        const toggle = document.querySelector(`[data-order-toggle="${id}"]`);
+        if (details && toggle) {
+          details.hidden = false;
+          toggle.setAttribute('aria-expanded', 'true');
+          toggle.closest('.admin-order')?.classList.add('is-open');
+        }
+      } catch (e) {
+        button.disabled = false;
+        button.textContent = originalText;
+        alert(e.message);
+      }
     }));
 
     list.querySelectorAll('[data-order-note-edit]').forEach(button => button.addEventListener('click', () => {
@@ -1479,15 +1452,11 @@ async function renderAdminOrders() {
       const statusSelect = list.querySelector(`[data-order-status="${id}"]`);
       const assignment = list.querySelector(`[data-order-assignment="${id}"]`);
       if (!textarea || !saveButton) return;
-      editingOrders.add(id);
-      const productEditButton = list.querySelector(`[data-order-items-edit="${id}"]`);
-      if (productEditButton) {
-        productEditButton.disabled = false;
-        productEditButton.title = 'Editar productos del pedido';
-      }
       textarea.disabled = false;
       if (statusSelect) statusSelect.disabled = false;
       if (assignment) assignment.disabled = false;
+      const itemsEditButton = list.querySelector(`[data-order-items-edit="${id}"]`);
+      if (itemsEditButton) itemsEditButton.disabled = false;
       textarea.focus();
       button.disabled = true;
       button.textContent = 'Editando…';
@@ -1545,11 +1514,6 @@ async function renderAdminOrders() {
           editButton.disabled = false;
           editButton.textContent = 'Editar pedido';
         }
-        editingOrders.delete(id);
-        if (editButton) {
-          const productEditButton = list.querySelector(`[data-order-items-edit="${id}"]`);
-          if (productEditButton) { productEditButton.disabled = true; productEditButton.title = 'Activa «Editar pedido» primero'; }
-        }
         delete button.dataset.editing;
         button.textContent='Sin cambios';
         button.disabled=true;
@@ -1590,9 +1554,6 @@ async function renderAdminOrders() {
           editButton.disabled = false;
           editButton.textContent = 'Editar pedido';
         }
-        editingOrders.delete(id);
-        const productEditButton = list.querySelector(`[data-order-items-edit="${id}"]`);
-        if (productEditButton) { productEditButton.disabled = true; productEditButton.title = 'Activa «Editar pedido» primero'; }
         delete button.dataset.editing;
         button.textContent='Cambios guardados ✓';
         setTimeout(()=>{button.textContent='Guardar cambios'; button.disabled=true;},1400);
