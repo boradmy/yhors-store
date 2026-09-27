@@ -1993,10 +1993,10 @@ body.generate-modal-open{overflow:hidden}
 
 /* Editor de productos dentro de pedidos */
 .order-items-editor {
-  margin: 14px 0 6px;
-  padding: 18px;
+  margin: 12px 0 4px;
+  padding: 16px;
   border: 1px solid #ded8cb;
-  border-radius: 14px;
+  border-radius: 12px;
   background: #faf9f5;
 }
 .order-items-editor-head {
@@ -2005,29 +2005,14 @@ body.generate-modal-open{overflow:hidden}
   gap: 16px;
   margin-bottom: 12px;
 }
-.order-items-editor-head strong { display: block; font-size: .9rem; }
+.order-items-editor-head strong { display: block; }
 .order-items-editor-head small { display: block; margin-top: 4px; color: #777; }
 .order-item-editor-row {
   display: grid;
-  grid-template-columns: minmax(300px, 1fr) 120px 112px 92px 78px;
-  gap: 12px;
+  grid-template-columns: minmax(220px, 1fr) 130px 90px 110px auto;
+  gap: 8px;
   align-items: center;
-  padding: 11px 8px;
-  border-bottom: 1px solid #ebe7df;
-}
-.order-edit-product-cell {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-}
-.order-edit-product-cell img {
-  width: 48px;
-  height: 48px;
-  border-radius: 7px;
-  object-fit: cover;
-  background: #eeeae2;
-  flex: 0 0 48px;
+  margin-bottom: 8px;
 }
 .order-item-editor-row select,
 .order-item-editor-row input {
@@ -2040,74 +2025,160 @@ body.generate-modal-open{overflow:hidden}
   background: #fff;
   font: inherit;
 }
-.order-item-mode,
-.order-item-days { font-size: .78rem; }
-.order-edit-qty {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-}
-.order-edit-qty .order-item-quantity {
-  width: 42px;
-  text-align: center;
-  padding: 8px 4px;
-  -moz-appearance: textfield;
-}
-.order-edit-qty .order-item-quantity::-webkit-outer-spin-button,
-.order-edit-qty .order-item-quantity::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-.order-item-qty-btn {
-  width: 28px;
-  height: 28px;
-  border: 1px solid #d7d1c6;
-  border-radius: 7px;
-  background: #fff;
-  cursor: pointer;
-  font-size: 1rem;
-  line-height: 1;
-}
-.order-item-qty-btn:hover { border-color: var(--gold); transform: translateY(-1px); }
-.order-item-remove {
-  white-space: nowrap;
-}
 .order-items-editor-actions {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-top: 14px;
+  margin-top: 12px;
 }
 .order-items-editor-spacer { flex: 1; }
 .admin-order-items-actions {
   margin: 8px 0 2px;
 }
 .admin-order-items-actions .button { margin: 0; }
-[data-order-items-edit]:disabled {
-  opacity: .48;
-  cursor: not-allowed;
-  pointer-events: none;
-}
-@media (max-width: 1000px) {
+@media (max-width: 900px) {
   .order-item-editor-row {
-    grid-template-columns: minmax(240px, 1fr) 110px 105px;
+    grid-template-columns: 1fr 1fr;
   }
-  .order-item-days,
-  .order-item-remove { grid-column: auto; }
-}
-@media (max-width: 760px) {
-  .order-item-editor-row { grid-template-columns: 1fr 1fr; }
-  .order-edit-product-cell { grid-column: 1 / -1; }
-  .order-item-mode { grid-column: 1; }
-  .order-edit-qty { grid-column: 2; }
-  .order-item-days { grid-column: 1; }
-  .order-item-remove { grid-column: 2; }
+  .order-item-editor-row .order-item-product { grid-column: 1 / -1; }
 }
 @media (max-width: 560px) {
   .order-item-editor-row { grid-template-columns: 1fr; }
-  .order-edit-product-cell,
-  .order-item-mode,
-  .order-edit-qty,
-  .order-item-days,
-  .order-item-remove { grid-column: auto; }
+  .order-item-editor-row .order-item-product { grid-column: auto; }
   .order-items-editor-actions { flex-wrap: wrap; }
   .order-items-editor-spacer { display: none; }
+}
+
+
+/* Selector de productos para edición de pedidos: misma experiencia visual que Generar orden */
+.order-product-editor-dialog {
+  width: min(900px, 100%);
+}
+.order-product-editor-subtitle {
+  display: block;
+  margin-top: 7px;
+  color: var(--muted);
+  font-size: .76rem;
+}
+.admin-order-items-actions .button:disabled {
+  opacity: .48;
+  cursor: not-allowed;
+  transform: none;
+}
+.order-edit-selected {
+  margin-top: 16px;
+  padding-top: 15px;
+  border-top: 1px solid #eeeae2;
+}
+.order-edit-selected-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  gap: 12px;
+  margin-bottom: 9px;
+}
+.order-edit-selected-head > div {
+  display: grid;
+  gap: 3px;
+}
+.order-edit-selected-head strong {
+  font-size: .92rem;
+}
+.order-edit-selected-head > span {
+  color: var(--muted);
+  font-size: .72rem;
+}
+.order-edit-selected-list {
+  display: grid;
+  gap: 0;
+}
+.order-edit-selected-row {
+  display: grid;
+  grid-template-columns: 50px minmax(220px,1fr) auto auto 28px;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 8px;
+  border-bottom: 1px solid #eeeae2;
+}
+.order-edit-selected-row img {
+  width: 50px;
+  height: 50px;
+  border-radius: 7px;
+  object-fit: cover;
+  background: #eeeae2;
+}
+.order-edit-selected-info {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.order-edit-selected-info strong {
+  font-size: .82rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.order-edit-selected-info small {
+  color: var(--muted);
+  font-size: .68rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.order-edit-line-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+}
+.order-edit-line-controls button {
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 1rem;
+}
+.order-edit-line-controls button:hover {
+  border-color: var(--gold);
+  transform: translateY(-1px);
+}
+.order-edit-line-controls strong {
+  min-width: 18px;
+  text-align: center;
+  font-size: .82rem;
+}
+.order-edit-line-controls select {
+  min-width: 88px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  padding: 5px 7px;
+  font: inherit;
+  font-size: .72rem;
+}
+.order-edit-line-total {
+  min-width: 80px;
+  text-align: right;
+  font-size: .82rem;
+  white-space: nowrap;
+}
+@media (max-width: 700px) {
+  .order-edit-selected-row {
+    grid-template-columns: 45px minmax(0,1fr) 28px;
+    gap: 9px;
+  }
+  .order-edit-selected-row > .order-edit-line-controls {
+    grid-column: 2;
+    justify-content: flex-start;
+  }
+  .order-edit-selected-row > .order-edit-line-total {
+    grid-column: 2;
+    text-align: left;
+  }
+  .order-edit-selected-row > .generate-remove {
+    grid-column: 3;
+    grid-row: 1;
+  }
 }
