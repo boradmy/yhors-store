@@ -1374,8 +1374,40 @@ async function renderAdminOrders() {
       if(qty){ const id=qty.closest('[data-order-items-editor]')?.dataset.orderItemsEditor; const order=orders.find(o=>o.id===id); if(!order)return; const items=getDraft(order); const i=Number(qty.dataset.orderDraftQty); if(!items[i])return; items[i].quantity=Math.max(1,Math.min(99,Number(items[i].quantity||1)+Number(qty.dataset.change||0))); syncOrderEditor(id); return; }
       const rem=event.target.closest('[data-order-draft-remove]');
       if(rem){ const id=rem.closest('[data-order-items-editor]')?.dataset.orderItemsEditor; const order=orders.find(o=>o.id===id); if(!order)return; const items=getDraft(order); const i=Number(rem.dataset.orderDraftRemove); if(items.length<=1){alert('Un pedido debe conservar al menos un producto.');return;} items.splice(i,1); syncOrderEditor(id); return; }
-      const editor=event.target.closest('[data-order-items-editor]');
-      if(editor && event.target.matches('[data-order-draft-days]')){ const id=editor.dataset.orderItemsEditor; const order=orders.find(o=>o.id===id); if(!order)return; const items=getDraft(order); const i=Number(event.target.dataset.orderDraftDays); if(items[i]) items[i].rentalDays=Math.max(1,Math.min(10,Number(event.target.value)||1)); syncOrderEditor(id); }
+      // Los días de alquiler se manejan en `change`, no en `click`.
+      // Si se redibuja el editor durante el click de un <select>, el navegador
+      // cierra inmediatamente el menú y obliga a mantener el mouse pulsado.
+    });
+
+    // Cambiar los días no debe reconstruir todo el editor: así el <select>
+    // conserva su comportamiento nativo y el menú permanece abierto normalmente.
+    list.addEventListener('change', event => {
+      const select = event.target.closest('[data-order-draft-days]');
+      if (!select) return;
+      const editor = select.closest('[data-order-items-editor]');
+      if (!editor) return;
+      const id = editor.dataset.orderItemsEditor;
+      const order = orders.find(o => o.id === id);
+      if (!order) return;
+      const items = getDraft(order);
+      const index = Number(select.dataset.orderDraftDays);
+      const item = items[index];
+      if (!item) return;
+      item.rentalDays = Math.max(1, Math.min(10, Number(select.value) || 1));
+
+      const product = productById(item.productId) || item;
+      const unit = Number(product?.rentalPrice ?? item.unitPrice ?? 0);
+      const quantity = Math.max(1, Number(item.quantity || 1));
+      const total = unit * quantity * item.rentalDays;
+      const row = select.closest('.order-edit-product-row');
+      if (row) {
+        const info = row.querySelector('.generate-product-info small');
+        const totalEl = row.querySelector('.generate-line-total');
+        const unitEl = row.querySelector('.generate-unit-price');
+        if (info) info.textContent = `SKU: ${product?.sku || item.sku || '—'} · Alquiler · ${item.rentalDays} día${item.rentalDays === 1 ? '' : 's'}`;
+        if (unitEl) unitEl.textContent = `${money(unit)} / día`;
+        if (totalEl) totalEl.textContent = money(total);
+      }
     });
 
     list.querySelectorAll('[data-order-items-cancel]').forEach(button=>button.addEventListener('click',()=>{}));
@@ -1399,6 +1431,16 @@ async function renderAdminOrders() {
       saveButton.dataset.editing = 'true';
       saveButton.disabled = false;
     }));
+
+    const refreshOrderItemsView = order => {
+      const view = list.querySelector(`[data-order-items-view="${order.id}"]`);
+      if (!view) return;
+      view.innerHTML = (order.items || []).map(item => {
+        const isRental = item.purchaseMode === 'rental';
+        const days = Number(item.rentalDays || 1);
+        return `<div class="admin-order-item"><span><strong>${escapeHTML(item.quantity)}×</strong> ${escapeHTML(item.name)} <small>SKU: ${escapeHTML(item.sku || '—')} · ${isRental ? `Alquiler · ${days} día${days === 1 ? '' : 's'} · ${money(item.unitPrice)}/día` : 'Compra'}</small></span><strong>${money(item.subtotal)}</strong></div>`;
+      }).join('');
+    };
 
     list.querySelectorAll('[data-order-note-save]').forEach(button=>button.addEventListener('click',async()=>{
       const id=button.dataset.orderNoteSave;
@@ -1457,6 +1499,7 @@ async function renderAdminOrders() {
         }
         const productsButton = list.querySelector(`[data-order-items-edit="${id}"]`);
         if (productsButton) { productsButton.disabled = true; productsButton.hidden = false; }
+        closeOrderEditor(id);
         editingOrders.delete(id); draftItems.delete(id); productEditorsOpen.delete(id);
         delete button.dataset.editing;
         button.textContent='Sin cambios';
@@ -1507,6 +1550,8 @@ async function renderAdminOrders() {
         }
         const productsButton = list.querySelector(`[data-order-items-edit="${id}"]`);
         if (productsButton) { productsButton.disabled = true; productsButton.hidden = false; }
+        refreshOrderItemsView(updated);
+        closeOrderEditor(id);
         editingOrders.delete(id); draftItems.delete(id); productEditorsOpen.delete(id);
         delete button.dataset.editing;
         button.textContent='Cambios guardados ✓';
