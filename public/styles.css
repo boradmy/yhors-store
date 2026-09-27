@@ -2880,3 +2880,94 @@ body.generate-modal-open{overflow:hidden}
   .security-alert-empty{display:grid;gap:5px}
   .security-alert-top{align-items:flex-start}
 }
+
+
+/* V15.5 · Usuarios / Seguridad + cabecera móvil */
+.users-module-tab{
+  appearance:none;
+  -webkit-appearance:none;
+  font:inherit;
+  cursor:pointer;
+  border:0;
+}
+.users-module-switch .users-module-tab:disabled{opacity:.55;cursor:wait}
+.account-page-actions{
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:10px;
+}
+.account-page-actions .account-menu-wrap{display:inline-flex;align-items:center}
+.account-page-actions .account-menu-trigger{
+  width:48px;height:48px;min-width:48px;
+  border-radius:50%;
+}
+.account-page-actions .account-back-button{
+  min-height:44px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  padding:0 18px;
+}
+@media (max-width:700px){
+  .admin-top{
+    align-items:center;
+    gap:12px;
+  }
+  .admin-top > div:first-child{
+    min-width:0;
+  }
+  .admin-title{
+    font-size:1.55rem;
+    line-height:1.08;
+  }
+  .admin-subtitle{
+    font-size:.82rem;
+  }
+  .account-page-actions{
+    flex:0 0 auto;
+    width:auto;
+    flex-wrap:nowrap;
+    align-items:center;
+    justify-content:flex-end;
+    gap:8px;
+  }
+  .account-page-actions .account-back-button{
+    min-height:42px;
+    padding:0 12px;
+    font-size:.78rem;
+    white-space:nowrap;
+  }
+  .account-page-actions .account-menu-trigger{
+    width:46px;
+    height:46px;
+    min-width:46px;
+  }
+  .account-page-actions .account-menu-caret{
+    margin-left:0;
+  }
+}
+@media (max-width:460px){
+  .admin-shell{padding:10px}
+  .admin-top{
+    gap:9px;
+    margin-bottom:16px;
+  }
+  .admin-top .brand{font-size:.86rem;letter-spacing:.26em}
+  .admin-title{font-size:1.38rem}
+  .admin-subtitle{font-size:.75rem;line-height:1.3}
+  .account-page-actions .account-back-button{
+    min-height:40px;
+    padding:0 10px;
+    font-size:.74rem;
+  }
+  .account-page-actions .account-menu-trigger{
+    width:42px;
+    height:42px;
+    min-width:42px;
+  }
+  .account-page-actions .account-menu{
+    right:0;
+    min-width:185px;
+  }
+}

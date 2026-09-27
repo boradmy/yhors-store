@@ -612,7 +612,10 @@ async function renderCurrentRoute() {
   if (path === `${ADMIN_PATH}/generar-orden` || path === `${ADMIN_PATH}/generar-orden/`) return renderAdminGenerateOrder();
     if (path === `${ADMIN_PATH}/auditoria` || path === `${ADMIN_PATH}/auditoria/`) return renderAdminAudit();
   if (path === `${ADMIN_PATH}/seguridad` || path === `${ADMIN_PATH}/seguridad/`) return renderAdminSecurity(true);
-if (path === `${ADMIN_PATH}/usuarios` || path === `${ADMIN_PATH}/usuarios/`) return renderAdminUsers(new URLSearchParams(window.location.search).get('panel') || 'usuarios');
+if (path === `${ADMIN_PATH}/usuarios` || path === `${ADMIN_PATH}/usuarios/`) {
+    const panel = new URLSearchParams(window.location.search).get('panel') || 'usuarios';
+    return panel === 'seguridad' ? renderAdminSecurity(true) : renderAdminUsers('usuarios');
+  }
   if (path === `${ADMIN_PATH}/inventario` || path === `${ADMIN_PATH}/inventario/`) return renderAdminInventory();
   if (path === '/mi-cuenta' || path === '/mi-cuenta/') return renderMyAccount();
   if (path === '/pedido' || path === '/pedido/') return checkoutPage();
@@ -1983,7 +1986,13 @@ async function renderAdminSecurity(embedded = false) {
   if (session.role !== 'admin') return renderAdminOrders();
 
   let data = await request('/api/admin/security/overview').catch(() => null);
-  const alertData = await request('/api/admin/security/alerts').catch(() => ({ alerts: [], summary: { total: 0 } }));
+  let alertData = await request('/api/admin/security/alerts').catch(() => ({ alerts: [], summary: { total: 0 } }));
+  if (!data || !Array.isArray(data.users)) {
+    data = { version: 'V15.4', generatedAt: new Date().toISOString(), totals: {}, users: [] };
+  }
+  if (!alertData || typeof alertData !== 'object') {
+    alertData = { alerts: [], summary: { total: 0 } };
+  }
   if (!data) {
     const alertSeverityLabel = severity => ({ critical:'Crítica', high:'Alta', medium:'Media', low:'Baja' }[severity] || 'Aviso');
   const alertIcon = severity => ({ critical:'!', high:'!', medium:'•', low:'i' }[severity] || 'i');
@@ -1999,16 +2008,17 @@ async function renderAdminSecurity(embedded = false) {
       </article>`).join('')
     : `<div class="security-alert-empty"><strong>Sin alertas activas</strong><span>No se detectaron patrones anormales en la actividad reciente.</span></div>`;
 
-  app.innerHTML = `<main class="admin-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">${embedded ? 'Usuarios' : 'Seguridad'}</h1><p class="admin-subtitle">No se pudo cargar el centro de seguridad.</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>${adminSectionNav(session, 'usuarios')}${embedded ? `<div class="users-module-switch" role="tablist" aria-label="Usuarios y seguridad"><a class="users-module-tab" href="${ADMIN_PATH}/usuarios" data-smooth-route>Usuarios</a><a class="users-module-tab is-active" href="${ADMIN_PATH}/usuarios?panel=seguridad" data-smooth-route>Seguridad</a></div>` : ''}<section class="admin-panel"><div class="message error">Intenta recargar esta sección.</div></section></div></main>`;
+  app.innerHTML = `<main class="admin-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">${embedded ? 'Usuarios' : 'Seguridad'}</h1><p class="admin-subtitle">No se pudo cargar el centro de seguridad.</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>${adminSectionNav(session, 'usuarios')}${embedded ? `<div class="users-module-switch" role="tablist" aria-label="Usuarios y seguridad"><button type="button" class="users-module-tab" data-open-users>Usuarios</button><button type="button" class="users-module-tab is-active" data-open-security>Seguridad</button></div>` : ''}<section class="admin-panel"><div class="message error">Intenta recargar esta sección.</div></section></div></main>`;
     return;
   }
 
   const fmtDate = value => value ? new Intl.DateTimeFormat('es-EC', { dateStyle:'short', timeStyle:'short' }).format(new Date(value)) : 'Nunca';
+  const totals = data.totals || {};
   const cards = [
-    ['USUARIOS ACTIVOS', data.totals.activeUsers, 'Cuentas con acceso permitido'],
-    ['SESIONES ACTIVAS', data.totals.activeSessions, 'Sesiones en este servidor'],
-    ['PASSKEYS', data.totals.passkeys, 'Credenciales registradas'],
-    ['CUENTAS BLOQUEADAS', data.totals.lockedUsers, 'Requieren revisión'],
+    ['USUARIOS ACTIVOS', Number(totals.activeUsers || 0), 'Cuentas con acceso permitido'],
+    ['SESIONES ACTIVAS', Number(totals.activeSessions || 0), 'Sesiones en este servidor'],
+    ['PASSKEYS', Number(totals.passkeys || 0), 'Credenciales registradas'],
+    ['CUENTAS BLOQUEADAS', Number(totals.lockedUsers || 0), 'Requieren revisión'],
     ['ALERTAS ACTIVAS', Number(alertData.summary?.total || 0), 'Patrones que requieren atención']
   ];
   const rows = data.users.map(row => `<article class="security-user-card" data-security-user="${escapeHTML(row.id)}">
@@ -2032,7 +2042,7 @@ async function renderAdminSecurity(embedded = false) {
   app.innerHTML = `<main class="admin-shell"><div class="admin-wrap">
     <div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">${embedded ? 'Usuarios' : 'Seguridad'}</h1><p class="admin-subtitle">${embedded ? 'Cuentas, acceso y protección de YHORS' : 'Centro de control de acceso de YHORS'}</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>
     ${adminSectionNav(session, 'usuarios')}
-    ${embedded ? `<div class="users-module-switch" role="tablist" aria-label="Usuarios y seguridad"><a class="users-module-tab" href="${ADMIN_PATH}/usuarios" data-smooth-route>Usuarios</a><a class="users-module-tab is-active" href="${ADMIN_PATH}/usuarios?panel=seguridad" data-smooth-route>Seguridad</a></div>` : ''}
+    ${embedded ? `<div class="users-module-switch" role="tablist" aria-label="Usuarios y seguridad"><button type="button" class="users-module-tab" data-open-users>Usuarios</button><button type="button" class="users-module-tab is-active" data-open-security>Seguridad</button></div>` : ''}
     <section class="admin-panel security-panel">
       <div class="security-hero">
         <div><span class="eyebrow">V15.4 · PROTECCIÓN DE ACCESO</span><h2>Seguridad y sesiones</h2><p>Controla cuentas, bloqueos, Passkeys y sesiones activas desde un solo lugar.</p></div>
@@ -2072,6 +2082,33 @@ async function renderAdminSecurity(embedded = false) {
     catch (error) { alert(error.message); }
   }));
   wireAccountMenu();
+  document.querySelectorAll('[data-open-users]').forEach(button => {
+    button.addEventListener('click', async () => {
+      button.disabled = true;
+      try {
+        history.pushState({}, '', `${ADMIN_PATH}/usuarios`);
+        await renderAdminUsers('usuarios');
+      } catch (error) {
+        console.error('[YHORS] No se pudo volver a Usuarios:', error);
+        alert('No se pudo abrir Usuarios. Intenta nuevamente.');
+      } finally {
+        button.disabled = false;
+      }
+    });
+  });
+  document.querySelectorAll('[data-open-security]').forEach(button => {
+    button.addEventListener('click', async () => {
+      button.disabled = true;
+      try {
+        history.pushState({}, '', `${ADMIN_PATH}/usuarios?panel=seguridad`);
+        await renderAdminSecurity(true);
+      } catch (error) {
+        console.error('[YHORS] No se pudo actualizar Seguridad:', error);
+      } finally {
+        button.disabled = false;
+      }
+    });
+  });
 }
 
 async function renderAdminAudit() {
@@ -2235,8 +2272,8 @@ function usersPanel(users = []) {
 
   return `<section class="admin-panel users-panel" id="usersPanel">
     <div class="users-module-switch" role="tablist" aria-label="Usuarios y seguridad">
-      <a class="users-module-tab is-active" href="${ADMIN_PATH}/usuarios" data-smooth-route role="tab" aria-selected="true">Usuarios</a>
-      <a class="users-module-tab" href="${ADMIN_PATH}/usuarios?panel=seguridad" data-smooth-route role="tab" aria-selected="false">Seguridad</a>
+      <button type="button" class="users-module-tab is-active" data-open-users role="tab" aria-selected="true">Usuarios</button>
+      <button type="button" class="users-module-tab" data-open-security role="tab" aria-selected="false">Seguridad</button>
     </div>
     <div class="section-heading">
       <div><span class="eyebrow">Cuentas y acceso</span><h2>Usuarios</h2></div>
@@ -2381,6 +2418,35 @@ async function renderAdminUsers(panel = 'usuarios') {
 
   cancel?.addEventListener('click', resetForm);
   wireAccountMenu();
+
+  document.querySelectorAll('[data-open-security]').forEach(button => {
+    button.addEventListener('click', async () => {
+      button.disabled = true;
+      try {
+        history.pushState({}, '', `${ADMIN_PATH}/usuarios?panel=seguridad`);
+        await renderAdminSecurity(true);
+      } catch (error) {
+        console.error('[YHORS] No se pudo abrir Seguridad:', error);
+        alert('No se pudo abrir Seguridad. Intenta nuevamente.');
+      } finally {
+        button.disabled = false;
+      }
+    });
+  });
+  document.querySelectorAll('[data-open-users]').forEach(button => {
+    button.addEventListener('click', async () => {
+      button.disabled = true;
+      try {
+        history.pushState({}, '', `${ADMIN_PATH}/usuarios`);
+        await renderAdminUsers('usuarios');
+      } catch (error) {
+        console.error('[YHORS] No se pudo abrir Usuarios:', error);
+        alert('No se pudo abrir Usuarios. Intenta nuevamente.');
+      } finally {
+        button.disabled = false;
+      }
+    });
+  });
 
   form?.addEventListener('submit', async event => {
     event.preventDefault();
