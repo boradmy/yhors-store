@@ -890,13 +890,13 @@ function buildOrderPdf(order) {
     } else {
       drawText(ops, 'YHORS', margin, y - 10, 24, boldFont);
     }
-    // Los tres textos comparten exactamente el mismo eje central del
-    // recuadro PENDIENTE. El ancho real de cada fuente se calcula con las
-    // métricas de Helvetica, por eso títulos de distinto tamaño quedan
-    // visualmente centrados y no desplazados por aproximaciones.
+    // El encabezado ocupa la columna derecha del documento, pero NO se
+    // centra contra el borde derecho de la página. Este eje (78% del ancho
+    // útil) es el que mantiene el título, número, fecha y PENDIENTE dentro
+    // del margen y con la misma apariencia de la versión correcta anterior.
+    const headerCenter = margin + contentWidth * 0.78;
     const statusW = 116;
-    const statusX = right - statusW;
-    const headerCenter = statusX + statusW / 2;
+    const statusX = headerCenter - statusW / 2;
     drawText(ops, 'ORDEN DE PEDIDO', headerCenter, y - 8, 18, boldFont, 'center');
     drawText(ops, `N. ORDEN  ${orderNo}`, headerCenter, y - 29, 9, boldFont, 'center');
     drawText(ops, `FECHA  ${date}`, headerCenter, y - 44, 8, normalFont, 'center');
