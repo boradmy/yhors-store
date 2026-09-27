@@ -1781,7 +1781,7 @@ function applyPurchaseStock(products, purchaseDemand) {
   return updated;
 }
 
-function makeSession(user, role, accountId = '') {
+function makeSession(user, role, accountId = '', metadata = {}) {
   sessionCleanup();
   const token = crypto.randomBytes(32).toString('base64url');
   const now = Date.now();
@@ -1790,6 +1790,8 @@ function makeSession(user, role, accountId = '') {
     user,
     role,
     accountId: String(accountId || ''),
+    ip: String(metadata.ip || '').slice(0, 120) || null,
+    userAgent: String(metadata.userAgent || '').slice(0, 300) || null,
     createdAt: now,
     lastSeenAt: now,
     expiresAt: now + SESSION_TTL_MS
@@ -1827,7 +1829,15 @@ function destroySessionsForAccount(accountId) {
 function sessionCleanup() {
   const now = Date.now();
   for (const [token, session] of sessions) {
-    if (session.expiresAt <= now) sessions.delete(token);
+    if (session.expiresAt <= now) {
+      sessions.delete(token);
+      auditLog(null, 'Sesión expirada', 'Seguridad', {
+        username: session.user,
+        accountId: session.accountId,
+        role: session.role,
+        reason: 'Tiempo de sesión agotado'
+      }, 'success');
+    }
   }
 }
 setInterval(sessionCleanup, 10 * 60 * 1000).unref();
@@ -2095,7 +2105,10 @@ app.post('/api/passkey/login', async (req, res) => {
   const token = req.cookies.yhors_webauthn_challenge;
   const challenge = consumeWebAuthnChallenge(token, 'login');
   res.clearCookie('yhors_webauthn_challenge', { httpOnly: true, sameSite: 'strict', secure: COOKIE_SECURE, path: '/' });
-  if (!challenge?.options) return res.status(401).json({ error: 'El desafío Passkey expiró. Inténtalo nuevamente.' });
+  if (!challenge?.options) {
+    auditLog(req, 'Passkey fallida', 'Seguridad', { reason: 'Desafío expirado' }, 'failure');
+    return res.status(401).json({ error: 'El desafío Passkey expiró. Inténtalo nuevamente.' });
+  }
   const passkeyId = String(req.body?.id || '');
   const users = readUsers();
   let account = challenge.accountId ? users.find(u => u.id === challenge.accountId) : null;
@@ -2107,7 +2120,10 @@ app.post('/api/passkey/login', async (req, res) => {
       if (found) { account = user; credential = found; break; }
     }
   }
-  if (!account || account.active === false || !credential || !passkeyAllowed(account.id)) return res.status(401).json({ error: 'Passkey no reconocida o no autorizada.' });
+  if (!account || account.active === false || !credential || !passkeyAllowed(account.id)) {
+    auditLog(req, 'Passkey fallida', 'Seguridad', { username: account?.username || null, accountId: account?.id || null, reason: 'Passkey no reconocida o no autorizada' }, 'failure');
+    return res.status(401).json({ error: 'Passkey no reconocida o no autorizada.' });
+  }
   try {
     const verification = await verifyAuthenticationResponse({
       response: req.body,
@@ -2117,16 +2133,20 @@ app.post('/api/passkey/login', async (req, res) => {
       requireUserVerification: true,
       credential: { id: credential.id, publicKey: new Uint8Array(Buffer.from(credential.publicKey, 'base64url')), counter: credential.counter || 0, transports: credential.transports || [] }
     });
-    if (!verification.verified) return res.status(401).json({ error: 'No se pudo verificar la Passkey.' });
+    if (!verification.verified) {
+      auditLog(req, 'Passkey fallida', 'Seguridad', { username: account.username, accountId: account.id, role: account.role, reason: 'Verificación no válida' }, 'failure');
+      return res.status(401).json({ error: 'No se pudo verificar la Passkey.' });
+    }
     const store = readPasskeyStore();
     const list = store.passkeys[String(account.id)] || [];
     const index = list.findIndex(item => item.id === credential.id);
     if (index >= 0) { list[index].counter = verification.authenticationInfo.newCounter; list[index].lastUsedAt = new Date().toISOString(); store.passkeys[String(account.id)] = list; writePasskeyStore(store); }
     clearFailedAttempts(clientIp(req), account.username);
-    const session = makeSession(account.username, account.role, account.id);
+    auditLog(req, 'Inicio de sesión con Passkey', 'Seguridad', { username: account.username, accountId: account.id, role: account.role });
+    const session = makeSession(account.username, account.role, account.id, { ip: clientIp(req), userAgent: req.get('user-agent') });
     setSessionCookie(res, session);
     return res.json({ ok: true, role: session.role, username: account.username, name: account.name, expiresAt: session.expiresAt });
-  } catch (error) { return res.status(401).json({ error: 'No se pudo verificar la Passkey.' }); }
+  } catch (error) { auditLog(req, 'Passkey fallida', 'Seguridad', { username: account?.username || null, accountId: account?.id || null, reason: 'Error de verificación' }, 'failure'); return res.status(401).json({ error: 'No se pudo verificar la Passkey.' }); }
 });
 
 app.get('/api/me', (req, res) => {
@@ -2167,17 +2187,112 @@ app.post('/api/me/passkeys', requireLogin, async (req, res) => {
 app.delete('/api/me/passkeys/:id', requireLogin, (req, res) => {
   const session = getSession(req); const store = readPasskeyStore(); const list = store.passkeys[session.accountId] || [];
   if (list.length <= 1) return res.status(400).json({ error: 'Debes conservar al menos una Passkey o contraseña para mantener acceso a la cuenta.' });
-  store.passkeys[session.accountId] = list.filter(item => item.id !== req.params.id); writePasskeyStore(store); return res.json({ ok: true, passkeys: publicPasskeys(session.accountId) });
+  store.passkeys[session.accountId] = list.filter(item => item.id !== req.params.id);
+  writePasskeyStore(store);
+  auditLog(req, 'Passkey eliminada', 'Seguridad', { accountId: session.accountId, username: session.user, role: session.role, remaining: store.passkeys[session.accountId].length });
+  return res.json({ ok: true, passkeys: publicPasskeys(session.accountId) });
 });
 
 app.post('/api/admin/users/:id/passkeys/policy', requireAdmin, (req, res) => {
   const users = readUsers(); const user = users.find(item => item.id === req.params.id); if (!user) return res.status(404).json({ error: 'Usuario no encontrado.' });
-  const store = readPasskeyStore(); store.passkeyPolicy[user.id] = req.body?.enabled !== false; writePasskeyStore(store); return res.json(publicUser(user));
+  const enabled = req.body?.enabled !== false;
+  const store = readPasskeyStore(); store.passkeyPolicy[user.id] = enabled; writePasskeyStore(store);
+  auditLog(req, enabled ? 'Passkey habilitada' : 'Passkey bloqueada', 'Seguridad', {
+    accountId: user.id, username: user.username, role: user.role, enabled
+  });
+  return res.json(publicUser(user));
 });
 
 app.delete('/api/admin/users/:id/passkeys', requireAdmin, (req, res) => {
   const users = readUsers(); const user = users.find(item => item.id === req.params.id); if (!user) return res.status(404).json({ error: 'Usuario no encontrado.' });
-  const store = readPasskeyStore(); store.passkeys[user.id] = []; writePasskeyStore(store); destroySessionsForAccount(user.id); return res.json(publicUser(user));
+  const count = accountPasskeys(user.id).length;
+  const store = readPasskeyStore(); store.passkeys[user.id] = []; writePasskeyStore(store); destroySessionsForAccount(user.id);
+  auditLog(req, 'Passkeys revocadas', 'Seguridad', {
+    accountId: user.id, username: user.username, role: user.role, credentialsRevoked: count
+  });
+  return res.json(publicUser(user));
+});
+
+
+app.get('/api/admin/security/overview', requireAdmin, (req, res) => {
+  const users = readUsers();
+  const security = readSecurity();
+  const now = Date.now();
+  const sessionsByAccount = new Map();
+  for (const session of sessions.values()) {
+    if (session.expiresAt <= now) continue;
+    const key = String(session.accountId || '');
+    sessionsByAccount.set(key, (sessionsByAccount.get(key) || 0) + 1);
+  }
+  const rows = users.map(user => {
+    const protection = loginProtectionStatus(user.id);
+    const passkeys = accountPasskeys(user.id);
+    return {
+      id: user.id,
+      name: user.name,
+      username: user.username,
+      role: normalizeRole(user.role),
+      active: user.active !== false,
+      passkeyAllowed: passkeyAllowed(user.id),
+      passkeyCount: passkeys.length,
+      lastPasskeyUsedAt: passkeys.reduce((latest, item) => item.lastUsedAt && (!latest || item.lastUsedAt > latest) ? item.lastUsedAt : latest, null),
+      locked: protection.locked,
+      permanentLock: protection.permanent,
+      lockRemainingSeconds: protection.remainingSeconds,
+      failedAttempts: protection.failures,
+      lockStage: protection.stage,
+      activeSessions: sessionsByAccount.get(String(user.id)) || 0
+    };
+  });
+  const auditEntries = readAudit().filter(entry => entry.module === 'Seguridad');
+  return res.json({
+    version: 'V15.4',
+    generatedAt: new Date().toISOString(),
+    totals: {
+      users: users.length,
+      activeUsers: users.filter(user => user.active !== false).length,
+      admins: users.filter(user => isAdmin(user.role) && user.active !== false).length,
+      passkeys: rows.reduce((sum, row) => sum + row.passkeyCount, 0),
+      lockedUsers: rows.filter(row => row.locked).length,
+      activeSessions: rows.reduce((sum, row) => sum + row.activeSessions, 0),
+      securityEvents: auditEntries.length
+    },
+    users: rows
+  });
+});
+
+app.post('/api/admin/security/users/:id/reset-lock', requireAdmin, (req, res) => {
+  const user = readUsers().find(item => item.id === req.params.id);
+  if (!user) return res.status(404).json({ error: 'Usuario no encontrado.' });
+  const before = loginProtectionRecord(user.id);
+  clearLoginProtection(user.id);
+  auditLog(req, 'Bloqueo restablecido', 'Seguridad', {
+    accountId: user.id,
+    username: user.username,
+    role: user.role,
+    previous: { failures: before.failures, stage: before.stage, permanentlyLocked: before.permanentlyLocked }
+  });
+  return res.json({ ok: true, username: user.username });
+});
+
+app.post('/api/admin/security/users/:id/revoke-sessions', requireAdmin, (req, res) => {
+  const user = readUsers().find(item => item.id === req.params.id);
+  if (!user) return res.status(404).json({ error: 'Usuario no encontrado.' });
+  let revoked = 0;
+  const target = String(user.id);
+  for (const [token, session] of sessions) {
+    if (String(session.accountId || '') === target) {
+      sessions.delete(token);
+      revoked += 1;
+    }
+  }
+  auditLog(req, 'Sesiones revocadas', 'Seguridad', {
+    accountId: user.id,
+    username: user.username,
+    role: user.role,
+    sessionsRevoked: revoked
+  });
+  return res.json({ ok: true, sessionsRevoked: revoked });
 });
 
 app.post('/api/provider/reset-login-lock', (req, res) => {
@@ -2209,13 +2324,20 @@ app.post('/api/login', async (req, res) => {
   const ipEntry = loginAttempts.get(ipKey);
   // El bloqueo progresivo por cuenta controla los 4 intentos + escalamiento.
   // El límite por IP sigue siendo una barrera adicional contra ataques distribuidos desde un mismo origen.
-  if (isRateLimited(ipKey, LOGIN_IP_LIMIT_MAX_ATTEMPTS)) return rateLimitResponse(res, ipEntry.resetAt);
+  if (isRateLimited(ipKey, LOGIN_IP_LIMIT_MAX_ATTEMPTS)) {
+    auditLog(req, 'Límite de intentos activado', 'Seguridad', { username, reason: 'Límite por IP alcanzado' }, 'failure');
+    return rateLimitResponse(res, ipEntry.resetAt);
+  }
 
   const account = findUserByUsername(username);
   if (account) {
     const protection = loginProtectionStatus(account.id);
     if (protection.locked) {
-      if (protection.permanent) return res.status(423).json({ error: 'Tu acceso está bloqueado. Indica a tu proveedor que restablezca la contraseña para recuperar el acceso.', permanentLock: true });
+      if (protection.permanent) {
+        auditLog(req, 'Acceso bloqueado', 'Seguridad', { username: account.username, accountId: account.id, role: account.role, permanent: true, stage: protection.stage }, 'failure');
+        return res.status(423).json({ error: 'Tu acceso está bloqueado. Indica a tu proveedor que restablezca la contraseña para recuperar el acceso.', permanentLock: true });
+      }
+      auditLog(req, 'Acceso bloqueado', 'Seguridad', { username: account.username, accountId: account.id, role: account.role, permanent: false, remainingSeconds: protection.remainingSeconds, stage: protection.stage }, 'failure');
       return res.status(423).json({ error: `Acceso bloqueado temporalmente. Inténtalo nuevamente en ${Math.ceil(protection.remainingSeconds / 60)} minuto(s).`, lockoutSeconds: protection.remainingSeconds, lockoutStage: protection.stage });
     }
   }
@@ -2230,9 +2352,13 @@ app.post('/api/login', async (req, res) => {
     registerFailedAttempt(ipKey);
     if (account) {
       const protection = registerAccountPasswordFailure(account.id);
-      if (protection.permanent) return res.status(423).json({ error: 'Tu acceso ha sido bloqueado definitivamente por seguridad. Indica a tu proveedor que restablezca la contraseña.', permanentLock: true });
+      if (protection.permanent) {
+        auditLog(req, 'Cuenta bloqueada permanentemente', 'Seguridad', { username: account.username, accountId: account.id, role: account.role, stage: protection.stage, failures: protection.failures }, 'failure');
+        return res.status(423).json({ error: 'Tu acceso ha sido bloqueado definitivamente por seguridad. Indica a tu proveedor que restablezca la contraseña.', permanentLock: true });
+      }
       if (protection.locked) {
         const minutes = Math.ceil(protection.remainingSeconds / 60);
+        auditLog(req, 'Cuenta bloqueada temporalmente', 'Seguridad', { username: account.username, accountId: account.id, role: account.role, lockoutSeconds: protection.remainingSeconds, lockoutStage: protection.stage }, 'failure');
         return res.status(423).json({ error: `Demasiados intentos. Tu acceso se bloqueará durante ${minutes} minutos.`, lockoutSeconds: protection.remainingSeconds, lockoutStage: protection.stage });
       }
       auditLog(req, 'Inicio de sesión fallido', 'Seguridad', { username, accountId: account.id, role: account.role, attemptsRemaining: protection.attemptsRemaining, attemptsUsed: protection.failures }, 'failure');
@@ -2245,7 +2371,7 @@ app.post('/api/login', async (req, res) => {
   clearFailedAttempts(ip, username);
   clearLoginProtection(account.id);
   auditLog(req, 'Inicio de sesión exitoso', 'Seguridad', { username: account.username, accountId: account.id, role: account.role });
-  const session = makeSession(account.username, account.role, account.id);
+  const session = makeSession(account.username, account.role, account.id, { ip, userAgent: req.get('user-agent') });
   res.cookie(SESSION_COOKIE, session.id, {
     httpOnly: true,
     sameSite: 'strict',
@@ -2372,7 +2498,8 @@ app.get('/api/admin/security', requireAdmin, (_, res) => res.json({
   dataEncryption: 'AES-256-GCM',
   ordersEncryptedAtRest: true,
   keySource: 'YHORS_DATA_KEY environment variable',
-  version: 'V14.25',
+  version: 'V15.4',
+  auditSecurity: true,
   passkeys: 'WebAuthn / Passkeys',
   serverSideSessions: true,
   loginRateLimit: true

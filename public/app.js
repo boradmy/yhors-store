@@ -611,6 +611,7 @@ async function renderCurrentRoute() {
   if (path === `${ADMIN_PATH}/pedidos` || path === `${ADMIN_PATH}/pedidos/`) return renderAdminOrders();
   if (path === `${ADMIN_PATH}/generar-orden` || path === `${ADMIN_PATH}/generar-orden/`) return renderAdminGenerateOrder();
     if (path === `${ADMIN_PATH}/auditoria` || path === `${ADMIN_PATH}/auditoria/`) return renderAdminAudit();
+  if (path === `${ADMIN_PATH}/seguridad` || path === `${ADMIN_PATH}/seguridad/`) return renderAdminSecurity();
 if (path === `${ADMIN_PATH}/usuarios` || path === `${ADMIN_PATH}/usuarios/`) return renderAdminUsers();
   if (path === `${ADMIN_PATH}/inventario` || path === `${ADMIN_PATH}/inventario/`) return renderAdminInventory();
   if (path === '/mi-cuenta' || path === '/mi-cuenta/') return renderMyAccount();
@@ -1146,7 +1147,7 @@ function adminSectionNav(session = {}, active = '') {
   if (limitedOperations) {
     return `<nav class="admin-section-nav admin-section-nav--compact" id="adminSectionNav" aria-label="Secciones operativas">${link('ventas-generales', `${ADMIN_PATH}/ventas-generales`, 'VENTAS GENERALES')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('generar-orden', `${ADMIN_PATH}/generar-orden`, 'GENERAR ORDEN')}</nav>`;
   }
-  return `<nav class="admin-section-nav" id="adminSectionNav" aria-label="Secciones de administración">${link('web', ADMIN_PATH, 'PÁGINA WEB')}${link('usuarios', `${ADMIN_PATH}/usuarios`, 'USUARIOS')}${link('auditoria', `${ADMIN_PATH}/auditoria`, 'AUDITORÍA')}${link('inventario', `${ADMIN_PATH}/inventario`, 'INVENTARIO')}${link('resumen-financiero', `${ADMIN_PATH}/resumen-financiero`, 'RESUMEN FINANCIERO')}${link('ventas-generales', `${ADMIN_PATH}/ventas-generales`, 'VENTAS GENERALES')}${link('calculo-comision', `${ADMIN_PATH}/calculo-comision`, 'CÁLCULO DE COMISIÓN')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('generar-orden', `${ADMIN_PATH}/generar-orden`, 'GENERAR ORDEN')}</nav>`;
+  return `<nav class="admin-section-nav" id="adminSectionNav" aria-label="Secciones de administración">${link('web', ADMIN_PATH, 'PÁGINA WEB')}${link('usuarios', `${ADMIN_PATH}/usuarios`, 'USUARIOS')}${link('seguridad', `${ADMIN_PATH}/seguridad`, 'SEGURIDAD')}${link('auditoria', `${ADMIN_PATH}/auditoria`, 'AUDITORÍA')}${link('inventario', `${ADMIN_PATH}/inventario`, 'INVENTARIO')}${link('resumen-financiero', `${ADMIN_PATH}/resumen-financiero`, 'RESUMEN FINANCIERO')}${link('ventas-generales', `${ADMIN_PATH}/ventas-generales`, 'VENTAS GENERALES')}${link('calculo-comision', `${ADMIN_PATH}/calculo-comision`, 'CÁLCULO DE COMISIÓN')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('generar-orden', `${ADMIN_PATH}/generar-orden`, 'GENERAR ORDEN')}</nav>`;
 }
 
 function generateOrderNav(session) {
@@ -1957,6 +1958,89 @@ async function renderAdminOrders() {
 }
 
 
+
+
+function securityRoleLabel(role) {
+  return userRoleLabel(role);
+}
+
+function securityStatusPill(row) {
+  if (row.locked) return `<span class="security-pill danger">${row.permanentLock ? 'Bloqueado permanentemente' : `Bloqueado · ${Math.ceil(Number(row.lockRemainingSeconds || 0) / 60)} min`}</span>`;
+  if (!row.active) return `<span class="security-pill neutral">Cuenta desactivada</span>`;
+  return `<span class="security-pill success">Acceso activo</span>`;
+}
+
+async function renderAdminSecurity() {
+  const session = await request('/api/admin/session').catch(() => ({ authenticated: false }));
+  if (!session.authenticated) return renderLogin();
+  if (session.role !== 'admin') return renderAdminOrders();
+
+  let data = await request('/api/admin/security/overview').catch(() => null);
+  if (!data) {
+    app.innerHTML = `<main class="admin-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Seguridad</h1><p class="admin-subtitle">No se pudo cargar el centro de seguridad.</p></div>${accountMenu(session)}</div>${adminSectionNav(session, 'seguridad')}<section class="admin-panel"><div class="message error">Intenta recargar esta sección.</div></section></div></main>`;
+    return;
+  }
+
+  const fmtDate = value => value ? new Intl.DateTimeFormat('es-EC', { dateStyle:'short', timeStyle:'short' }).format(new Date(value)) : 'Nunca';
+  const cards = [
+    ['USUARIOS ACTIVOS', data.totals.activeUsers, 'Cuentas con acceso permitido'],
+    ['SESIONES ACTIVAS', data.totals.activeSessions, 'Sesiones en este servidor'],
+    ['PASSKEYS', data.totals.passkeys, 'Credenciales registradas'],
+    ['CUENTAS BLOQUEADAS', data.totals.lockedUsers, 'Requieren revisión']
+  ];
+  const rows = data.users.map(row => `<article class="security-user-card" data-security-user="${escapeHTML(row.id)}">
+    <div class="security-user-main">
+      <div class="security-avatar">${escapeHTML(String(row.name || row.username || '?').trim().slice(0,1).toUpperCase())}</div>
+      <div><strong>${escapeHTML(row.name)}</strong><small>@${escapeHTML(row.username)} · ${escapeHTML(securityRoleLabel(row.role))}</small></div>
+    </div>
+    <div class="security-user-status">${securityStatusPill(row)}</div>
+    <div class="security-user-metrics">
+      <span><b>${row.activeSessions}</b> sesión${row.activeSessions === 1 ? '' : 'es'}</span>
+      <span><b>${row.passkeyCount}</b> Passkey${row.passkeyCount === 1 ? '' : 's'}${row.passkeyAllowed ? '' : ' · bloqueadas'}</span>
+      <span>${row.failedAttempts ? `${row.failedAttempts} intento(s) fallido(s)` : 'Sin intentos fallidos recientes'}</span>
+    </div>
+    <div class="security-user-actions">
+      ${row.locked ? `<button type="button" class="button secondary small" data-security-reset="${escapeHTML(row.id)}">Desbloquear</button>` : ''}
+      ${row.activeSessions ? `<button type="button" class="button secondary small" data-security-sessions="${escapeHTML(row.id)}">Cerrar sesiones</button>` : ''}
+      ${row.passkeyCount ? `<button type="button" class="button secondary small" data-security-passkeys="${escapeHTML(row.id)}">Revocar Passkeys</button>` : ''}
+    </div>
+  </article>`).join('');
+
+  app.innerHTML = `<main class="admin-shell"><div class="admin-wrap">
+    <div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Seguridad</h1><p class="admin-subtitle">Centro de control de acceso de YHORS</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>
+    ${adminSectionNav(session, 'seguridad')}
+    <section class="admin-panel security-panel">
+      <div class="security-hero">
+        <div><span class="eyebrow">V15.4 · PROTECCIÓN DE ACCESO</span><h2>Seguridad y sesiones</h2><p>Controla cuentas, bloqueos, Passkeys y sesiones activas desde un solo lugar.</p></div>
+        <div class="security-live"><span></span> Sistema protegido</div>
+      </div>
+      <div class="security-metrics">${cards.map(([label,value,help]) => `<div class="security-metric"><span>${label}</span><strong>${value}</strong><small>${help}</small></div>`).join('')}</div>
+      <div class="section-heading security-section-heading"><div><span class="eyebrow">CUENTAS</span><h3>Estado de acceso</h3></div><p>Las acciones sensibles quedan registradas automáticamente en Auditoría.</p></div>
+      <div class="security-users-list">${rows || '<p class="backup-empty">No hay cuentas registradas.</p>'}</div>
+      <div class="security-note"><strong>Protección activa</strong><span>Contraseñas con hash · sesiones del lado del servidor · límite de intentos · bloqueo progresivo · WebAuthn / Passkeys · auditoría de seguridad</span></div>
+    </section>
+  </div></main>`;
+
+  const refresh = async () => {
+    const fresh = await request('/api/admin/security/overview').catch(() => null);
+    if (fresh) renderAdminSecurity();
+  };
+  document.querySelectorAll('[data-security-reset]').forEach(button => button.addEventListener('click', async () => {
+    if (!confirm('¿Seguro que quieres desbloquear esta cuenta?')) return;
+    try { await request(`/api/admin/security/users/${encodeURIComponent(button.dataset.securityReset)}/reset-lock`, { method:'POST' }); alert('Cuenta desbloqueada.'); await refresh(); }
+    catch (error) { alert(error.message); }
+  }));
+  document.querySelectorAll('[data-security-sessions]').forEach(button => button.addEventListener('click', async () => {
+    if (!confirm('¿Cerrar todas las sesiones activas de este usuario?')) return;
+    try { const result = await request(`/api/admin/security/users/${encodeURIComponent(button.dataset.securitySessions)}/revoke-sessions`, { method:'POST' }); alert(`${result.sessionsRevoked || 0} sesión(es) cerrada(s).`); await refresh(); }
+    catch (error) { alert(error.message); }
+  }));
+  document.querySelectorAll('[data-security-passkeys]').forEach(button => button.addEventListener('click', async () => {
+    if (!confirm('¿Seguro que quieres revocar todas las Passkeys de esta cuenta? Tendrá que volver a registrarlas.')) return;
+    try { await request(`/api/admin/users/${encodeURIComponent(button.dataset.securityPasskeys)}/passkeys`, { method:'DELETE' }); alert('Passkeys revocadas.'); await refresh(); }
+    catch (error) { alert(error.message); }
+  }));
+}
 
 async function renderAdminAudit() {
   const session = await request('/api/admin/session').catch(() => ({ authenticated: false }));
