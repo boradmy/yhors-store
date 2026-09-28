@@ -1346,13 +1346,13 @@ async function buildFlyerPdf({ products, title, subtitle, description, layout, o
 
   const drawProduct = (ops, product, globalIndex, x, y, w, h, mode) => {
     const gap = 8;
-    // Outer card: this is the same elegant frame used by the live preview.
-    // Keep the frame around the COMPLETE product card, including the commercial
-    // copy and price, rather than framing only the image area.
+    // Marco del producto: usar el marco completo de la versión que gustó en la
+    // vista previa. El borde debe encerrar imagen + ficha + precio como una sola
+    // tarjeta; el borde se vuelve a dibujar al final para que ningún fondo de la
+    // zona de imagen lo tape.
     flyerFill(ops, 1, 1, 1);
-    flyerStroke(ops, 0.87, 0.84, 0.79);
-    flyerRoundRect(ops, x, y, w, h, 10, true);
-    flyerStroke(ops, 0.89, 0.86, 0.81);
+    flyerStroke(ops, 0.88, 0.86, 0.82);
+    flyerRoundRect(ops, x, y, w, h, 9, true);
 
     const imageUrls = [...new Set([
       product.imageData || '',
@@ -1373,11 +1373,9 @@ async function buildFlyerPdf({ products, title, subtitle, description, layout, o
       copyY = imageY - 10;
       copyX = x + 10; copyW = w - 20;
       flyerFill(ops, 0.965, 0.95, 0.92);
-      // Image panel sits inside the outer card frame. Keep the lower edge clean
-      // so the text section visually belongs to the same card.
+      // Panel de imagen: mantiene el look crema de la vista previa, pero sin
+      // crear un segundo marco independiente. El marco real es el exterior.
       flyerRoundRect(ops, imageX + 1, imageY, imageW - 2, imageH, 8, true);
-      flyerStroke(ops, 0.91, 0.88, 0.83);
-      flyerLine(ops, x + 1, imageY, x + w - 1, imageY, 0.45);
     } else if (mode === 'horizontal') {
       imageW = w * 0.43;
       copyX = x + imageW + gap;
@@ -1445,14 +1443,20 @@ async function buildFlyerPdf({ products, title, subtitle, description, layout, o
     if (showPrices) {
       const price = Number(product.salePrice ?? product.price ?? 0);
       const priceSize = mode === 'featured' ? 18 : safeLayout === '2' ? 12 : 10;
-      // Keep the price in the same visual flow as the preview: directly after
-      // the commercial copy, while still reserving a small bottom safety zone.
+      // El precio queda dentro de la misma tarjeta, cerca del contenido y con
+      // un pequeño margen inferior, igual que en la vista previa.
       const priceFloor = y + (mode === 'featured' ? 24 : 20);
       const priceCeiling = y + (mode === 'featured' ? 72 : safeLayout === '2' ? 58 : 54);
       const priceY = Math.max(priceFloor, Math.min(priceCeiling, cy - 1));
       flyerFill(ops, ar, ag, ab);
       flyerPdfText(ops, `$${price.toFixed(2)}`, copyX, priceY, priceSize, 2);
     }
+
+    // Redibujar el borde exterior al final: así el marco continúa claramente
+    // por los laterales y llega hasta debajo del precio, sin ser cortado por
+    // el panel de imagen ni por los textos.
+    flyerStroke(ops, 0.88, 0.86, 0.82);
+    flyerRoundRect(ops, x, y, w, h, 9, false);
   };
 
   for (let pageIndex = 0; pageIndex < pages.length; pageIndex++) {
