@@ -1356,9 +1356,14 @@ async function buildFlyerPdf({ products, title, subtitle, description, layout, o
     let copyX = x, copyY = y + h, copyW = w;
     if (mode === 'grid') {
       imageH = Math.min(h * 0.48, safeLayout === '4' ? 135 : 165);
-      copyY = y + h - imageH - 10;
+      // PDF coordinates start at the bottom-left. The preview places the image
+      // in the TOP section of the card, so the image box must start at the top
+      // of the card rather than at `y`. The previous value made the image render
+      // over the product copy/price even though the background rectangle was up top.
+      imageY = y + h - imageH;
+      copyY = imageY - 10;
       copyX = x + 10; copyW = w - 20;
-      flyerFill(ops, 0.965, 0.95, 0.92); ops.push(`${imageX} ${y + h - imageH} ${imageW} ${imageH} re f`);
+      flyerFill(ops, 0.965, 0.95, 0.92); ops.push(`${imageX} ${imageY} ${imageW} ${imageH} re f`);
     } else if (mode === 'horizontal') {
       imageW = w * 0.43;
       copyX = x + imageW + gap;
@@ -1424,7 +1429,10 @@ async function buildFlyerPdf({ products, title, subtitle, description, layout, o
     if (showPrices) {
       const price = Number(product.salePrice ?? product.price ?? 0);
       const priceSize = mode === 'featured' ? 18 : safeLayout === '2' ? 12 : 10;
-      const priceY = Math.max(y + 18, Math.min(cy - 2, y + h - 18));
+      // Keep the price pinned to the bottom of the card, matching the live
+      // preview. It must not move upward when the description has fewer/more
+      // lines, otherwise the PDF looks different from the preview.
+      const priceY = y + 18;
       flyerFill(ops, ar, ag, ab);
       flyerPdfText(ops, `$${price.toFixed(2)}`, copyX, priceY, priceSize, 2);
     }
