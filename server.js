@@ -1423,9 +1423,13 @@ async function buildFlyerPdf({ products, title, subtitle, description, layout, o
       flyerStroke(ops, 0.91, 0.88, 0.83);
       flyerLine(ops, x + imageW, y + 8, x + imageW, y + h - 8, 0.45);
     } else {
-      imageW = w * 0.48;
-      copyX = x + imageW + 20;
-      copyW = w - imageW - 32;
+      // Featured / 1-product layout: give the commercial column a little more
+      // breathing room so long titles can wrap elegantly instead of escaping
+      // the card. The image column remains generous, but the copy gets the
+      // width needed for title + SKU + description.
+      imageW = w * 0.43;
+      copyX = x + imageW + 18;
+      copyW = w - imageW - 30;
       copyY = y + h - 28;
       flyerFill(ops, 0.965, 0.95, 0.92); flyerRoundRect(ops, x, y, imageW, h, 6, true);
       flyerStroke(ops, 0.91, 0.88, 0.83); flyerRoundRect(ops, x, y, imageW, h, 6, false);
@@ -1446,14 +1450,16 @@ async function buildFlyerPdf({ products, title, subtitle, description, layout, o
     flyerFill(ops, 1, 1, 1); flyerPdfText(ops, String(globalIndex + 1).padStart(2, '0'), x + 20.5, y + h - 19.5, 6, 2, 'center');
 
     const brand = String(product.brand || '').trim() || 'YHORS';
-    const titleSize = mode === 'featured' ? 20 : safeLayout === '2' ? 11.2 : safeLayout === '3' ? 9.3 : 8.0;
-    // Conservative character limits keep the Helvetica-Bold title inside the
-    // card even for long model names. Never let the PDF text cross the border.
-    const titleChars = mode === 'featured' ? 34 : safeLayout === '2' ? 27 : safeLayout === '3' ? 24 : 21;
-    const titleLines = mode === 'featured' ? 4 : safeLayout === '2' ? 3 : 2;
+    const titleSize = mode === 'featured' ? 17.5 : safeLayout === '2' ? 11.2 : safeLayout === '3' ? 9.3 : 8.0;
+    // Character counts are derived from the actual copy width so Helvetica
+    // cannot run past the right border. Featured titles get up to 3 lines;
+    // compact layouts stay intentionally tighter.
+    const charsFor = (width, size, factor = 0.50) => Math.max(10, Math.floor(width / Math.max(1, size * factor)));
+    const titleChars = mode === 'featured' ? charsFor(copyW, titleSize, 0.52) : safeLayout === '2' ? charsFor(copyW, titleSize, 0.52) : safeLayout === '3' ? charsFor(copyW, titleSize, 0.52) : charsFor(copyW, titleSize, 0.52);
+    const titleLines = mode === 'featured' ? 3 : safeLayout === '2' ? 3 : 2;
     const metaSize = mode === 'featured' ? 8 : safeLayout === '2' ? 6.3 : 5.6;
-    const highlightSize = mode === 'featured' ? 8 : safeLayout === '2' ? 6.2 : safeLayout === '3' ? 5.8 : 5.35;
-    const maxHighlights = mode === 'featured' ? 6 : safeLayout === '2' ? 5 : 4;
+    const highlightSize = mode === 'featured' ? 7.6 : safeLayout === '2' ? 6.2 : safeLayout === '3' ? 5.8 : 5.35;
+    const maxHighlights = mode === 'featured' ? 5 : safeLayout === '2' ? 5 : 4;
     const trim = (value, max) => {
       const text = String(value || '').replace(/\s+/g, ' ').trim();
       if (text.length <= max) return text;
@@ -1479,11 +1485,15 @@ async function buildFlyerPdf({ products, title, subtitle, description, layout, o
     // The description gets a subtle right indent so it reads as a separate
     // commercial block and remains light/elegant rather than bold.
     const highlights = flyerProductHighlights(product).slice(0, maxHighlights);
+    let descriptionLinesUsed = 0;
+    const descriptionMaxLines = mode === 'featured' ? 4 : safeLayout === '2' ? 5 : safeLayout === '3' ? 4 : 4;
     for (const item of highlights) {
-      if (cy < y + 40) break;
+      if (cy < y + (mode === 'featured' ? 58 : 40) || descriptionLinesUsed >= descriptionMaxLines) break;
       const bullet = `• ${item}`;
-      const chars = Math.max(18, safeLayout === '4' ? 28 : Math.floor((copyW - 5) / (highlightSize * 0.48)));
-      const result = drawLines(ops, bullet, copyX + 5, cy, chars, highlightSize, 1, [0.38,0.36,0.33], 1, highlightSize + 2.2);
+      const chars = charsFor(copyW - 5, highlightSize, 0.50);
+      const remaining = Math.max(1, descriptionMaxLines - descriptionLinesUsed);
+      const result = drawLines(ops, bullet, copyX + 5, cy, chars, highlightSize, 1, [0.38,0.36,0.33], Math.min(mode === 'featured' ? 2 : 1, remaining), highlightSize + 2.2);
+      descriptionLinesUsed += result.lines.length;
       cy = result.y - 0.5;
     }
 
