@@ -3178,30 +3178,99 @@ function catalogSearchProductCard(product, selected = false) {
   </article>`;
 }
 
+function flyerProductHighlights(product) {
+  const raw = String(product?.description || '').replace(/\r/g, '');
+  if (!raw) return [];
+  return raw.split(/\n|•|\s+-\s+/).map(x => x.replace(/^[-–—*]\s*/, '').trim()).filter(Boolean).slice(0, 3);
+}
+
+function flyerProductPreviewCard(product, index, draft, compact = false) {
+  const stock = Number(product.stock || 0);
+  const highlights = flyerProductHighlights(product);
+  const note = draft.notes?.[product.id] || '';
+  return `<article class="flyer-product ${compact ? 'flyer-product-compact' : ''}">
+    <div class="flyer-product-image"><img src="${escapeHTML(catalogProductImage(product))}" alt="${escapeHTML(product.name)}" loading="lazy"><span class="flyer-index">${String(index + 1).padStart(2,'0')}</span>${note ? `<span class="flyer-promo">${escapeHTML(note)}</span>` : ''}</div>
+    <div class="flyer-product-copy">
+      <span class="flyer-brand">${escapeHTML(product.brand || categories[product.category] || 'YHORS')}</span>
+      <h2>${escapeHTML(product.name)}</h2>
+      <div class="flyer-meta-line"><span>${escapeHTML(product.productType || categories[product.category] || 'Producto')}</span><span>SKU ${escapeHTML(product.sku || '—')}</span></div>
+      ${highlights.length && !compact ? `<ul class="flyer-highlights">${highlights.map(x=>`<li>${escapeHTML(x)}</li>`).join('')}</ul>` : ''}
+      <div class="flyer-product-bottom">${draft.showPrices ? `<strong class="flyer-price">${money(product.salePrice ?? product.price ?? 0)}</strong>` : '<span></span>'}<span class="flyer-stock ${stock > 0 ? 'available' : 'empty'}">${stock > 0 ? `${stock} disponibles` : 'Sin stock'}</span></div>
+    </div>
+  </article>`;
+}
+
+function flyerPreviewDraftFromModal(modal, selected) {
+  const draft = {
+    ids: selected.map(p=>String(p.id)),
+    title: modal.querySelector('#flyerTitle')?.value.trim() || 'Recién Llegados',
+    subtitle: modal.querySelector('#flyerSubtitle')?.value.trim() || '',
+    description: modal.querySelector('#flyerDescription')?.value.trim() || '',
+    layout: modal.querySelector('#flyerLayout')?.value || '4',
+    showPrices: !!modal.querySelector('#flyerShowPrices')?.checked,
+    theme: modal.querySelector('#flyerTheme')?.value || 'none',
+    accent: modal.querySelector('#flyerAccent')?.value || '#b58a43',
+    logo: modal.querySelector('#flyerLogo')?.value || 'yhors',
+    contact: !!modal.querySelector('#flyerContact')?.checked,
+    notes: {}
+  };
+  modal.querySelectorAll('[data-flyer-note-row]').forEach(row=>{
+    const input=row.querySelector('input');
+    if(input?.value.trim()) draft.notes[row.dataset.flyerNoteRow]=input.value.trim();
+  });
+  return draft;
+}
+
+function flyerMiniPreview(products, draft) {
+  const cols = Math.max(1, Math.min(4, Number(draft.layout || 4)));
+  const shown = products.slice(0, 6);
+  const extra = Math.max(0, products.length - shown.length);
+  return `<div class="flyer-preview-page theme-${escapeHTML(draft.theme || 'none')}" style="--flyer-accent:${escapeHTML(draft.accent || '#b58a43')};--flyer-cols:${cols}">
+    <header class="flyer-preview-header">
+      ${draft.logo !== 'none' ? '<div class="flyer-preview-logo">YHORS<span>STORE</span></div>' : ''}
+      <div><span class="eyebrow">YHORS · SELECCIÓN COMERCIAL</span><h1>${escapeHTML(draft.title || 'Recién Llegados')}</h1>${draft.subtitle ? `<p>${escapeHTML(draft.subtitle)}</p>` : ''}${draft.description ? `<small>${escapeHTML(draft.description)}</small>` : ''}</div>
+    </header>
+    <div class="flyer-preview-products" style="--flyer-cols:${cols}">${shown.map((p,i)=>flyerProductPreviewCard(p,i,draft,true)).join('')}</div>
+    ${extra ? `<div class="flyer-preview-more">+ ${extra} producto${extra===1?'':'s'} más</div>` : ''}
+    <footer><span>YHORS · más que un producto</span><span>${products.length} producto${products.length===1?'':'s'}</span></footer>
+  </div>`;
+}
+
 function flyerGeneratorModal(products = [], selectedIds = []) {
   const selected = products.filter(p => selectedIds.includes(String(p.id)));
   const notes = selected.map(p => ({ id: p.id, note: '' }));
   return `<div class="flyer-modal" id="flyerModal" role="dialog" aria-modal="true" aria-labelledby="flyerModalTitle">
     <div class="flyer-modal-backdrop" data-flyer-close></div>
-    <div class="flyer-modal-dialog">
-      <div class="flyer-modal-head"><div><span class="eyebrow">Diseño YHORS</span><h2 id="flyerModalTitle">🎨 Generar Flyer</h2></div><button type="button" class="flyer-close" data-flyer-close aria-label="Cerrar">×</button></div>
-      <div class="flyer-modal-scroll">
-        <div class="flyer-form-grid">
-          <label><span>Título *</span><input id="flyerTitle" maxlength="90" value="Recién Llegados" placeholder="Ej: Nuevos productos"></label>
-          <label><span>Subtítulo (opcional)</span><input id="flyerSubtitle" maxlength="140" placeholder="Ej: Tecnología · Accesorios · Memorias & USB"></label>
-        </div>
-        <div class="flyer-form-grid two">
+    <div class="flyer-modal-dialog flyer-designer-dialog">
+      <div class="flyer-modal-head"><div><span class="eyebrow">Diseñador YHORS</span><h2 id="flyerModalTitle">Crear Flyer</h2><p>Diseña y revisa tu selección antes de abrir el flyer final.</p></div><button type="button" class="flyer-close" data-flyer-close aria-label="Cerrar">×</button></div>
+      <div class="flyer-designer-body">
+        <section class="flyer-controls">
+          <div class="flyer-section-title"><span>01</span><div><strong>Contenido</strong><small>Define el mensaje principal</small></div></div>
+          <div class="flyer-form-grid">
+            <label><span>Título *</span><input id="flyerTitle" maxlength="90" value="Recién Llegados" placeholder="Ej: Nuevos productos"></label>
+            <label><span>Subtítulo</span><input id="flyerSubtitle" maxlength="140" placeholder="Ej: Tecnología · Accesorios · Memorias & USB"></label>
+          </div>
           <label><span>Descripción</span><textarea id="flyerDescription" rows="3" maxlength="280" placeholder="Una selección pensada para destacar.">Comercial enriquecida</textarea></label>
-          <label><span>Layout</span><select id="flyerLayout"><option value="4">Grid 4 columnas</option><option value="3">Grid 3 columnas</option><option value="2">Grid 2 columnas</option><option value="1">Producto destacado</option></select></label>
-        </div>
-        <label class="flyer-check"><input id="flyerShowPrices" type="checkbox" checked><span>Mostrar precios</span></label>
-        <label><span>Tema (opcional)</span><select id="flyerTheme"><option value="none">Sin tema</option><option value="midnight">Midnight</option><option value="editorial">Editorial</option><option value="luxury">Luxury</option></select></label>
-        <div class="flyer-color-row"><div><span>Color de acento</span><div class="flyer-swatches"><button type="button" class="flyer-swatch active" data-flyer-accent="#b58a43" style="--swatch:#b58a43"></button><button type="button" class="flyer-swatch" data-flyer-accent="#171513" style="--swatch:#171513"></button><button type="button" class="flyer-swatch" data-flyer-accent="#2f67d8" style="--swatch:#2f67d8"></button><button type="button" class="flyer-swatch" data-flyer-accent="#8d3bd8" style="--swatch:#8d3bd8"></button><button type="button" class="flyer-swatch" data-flyer-accent="#e85c12" style="--swatch:#e85c12"></button><button type="button" class="flyer-swatch" data-flyer-accent="#1b6f45" style="--swatch:#1b6f45"></button></div></div><input type="hidden" id="flyerAccent" value="#b58a43"></div>
-        <label><span>Logo destacado en header (opcional)</span><select id="flyerLogo"><option value="yhors">YHORS · marca principal</option><option value="none">Sin logo destacado</option></select></label>
-        <div class="flyer-info-box"><label class="flyer-check"><input id="flyerContact" type="checkbox"><span>📇 Incluir mi info de contacto</span></label><small>Agrega el nombre, email y teléfono de la cuenta activa al pie del flyer.</small></div>
-        <details class="flyer-notes"><summary>📝 Notas promocionales por producto (opcional)</summary><p>Ej: “10+1 GRATIS”, “Solo por hoy”, “Hasta agotar stock”. Aparece como banda sobre cada producto.</p><div id="flyerNotesList">${notes.map(item => { const p=products.find(x=>String(x.id)===String(item.id)); return `<label data-flyer-note-row="${escapeHTML(item.id)}"><span>${escapeHTML(p?.name || 'Producto')}</span><input type="text" maxlength="80" placeholder="Texto promocional…"></label>`; }).join('')}</div></details>
+
+          <div class="flyer-section-title"><span>02</span><div><strong>Composición</strong><small>Elige cómo se presentan los productos</small></div></div>
+          <div class="flyer-form-grid two">
+            <label><span>Layout</span><select id="flyerLayout"><option value="4">Grid 4 · catálogo</option><option value="3">Grid 3 · editorial</option><option value="2">Grid 2 · destacado</option><option value="1">Producto destacado</option></select></label>
+            <label><span>Tema</span><select id="flyerTheme"><option value="none">YHORS Minimal</option><option value="editorial">Editorial</option><option value="luxury">Luxury</option><option value="midnight">Midnight</option></select></label>
+          </div>
+          <div class="flyer-toggle-row"><label class="flyer-check"><input id="flyerShowPrices" type="checkbox" checked><span>Mostrar precios</span></label><label class="flyer-check"><input id="flyerContact" type="checkbox"><span>Incluir contacto</span></label></div>
+
+          <div class="flyer-section-title"><span>03</span><div><strong>Identidad</strong><small>Colores y marca YHORS</small></div></div>
+          <div class="flyer-color-row"><div><span>Color de acento</span><div class="flyer-swatches"><button type="button" class="flyer-swatch active" data-flyer-accent="#b58a43" style="--swatch:#b58a43" aria-label="Dorado"></button><button type="button" class="flyer-swatch" data-flyer-accent="#171513" style="--swatch:#171513" aria-label="Negro"></button><button type="button" class="flyer-swatch" data-flyer-accent="#2f67d8" style="--swatch:#2f67d8" aria-label="Azul"></button><button type="button" class="flyer-swatch" data-flyer-accent="#8d3bd8" style="--swatch:#8d3bd8" aria-label="Violeta"></button><button type="button" class="flyer-swatch" data-flyer-accent="#e85c12" style="--swatch:#e85c12" aria-label="Naranja"></button><button type="button" class="flyer-swatch" data-flyer-accent="#1b6f45" style="--swatch:#1b6f45" aria-label="Verde"></button></div></div><input type="hidden" id="flyerAccent" value="#b58a43"></div>
+          <label><span>Logo en el encabezado</span><select id="flyerLogo"><option value="yhors">YHORS · marca principal</option><option value="none">Sin logo</option></select></label>
+
+          <details class="flyer-notes"><summary>Notas promocionales por producto</summary><p>Opcional. Ej.: “10+1 GRATIS”, “Solo por hoy”, “Hasta agotar stock”.</p><div id="flyerNotesList">${notes.map(item => { const p=products.find(x=>String(x.id)===String(item.id)); return `<label data-flyer-note-row="${escapeHTML(item.id)}"><span>${escapeHTML(p?.name || 'Producto')}</span><input type="text" maxlength="80" placeholder="Texto promocional…"></label>`; }).join('')}</div></details>
+        </section>
+        <section class="flyer-live-preview">
+          <div class="flyer-live-head"><div><span class="eyebrow">Vista previa</span><strong>Así se verá tu flyer</strong></div><span id="flyerPreviewCount">${selected.length} productos</span></div>
+          <div id="flyerLivePreview" class="flyer-live-canvas"></div>
+        </section>
       </div>
-      <div class="flyer-modal-foot"><span><strong>${selected.length}</strong> producto${selected.length===1?'':'s'} seleccionado${selected.length===1?'':'s'}</span><div><button type="button" class="button secondary" data-flyer-close>Cancelar</button><button type="button" class="button primary" id="generateFlyerButton">Generar Flyer ↗</button></div></div>
+      <div class="flyer-modal-foot"><span><strong>${selected.length}</strong> producto${selected.length===1?'':'s'} seleccionado${selected.length===1?'':'s'}</span><div><button type="button" class="button secondary" data-flyer-close>Cancelar</button><button type="button" class="button primary" id="generateFlyerButton">Abrir Flyer ↗</button></div></div>
     </div>
   </div>`;
 }
@@ -3265,14 +3334,22 @@ async function renderAdminCatalogSearch() {
     const close=()=>{modal?.remove();document.body.classList.remove('no-scroll');};
     modal?.querySelectorAll('[data-flyer-close]').forEach(el=>el.addEventListener('click',close));
     document.body.classList.add('no-scroll');
-    modal?.querySelectorAll('[data-flyer-accent]').forEach(btn=>btn.addEventListener('click',()=>{modal.querySelectorAll('.flyer-swatch').forEach(x=>x.classList.remove('active'));btn.classList.add('active');modal.querySelector('#flyerAccent').value=btn.dataset.flyerAccent;}));
+    const refreshPreview = () => {
+      const draft = flyerPreviewDraftFromModal(modal, selected);
+      const preview = modal?.querySelector('#flyerLivePreview');
+      if (preview) preview.innerHTML = flyerMiniPreview(selected, draft);
+      const countEl = modal?.querySelector('#flyerPreviewCount');
+      if (countEl) countEl.textContent = `${selected.length} producto${selected.length===1?'':'s'}`;
+      wireImageFallback(preview);
+    };
+    modal?.querySelectorAll('[data-flyer-accent]').forEach(btn=>btn.addEventListener('click',()=>{modal.querySelectorAll('.flyer-swatch').forEach(x=>x.classList.remove('active'));btn.classList.add('active');modal.querySelector('#flyerAccent').value=btn.dataset.flyerAccent;refreshPreview();}));
+    modal?.querySelectorAll('input,select,textarea').forEach(el=>el.addEventListener(el.type==='text'||el.tagName==='TEXTAREA'?'input':'change',refreshPreview));
+    refreshPreview();
     modal?.querySelector('#generateFlyerButton')?.addEventListener('click',()=>{
-      const draft={ ids:selected.map(p=>String(p.id)), title:modal.querySelector('#flyerTitle').value.trim()||'Recién Llegados', subtitle:modal.querySelector('#flyerSubtitle').value.trim(), description:modal.querySelector('#flyerDescription').value.trim(), layout:modal.querySelector('#flyerLayout').value, showPrices:modal.querySelector('#flyerShowPrices').checked, theme:modal.querySelector('#flyerTheme').value, accent:modal.querySelector('#flyerAccent').value, logo:modal.querySelector('#flyerLogo').value, contact:modal.querySelector('#flyerContact').checked, notes:{} };
-      modal.querySelectorAll('[data-flyer-note-row]').forEach(row=>{const input=row.querySelector('input'); if(input?.value.trim()) draft.notes[row.dataset.flyerNoteRow]=input.value.trim();});
+      const draft=flyerPreviewDraftFromModal(modal, selected);
       const key=flyerDraftKey(); localStorage.setItem(key,JSON.stringify({...draft,createdAt:Date.now()}));
-      const tab=window.open('about:blank','_blank');
-      const url=`/yhors/flyer?draft=${encodeURIComponent(key)}`;
-      if(tab){tab.location=url;} else {window.location.href=url;}
+      const tab=window.open(`/yhors/flyer?draft=${encodeURIComponent(key)}`,'_blank');
+      if(!tab) window.location.href=`/yhors/flyer?draft=${encodeURIComponent(key)}`;
       close();
     });
   };
@@ -3291,23 +3368,33 @@ async function renderFlyerPreview() {
   let draft = null;
   try { draft = JSON.parse(localStorage.getItem(key) || 'null'); } catch (_) {}
   if (!draft) { app.innerHTML='<main class="flyer-missing"><h1>Flyer no encontrado</h1><p>Genera nuevamente el flyer desde Buscar Productos.</p></main>'; return; }
-  const [products, session] = await Promise.all([
-    request('/api/admin/catalog-products').catch(() => []),
-    request('/api/admin/session').catch(() => ({ username: '', name: '' }))
-  ]);
+  const products = await request('/api/admin/catalog-products').catch(() => []);
+  const session = await request('/api/admin/session').catch(() => ({ username: '', name: '' }));
   const selected = (draft.ids || []).map(id => products.find(p=>String(p.id)===String(id))).filter(Boolean);
   const accent = draft.accent || '#b58a43';
   const columns = Math.max(1, Math.min(4, Number(draft.layout || 4)));
   const theme = draft.theme || 'none';
   const logo = draft.logo !== 'none';
-  const moneyLabel = value => money(value);
-  const noteFor = id => draft.notes?.[id] || '';
-  const productMarkup = selected.map((p,index)=>`<article class="flyer-product ${columns===1?'featured':''}"><div class="flyer-product-image"><img src="${escapeHTML(catalogProductImage(p))}" alt="${escapeHTML(p.name)}"><span class="flyer-index">${String(index+1).padStart(2,'0')}</span>${noteFor(p.id)?`<span class="flyer-promo">${escapeHTML(noteFor(p.id))}</span>`:''}</div><div class="flyer-product-copy"><span class="flyer-brand">${escapeHTML(p.brand || categories[p.category] || 'YHORS')}</span><h2>${escapeHTML(p.name)}</h2><small>${escapeHTML(p.sku || '')}${p.productType ? ` · ${escapeHTML(p.productType)}`:''}</small>${draft.showPrices ? `<strong class="flyer-price">${moneyLabel(p.salePrice)}</strong>`:''}</div></article>`).join('');
-  const contact = draft.contact ? `<div class="flyer-contact"><strong>YHORS</strong><span>${escapeHTML(session?.name || session?.username || 'Equipo YHORS')}</span></div>` : '';
-  app.innerHTML=`<main class="flyer-page theme-${escapeHTML(theme)}" style="--flyer-accent:${escapeHTML(accent)};--flyer-cols:${columns}"><div class="flyer-toolbar no-print"><div><strong>Vista previa del Flyer</strong><small>${selected.length} producto${selected.length===1?'':'s'} · listo para PDF</small></div><div><button type="button" class="button secondary" id="flyerBack">← Volver</button><button type="button" class="button primary" id="flyerPrint">Guardar / imprimir PDF</button></div></div><section class="flyer-sheet"><header class="flyer-header">${logo?`<div class="flyer-logo">YHORS<span>STORE</span></div>`:''}<div class="flyer-header-copy"><span class="eyebrow">YHORS · SELECCIÓN COMERCIAL</span><h1>${escapeHTML(draft.title)}</h1>${draft.subtitle?`<p class="flyer-subtitle">${escapeHTML(draft.subtitle)}</p>`:''}${draft.description?`<p class="flyer-description">${escapeHTML(draft.description)}</p>`:''}</div><div class="flyer-date">${new Intl.DateTimeFormat('es-EC',{dateStyle:'medium'}).format(new Date())}</div></header><div class="flyer-products" style="--flyer-cols:${columns}">${productMarkup}</div><footer class="flyer-footer"><span>YHORS · más que un producto</span>${contact}</footer></section></main>`;
-  document.querySelector('#flyerPrint')?.addEventListener('click',()=>window.print());
-  document.querySelector('#flyerBack')?.addEventListener('click',()=>window.close());
-  // La primera apertura queda limpia y lista para que el usuario revise el diseño.
+  const contact = draft.contact ? `<div class="flyer-contact"><strong>${escapeHTML(session?.name || session?.username || 'Equipo YHORS')}</strong><span>${escapeHTML(session?.username || '')}</span></div>` : '';
+  const pages = [];
+  const perPage = columns === 1 ? 1 : columns === 2 ? 4 : columns === 3 ? 6 : 8;
+  for (let i=0;i<selected.length;i+=perPage) pages.push(selected.slice(i,i+perPage));
+  if (!pages.length) pages.push([]);
+  const pagesMarkup = pages.map((page,pageIndex)=>`<section class="flyer-sheet ${pageIndex===0?'flyer-cover-sheet':''}">
+    <header class="flyer-header">
+      ${logo ? `<div class="flyer-logo">YHORS<span>STORE</span></div>` : ''}
+      <div class="flyer-header-copy"><span class="eyebrow">YHORS · SELECCIÓN COMERCIAL</span><h1>${escapeHTML(draft.title || 'Recién Llegados')}</h1>${draft.subtitle ? `<p class="flyer-subtitle">${escapeHTML(draft.subtitle)}</p>` : ''}${draft.description ? `<p class="flyer-description">${escapeHTML(draft.description)}</p>` : ''}</div>
+      <div class="flyer-date">${new Intl.DateTimeFormat('es-EC',{dateStyle:'medium'}).format(new Date())}<small>Página ${pageIndex+1} / ${pages.length}</small></div>
+    </header>
+    <div class="flyer-products" style="--flyer-cols:${columns}">${page.map((p,idx)=>flyerProductPreviewCard(p,i+idx,draft,false)).join('')}</div>
+    <footer class="flyer-footer"><span>YHORS · más que un producto</span>${contact}</footer>
+  </section>`).join('');
+  app.innerHTML=`<main class="flyer-page theme-${escapeHTML(theme)}" style="--flyer-accent:${escapeHTML(accent)};--flyer-cols:${columns}">
+    <div class="flyer-toolbar no-print"><div><span class="eyebrow">Flyer generado</span><strong>${escapeHTML(draft.title || 'Recién Llegados')}</strong><small>${selected.length} producto${selected.length===1?'':'s'} · ${pages.length} página${pages.length===1?'':'s'}</small></div><div><button type="button" class="button secondary" id="flyerBack">← Volver al catálogo</button><button type="button" class="button primary" id="flyerPdf">Guardar como PDF</button></div></div>
+    <div class="flyer-generated-wrap">${pagesMarkup}</div>
+  </main>`;
+  document.querySelector('#flyerPdf')?.addEventListener('click',()=>window.print());
+  document.querySelector('#flyerBack')?.addEventListener('click',()=>{ window.location.href=`${ADMIN_PATH}/buscar-productos`; });
   wireImageFallback(document.querySelector('.flyer-page'));
   try { localStorage.removeItem(key); } catch (_) {}
 }

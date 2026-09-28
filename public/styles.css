@@ -3373,3 +3373,103 @@ body.generate-modal-open{overflow:hidden}
 @media(max-width:1100px){.catalog-search-toolbar{grid-template-columns:minmax(250px,1fr) repeat(2,minmax(140px,.5fr)) auto auto}.catalog-search-toolbar select:nth-of-type(3),.catalog-search-toolbar select:nth-of-type(4){display:none}.catalog-search-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.flyer-sheet{padding:34px}.flyer-products{gap:12px}}
 @media(max-width:760px){.catalog-search-hero{display:block}.catalog-search-count{text-align:left;margin-top:20px}.catalog-search-toolbar{position:static;grid-template-columns:1fr 1fr;padding:10px}.catalog-main-search{grid-column:1/-1}.catalog-search-button,.catalog-invert-button{width:100%}.catalog-search-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.catalog-search-body{padding:11px}.catalog-search-bottom{display:grid;gap:6px}.catalog-search-bottom strong{font-size:1rem}.catalog-stock{justify-self:start}.flyer-form-grid{grid-template-columns:1fr}.flyer-modal{padding:0}.flyer-modal-dialog{width:100%;height:100%;max-height:100%;border-radius:0}.flyer-modal-foot{position:sticky;bottom:0}.flyer-color-row{display:block}.flyer-swatches{flex-wrap:wrap}.flyer-notes #flyerNotesList label{grid-template-columns:1fr}.flyer-page{padding:0;background:#fff}.flyer-toolbar{border-radius:0;position:sticky;top:0;z-index:10}.flyer-sheet{box-shadow:none;width:100%;padding:24px 18px}.flyer-header{grid-template-columns:1fr;gap:10px}.flyer-date{padding:0}.flyer-products{grid-template-columns:repeat(2,minmax(0,1fr));}.flyer-products[style*="--flyer-cols:1"]{grid-template-columns:1fr}.flyer-products[style*="--flyer-cols:3"]{grid-template-columns:repeat(2,minmax(0,1fr))}.flyer-product.featured{grid-template-columns:1fr}.flyer-product.featured .flyer-product-image{min-height:260px}.flyer-product.featured .flyer-product-copy{padding:18px}.flyer-footer{display:block}.flyer-contact{margin-top:8px;flex-wrap:wrap}.no-print{display:flex}}
 @media print{html,body{background:#fff!important}.no-print{display:none!important}.flyer-page{padding:0!important;background:#fff!important}.flyer-sheet{width:100%!important;min-height:0!important;box-shadow:none!important;margin:0!important;padding:14mm 13mm 10mm!important}.flyer-toolbar{display:none!important}.flyer-products{gap:5mm!important}.flyer-product{break-inside:avoid;page-break-inside:avoid}.flyer-product-image{print-color-adjust:exact;-webkit-print-color-adjust:exact}.flyer-promo,.flyer-product-image,.flyer-product{print-color-adjust:exact;-webkit-print-color-adjust:exact}.theme-midnight .flyer-sheet{background:#171513!important}.flyer-page{--print-accent:var(--flyer-accent)}@page{size:A4 landscape;margin:0}}
+
+/* YHORS Flyer Designer 2.0 · preview en vivo + salida editorial */
+.flyer-designer-dialog{width:min(1260px,97vw);max-height:calc(100vh - 28px);border-radius:20px;background:#f7f5f1}
+.flyer-modal-head{padding:18px 22px;background:linear-gradient(120deg,#171513 0%,#26221d 62%,#b58a43 160%);align-items:center}
+.flyer-modal-head h2{font-size:1.18rem;letter-spacing:-.02em;margin:4px 0 2px}
+.flyer-modal-head p{margin:0;color:rgba(255,255,255,.68);font-size:.7rem}
+.flyer-designer-body{display:grid;grid-template-columns:390px minmax(0,1fr);min-height:0;overflow:hidden}
+.flyer-controls{padding:22px;overflow:auto;max-height:calc(100vh - 178px);background:#fff;border-right:1px solid #e5e0d7}
+.flyer-live-preview{padding:20px;background:#e8e4dc;min-width:0;display:flex;flex-direction:column;min-height:0}
+.flyer-live-head{display:flex;justify-content:space-between;align-items:end;gap:14px;margin:0 0 12px}
+.flyer-live-head strong{display:block;font-size:.95rem;margin-top:3px}
+.flyer-live-head>span{font-size:.65rem;color:#77716a;background:#fff;padding:7px 9px;border-radius:999px;border:1px solid #ddd7ce;white-space:nowrap}
+.flyer-live-canvas{flex:1;min-height:0;overflow:auto;border-radius:14px;box-shadow:0 14px 45px rgba(25,20,14,.12)}
+.flyer-preview-page{min-height:100%;background:#fff;color:#1b1916;padding:30px;display:flex;flex-direction:column;--flyer-accent:#b58a43}
+.flyer-preview-header{display:grid;grid-template-columns:auto 1fr;gap:18px;align-items:start;border-bottom:1px solid #e4dfd6;padding-bottom:17px}
+.flyer-preview-logo{font-size:1.05rem;letter-spacing:.22em;font-weight:900;line-height:1}
+.flyer-preview-logo span{display:block;font-size:.42rem;letter-spacing:.34em;color:var(--flyer-accent);margin-top:5px}
+.flyer-preview-header h1{font-size:clamp(1.7rem,3.2vw,3.1rem);line-height:.95;letter-spacing:-.05em;margin:5px 0 7px}
+.flyer-preview-header p{margin:0 0 4px;font-size:.72rem;font-weight:700}
+.flyer-preview-header small{display:block;color:#77716a;font-size:.58rem;line-height:1.45;max-width:620px}
+.flyer-preview-products{display:grid;grid-template-columns:repeat(var(--flyer-cols),minmax(0,1fr));gap:10px;padding:16px 0;align-items:stretch}
+.flyer-preview-page .flyer-product{min-width:0;border:1px solid #e1dcd3;border-radius:10px;background:#fff;overflow:hidden;display:flex;flex-direction:column}
+.flyer-preview-page .flyer-product-image{height:145px;aspect-ratio:auto;background:#f4f1eb;padding:10px;flex:none}
+.flyer-preview-page .flyer-product-image img{display:block;width:100%;height:100%;object-fit:contain;object-position:center}
+.flyer-preview-page .flyer-product-copy{padding:9px 10px 11px;gap:3px;min-width:0;display:flex;flex-direction:column;flex:1}
+.flyer-preview-page .flyer-brand{font-size:.48rem}
+.flyer-preview-page .flyer-product-copy h2{font-size:.68rem;line-height:1.22;margin:2px 0;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.flyer-preview-page .flyer-meta-line{display:flex;justify-content:space-between;gap:6px;font-size:.45rem;color:#8a847c;white-space:nowrap;overflow:hidden}
+.flyer-preview-page .flyer-meta-line span{overflow:hidden;text-overflow:ellipsis}
+.flyer-preview-page .flyer-product-bottom{display:flex;justify-content:space-between;align-items:end;gap:5px;margin-top:auto;padding-top:6px}
+.flyer-preview-page .flyer-price{font-size:.78rem;margin:0;color:var(--flyer-accent)}
+.flyer-preview-page .flyer-stock{font-size:.42rem;padding:4px 5px;border-radius:999px;background:#e1f5e9;color:#286e49;white-space:nowrap}
+.flyer-preview-page .flyer-stock.empty{background:#f7e2df;color:#9c3a31}
+.flyer-preview-more{text-align:center;border:1px dashed #d3cdc2;padding:8px;color:#7b746c;font-size:.55rem;border-radius:8px}
+.flyer-preview-page footer{margin-top:auto;padding-top:10px;border-top:1px solid #e4dfd6;display:flex;justify-content:space-between;gap:10px;color:#8a847c;font-size:.47rem;text-transform:uppercase;letter-spacing:.08em}
+.flyer-section-title{display:flex;align-items:center;gap:10px;padding:0 0 10px;margin:2px 0 12px;border-bottom:1px solid #eeeae3}
+.flyer-section-title>span{width:25px;height:25px;border-radius:50%;display:grid;place-items:center;background:#171513;color:#fff;font-size:.56rem;font-weight:850}
+.flyer-section-title strong{display:block;font-size:.76rem}.flyer-section-title small{display:block;color:#8b857d;font-size:.58rem;margin-top:2px}
+.flyer-controls>label,.flyer-controls .flyer-form-grid label{display:grid;gap:6px;margin-bottom:12px}
+.flyer-controls label>span,.flyer-color-row>div>span{font-size:.66rem;color:#625d56;font-weight:800}
+.flyer-controls input,.flyer-controls select,.flyer-controls textarea{box-sizing:border-box;width:100%;border:1px solid #ddd8cf;border-radius:9px;background:#fff;color:#26231f;padding:10px 11px;font:inherit;font-size:.76rem;outline:0}
+.flyer-controls textarea{resize:vertical;min-height:74px;line-height:1.45}
+.flyer-controls input:focus,.flyer-controls select:focus,.flyer-controls textarea:focus{border-color:#b58a43;box-shadow:0 0 0 3px rgba(181,138,67,.1)}
+.flyer-toggle-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:18px}
+.flyer-toggle-row .flyer-check{margin:0;padding:9px 10px;background:#f7f5f1;border:1px solid #e3ded5;border-radius:9px}
+.flyer-check{display:flex!important;align-items:center;gap:8px!important;padding:5px 0}.flyer-check input{width:15px!important;height:15px;margin:0;accent-color:#b58a43}.flyer-check span{font-size:.7rem!important;color:#4e4942!important}
+.flyer-swatches{display:flex;gap:9px;margin-top:8px;align-items:center;flex-wrap:wrap}.flyer-swatch{width:30px;height:30px;border-radius:50%;border:3px solid #fff;background:var(--swatch);box-shadow:0 0 0 1px #d7d0c5;cursor:pointer}.flyer-swatch.active{box-shadow:0 0 0 2px #171513}
+.flyer-notes{border:1px solid #e0dbd2;border-radius:9px;padding:0 11px;background:#fbfaf8;margin-top:3px}.flyer-notes summary{padding:11px 0;cursor:pointer;font-size:.7rem;font-weight:800}.flyer-notes>p{font-size:.6rem;color:#817a71;margin:0 0 9px;line-height:1.45}.flyer-notes #flyerNotesList{display:grid;gap:7px;padding-bottom:10px}.flyer-notes #flyerNotesList label{grid-template-columns:1fr;gap:4px}.flyer-notes #flyerNotesList label span{font-size:.57rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.flyer-notes #flyerNotesList input{padding:8px;font-size:.65rem}
+.flyer-modal-foot{padding:13px 18px;background:#fff;border-top:1px solid #e2ddd5}.flyer-modal-foot .button.primary{background:#171513;border-color:#171513}.flyer-modal-foot .button.primary:hover{background:#b58a43;border-color:#b58a43}
+
+/* Tarjetas del buscador: área de imagen consistente */
+.catalog-search-card{display:grid;grid-template-rows:250px 1fr;min-height:430px}
+.catalog-search-image{height:250px;aspect-ratio:auto;padding:14px 22px;background:linear-gradient(180deg,#f7f5f1,#f0ede7);box-sizing:border-box}
+.catalog-search-image img{display:block;width:100%;height:100%;object-fit:contain;object-position:center}
+.catalog-search-body{min-height:0}
+
+/* Flyer final generado: páginas limpias y listas para PDF */
+.flyer-page{padding:18px;background:#d9d5cd}
+.flyer-generated-wrap{display:grid;gap:18px;max-width:1180px;margin:auto}
+.flyer-sheet{box-sizing:border-box;width:100%;min-height:760px;border-radius:2px;padding:34px 40px 24px;background:#fff;box-shadow:0 20px 65px rgba(30,25,18,.14);display:flex;flex-direction:column;overflow:hidden}
+.flyer-header{grid-template-columns:auto minmax(0,1fr) auto;gap:20px;padding-bottom:18px}
+.flyer-header-copy h1{font-size:clamp(2rem,4.3vw,4rem)}
+.flyer-date{display:grid;gap:5px;text-align:right}.flyer-date small{font-size:.5rem;color:#aaa39a}
+.flyer-products{flex:1;grid-auto-rows:minmax(0,1fr);gap:13px;padding:18px 0}
+.flyer-product{border-radius:11px;display:flex;flex-direction:column;background:#fff}
+.flyer-product-image{height:190px;aspect-ratio:auto;padding:13px;background:#f4f1eb}
+.flyer-product-image img{width:100%;height:100%;object-fit:contain;object-position:center;display:block}
+.flyer-product-copy{flex:1;min-height:0;padding:11px 12px 12px;display:flex;flex-direction:column;gap:4px}
+.flyer-meta-line{display:flex;justify-content:space-between;gap:8px;font-size:.55rem;color:#8b857c}.flyer-meta-line span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.flyer-highlights{margin:3px 0 0;padding-left:14px;color:#716b63;font-size:.54rem;line-height:1.35;display:grid;gap:2px}.flyer-highlights li{overflow:hidden;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical}
+.flyer-product-bottom{margin-top:auto;display:flex;align-items:end;justify-content:space-between;gap:8px;padding-top:7px}.flyer-stock{font-size:.53rem;padding:5px 7px;border-radius:999px;background:#e1f5e9;color:#286e49;white-space:nowrap;font-weight:800}.flyer-stock.empty{background:#f7e2df;color:#9c3a31}
+.flyer-generated-wrap .flyer-product.featured{grid-column:1/-1;grid-template-columns:38% 1fr;display:grid}.flyer-generated-wrap .flyer-product.featured .flyer-product-image{height:auto;min-height:330px}.flyer-generated-wrap .flyer-product.featured .flyer-product-copy{padding:28px}.flyer-generated-wrap .flyer-product.featured .flyer-product-copy h2{font-size:1.7rem}.flyer-generated-wrap .flyer-product.featured .flyer-price{font-size:1.35rem}
+
+@media(max-width:1050px){.flyer-designer-dialog{width:98vw}.flyer-designer-body{grid-template-columns:350px minmax(0,1fr)}.flyer-controls{padding:18px}.flyer-preview-page{padding:24px}.flyer-product-image{height:175px}.catalog-search-card{grid-template-rows:230px 1fr}.catalog-search-image{height:230px}}
+@media(max-width:760px){
+  .flyer-designer-dialog{width:100vw;height:100vh;max-height:100vh;border-radius:0}
+  .flyer-designer-body{grid-template-columns:1fr;overflow:auto}
+  .flyer-controls{max-height:none;overflow:visible;border-right:0;border-bottom:1px solid #e4dfd7}
+  .flyer-live-preview{min-height:520px}
+  .flyer-live-canvas{overflow:auto}
+  .flyer-preview-page{min-width:620px}
+  .flyer-modal-foot{position:sticky;bottom:0;z-index:3}
+  .flyer-modal-foot>span{display:none}
+  .flyer-modal-foot>div{width:100%}.flyer-modal-foot .button{flex:1}
+  .catalog-search-card{grid-template-rows:205px 1fr;min-height:380px}.catalog-search-image{height:205px;padding:10px 14px}
+  .flyer-page{padding:0}.flyer-toolbar{border-radius:0;position:sticky;top:0;z-index:10}.flyer-generated-wrap{gap:8px}.flyer-sheet{border-radius:0;box-shadow:none;min-height:0;padding:24px 18px}.flyer-header{grid-template-columns:1fr;gap:9px}.flyer-date{text-align:left}.flyer-products{grid-template-columns:repeat(2,minmax(0,1fr))!important;grid-auto-rows:auto}.flyer-product-image{height:150px}.flyer-generated-wrap .flyer-product.featured{grid-template-columns:1fr}.flyer-generated-wrap .flyer-product.featured .flyer-product-image{min-height:230px}.flyer-footer{display:block}.flyer-contact{margin-top:8px;flex-wrap:wrap}
+}
+@media print{
+  html,body{background:#fff!important}
+  .no-print{display:none!important}
+  .flyer-page{padding:0!important;background:#fff!important}
+  .flyer-generated-wrap{display:block!important;max-width:none!important;margin:0!important}
+  .flyer-sheet{width:297mm!important;height:210mm!important;min-height:210mm!important;max-height:210mm!important;margin:0!important;padding:10mm 11mm 7mm!important;border-radius:0!important;box-shadow:none!important;page-break-after:always!important;break-after:page!important;overflow:hidden!important}
+  .flyer-sheet:last-child{page-break-after:auto!important;break-after:auto!important}
+  .flyer-products{gap:4mm!important;padding:5mm 0!important;grid-auto-rows:minmax(0,1fr)!important}
+  .flyer-product-image{height:46mm!important;min-height:0!important;padding:3mm!important}
+  .flyer-product-copy{padding:3mm!important}.flyer-highlights{font-size:5.5pt!important}.flyer-product-copy h2{font-size:9pt!important}.flyer-meta-line{font-size:5.5pt!important}.flyer-price{font-size:11pt!important}.flyer-stock{font-size:5.5pt!important;padding:1.5mm 2mm!important}
+  .flyer-promo,.flyer-product-image,.flyer-product{print-color-adjust:exact;-webkit-print-color-adjust:exact}
+  @page{size:A4 landscape;margin:0}
+}
