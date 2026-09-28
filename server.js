@@ -861,7 +861,7 @@ function buildOrderPdf(order) {
   const imageHeight = 33;
   const logoPath = path.join(__dirname, 'public', 'assets', 'yhors-logo-pdf.jpg');
   let logoJpeg = null;
-  try { if (String(options.logo || 'yhors') !== 'none') logoJpeg = fs.readFileSync(logoPath); } catch { logoJpeg = null; }
+  try { logoJpeg = fs.readFileSync(logoPath); } catch { logoJpeg = null; }
 
   const wrap = (text, maxChars) => {
     const value = String(text ?? '').trim();
@@ -1246,6 +1246,15 @@ app.get('/', (req, res, next) => {
 });
 
 app.use(ADMIN_PATH, (req, res, next) => { res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive'); next(); });
+
+// YHORS Flyer: la vista previa se abre en una pestaña independiente y se
+// imprime/guarda como PDF desde el navegador, sin exponer el catálogo fuera
+// de una sesión autenticada.
+app.get('/yhors/flyer', requireOrdersAccess, (_, res) => {
+  res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+  return res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
 
 app.use('/uploads', express.static(UPLOADS_DIR, { maxAge: '7d', immutable: true }));
 
@@ -2006,17 +2015,6 @@ function requireCatalogRead(req, res, next) {
   const session = getSession(req);
   if (!session) return res.status(401).json({ error: 'No autorizado.' });
   if (!isAdmin(session.role)) return res.status(403).json({ error: 'Solo el administrador puede consultar el catálogo administrativo.' });
-  return next();
-}
-
-// Catálogo interno de consulta: accesible para Administrador, Jefe de tienda y Vendedor.
-// Nunca expone precio de compra ni permite modificar inventario.
-function requireInternalCatalogRead(req, res, next) {
-  const session = getSession(req);
-  if (!session) return res.status(401).json({ error: 'No autorizado.' });
-  if (!['admin', 'store_manager', 'vendedor'].includes(normalizeRole(session.role))) {
-    return res.status(403).json({ error: 'Esta cuenta no tiene acceso al catálogo interno.' });
-  }
   return next();
 }
 
@@ -2840,7 +2838,7 @@ function buildFinancialReportPdf(report) {
   // Mismo logo oficial utilizado en los PDF de órdenes de YHORS.
   const logoPath = path.join(__dirname, 'public', 'assets', 'yhors-logo-pdf.jpg');
   let logoJpeg = null;
-  try { if (String(options.logo || 'yhors') !== 'none') logoJpeg = fs.readFileSync(logoPath); } catch { logoJpeg = null; }
+  try { logoJpeg = fs.readFileSync(logoPath); } catch { logoJpeg = null; }
   const logoWidth = 150;
   const logoHeight = 33;
   const pdfEscapeLocal = value => String(value ?? '')
@@ -3482,253 +3480,6 @@ app.get('/api/admin/ventas-generales', requireOrdersAccess, (req, res) => {
   });
 });
 
-function flyerHexToRgb(hex, fallback = [0.13, 0.64, 0.39]) {
-  const raw = String(hex || '').trim().replace('#', '');
-  if (!/^[0-9a-fA-F]{6}$/.test(raw)) return fallback;
-  return [0, 2, 4].map(index => parseInt(raw.slice(index, index + 2), 16) / 255);
-}
-
-function flyerJpegSize(buffer) {
-  if (!Buffer.isBuffer(buffer) || buffer.length < 4 || buffer[0] !== 0xff || buffer[1] !== 0xd8) return null;
-  let offset = 2;
-  while (offset + 9 < buffer.length) {
-    if (buffer[offset] !== 0xff) { offset += 1; continue; }
-    const marker = buffer[offset + 1];
-    offset += 2;
-    if (marker === 0xd8 || marker === 0xd9) continue;
-    if (offset + 2 > buffer.length) break;
-    const length = buffer.readUInt16BE(offset);
-    if (length < 2 || offset + length > buffer.length) break;
-    const isSof = (marker >= 0xc0 && marker <= 0xc3) || (marker >= 0xc5 && marker <= 0xc7) || (marker >= 0xc9 && marker <= 0xcb) || (marker >= 0xcd && marker <= 0xcf);
-    if (isSof && offset + 7 <= buffer.length) return { width: buffer.readUInt16BE(offset + 5), height: buffer.readUInt16BE(offset + 3) };
-    offset += length;
-  }
-  return null;
-}
-
-function flyerWrap(text, maxChars) {
-  const value = String(text ?? '').replace(/\s+/g, ' ').trim();
-  if (!value) return [''];
-  const words = value.split(' ');
-  const lines = [];
-  let line = '';
-  for (const word of words) {
-    const candidate = line ? `${line} ${word}` : word;
-    if (candidate.length <= maxChars) line = candidate;
-    else { if (line) lines.push(line); line = word.slice(0, maxChars); }
-  }
-  if (line) lines.push(line);
-  return lines.slice(0, 3);
-}
-
-async function loadFlyerJpeg(source) {
-  const value = String(source || '').trim();
-  if (!value) return null;
-  try {
-    let data;
-    if (value.startsWith('/uploads/')) {
-      const file = path.join(UPLOADS_DIR, path.basename(value));
-      if (!file.startsWith(UPLOADS_DIR + path.sep) || !fs.existsSync(file)) return null;
-      data = fs.readFileSync(file);
-    } else if (/^https?:\/\//i.test(value)) {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 8000);
-      try {
-        const response = await fetch(value, { signal: controller.signal, headers: { 'user-agent': 'YHORS-Flyer/1.0' } });
-        if (!response.ok) return null;
-        data = Buffer.from(await response.arrayBuffer());
-      } finally { clearTimeout(timer); }
-    } else return null;
-
-    if (data.subarray(0, 2).equals(Buffer.from([0xff, 0xd8]))) return data;
-
-    // Convert PNG/WebP/etc. to JPEG when ImageMagick is available. The app
-    // already runs in a Node container; this is best-effort and gracefully
-    // falls back to a clean placeholder when conversion is unavailable.
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'yhors-flyer-'));
-    const input = path.join(tmpDir, 'input');
-    const output = path.join(tmpDir, 'output.jpg');
-    try {
-      fs.writeFileSync(input, data);
-      const { execFileSync } = require('child_process');
-      execFileSync('convert', [input, '-background', 'white', '-alpha', 'remove', '-alpha', 'off', '-quality', '88', output], { stdio: 'ignore', timeout: 12000 });
-      return fs.readFileSync(output);
-    } catch { return null; }
-    finally { fs.rmSync(tmpDir, { recursive: true, force: true }); }
-  } catch { return null; }
-}
-
-async function buildFlyerPdf(products, options = {}) {
-  const W = 842;
-  const H = 595;
-  const margin = 18;
-  const headerH = 72;
-  const footerH = 22;
-  const gap = 12;
-  const columns = Math.max(2, Math.min(4, Number.parseInt(options.layout, 10) || 4));
-  const rowsPerPage = columns === 4 ? 2 : 2;
-  const cardW = (W - margin * 2 - gap * (columns - 1)) / columns;
-  const cardAreaTop = H - margin - headerH;
-  const cardAreaBottom = margin + footerH;
-  const cardH = (cardAreaTop - cardAreaBottom - gap * (rowsPerPage - 1)) / rowsPerPage;
-  const accent = flyerHexToRgb(options.accent, [0.13, 0.64, 0.39]);
-  const title = String(options.title || 'Selección YHORS').trim().slice(0, 90) || 'Selección YHORS';
-  const subtitle = String(options.subtitle || '').trim().slice(0, 140);
-  const description = String(options.description || '').trim().slice(0, 240);
-  const showPrices = options.showPrices !== false;
-  const contact = options.includeContact ? String(options.contact || '').trim().slice(0, 180) : '';
-  const theme = String(options.theme || 'Sin tema');
-  const notes = options.notes && typeof options.notes === 'object' ? options.notes : {};
-  const logoPath = path.join(__dirname, 'public', 'assets', 'yhors-logo-pdf.jpg');
-  let logoJpeg = null;
-  try { if (String(options.logo || 'yhors') !== 'none') logoJpeg = fs.readFileSync(logoPath); } catch { logoJpeg = null; }
-
-  const imageEntries = [];
-  for (const product of products) {
-    const jpeg = await loadFlyerJpeg((product.images || [product.image || '']).filter(Boolean)[0]);
-    imageEntries.push({ product, jpeg, size: flyerJpegSize(jpeg) });
-  }
-
-  const pages = [];
-  const chunks = [];
-  const perPage = columns * rowsPerPage;
-  for (let i = 0; i < imageEntries.length; i += perPage) chunks.push(imageEntries.slice(i, i + perPage));
-  if (!chunks.length) chunks.push([]);
-
-  const drawText = (ops, text, x, y, size = 9, font = 1, align = 'left') => {
-    const value = pdfEscape(String(text ?? ''));
-    const approxWidth = String(text ?? '').length * size * 0.48;
-    let tx = x;
-    if (align === 'right') tx = x - approxWidth;
-    if (align === 'center') tx = x - approxWidth / 2;
-    ops.push(`BT /F${font} ${size} Tf ${tx.toFixed(2)} ${y.toFixed(2)} Td (${value}) Tj ET`);
-  };
-  const setFill = (ops, r, g, b) => ops.push(`${r} ${g} ${b} rg`);
-  const setStroke = (ops, r, g, b) => ops.push(`${r} ${g} ${b} RG`);
-  const rect = (ops, x, y, w, h, width = 0.6) => ops.push(`${width} w ${x} ${y} ${w} ${h} re S`);
-  const fillRect = (ops, x, y, w, h, r, g, b) => ops.push(`${r} ${g} ${b} rg ${x} ${y} ${w} ${h} re f 0 0 0 rg`);
-
-  for (let pageIndex = 0; pageIndex < chunks.length; pageIndex++) {
-    const ops = [];
-    const chunk = chunks[pageIndex];
-    setFill(ops, 0.04, 0.05, 0.08);
-    if (logoJpeg) ops.push(`q 82 0 0 18 ${margin} ${H - margin - 22} cm /Logo Do Q`);
-    else drawText(ops, 'YHORS', margin, H - margin - 18, 18, 2);
-
-    drawText(ops, title, W / 2, H - margin - 16, 18, 2, 'center');
-    if (subtitle) drawText(ops, subtitle, W / 2, H - margin - 34, 8.5, 1, 'center');
-    if (description) drawText(ops, description, W / 2, H - margin - 48, 7.2, 1, 'center');
-    fillRect(ops, margin, H - margin - headerH + 2, W - margin * 2, 3, accent[0], accent[1], accent[2]);
-
-    for (let i = 0; i < chunk.length; i++) {
-      const entry = chunk[i];
-      const col = i % columns;
-      const row = Math.floor(i / columns);
-      const x = margin + col * (cardW + gap);
-      const y = cardAreaTop - (row + 1) * cardH - row * gap;
-      const inner = 8;
-      const imgBoxH = Math.min(118, cardH * 0.50);
-      const product = entry.product;
-      setFill(ops, 1, 1, 1);
-      ops.push(`${x} ${y} ${cardW} ${cardH} re f 0 0 0 rg`);
-      setStroke(ops, 0.88, 0.89, 0.92); rect(ops, x, y, cardW, cardH, 0.7);
-      if (entry.jpeg && entry.size) {
-        const ratio = entry.size.width / Math.max(1, entry.size.height);
-        let iw = cardW - inner * 2;
-        let ih = iw / ratio;
-        if (ih > imgBoxH) { ih = imgBoxH; iw = ih * ratio; }
-        const ix = x + (cardW - iw) / 2;
-        const iy = y + cardH - inner - ih;
-        ops.push(`q ${iw.toFixed(2)} 0 0 ${ih.toFixed(2)} ${ix.toFixed(2)} ${iy.toFixed(2)} cm /P${i} Do Q`);
-      } else {
-        fillRect(ops, x + inner, y + cardH - inner - imgBoxH, cardW - inner * 2, imgBoxH, 0.96, 0.97, 0.98);
-        drawText(ops, 'YHORS', x + cardW / 2, y + cardH - inner - imgBoxH / 2, 13, 2, 'center');
-      }
-      const textTop = y + cardH - inner - imgBoxH - 10;
-      setFill(ops, accent[0], accent[1], accent[2]);
-      drawText(ops, String(product.brand || product.productType || categoriesLabel(product.category) || 'YHORS').toUpperCase().slice(0, 24), x + inner, textTop, 6.5, 2);
-      setFill(ops, 0.06, 0.07, 0.10);
-      const nameLines = flyerWrap(product.name || 'Producto', columns === 4 ? 30 : 38);
-      nameLines.forEach((lineText, idx) => drawText(ops, lineText, x + inner, textTop - 13 - idx * 10, 7.8, 2));
-      let infoY = textTop - 13 - nameLines.length * 10 - 3;
-      const sku = String(product.sku || '');
-      if (sku) { drawText(ops, `SKU ${sku}`.slice(0, columns === 4 ? 27 : 34), x + inner, infoY, 6.3, 1); infoY -= 9; }
-      if (showPrices) { setFill(ops, accent[0], accent[1], accent[2]); drawText(ops, `$${Number(product.salePrice ?? product.price ?? 0).toFixed(2)}`, x + inner, y + 16, 13, 2); }
-      const note = String(notes[product.id] || '').trim();
-      if (note) {
-        const noteText = flyerWrap(note, columns === 4 ? 27 : 34)[0];
-        setFill(ops, 0.75, 0.14, 0.14); fillRect(ops, x + inner, y + 30, cardW - inner * 2, 13, 0.92, 0.86, 0.86);
-        setFill(ops, 0.65, 0.08, 0.08); drawText(ops, noteText, x + cardW / 2, y + 34, 6.4, 2, 'center');
-      }
-      setFill(ops, 0.32, 0.34, 0.38);
-      const stock = Number(product.stock || 0);
-      drawText(ops, `Stock ${stock}`, x + cardW - inner, y + 17, 6.5, 1, 'right');
-    }
-
-    setFill(ops, 0.34, 0.36, 0.40);
-    const footerText = contact ? contact : `YHORS · ${theme}`;
-    drawText(ops, footerText, margin, 9, 6.5, 1);
-    drawText(ops, `Página ${pageIndex + 1} de ${chunks.length}`, W - margin, 9, 6.5, 1, 'right');
-    pages.push({ stream: ops.join('\n'), images: chunk });
-  }
-
-  const objects = [
-    '<< /Type /Catalog /Pages 2 0 R >>',
-    `<< /Type /Pages /Kids [${pages.map((_, i) => `${3 + i * 2} 0 R`).join(' ')}] /Count ${pages.length} >>`
-  ];
-  let nextObject = 3;
-  const pageMeta = [];
-  const sharedLogoObject = logoJpeg ? (3 + pages.length * 2) : null;
-  let imageObjectCursor = sharedLogoObject ? sharedLogoObject + 1 : 3 + pages.length * 2;
-  const pageImageObjects = [];
-  for (let pageIndex = 0; pageIndex < pages.length; pageIndex++) {
-    const pageNo = 3 + pageIndex * 2;
-    const contentNo = pageNo + 1;
-    const map = [];
-    for (let i = 0; i < pages[pageIndex].images.length; i++) {
-      if (pages[pageIndex].images[i].jpeg && pages[pageIndex].images[i].size) map.push({ name: `P${i}`, objectNo: imageObjectCursor++ });
-    }
-    pageImageObjects.push(map);
-    const xObjects = [];
-    if (logoJpeg) xObjects.push(`/Logo ${sharedLogoObject} 0 R`);
-    map.forEach(item => xObjects.push(`/${item.name} ${item.objectNo} 0 R`));
-    objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] /Resources << /ProcSet [/PDF /Text /ImageC] /Font << /F1 ${imageObjectCursor + 0} 0 R /F2 ${imageObjectCursor + 1} 0 R >> /XObject << ${xObjects.join(' ')} >> >> /Contents ${contentNo} 0 R >>`);
-    objects.push(`<< /Length ${Buffer.byteLength(pages[pageIndex].stream, 'latin1')} >>\nstream\n${pages[pageIndex].stream}\nendstream`);
-    pageMeta.push({ pageNo, contentNo });
-  }
-  const normalFontObject = imageObjectCursor;
-  const boldFontObject = imageObjectCursor + 1;
-  if (logoJpeg) objects.push(`<< /Type /XObject /Subtype /Image /Width 839 /Height 184 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${logoJpeg.length} >>\nstream\n${logoJpeg.toString('latin1')}\nendstream`);
-  pages.forEach((page, pageIndex) => {
-    pageImageObjects[pageIndex].forEach(item => {
-      const entry = page.images[Number(item.name.slice(1))];
-      const size = entry.size;
-      objects.push(`<< /Type /XObject /Subtype /Image /Width ${size.width} /Height ${size.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${entry.jpeg.length} >>\nstream\n${entry.jpeg.toString('latin1')}\nendstream`);
-    });
-  });
-  objects.push(`<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>`);
-  objects.push(`<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>`);
-  // Page resources reference the final font object numbers; patch them now.
-  const normalNo = imageObjectCursor;
-  const boldNo = imageObjectCursor + 1;
-  for (let i = 0; i < pages.length; i++) {
-    const objectIndex = 2 + i * 2;
-    objects[objectIndex] = objects[objectIndex].replace(`/F1 ${imageObjectCursor + 0} 0 R /F2 ${imageObjectCursor + 1} 0 R`, `/F1 ${normalNo} 0 R /F2 ${boldNo} 0 R`);
-  }
-  let pdf = '%PDF-1.4\n';
-  const offsets = [0];
-  objects.forEach((object, index) => { offsets.push(Buffer.byteLength(pdf, 'latin1')); pdf += `${index + 1} 0 obj\n${object}\nendobj\n`; });
-  const xref = Buffer.byteLength(pdf, 'latin1');
-  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
-  for (let i = 1; i < offsets.length; i++) pdf += `${String(offsets[i]).padStart(10, '0')} 00000 n \n`;
-  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
-  return Buffer.from(pdf, 'latin1');
-}
-
-function categoriesLabel(category) {
-  return String(category || '').replace(/^./, char => char.toUpperCase());
-}
-
 app.get('/api/admin/orders/:id/pdf', requireOrdersAccess, (req, res) => {
   const order = readOrders().find(item => item.id === req.params.id);
   if (!order) return res.status(404).json({ error: 'Pedido no encontrado.' });
@@ -4158,38 +3909,28 @@ app.get('/api/admin/backups/:name/download', requireAdmin, (req, res) => {
   }
 });
 
-app.get('/api/internal/catalog', requireInternalCatalogRead, (_, res) => {
-  const products = readProducts().map(normalizeProduct).map(product => {
-    const { purchasePrice, ...safe } = product;
-    return safe;
-  });
+app.get('/api/admin/products', requireCatalogRead, (_, res) => res.json(readProducts().map(normalizeProduct)));
+
+// Catálogo de consulta para vendedores, jefes y administradores. Nunca incluye
+// precio de compra ni otros campos internos de administración.
+app.get('/api/admin/catalog-products', requireOrdersAccess, (_, res) => {
+  const products = readProducts().map(normalizeProduct).map(product => ({
+    id: product.id,
+    name: product.name,
+    description: product.description || '',
+    category: product.category,
+    brand: product.brand || '',
+    productType: product.productType || '',
+    sku: product.sku || '',
+    salePrice: Number(product.salePrice ?? product.price ?? 0),
+    rentalPrice: product.rentalPrice ?? null,
+    stock: Number(product.stock || 0),
+    published: product.published !== false,
+    image: product.image || '',
+    images: Array.isArray(product.images) ? product.images.filter(Boolean) : []
+  }));
   return res.json(products);
 });
-
-app.post('/api/internal/catalog/flyer', requireInternalCatalogRead, async (req, res) => {
-  try {
-    const ids = Array.isArray(req.body?.productIds) ? [...new Set(req.body.productIds.map(String))].slice(0, 60) : [];
-    if (!ids.length) return res.status(400).json({ error: 'Selecciona al menos un producto para generar el flyer.' });
-    const byId = new Map(readProducts().map(product => [String(product.id), normalizeProduct(product)]));
-    const products = ids.map(id => byId.get(id)).filter(Boolean).map(product => { const { purchasePrice, ...safe } = product; return safe; });
-    if (!products.length) return res.status(400).json({ error: 'Los productos seleccionados ya no están disponibles.' });
-    const pdf = await buildFlyerPdf(products, req.body?.options || {});
-    auditLog(req, 'Flyer generado', 'Catálogo interno', { productCount: products.length, productIds: products.map(product => product.id), title: String(req.body?.options?.title || '').slice(0, 90) });
-    const safeTitle = String(req.body?.options?.title || 'YHORS-Flyer').replace(/[^a-zA-Z0-9_-]+/g, '_').slice(0, 60) || 'YHORS-Flyer';
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `inline; filename="${safeTitle}.pdf"`);
-    res.setHeader('Content-Length', pdf.length);
-    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
-    res.setHeader('Pragma', 'no-cache');
-    res.setHeader('Expires', '0');
-    return res.end(pdf);
-  } catch (error) {
-    console.error('[YHORS] Error generando flyer:', error);
-    return res.status(500).json({ error: 'No se pudo generar el flyer PDF.' });
-  }
-});
-
-app.get('/api/admin/products', requireCatalogRead, (_, res) => res.json(readProducts().map(normalizeProduct)));
 
 // Catálogo operativo: solo para construir órdenes. No expone el área administrativa
 // de inventario ni habilita acciones de edición.

@@ -539,7 +539,7 @@ async function renderAdminAfterLogin(session) {
   if (!isAdminRoute) target = limitedRole ? `${ADMIN_PATH}/pedidos` : ADMIN_PATH;
 
   if (limitedRole) {
-    const allowed = [`${ADMIN_PATH}/ventas-generales`, `${ADMIN_PATH}/pedidos`, `${ADMIN_PATH}/generar-orden`];
+    const allowed = [`${ADMIN_PATH}/ventas-generales`, `${ADMIN_PATH}/pedidos`, `${ADMIN_PATH}/generar-orden`, `${ADMIN_PATH}/buscar-productos`];
     if (!allowed.includes(target.replace(/\/$/, ''))) target = `${ADMIN_PATH}/pedidos`;
   }
 
@@ -618,7 +618,8 @@ if (path === `${ADMIN_PATH}/usuarios` || path === `${ADMIN_PATH}/usuarios/`) {
     return panel === 'seguridad' ? renderAdminSecurity(true) : renderAdminUsers('usuarios');
   }
   if (path === `${ADMIN_PATH}/inventario` || path === `${ADMIN_PATH}/inventario/`) return renderAdminInventory();
-  if (path === '/buscar-productos' || path === '/buscar-productos/') return renderInternalCatalog();
+  if (path === `${ADMIN_PATH}/buscar-productos` || path === `${ADMIN_PATH}/buscar-productos/`) return renderAdminCatalogSearch();
+  if (path === '/yhors/flyer' || path === '/yhors/flyer/') return renderFlyerPreview();
   if (path === '/mi-cuenta' || path === '/mi-cuenta/') return renderMyAccount();
   if (path === '/pedido' || path === '/pedido/') return checkoutPage();
   return renderStore();
@@ -905,171 +906,6 @@ async function renderProductDetail(product, products, storefront) {
   });
 }
 
-async function renderInternalCatalog() {
-  const session = await request('/api/admin/session').catch(() => ({ authenticated: false }));
-  if (!session.authenticated) return renderLogin();
-  const allowed = ['admin', 'store_manager', 'vendedor', 'orders'];
-  if (!allowed.includes(String(session.role || '').toLowerCase())) return renderStore();
-
-  let products = [];
-  try { products = await request('/api/internal/catalog'); }
-  catch (error) {
-    app.innerHTML = `<main class="internal-catalog-page"><div class="internal-catalog-empty"><span class="eyebrow">Catálogo interno</span><h1>No se pudo cargar el catálogo</h1><p>${escapeHTML(error.message || 'Intenta nuevamente.')}</p><button class="button" id="retryInternalCatalog">Reintentar</button></div></main>`;
-    document.querySelector('#retryInternalCatalog')?.addEventListener('click', renderInternalCatalog);
-    return;
-  }
-
-  const brands = [...new Set(products.map(product => String(product.brand || '').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
-  const categoriesForFilter = [...new Set(products.map(product => String(product.category || '').trim()).filter(Boolean))];
-  const state = { query: '', brand: '', category: '', sort: 'name', selected: new Set(), notes: {} };
-
-  const renderCard = product => {
-    const stock = Number(product.stock || 0);
-    const image = productImages(product)[0];
-    const selected = state.selected.has(product.id);
-    return `<article class="internal-product-card ${selected ? 'is-selected' : ''}" data-product-card="${escapeHTML(product.id)}">
-      <div class="internal-product-card-top">
-        <label class="internal-product-check"><input type="checkbox" data-internal-select="${escapeHTML(product.id)}" ${selected ? 'checked' : ''} aria-label="Seleccionar ${escapeHTML(product.name)}"><span></span></label>
-        <span class="internal-product-sku">${escapeHTML(product.sku || 'SIN SKU')}</span>
-      </div>
-      <div class="internal-product-image"><img src="${escapeHTML(image)}" data-fallback alt="${escapeHTML(product.name)}"></div>
-      <div class="internal-product-body">
-        <span class="internal-product-brand">${escapeHTML(product.brand || 'YHORS')}</span>
-        <h2>${escapeHTML(product.name || 'Producto')}</h2>
-        <div class="internal-product-meta"><span>${escapeHTML(categories[product.category] || product.category || 'Producto')}</span><span>${escapeHTML(product.productType || 'Catálogo')}</span></div>
-        <div class="internal-product-bottom"><strong>${money(product.salePrice ?? product.price ?? 0)}</strong><span class="internal-stock ${stock > 0 ? 'available' : 'empty'}"><i></i>${stock > 0 ? `${stock} disponibles` : 'Sin stock'}</span></div>
-      </div>
-    </article>`;
-  };
-
-  const getFiltered = () => {
-    const query = state.query.toLowerCase();
-    return products.filter(product => {
-      const hay = `${product.name || ''} ${product.sku || ''} ${product.brand || ''} ${product.productType || ''} ${categories[product.category] || product.category || ''}`.toLowerCase();
-      return (!query || hay.includes(query)) && (!state.brand || String(product.brand || '') === state.brand) && (!state.category || String(product.category || '') === state.category);
-    }).sort((a,b) => {
-      if (state.sort === 'priceAsc') return Number(a.salePrice ?? a.price ?? 0) - Number(b.salePrice ?? b.price ?? 0);
-      if (state.sort === 'priceDesc') return Number(b.salePrice ?? b.price ?? 0) - Number(a.salePrice ?? a.price ?? 0);
-      if (state.sort === 'stockDesc') return Number(b.stock || 0) - Number(a.stock || 0);
-      if (state.sort === 'recent') return String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || ''));
-      return String(a.name || '').localeCompare(String(b.name || ''), 'es');
-    });
-  };
-
-  app.innerHTML = `<main class="internal-catalog-page">
-    <div class="internal-catalog-wrap">
-      <header class="internal-catalog-header">
-        <div class="internal-catalog-brand"><a class="brand" href="/">YHORS</a><div><span class="eyebrow">Catálogo interno</span><h1>Buscar productos</h1><p>Consulta precios y existencias sin entrar a la administración.</p></div></div>
-        <div class="internal-catalog-actions"><a class="button secondary" href="${escapeHTML(orderBackHref(session.role))}" data-smooth-route>← Volver</a>${accountMenu(session)}</div>
-      </header>
-      <section class="internal-search-panel">
-        <div class="internal-search-main"><span aria-hidden="true">⌕</span><input id="internalSearch" type="search" placeholder="Buscar por nombre, SKU, marca o modelo…" autocomplete="off"><button type="button" id="internalSearchButton">Buscar</button></div>
-        <div class="internal-filter-row">
-          <label><span>Marca</span><select id="internalBrand"><option value="">Todas las marcas</option>${brands.map(brand => `<option value="${escapeHTML(brand)}">${escapeHTML(brand)}</option>`).join('')}</select></label>
-          <label><span>Categoría</span><select id="internalCategory"><option value="">Todas las categorías</option>${categoriesForFilter.map(category => `<option value="${escapeHTML(category)}">${escapeHTML(categories[category] || category)}</option>`).join('')}</select></label>
-          <label><span>Ordenar</span><select id="internalSort"><option value="name">Nombre A–Z</option><option value="priceAsc">Precio menor</option><option value="priceDesc">Precio mayor</option><option value="stockDesc">Mayor stock</option><option value="recent">Más recientes</option></select></label>
-        </div>
-      </section>
-      <section class="internal-results-head"><div><span class="eyebrow">Inventario de consulta</span><h2 id="internalResultsCount">${products.length} productos</h2></div><div class="internal-selection-summary" id="internalSelectionSummary">0 seleccionados</div></section>
-      <section class="internal-products-grid" id="internalProductsGrid"></section>
-    </div>
-    <div class="internal-selection-bar" id="internalSelectionBar" hidden><div><strong id="internalSelectionCount">0 productos</strong><span>seleccionados para acciones</span></div><div><button type="button" class="button secondary" id="internalClearSelection">Limpiar</button><button type="button" class="button primary" id="internalCreateFlyer">📰 Crear Flyer</button></div></div>
-    <div class="generate-modal internal-flyer-modal" id="internalFlyerModal" hidden><div class="generate-modal-backdrop" data-close-flyer></div><div class="generate-modal-dialog internal-flyer-dialog" role="dialog" aria-modal="true" aria-labelledby="internalFlyerTitle">
-      <div class="generate-modal-head"><div><span class="eyebrow">Diseño YHORS</span><h2 id="internalFlyerTitle">📰 Generar Flyer</h2><p class="internal-flyer-lead">Convierte los productos seleccionados en un PDF listo para abrir, revisar e imprimir.</p></div><button type="button" class="generate-modal-close" data-close-flyer aria-label="Cerrar">×</button></div>
-      <div class="internal-flyer-form">
-        <div class="internal-flyer-field full"><label for="flyerTitle">Título *</label><input id="flyerTitle" value="Recién llegados" maxlength="90"></div>
-        <div class="internal-flyer-field full"><label for="flyerSubtitle">Subtítulo <small>(opcional)</small></label><input id="flyerSubtitle" placeholder="Ej: Línea HIKSEMI · Almacenamiento, Memorias & USB" maxlength="140"></div>
-        <div class="internal-flyer-field"><label for="flyerDescription">Descripción</label><select id="flyerDescription"><option value="Comercial enriquecida">Comercial enriquecida</option><option value="Minimalista">Minimalista</option><option value="Promocional">Promocional</option></select></div>
-        <div class="internal-flyer-field"><label for="flyerLayout">Layout</label><select id="flyerLayout"><option value="4">Grid 4 columnas</option><option value="3">Grid 3 columnas</option><option value="2">Grid 2 columnas</option></select></div>
-        <label class="internal-flyer-check full"><input id="flyerShowPrices" type="checkbox" checked><span><strong>Mostrar precios</strong><small>Los precios son los de venta vigentes.</small></span></label>
-        <div class="internal-flyer-field full"><label for="flyerTheme">Tema <small>(opcional)</small></label><select id="flyerTheme"><option>Sin tema</option><option>Corporativo YHORS</option><option>Recién llegados</option><option>Promociones</option><option>Oferta especial</option></select></div>
-        <div class="internal-flyer-field full"><label>Color de acento</label><div class="internal-accent-row"><button type="button" class="internal-accent active" data-accent="#1fa463" style="--accent:#1fa463"></button><button type="button" class="internal-accent" data-accent="#e53935" style="--accent:#e53935"></button><button type="button" class="internal-accent" data-accent="#2f6be5" style="--accent:#2f6be5"></button><button type="button" class="internal-accent" data-accent="#9337e5" style="--accent:#9337e5"></button><button type="button" class="internal-accent" data-accent="#ef650d" style="--accent:#ef650d"></button><button type="button" class="internal-accent" data-accent="#162033" style="--accent:#162033"></button><input id="flyerCustomAccent" type="color" value="#1fa463" title="Color personalizado"></div></div>
-        <div class="internal-flyer-field full"><label for="flyerLogo">Logo destacado en header <small>(opcional)</small></label><select id="flyerLogo"><option value="yhors">YHORS</option><option value="none">Sin logo destacado</option></select></div>
-        <label class="internal-flyer-check full"><input id="flyerContact" type="checkbox"><span><strong>📇 Incluir mi info de contacto</strong><small>Agrega el nombre y teléfono configurados para el flyer.</small></span></label>
-        <details class="internal-flyer-notes full"><summary>📣 Notas promocionales por producto <small>(opcional)</small></summary><p>Ej: “10+1 GRATIS”, “Solo por hoy”, “Hasta agotar stock”. Aparecerá como una banda roja en cada producto.</p><div id="internalFlyerNotesList"></div></details>
-      </div>
-      <div class="generate-modal-actions"><span class="generate-picker-hint" id="internalFlyerHint">0 productos seleccionados</span><button type="button" class="button secondary" data-close-flyer>Cancelar</button><button type="button" class="button primary" id="internalGenerateFlyer">Generar Flyer</button></div>
-    </div></div>
-  </main>`;
-
-  const grid = document.querySelector('#internalProductsGrid');
-  const renderResults = () => {
-    const filtered = getFiltered();
-    grid.innerHTML = filtered.length ? filtered.map(renderCard).join('') : `<div class="internal-no-results"><span>⌕</span><strong>No encontramos productos</strong><small>Prueba con otro nombre, marca o categoría.</small></div>`;
-    const count = document.querySelector('#internalResultsCount');
-    if (count) count.textContent = `${filtered.length} producto${filtered.length === 1 ? '' : 's'}`;
-    wireImageFallback(grid);
-    grid.querySelectorAll('[data-internal-select]').forEach(input => input.addEventListener('change', () => {
-      if (input.checked) state.selected.add(input.dataset.internalSelect); else state.selected.delete(input.dataset.internalSelect);
-      updateSelectionUI();
-      const card = input.closest('.internal-product-card'); card?.classList.toggle('is-selected', input.checked);
-    }));
-  };
-  const updateSelectionUI = () => {
-    const count = state.selected.size;
-    document.querySelector('#internalSelectionCount').textContent = `${count} producto${count === 1 ? '' : 's'}`;
-    document.querySelector('#internalSelectionSummary').textContent = `${count} seleccionado${count === 1 ? '' : 's'}`;
-    document.querySelector('#internalSelectionBar').hidden = count === 0;
-  };
-  const openFlyer = () => {
-    if (!state.selected.size) return;
-    const modal = document.querySelector('#internalFlyerModal');
-    const selected = products.filter(product => state.selected.has(product.id));
-    const notesList = document.querySelector('#internalFlyerNotesList');
-    notesList.innerHTML = selected.map(product => `<label class="internal-note-row"><img src="${escapeHTML(productImages(product)[0])}" data-fallback alt=""><span><strong>${escapeHTML(product.name)}</strong><input type="text" data-flyer-note="${escapeHTML(product.id)}" placeholder="Nota promocional…" maxlength="70"></span></label>`).join('');
-    wireImageFallback(notesList);
-    document.querySelector('#internalFlyerHint').textContent = `${selected.length} producto${selected.length === 1 ? '' : 's'} seleccionados`;
-    modal.hidden = false; requestAnimationFrame(() => modal.classList.add('is-open')); document.body.classList.add('generate-modal-open');
-  };
-  const closeFlyer = () => { const modal=document.querySelector('#internalFlyerModal'); modal?.classList.remove('is-open'); document.body.classList.remove('generate-modal-open'); setTimeout(()=>{ if(modal) modal.hidden=true; },180); };
-  document.querySelector('#internalSearch').addEventListener('input', event => { state.query = event.target.value.trim(); renderResults(); });
-  document.querySelector('#internalSearchButton').addEventListener('click', () => { state.query = document.querySelector('#internalSearch').value.trim(); renderResults(); document.querySelector('#internalSearch').focus(); });
-  document.querySelector('#internalBrand').addEventListener('change', event => { state.brand = event.target.value; renderResults(); });
-  document.querySelector('#internalCategory').addEventListener('change', event => { state.category = event.target.value; renderResults(); });
-  document.querySelector('#internalSort').addEventListener('change', event => { state.sort = event.target.value; renderResults(); });
-  document.querySelector('#internalClearSelection').addEventListener('click', () => { state.selected.clear(); renderResults(); updateSelectionUI(); });
-  document.querySelector('#internalCreateFlyer').addEventListener('click', openFlyer);
-  document.querySelectorAll('[data-close-flyer]').forEach(button => button.addEventListener('click', closeFlyer));
-  document.querySelectorAll('.internal-accent').forEach(button => button.addEventListener('click', () => { document.querySelectorAll('.internal-accent').forEach(item=>item.classList.remove('active')); button.classList.add('active'); document.querySelector('#flyerCustomAccent').value = button.dataset.accent; }));
-  document.querySelector('#flyerCustomAccent').addEventListener('input', event => { document.querySelectorAll('.internal-accent').forEach(item=>item.classList.remove('active')); });
-  document.querySelector('#internalGenerateFlyer').addEventListener('click', async () => {
-    const selectedIds = [...state.selected];
-    if (!selectedIds.length) return;
-    const tab = window.open('', '_blank');
-    if (!tab) { alert('El navegador bloqueó la nueva pestaña. Permite ventanas emergentes para YHORS y vuelve a intentarlo.'); return; }
-    tab.document.write('<title>Generando flyer…</title><body style="font-family:Arial,sans-serif;padding:40px;text-align:center"><h2>Generando flyer YHORS…</h2><p>Preparando el PDF.</p></body>'); tab.document.close();
-    const notes = {}; document.querySelectorAll('[data-flyer-note]').forEach(input => { if (input.value.trim()) notes[input.dataset.flyerNote] = input.value.trim(); });
-    const options = {
-      title: document.querySelector('#flyerTitle').value.trim() || 'Selección YHORS',
-      subtitle: document.querySelector('#flyerSubtitle').value.trim(),
-      description: document.querySelector('#flyerDescription').value,
-      layout: document.querySelector('#flyerLayout').value,
-      showPrices: document.querySelector('#flyerShowPrices').checked,
-      theme: document.querySelector('#flyerTheme').value,
-      accent: document.querySelector('#flyerCustomAccent').value,
-      logo: document.querySelector('#flyerLogo').value,
-      includeContact: document.querySelector('#flyerContact').checked,
-      contact: document.querySelector('#flyerContact').checked ? `${session.username || 'YHORS'} · ${session.role === 'vendedor' ? 'Vendedor' : session.role === 'store_manager' ? 'Jefe de tienda' : 'Administración'}` : '',
-      notes
-    };
-    const button = document.querySelector('#internalGenerateFlyer'); button.disabled = true; button.textContent = 'Generando…';
-    try {
-      const response = await fetch('/api/internal/catalog/flyer', { method:'POST', credentials:'same-origin', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ productIds:selectedIds, options }) });
-      if (!response.ok) { const json = await response.json().catch(()=>({})); throw new Error(json.error || 'No se pudo generar el flyer.'); }
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      tab.location.href = url;
-      setTimeout(() => URL.revokeObjectURL(url), 60000);
-      closeFlyer();
-    } catch (error) {
-      tab.close();
-      alert(error.message || 'No se pudo generar el flyer.');
-    } finally { button.disabled = false; button.textContent = 'Generar Flyer'; }
-  });
-  wireAccountMenu();
-  renderResults(); updateSelectionUI();
-}
-
 async function renderStore() {
   const categoryKey = currentCategoryFromPath();
   let products = [], storefront = { whatsappNumber: '', heroProductIds: [], featuredProductIds: [] };
@@ -1328,12 +1164,12 @@ function adminSectionNav(session = {}, active = '') {
   const link = (key, href, label) => `<a href="${href}" class="admin-section-link${active === key ? ' active' : ''}" data-smooth-route>${label}</a>`;
   if (limitedOperations) {
     return `<nav class="admin-section-nav admin-section-nav--compact" id="adminSectionNav" aria-label="Secciones operativas">
-      <details class="admin-nav-group"><summary>Operación</summary><div class="admin-nav-group-links">${link('buscar-productos', '/buscar-productos', 'BUSCAR PRODUCTOS')}${link('ventas-generales', `${ADMIN_PATH}/ventas-generales`, 'VENTAS GENERALES')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('generar-orden', `${ADMIN_PATH}/generar-orden`, 'GENERAR ORDEN')}</div></details>
+      <details class="admin-nav-group"><summary>Operación</summary><div class="admin-nav-group-links">${link('buscar-productos', `${ADMIN_PATH}/buscar-productos`, 'BUSCAR PRODUCTOS')}${link('ventas-generales', `${ADMIN_PATH}/ventas-generales`, 'VENTAS GENERALES')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('generar-orden', `${ADMIN_PATH}/generar-orden`, 'GENERAR ORDEN')}</div></details>
     </nav>`;
   }
   const group = (label, activeKeys, items, open = false) => `<details class="admin-nav-group${activeKeys.includes(active) ? ' has-active' : ''}"${open ? ' open' : ''}><summary><span>${label}</span>${activeKeys.includes(active) ? '<i aria-hidden="true"></i>' : ''}</summary><div class="admin-nav-group-links">${items}</div></details>`;
   return `<nav class="admin-section-nav" id="adminSectionNav" aria-label="Administración YHORS">
-    ${group('Operación', ['web','buscar-productos','inventario','pedidos','generar-orden'], `${link('web', ADMIN_PATH, 'PÁGINA WEB')}${link('buscar-productos', '/buscar-productos', 'BUSCAR PRODUCTOS')}${link('inventario', `${ADMIN_PATH}/inventario`, 'INVENTARIO')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('generar-orden', `${ADMIN_PATH}/generar-orden`, 'GENERAR ORDEN')}`)}
+    ${group('Operación', ['web','inventario','buscar-productos','pedidos','generar-orden'], `${link('web', ADMIN_PATH, 'PÁGINA WEB')}${link('buscar-productos', `${ADMIN_PATH}/buscar-productos`, 'BUSCAR PRODUCTOS')}${link('inventario', `${ADMIN_PATH}/inventario`, 'INVENTARIO')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('generar-orden', `${ADMIN_PATH}/generar-orden`, 'GENERAR ORDEN')}`)}
     ${group('Gestión', ['usuarios','auditoria'], `${link('usuarios', `${ADMIN_PATH}/usuarios`, 'USUARIOS')}${link('auditoria', `${ADMIN_PATH}/auditoria`, 'AUDITORÍA')}`)}
     ${group('Finanzas', ['resumen-financiero','ventas-generales','multas','calculo-comision'], `${link('resumen-financiero', `${ADMIN_PATH}/resumen-financiero`, 'RESUMEN FINANCIERO')}${link('ventas-generales', `${ADMIN_PATH}/ventas-generales`, 'VENTAS GENERALES')}${link('multas', `${ADMIN_PATH}/multas`, 'MULTAS')}${link('calculo-comision', `${ADMIN_PATH}/calculo-comision`, 'CÁLCULO DE COMISIÓN')}`)}
   </nav>`;
@@ -3314,6 +3150,166 @@ function inventoryPageMarkup(products = [], options = {}) {
       <div id="inventoryPageList">${rows}</div>
     </section>
   </div></main>`;
+}
+
+
+function flyerDraftKey() {
+  return `yhors_flyer_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function catalogProductImage(product) {
+  return productImages(product)[0] || placeholder;
+}
+
+function catalogSearchProductCard(product, selected = false) {
+  const stock = Number(product.stock || 0);
+  const price = money(product.salePrice ?? product.price ?? 0);
+  return `<article class="catalog-search-card ${selected ? 'is-selected' : ''}" data-catalog-product="${escapeHTML(product.id)}" data-search-haystack="${escapeHTML(`${product.name||''} ${product.sku||''} ${product.brand||''} ${product.productType||''} ${categories[product.category]||product.category||''}`.toLowerCase())}">
+    <label class="catalog-select-box" title="Seleccionar producto"><input type="checkbox" data-catalog-select value="${escapeHTML(product.id)}" ${selected ? 'checked' : ''}><span></span></label>
+    <button type="button" class="catalog-copy-button" data-copy-sku="${escapeHTML(product.sku || '')}" title="Copiar SKU" aria-label="Copiar SKU">▣</button>
+    <div class="catalog-search-image"><img src="${escapeHTML(catalogProductImage(product))}" data-fallback alt="${escapeHTML(product.name)}" loading="lazy"></div>
+    <div class="catalog-search-body">
+      <span class="catalog-search-kicker">${escapeHTML(product.brand || categories[product.category] || 'YHORS')}</span>
+      <small>${escapeHTML(product.sku || 'SIN SKU')}</small>
+      <h3>${escapeHTML(product.name)}</h3>
+      ${product.productType ? `<span class="catalog-product-type">${escapeHTML(product.productType)}</span>` : ''}
+      <div class="catalog-search-bottom"><strong>${price}</strong><span class="catalog-stock ${stock > 0 ? 'available' : 'empty'}">${stock > 0 ? `${stock} disponibles` : 'Sin stock'}</span></div>
+    </div>
+  </article>`;
+}
+
+function flyerGeneratorModal(products = [], selectedIds = []) {
+  const selected = products.filter(p => selectedIds.includes(String(p.id)));
+  const notes = selected.map(p => ({ id: p.id, note: '' }));
+  return `<div class="flyer-modal" id="flyerModal" role="dialog" aria-modal="true" aria-labelledby="flyerModalTitle">
+    <div class="flyer-modal-backdrop" data-flyer-close></div>
+    <div class="flyer-modal-dialog">
+      <div class="flyer-modal-head"><div><span class="eyebrow">Diseño YHORS</span><h2 id="flyerModalTitle">🎨 Generar Flyer</h2></div><button type="button" class="flyer-close" data-flyer-close aria-label="Cerrar">×</button></div>
+      <div class="flyer-modal-scroll">
+        <div class="flyer-form-grid">
+          <label><span>Título *</span><input id="flyerTitle" maxlength="90" value="Recién Llegados" placeholder="Ej: Nuevos productos"></label>
+          <label><span>Subtítulo (opcional)</span><input id="flyerSubtitle" maxlength="140" placeholder="Ej: Tecnología · Accesorios · Memorias & USB"></label>
+        </div>
+        <div class="flyer-form-grid two">
+          <label><span>Descripción</span><textarea id="flyerDescription" rows="3" maxlength="280" placeholder="Una selección pensada para destacar.">Comercial enriquecida</textarea></label>
+          <label><span>Layout</span><select id="flyerLayout"><option value="4">Grid 4 columnas</option><option value="3">Grid 3 columnas</option><option value="2">Grid 2 columnas</option><option value="1">Producto destacado</option></select></label>
+        </div>
+        <label class="flyer-check"><input id="flyerShowPrices" type="checkbox" checked><span>Mostrar precios</span></label>
+        <label><span>Tema (opcional)</span><select id="flyerTheme"><option value="none">Sin tema</option><option value="midnight">Midnight</option><option value="editorial">Editorial</option><option value="luxury">Luxury</option></select></label>
+        <div class="flyer-color-row"><div><span>Color de acento</span><div class="flyer-swatches"><button type="button" class="flyer-swatch active" data-flyer-accent="#b58a43" style="--swatch:#b58a43"></button><button type="button" class="flyer-swatch" data-flyer-accent="#171513" style="--swatch:#171513"></button><button type="button" class="flyer-swatch" data-flyer-accent="#2f67d8" style="--swatch:#2f67d8"></button><button type="button" class="flyer-swatch" data-flyer-accent="#8d3bd8" style="--swatch:#8d3bd8"></button><button type="button" class="flyer-swatch" data-flyer-accent="#e85c12" style="--swatch:#e85c12"></button><button type="button" class="flyer-swatch" data-flyer-accent="#1b6f45" style="--swatch:#1b6f45"></button></div></div><input type="hidden" id="flyerAccent" value="#b58a43"></div>
+        <label><span>Logo destacado en header (opcional)</span><select id="flyerLogo"><option value="yhors">YHORS · marca principal</option><option value="none">Sin logo destacado</option></select></label>
+        <div class="flyer-info-box"><label class="flyer-check"><input id="flyerContact" type="checkbox"><span>📇 Incluir mi info de contacto</span></label><small>Agrega el nombre, email y teléfono de la cuenta activa al pie del flyer.</small></div>
+        <details class="flyer-notes"><summary>📝 Notas promocionales por producto (opcional)</summary><p>Ej: “10+1 GRATIS”, “Solo por hoy”, “Hasta agotar stock”. Aparece como banda sobre cada producto.</p><div id="flyerNotesList">${notes.map(item => { const p=products.find(x=>String(x.id)===String(item.id)); return `<label data-flyer-note-row="${escapeHTML(item.id)}"><span>${escapeHTML(p?.name || 'Producto')}</span><input type="text" maxlength="80" placeholder="Texto promocional…"></label>`; }).join('')}</div></details>
+      </div>
+      <div class="flyer-modal-foot"><span><strong>${selected.length}</strong> producto${selected.length===1?'':'s'} seleccionado${selected.length===1?'':'s'}</span><div><button type="button" class="button secondary" data-flyer-close>Cancelar</button><button type="button" class="button primary" id="generateFlyerButton">Generar Flyer ↗</button></div></div>
+    </div>
+  </div>`;
+}
+
+async function renderAdminCatalogSearch() {
+  const session = await request('/api/admin/session').catch(() => ({ authenticated: false }));
+  if (!session.authenticated) return renderLogin();
+  const products = await request('/api/admin/catalog-products').catch(() => []);
+  const classifications = await request('/api/admin/classifications').catch(() => ({ brands: {}, productTypes: {} }));
+  const brands = [...new Set(products.map(p => p.brand).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
+  const categoryEntries = Object.entries(categories).filter(([key]) => key !== 'all');
+  let selectedIds = new Set();
+  const roleLabel = userRoleLabel(session.role || '');
+
+  app.innerHTML = `<main class="admin-shell catalog-search-shell"><div class="admin-wrap catalog-search-wrap">
+    <div class="admin-top"><div><a class="brand" href="${ADMIN_PATH}">YHORS</a><h1 class="admin-title">Buscar productos</h1></div><div class="admin-top-actions">${accountMenu(session)}</div></div>
+    ${adminSectionNav(session, 'buscar-productos')}
+    <section class="catalog-search-hero"><div><span class="eyebrow">Catálogo interno · ${escapeHTML(roleLabel)}</span><h2>Encuentra. Consulta. Selecciona.</h2><p>Precios de venta, stock, marca y datos comerciales en una sola vista. Disponible para vendedores, jefes y administradores.</p></div><div class="catalog-search-count"><strong id="catalogResultCount">0</strong><span>productos visibles</span></div></section>
+    <section class="catalog-search-toolbar"><label class="catalog-main-search"><span>⌕</span><input id="catalogMainSearch" type="search" placeholder="Buscar por código, nombre, modelo o marca…" autocomplete="off"><button id="catalogClearSearch" type="button" aria-label="Limpiar">×</button></label><select id="catalogBrandFilter"><option value="">Todas las marcas</option>${brands.map(b=>`<option value="${escapeHTML(b)}">${escapeHTML(b)}</option>`).join('')}</select><select id="catalogCategoryFilter"><option value="">Todas las categorías</option>${categoryEntries.map(([k,v])=>`<option value="${escapeHTML(k)}">${escapeHTML(v)}</option>`).join('')}</select><select id="catalogStockFilter"><option value="">Todo el stock</option><option value="available">Disponibles</option><option value="empty">Sin stock</option></select><select id="catalogSort"><option value="name">Nombre A–Z</option><option value="price-asc">Precio menor</option><option value="price-desc">Precio mayor</option><option value="stock-desc">Mayor stock</option></select><button class="button primary catalog-search-button" id="catalogSearchButton" type="button">⌕ Buscar</button><button class="button secondary catalog-invert-button" id="catalogInvertButton" type="button">⇄ Invertir</button></section>
+    <section class="catalog-search-meta"><div><span class="eyebrow">Selección para flyer</span><strong id="catalogSelectionCount">0 seleccionados</strong></div><button type="button" class="button secondary small" id="catalogGenerateFlyer" disabled>🎨 Crear Flyer</button></section>
+    <section class="catalog-search-grid" id="catalogSearchGrid"></section>
+  </div></main>`;
+  wireAccountMenu();
+
+  const grid = document.querySelector('#catalogSearchGrid');
+  const count = document.querySelector('#catalogResultCount');
+  const selectionCount = document.querySelector('#catalogSelectionCount');
+  const flyerButton = document.querySelector('#catalogGenerateFlyer');
+  const searchInput = document.querySelector('#catalogMainSearch');
+  const brandFilter = document.querySelector('#catalogBrandFilter');
+  const categoryFilter = document.querySelector('#catalogCategoryFilter');
+  const stockFilter = document.querySelector('#catalogStockFilter');
+  const sortSelect = document.querySelector('#catalogSort');
+
+  const getFiltered = () => {
+    const q = (searchInput?.value || '').trim().toLowerCase();
+    const brand = brandFilter?.value || '';
+    const category = categoryFilter?.value || '';
+    const stock = stockFilter?.value || '';
+    const rows = products.filter(p => {
+      const hay = `${p.name||''} ${p.sku||''} ${p.brand||''} ${p.productType||''} ${categories[p.category]||p.category||''}`.toLowerCase();
+      return (!q || hay.includes(q)) && (!brand || p.brand === brand) && (!category || p.category === category) && (!stock || (stock === 'available' ? Number(p.stock||0)>0 : Number(p.stock||0)<=0));
+    });
+    const sort = sortSelect?.value || 'name';
+    rows.sort((a,b) => sort === 'price-asc' ? Number(a.salePrice||0)-Number(b.salePrice||0) : sort === 'price-desc' ? Number(b.salePrice||0)-Number(a.salePrice||0) : sort === 'stock-desc' ? Number(b.stock||0)-Number(a.stock||0) : String(a.name||'').localeCompare(String(b.name||''),'es',{sensitivity:'base'}));
+    return rows;
+  };
+  const updateSelectionUi = () => { const n=selectedIds.size; selectionCount.textContent=`${n} seleccionado${n===1?'':'s'}`; flyerButton.disabled=!n; };
+  const draw = () => {
+    const rows=getFiltered(); count.textContent=rows.length; grid.innerHTML=rows.length ? rows.map(p=>catalogSearchProductCard(p,selectedIds.has(String(p.id)))).join('') : `<div class="catalog-search-empty"><span>⌕</span><h3>No encontramos productos</h3><p>Prueba otro código, nombre, marca o filtro.</p></div>`;
+    wireImageFallback(grid); updateSelectionUi();
+    grid.querySelectorAll('[data-catalog-select]').forEach(input=>input.addEventListener('change',()=>{const id=String(input.value); if(input.checked) selectedIds.add(id); else selectedIds.delete(id); input.closest('.catalog-search-card')?.classList.toggle('is-selected',input.checked); updateSelectionUi();}));
+    grid.querySelectorAll('[data-copy-sku]').forEach(button=>button.addEventListener('click',async()=>{const sku=button.dataset.copySku||''; if(!sku)return; try{await navigator.clipboard.writeText(sku); button.textContent='✓'; setTimeout(()=>button.textContent='▣',700);}catch(_){}}));
+  };
+  const openFlyer = () => {
+    if (!selectedIds.size) return;
+    const selected = products.filter(p=>selectedIds.has(String(p.id)));
+    document.querySelector('#flyerModal')?.remove();
+    document.body.insertAdjacentHTML('beforeend', flyerGeneratorModal(products, selected.map(p=>String(p.id))));
+    const modal=document.querySelector('#flyerModal');
+    const close=()=>{modal?.remove();document.body.classList.remove('no-scroll');};
+    modal?.querySelectorAll('[data-flyer-close]').forEach(el=>el.addEventListener('click',close));
+    document.body.classList.add('no-scroll');
+    modal?.querySelectorAll('[data-flyer-accent]').forEach(btn=>btn.addEventListener('click',()=>{modal.querySelectorAll('.flyer-swatch').forEach(x=>x.classList.remove('active'));btn.classList.add('active');modal.querySelector('#flyerAccent').value=btn.dataset.flyerAccent;}));
+    modal?.querySelector('#generateFlyerButton')?.addEventListener('click',()=>{
+      const draft={ ids:selected.map(p=>String(p.id)), title:modal.querySelector('#flyerTitle').value.trim()||'Recién Llegados', subtitle:modal.querySelector('#flyerSubtitle').value.trim(), description:modal.querySelector('#flyerDescription').value.trim(), layout:modal.querySelector('#flyerLayout').value, showPrices:modal.querySelector('#flyerShowPrices').checked, theme:modal.querySelector('#flyerTheme').value, accent:modal.querySelector('#flyerAccent').value, logo:modal.querySelector('#flyerLogo').value, contact:modal.querySelector('#flyerContact').checked, notes:{} };
+      modal.querySelectorAll('[data-flyer-note-row]').forEach(row=>{const input=row.querySelector('input'); if(input?.value.trim()) draft.notes[row.dataset.flyerNoteRow]=input.value.trim();});
+      const key=flyerDraftKey(); localStorage.setItem(key,JSON.stringify({...draft,createdAt:Date.now()}));
+      const tab=window.open('about:blank','_blank');
+      const url=`/yhors/flyer?draft=${encodeURIComponent(key)}`;
+      if(tab){tab.location=url;} else {window.location.href=url;}
+      close();
+    });
+  };
+  flyerButton.addEventListener('click',openFlyer);
+  document.querySelector('#catalogInvertButton')?.addEventListener('click',()=>{products.forEach(p=>{const id=String(p.id); if(selectedIds.has(id)) selectedIds.delete(id); else selectedIds.add(id);}); draw();});
+  document.querySelector('#catalogSearchButton')?.addEventListener('click',draw);
+  [searchInput,brandFilter,categoryFilter,stockFilter,sortSelect].forEach(el=>el?.addEventListener(el===searchInput?'input':'change',draw));
+  document.querySelector('#catalogClearSearch')?.addEventListener('click',()=>{searchInput.value='';draw();searchInput.focus();});
+  document.addEventListener('keydown', event => { if(event.key==='Escape' && document.querySelector('#flyerModal')) document.querySelector('#flyerModal')?.remove(); });
+  draw();
+}
+
+async function renderFlyerPreview() {
+  const params = new URLSearchParams(window.location.search);
+  const key = params.get('draft') || '';
+  let draft = null;
+  try { draft = JSON.parse(localStorage.getItem(key) || 'null'); } catch (_) {}
+  if (!draft) { app.innerHTML='<main class="flyer-missing"><h1>Flyer no encontrado</h1><p>Genera nuevamente el flyer desde Buscar Productos.</p></main>'; return; }
+  const [products, session] = await Promise.all([
+    request('/api/admin/catalog-products').catch(() => []),
+    request('/api/admin/session').catch(() => ({ username: '', name: '' }))
+  ]);
+  const selected = (draft.ids || []).map(id => products.find(p=>String(p.id)===String(id))).filter(Boolean);
+  const accent = draft.accent || '#b58a43';
+  const columns = Math.max(1, Math.min(4, Number(draft.layout || 4)));
+  const theme = draft.theme || 'none';
+  const logo = draft.logo !== 'none';
+  const moneyLabel = value => money(value);
+  const noteFor = id => draft.notes?.[id] || '';
+  const productMarkup = selected.map((p,index)=>`<article class="flyer-product ${columns===1?'featured':''}"><div class="flyer-product-image"><img src="${escapeHTML(catalogProductImage(p))}" alt="${escapeHTML(p.name)}"><span class="flyer-index">${String(index+1).padStart(2,'0')}</span>${noteFor(p.id)?`<span class="flyer-promo">${escapeHTML(noteFor(p.id))}</span>`:''}</div><div class="flyer-product-copy"><span class="flyer-brand">${escapeHTML(p.brand || categories[p.category] || 'YHORS')}</span><h2>${escapeHTML(p.name)}</h2><small>${escapeHTML(p.sku || '')}${p.productType ? ` · ${escapeHTML(p.productType)}`:''}</small>${draft.showPrices ? `<strong class="flyer-price">${moneyLabel(p.salePrice)}</strong>`:''}</div></article>`).join('');
+  const contact = draft.contact ? `<div class="flyer-contact"><strong>YHORS</strong><span>${escapeHTML(session?.name || session?.username || 'Equipo YHORS')}</span></div>` : '';
+  app.innerHTML=`<main class="flyer-page theme-${escapeHTML(theme)}" style="--flyer-accent:${escapeHTML(accent)};--flyer-cols:${columns}"><div class="flyer-toolbar no-print"><div><strong>Vista previa del Flyer</strong><small>${selected.length} producto${selected.length===1?'':'s'} · listo para PDF</small></div><div><button type="button" class="button secondary" id="flyerBack">← Volver</button><button type="button" class="button primary" id="flyerPrint">Guardar / imprimir PDF</button></div></div><section class="flyer-sheet"><header class="flyer-header">${logo?`<div class="flyer-logo">YHORS<span>STORE</span></div>`:''}<div class="flyer-header-copy"><span class="eyebrow">YHORS · SELECCIÓN COMERCIAL</span><h1>${escapeHTML(draft.title)}</h1>${draft.subtitle?`<p class="flyer-subtitle">${escapeHTML(draft.subtitle)}</p>`:''}${draft.description?`<p class="flyer-description">${escapeHTML(draft.description)}</p>`:''}</div><div class="flyer-date">${new Intl.DateTimeFormat('es-EC',{dateStyle:'medium'}).format(new Date())}</div></header><div class="flyer-products" style="--flyer-cols:${columns}">${productMarkup}</div><footer class="flyer-footer"><span>YHORS · más que un producto</span>${contact}</footer></section></main>`;
+  document.querySelector('#flyerPrint')?.addEventListener('click',()=>window.print());
+  document.querySelector('#flyerBack')?.addEventListener('click',()=>window.close());
+  // La primera apertura queda limpia y lista para que el usuario revise el diseño.
+  wireImageFallback(document.querySelector('.flyer-page'));
+  try { localStorage.removeItem(key); } catch (_) {}
 }
 
 async function renderAdminInventory() {
