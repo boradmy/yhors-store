@@ -3167,3 +3167,80 @@ body.generate-modal-open{overflow:hidden}
   .fines-reason { grid-column: auto; }
   .fine-row-main { align-items: flex-start; flex-direction: column; gap: 6px; }
 }
+
+/* V15.6.1 — Edición y filtros de multas */
+.fines-toolbar {
+  display: grid;
+  grid-template-columns: auto minmax(320px, 1fr) auto;
+  gap: 16px;
+  align-items: end;
+}
+.fines-history-filters {
+  display: grid;
+  grid-template-columns: minmax(180px, .8fr) minmax(220px, 1fr);
+  gap: 10px;
+}
+.fines-history-filters label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.fines-history-filters label > span {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: #766f63;
+}
+.fines-history-filters select,
+.fines-history-filters input {
+  width: 100%;
+  min-height: 42px;
+  box-sizing: border-box;
+  border: 1px solid #ddd7cc;
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: #fff;
+  font: inherit;
+}
+.fines-history-filters input:focus,
+.fines-history-filters select:focus,
+.fines-form-grid input:focus,
+.fines-form-grid select:focus,
+.fines-form-grid textarea:focus {
+  outline: 2px solid rgba(182, 145, 76, .18);
+  border-color: #b6914c;
+}
+.fines-count-note {
+  font-size: 11px;
+  font-weight: 600;
+  color: #8b8377;
+}
+.fine-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+#cancelFineEdit {
+  background: #fff;
+}
+@media (max-width: 980px) {
+  .fines-toolbar {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+  .fines-history-filters {
+    grid-template-columns: 1fr 1fr;
+  }
+  .fines-toolbar > .button {
+    justify-self: start;
+  }
+}
+@media (max-width: 560px) {
+  .fines-history-filters {
+    grid-template-columns: 1fr;
+  }
+  .fine-row-actions {
+    flex-wrap: wrap;
+  }
+}

@@ -1278,20 +1278,25 @@ async function renderAdminFines() {
     <div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Multas</h1><p class="admin-subtitle">Descuentos que se aplican directamente a la comisión del vendedor o Jefe de Tienda.</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>
     ${nav}
     <section class="admin-panel fines-panel">
-      <div class="section-heading"><div><span class="eyebrow">Finanzas · Control</span><h2>Registrar multa</h2></div><p>La multa se descuenta automáticamente de la comisión del período en el que esté registrada.</p></div>
+      <div class="section-heading"><div><span class="eyebrow" id="fineFormEyebrow">Finanzas · Control</span><h2 id="fineFormTitle">Registrar multa</h2></div><p id="fineFormHelp">La multa se descuenta automáticamente de la comisión del período en el que esté registrada.</p></div>
+      <input type="hidden" id="fineEditId" value="">
       <div class="fines-form-grid">
         <label><span>Vendedor / Jefe de Tienda</span><select id="fineUser"><option value="">Selecciona una persona</option></select></label>
         <label><span>Valor</span><input id="fineAmount" type="number" min="0.01" step="0.01" placeholder="0,00"></label>
         <label><span>Fecha</span><input id="fineDate" type="date" value="${today}"></label>
         <label class="fines-reason"><span>Motivo</span><textarea id="fineReason" rows="3" maxlength="500" placeholder="¿Por qué se aplica la multa?"></textarea></label>
       </div>
-      <div class="fines-actions"><button type="button" class="button primary small" id="saveFine">Guardar multa</button><span class="message" id="fineMessage" hidden></span></div>
+      <div class="fines-actions"><button type="button" class="button primary small" id="saveFine">Guardar multa</button><button type="button" class="button small" id="cancelFineEdit" hidden>Cancelar edición</button><span class="message" id="fineMessage" hidden></span></div>
     </section>
 
     <section class="admin-panel fines-panel">
       <div class="section-heading"><div><span class="eyebrow">Historial</span><h2>Multas registradas</h2></div><p>Estas multas son las que se toman en cuenta para calcular las comisiones.</p></div>
-      <div class="commission-toolbar">
+      <div class="commission-toolbar fines-toolbar">
         <div class="commission-date-range"><label class="commission-date-filter"><span>Desde</span><input id="fineFrom" type="date" value="${monthStart}"></label><label class="commission-date-filter"><span>Hasta</span><input id="fineTo" type="date" value="${today}"></label></div>
+        <div class="fines-history-filters">
+          <label><span>Persona</span><select id="fineFilterUser"><option value="">Todos</option></select></label>
+          <label class="fines-search"><span>Buscar</span><input id="fineSearch" type="search" placeholder="Nombre, usuario o motivo…"></label>
+        </div>
         <button type="button" class="button small" id="fineRefresh">Actualizar</button>
       </div>
       <div class="fines-summary" id="finesSummary"></div>
@@ -1324,9 +1329,16 @@ async function renderAdminFines() {
     }
   }
 
+  const filterUser = document.querySelector('#fineFilterUser');
+  if (filterUser && userSelect) {
+    filterUser.innerHTML = '<option value="">Todos</option>' + Array.from(userSelect.options).slice(1).map(option => option.outerHTML).join('');
+  }
+
   const renderFines = async () => {
     const from = document.querySelector('#fineFrom')?.value || '';
     const to = document.querySelector('#fineTo')?.value || '';
+    const filterUserId = document.querySelector('#fineFilterUser')?.value || '';
+    const search = (document.querySelector('#fineSearch')?.value || '').trim().toLowerCase();
     const list = document.querySelector('#finesList');
     const summary = document.querySelector('#finesSummary');
     if (!list) return;
@@ -1338,14 +1350,23 @@ async function renderAdminFines() {
     list.innerHTML = '<div class="commission-loading">Cargando multas…</div>';
     try {
       const result = await request(`/api/admin/multas?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
-      const fines = Array.isArray(result.fines) ? result.fines : [];
-      if (summary) summary.innerHTML = `<div><span>PERÍODO</span><strong>${escapeHTML(from || 'Todo')} → ${escapeHTML(to || 'Todo')}</strong></div><div><span>MULTAS</span><strong>${fines.length}</strong></div><div><span>TOTAL DESCONTADO</span><strong>${money(result.total || 0)}</strong></div>`;
+      const allFines = Array.isArray(result.fines) ? result.fines : [];
+      const fines = allFines.filter(fine => {
+        if (filterUserId && String(fine.userId) !== String(filterUserId)) return false;
+        if (search) {
+          const haystack = `${fine.userName || ''} ${fine.username || ''} ${fine.reason || ''} ${fine.userRole || ''}`.toLowerCase();
+          if (!haystack.includes(search)) return false;
+        }
+        return true;
+      });
+      const filteredTotal = fines.reduce((sum, fine) => sum + Number(fine.amount || 0), 0);
+      if (summary) summary.innerHTML = `<div><span>PERÍODO</span><strong>${escapeHTML(from || 'Todo')} → ${escapeHTML(to || 'Todo')}</strong></div><div><span>MULTAS</span><strong>${fines.length}${fines.length !== allFines.length ? ` <small class="fines-count-note">de ${allFines.length}</small>` : ''}</strong></div><div><span>TOTAL DESCONTADO</span><strong>${money(filteredTotal)}</strong></div>`;
       list.innerHTML = fines.length ? fines.map(fine => {
         const role = fine.userRole === 'store_manager' ? 'Jefe de Tienda' : 'Vendedor';
         return `<article class="fine-row">
           <div class="fine-row-main"><div><strong>${escapeHTML(fine.userName || 'Usuario')}</strong><small>@${escapeHTML(fine.username || '')} · ${role}</small></div><time>${escapeHTML(fine.date || '')}</time></div>
           <p>${escapeHTML(fine.reason || 'Sin motivo')}</p>
-          <div class="fine-row-footer"><strong>${money(fine.amount || 0)}</strong><button type="button" class="button danger small" data-delete-fine="${escapeHTML(fine.id)}">Eliminar</button></div>
+          <div class="fine-row-footer"><strong>${money(fine.amount || 0)}</strong><div class="fine-row-actions"><button type="button" class="button secondary small" data-edit-fine="${escapeHTML(fine.id)}">Editar</button><button type="button" class="button danger small" data-delete-fine="${escapeHTML(fine.id)}">Eliminar</button></div></div>
         </article>`;
       }).join('') : '<div class="commission-empty">No hay multas registradas en este período.</div>';
     } catch (error) {
@@ -1356,9 +1377,31 @@ async function renderAdminFines() {
   document.querySelector('#fineRefresh')?.addEventListener('click', renderFines);
   document.querySelector('#fineFrom')?.addEventListener('change', renderFines);
   document.querySelector('#fineTo')?.addEventListener('change', renderFines);
+  document.querySelector('#fineFilterUser')?.addEventListener('change', renderFines);
+  document.querySelector('#fineSearch')?.addEventListener('input', renderFines);
+
+  const fineEditId = document.querySelector('#fineEditId');
+  const fineFormTitle = document.querySelector('#fineFormTitle');
+  const fineFormEyebrow = document.querySelector('#fineFormEyebrow');
+  const fineFormHelp = document.querySelector('#fineFormHelp');
+  const cancelFineEdit = document.querySelector('#cancelFineEdit');
+  const resetFineForm = () => {
+    if (fineEditId) fineEditId.value = '';
+    if (fineFormTitle) fineFormTitle.textContent = 'Registrar multa';
+    if (fineFormEyebrow) fineFormEyebrow.textContent = 'Finanzas · Control';
+    if (fineFormHelp) fineFormHelp.textContent = 'La multa se descuenta automáticamente de la comisión del período en el que esté registrada.';
+    if (document.querySelector('#saveFine')) document.querySelector('#saveFine').textContent = 'Guardar multa';
+    if (cancelFineEdit) cancelFineEdit.hidden = true;
+    if (userSelect) userSelect.value = '';
+    if (document.querySelector('#fineAmount')) document.querySelector('#fineAmount').value = '';
+    if (document.querySelector('#fineDate')) document.querySelector('#fineDate').value = today;
+    if (document.querySelector('#fineReason')) document.querySelector('#fineReason').value = '';
+  };
+  cancelFineEdit?.addEventListener('click', resetFineForm);
 
   document.querySelector('#saveFine')?.addEventListener('click', async () => {
     const button = document.querySelector('#saveFine');
+    const editId = fineEditId?.value || '';
     const userId = userSelect?.value || '';
     const amount = Number(document.querySelector('#fineAmount')?.value || 0);
     const date = document.querySelector('#fineDate')?.value || '';
@@ -1368,23 +1411,47 @@ async function renderAdminFines() {
       return;
     }
     const userLabel = userSelect.options[userSelect.selectedIndex]?.textContent || 'usuario';
-    const confirmed = await showYhorsConfirm('¿Seguro que quieres guardar esta multa?', `Se registrará ${money(amount)} a ${escapeHTML(userLabel)} y se descontará de su comisión.`);
+    const confirmed = await showYhorsConfirm(editId ? '¿Guardar cambios de esta multa?' : '¿Seguro que quieres guardar esta multa?', editId ? `Se actualizará la multa de ${escapeHTML(userLabel)} a ${money(amount)}.` : `Se registrará ${money(amount)} a ${escapeHTML(userLabel)} y se descontará de su comisión.`);
     if (!confirmed) return;
     button.disabled = true;
     try {
-      await request('/api/admin/multas', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ userId, amount, date, reason }) });
-      document.querySelector('#fineAmount').value = '';
-      document.querySelector('#fineReason').value = '';
-      if (message) { message.hidden = false; message.className = 'message success'; message.textContent = 'Multa registrada correctamente.'; }
+      const endpoint = editId ? `/api/admin/multas/${encodeURIComponent(editId)}` : '/api/admin/multas';
+      await request(endpoint, { method: editId ? 'PUT' : 'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ userId, amount, date, reason }) });
+      resetFineForm();
+      if (message) { message.hidden = false; message.className = 'message success'; message.textContent = editId ? 'Multa actualizada correctamente.' : 'Multa registrada correctamente.'; }
       await renderFines();
     } catch (error) {
-      if (message) { message.hidden = false; message.className = 'message error'; message.textContent = error.message || 'No se pudo registrar la multa.'; }
+      if (message) { message.hidden = false; message.className = 'message error'; message.textContent = error.message || (editId ? 'No se pudo actualizar la multa.' : 'No se pudo registrar la multa.'); }
     } finally {
       button.disabled = false;
     }
   });
 
   document.querySelector('#finesList')?.addEventListener('click', async event => {
+    const editButton = event.target.closest('[data-edit-fine]');
+    if (editButton) {
+      try {
+        const result = await request(`/api/admin/multas?from=&to=`);
+        const fine = (result.fines || []).find(item => String(item.id) === String(editButton.dataset.editFine));
+        if (!fine) throw new Error('No se encontró la multa para editar.');
+        if (fineEditId) fineEditId.value = fine.id;
+        if (fineFormTitle) fineFormTitle.textContent = 'Editar multa';
+        if (fineFormEyebrow) fineFormEyebrow.textContent = 'Finanzas · Edición';
+        if (fineFormHelp) fineFormHelp.textContent = 'Puedes cambiar la persona, monto, fecha o motivo. El cambio se reflejará en su comisión.';
+        if (document.querySelector('#fineAmount')) document.querySelector('#fineAmount').value = Number(fine.amount || 0).toFixed(2);
+        if (document.querySelector('#fineDate')) document.querySelector('#fineDate').value = fine.date || today;
+        if (document.querySelector('#fineReason')) document.querySelector('#fineReason').value = fine.reason || '';
+        if (userSelect) userSelect.value = fine.userId || '';
+        if (document.querySelector('#saveFine')) document.querySelector('#saveFine').textContent = 'Guardar cambios';
+        if (cancelFineEdit) cancelFineEdit.hidden = false;
+        document.querySelector('#fineAmount')?.focus();
+        document.querySelector('.fines-shell')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } catch (error) {
+        alert(error.message || 'No se pudo abrir la multa.');
+      }
+      return;
+    }
+
     const button = event.target.closest('[data-delete-fine]');
     if (!button) return;
     const confirmed = await showYhorsConfirm('¿Eliminar esta multa?', 'Al eliminarla dejará de descontarse de la comisión del período correspondiente.');
@@ -1392,6 +1459,7 @@ async function renderAdminFines() {
     button.disabled = true;
     try {
       await request(`/api/admin/multas/${encodeURIComponent(button.dataset.deleteFine)}`, { method:'DELETE' });
+      if (fineEditId?.value === button.dataset.deleteFine) resetFineForm();
       await renderFines();
     } catch (error) {
       button.disabled = false;

@@ -3174,6 +3174,60 @@ app.post('/api/admin/multas', requireAdmin, (req, res) => {
   return res.status(201).json(fine);
 });
 
+app.put('/api/admin/multas/:id', requireAdmin, (req, res) => {
+  const fines = readFines();
+  const index = fines.findIndex(item => String(item.id) === String(req.params.id));
+  if (index < 0) return res.status(404).json({ error: 'Multa no encontrada.' });
+
+  const current = fines[index];
+  const userId = cleanText(req.body?.userId, 100);
+  const reason = cleanText(req.body?.reason, 500);
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(String(req.body?.date || '')) ? String(req.body.date) : '';
+  const amount = Number(req.body?.amount);
+
+  if (!userId) return res.status(400).json({ error: 'Selecciona un vendedor o Jefe de Tienda.' });
+  if (!reason) return res.status(400).json({ error: 'Escribe el motivo de la multa.' });
+  if (!date) return res.status(400).json({ error: 'Selecciona una fecha válida.' });
+  if (!Number.isFinite(amount) || amount <= 0 || amount > 100000000) {
+    return res.status(400).json({ error: 'Ingresa un valor de multa válido.' });
+  }
+
+  const users = readUsers();
+  const user = users.find(item =>
+    String(item.id) === userId &&
+    item.active !== false &&
+    (isSellerRole(item.role) || isStoreManager(item.role))
+  );
+  if (!user) return res.status(404).json({ error: 'El usuario seleccionado no es un vendedor o Jefe de Tienda activo.' });
+
+  const updated = {
+    ...current,
+    date,
+    userId: user.id,
+    userName: user.name || user.username || 'Usuario',
+    username: user.username || '',
+    userRole: isStoreManager(user.role) ? 'store_manager' : 'vendedor',
+    amount: Math.round(amount * 100) / 100,
+    reason,
+    updatedAt: new Date().toISOString(),
+    updatedBy: getSession(req)?.accountId || null
+  };
+
+  fines[index] = updated;
+  writeFines(fines);
+  auditLog(req, 'Multa modificada', 'Finanzas', {
+    fineId: updated.id,
+    userId: updated.userId,
+    username: updated.username,
+    role: updated.userRole,
+    amount: updated.amount,
+    reason: updated.reason,
+    date: updated.date,
+    previous: { userId: current.userId, amount: current.amount, reason: current.reason, date: current.date }
+  });
+  return res.json(updated);
+});
+
 app.delete('/api/admin/multas/:id', requireAdmin, (req, res) => {
   const fines = readFines();
   const fine = fines.find(item => String(item.id) === String(req.params.id));
