@@ -1402,12 +1402,17 @@ async function buildFlyerPdf({ products, title, subtitle, description, layout, o
       flyerFill(ops, 0.965, 0.95, 0.92);
       flyerTopPanel(ops, imageX + 0.6, imageY, imageW - 1.2, imageH, 7);
     } else if (mode === 'horizontal') {
-      imageW = w * 0.43;
-      copyX = x + imageW + gap;
-      copyW = w - imageW - gap - 12;
-      copyY = y + h - 16;
-      flyerFill(ops, 0.965, 0.95, 0.92); flyerRoundRect(ops, x, y, imageW, h, 6, true);
-      flyerStroke(ops, 0.91, 0.88, 0.83); flyerRoundRect(ops, x, y, imageW, h, 6, false);
+      // Layout 2: reproduce the elegant preview card: a cream/gold-tinted
+      // image column on the left, white commercial copy on the right, one
+      // continuous rounded border around the complete product card.
+      imageW = w * 0.42;
+      copyX = x + imageW + 10;
+      copyW = w - imageW - 20;
+      copyY = y + h - 15;
+      flyerFill(ops, 0.965, 0.95, 0.92);
+      flyerRoundRect(ops, x + 0.5, y + 0.5, imageW, h - 1, 7, true, 0.35);
+      flyerStroke(ops, 0.91, 0.88, 0.83);
+      flyerLine(ops, x + imageW, y + 8, x + imageW, y + h - 8, 0.45);
     } else {
       imageW = w * 0.48;
       copyX = x + imageW + 20;
@@ -1468,11 +1473,10 @@ async function buildFlyerPdf({ products, title, subtitle, description, layout, o
     if (showPrices) {
       const price = Number(product.salePrice ?? product.price ?? 0);
       const priceSize = mode === 'featured' ? 18 : safeLayout === '2' ? 12 : 10;
-      // El precio queda dentro de la misma tarjeta, cerca del contenido y con
-      // un pequeño margen inferior, igual que en la vista previa.
-      const priceFloor = y + (mode === 'featured' ? 24 : 20);
-      const priceCeiling = y + (mode === 'featured' ? 72 : safeLayout === '2' ? 58 : 54);
-      const priceY = Math.max(priceFloor, Math.min(priceCeiling, cy - 1));
+      // Keep every price on the same visual baseline at the bottom of its
+      // card, just like the preview. This prevents short descriptions from
+      // pushing the price upward.
+      const priceY = y + (mode === 'featured' ? 24 : safeLayout === '2' ? 18 : 18);
       flyerFill(ops, ar, ag, ab);
       flyerPdfText(ops, `$${price.toFixed(2)}`, copyX, priceY, priceSize, 2);
     }
@@ -1508,20 +1512,19 @@ async function buildFlyerPdf({ products, title, subtitle, description, layout, o
     const headerBottom = Math.min(hy, headerY - 55);
     flyerStroke(ops, 0.86,0.83,0.78); flyerLine(ops, margin, headerBottom - 8, W - margin, headerBottom - 8, 0.7);
 
-    const top = headerBottom - 24;
+    const top = headerBottom - 16;
     const footerH = 24;
     const availableH = Math.max(180, top - margin - footerH);
     const gap = safeLayout === '1' ? 0 : 10;
     const rowsOnPage = Math.max(1, Math.ceil(page.length / config.cols));
     const cardW = config.cols === 1 ? contentW : (contentW - gap * (config.cols - 1)) / config.cols;
-    // Anchor the FIRST row directly under the header. The previous PDF placed
-    // rows from the footer upward, which created the large empty band seen in
-    // the screenshot. Calculate the card height from the actual number of rows
-    // and then place every row from the header downward, like the preview.
-    const preferredRowH = safeLayout === '1' ? availableH : (safeLayout === '2' ? 285 : safeLayout === '3' ? 255 : 245);
+    // Keep the PDF composition compact and top-aligned like the live preview.
+    // In particular, layout 2 should not stretch to fill the whole A4 page.
+    const preferredRowH = safeLayout === '1' ? availableH : (safeLayout === '2' ? 225 : safeLayout === '3' ? 205 : 185);
+    const minimumRowH = safeLayout === '2' ? 210 : safeLayout === '3' ? 195 : 175;
     const cardH = safeLayout === '1'
       ? availableH
-      : Math.min(preferredRowH, Math.max(205, (availableH - gap * (rowsOnPage - 1)) / rowsOnPage));
+      : Math.min(preferredRowH, Math.max(minimumRowH, (availableH - gap * (rowsOnPage - 1)) / rowsOnPage));
     page.forEach((product, idx) => {
       const row = Math.floor(idx / config.cols), col = idx % config.cols;
       const x = margin + col * (cardW + gap);
