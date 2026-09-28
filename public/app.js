@@ -3229,7 +3229,7 @@ function flyerMiniPreview(products, draft) {
   const shown = products.slice(0, layout === '1' ? 1 : 6);
   const extra = Math.max(0, products.length - shown.length);
   const card = (p, i, featured = false) => {
-    const highlights = flyerProductHighlights(p).slice(0, 3);
+    const highlights = flyerProductHighlights(p).slice(0, 5);
     const note = draft.notes?.[p.id] || '';
     const cardClass = `flyer-preview-card ${featured ? 'is-featured' : ''} layout-card-${layout}`;
     return `<article class="${cardClass}">
@@ -3238,7 +3238,7 @@ function flyerMiniPreview(products, draft) {
         <span class="flyer-brand">${escapeHTML(p.brand || categories[p.category] || 'YHORS')}</span>
         <h2>${escapeHTML(p.name || 'Producto')}</h2>
         <div class="flyer-meta-line"><span>${escapeHTML(p.productType || categories[p.category] || 'Producto')}</span><span>SKU ${escapeHTML(p.sku || '—')}</span></div>
-        ${highlights.length ? `<ul>${highlights.map(x=>`<li>${escapeHTML(x)}</li>`).join('')}</ul>` : ''}
+        ${highlights.length ? `<ul>${highlights.map(x=>`<li>${escapeHTML(x)}</li>`).join('')}</ul>` : '<p class="flyer-preview-empty-desc">Información comercial disponible en el catálogo.</p>'}
         ${draft.showPrices ? `<div class="flyer-preview-price-row"><strong>${money(p.salePrice ?? p.price ?? 0)}</strong></div>` : ''}
       </div>
     </article>`;
@@ -3352,6 +3352,47 @@ async function renderAdminCatalogSearch() {
     grid.querySelectorAll('[data-catalog-select]').forEach(input=>input.addEventListener('change',()=>{const id=String(input.value); if(input.checked) selectedIds.add(id); else selectedIds.delete(id); input.closest('.catalog-search-card')?.classList.toggle('is-selected',input.checked); updateSelectionUi();}));
     grid.querySelectorAll('[data-copy-sku]').forEach(button=>button.addEventListener('click',async()=>{const sku=button.dataset.copySku||''; if(!sku)return; try{await navigator.clipboard.writeText(sku); button.textContent='✓'; setTimeout(()=>button.textContent='▣',700);}catch(_){}}));
   };
+  const flyerImageAsDataUrl = async (url) => {
+    const source = String(url || '').trim();
+    if (!source || source.startsWith('data:image/')) return source || '';
+    const candidates = [
+      `https://wsrv.nl/?url=${encodeURIComponent(source)}&output=jpg&q=84&w=1200`,
+      source
+    ];
+    for (const candidate of candidates) {
+      try {
+        const response = await fetch(candidate, { mode: 'cors', credentials: 'omit', cache: 'force-cache' });
+        if (!response.ok) continue;
+        const blob = await response.blob();
+        if (!blob.type.startsWith('image/') || !blob.size) continue;
+        const reader = new FileReader();
+        const data = await new Promise((resolve, reject) => { reader.onload=()=>resolve(reader.result); reader.onerror=reject; reader.readAsDataURL(blob); });
+        if (typeof data === 'string' && data.startsWith('data:image/')) return data;
+      } catch (_) {}
+    }
+    // Last browser-native attempt: an already renderable image can sometimes be
+    // read when the host explicitly permits CORS.
+    try {
+      const img = new Image(); img.crossOrigin = 'anonymous';
+      const loaded = new Promise((resolve, reject) => { img.onload=resolve; img.onerror=reject; });
+      img.src = source; await loaded;
+      const max = 1200, scale = Math.min(1, max / Math.max(img.naturalWidth || 1, img.naturalHeight || 1));
+      const canvas=document.createElement('canvas'); canvas.width=Math.max(1,Math.round((img.naturalWidth||1)*scale)); canvas.height=Math.max(1,Math.round((img.naturalHeight||1)*scale));
+      const ctx=canvas.getContext('2d'); ctx.drawImage(img,0,0,canvas.width,canvas.height);
+      return canvas.toDataURL('image/jpeg',.84);
+    } catch (_) { return ''; }
+  };
+
+  const prepareFlyerImages = async (selected) => {
+    const map = {};
+    await Promise.all(selected.map(async p => {
+      const url = catalogProductImage(p);
+      const data = await flyerImageAsDataUrl(url);
+      if (data) map[String(p.id)] = data;
+    }));
+    return map;
+  };
+
   const openFlyer = () => {
     if (!selectedIds.size) return;
     const selected = products.filter(p=>selectedIds.has(String(p.id)));
@@ -3383,7 +3424,8 @@ async function renderAdminCatalogSearch() {
       button.disabled=true;
       button.innerHTML='<span class="flyer-create-icon" aria-hidden="true">◌</span> Generando PDF…';
       try {
-        const payload={...draft, ids:selected.map(p=>String(p.id))};
+        const imageData = await prepareFlyerImages(selected);
+        const payload={...draft, ids:selected.map(p=>String(p.id)), imageData};
         const body=new URLSearchParams();
         Object.entries(payload).forEach(([key,value])=>body.set(key, typeof value==='object' ? JSON.stringify(value) : String(value ?? '')));
         const response=await fetch('/api/admin/flyers/pdf',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'},body});

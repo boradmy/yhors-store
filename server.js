@@ -714,8 +714,8 @@ app.use((req, res, next) => {
   res.setHeader('Content-Security-Policy', "default-src 'self'; img-src 'self' https: data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; base-uri 'self'; frame-ancestors 'none'");
   next();
 });
-app.use(express.json({ limit: '1mb' }));
-app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+app.use(express.json({ limit: '8mb' }));
+app.use(express.urlencoded({ extended: true, limit: '8mb' }));
 app.use(cookieParser());
 
 
@@ -1280,6 +1280,9 @@ async function buildFlyerPdf({ products, title, subtitle, description, layout, o
   const imageCache = new Map();
 
   for (const product of cleanProducts) {
+    if (product.imageData) {
+      if (!imageCache.has(product.imageData)) imageCache.set(product.imageData, await flyerImageJpeg(product.imageData));
+    }
     const urls = [...new Set([
       ...(Array.isArray(product.images) ? product.images : []),
       product.image || ''
@@ -1319,9 +1322,10 @@ async function buildFlyerPdf({ products, title, subtitle, description, layout, o
     flyerFill(ops, 1, 1, 1); flyerStroke(ops, 0.87, 0.84, 0.79); flyerRoundRect(ops, x, y, w, h, 8, true);
 
     const imageUrls = [...new Set([
+      product.imageData || '',
       ...(Array.isArray(product.images) ? product.images : []),
       product.image || ''
-    ].filter(Boolean))].slice(0, 4);
+    ].filter(Boolean))].slice(0, 5);
     const image = imageUrls.map(url => imageCache.get(url)).find(Boolean) || null;
 
     let imageX = x, imageY = y, imageW = w, imageH = h;
@@ -1364,7 +1368,7 @@ async function buildFlyerPdf({ products, title, subtitle, description, layout, o
     const titleChars = Math.max(13, Math.floor(copyW / (titleSize * 0.48)));
     const metaSize = mode === 'featured' ? 8 : safeLayout === '2' ? 6.3 : 5.8;
     const highlightSize = mode === 'featured' ? 8 : safeLayout === '2' ? 6.2 : safeLayout === '3' ? 5.9 : 5.6;
-    const maxHighlights = mode === 'featured' ? 5 : safeLayout === '2' ? 4 : safeLayout === '3' ? 3 : 2;
+    const maxHighlights = mode === 'featured' ? 6 : safeLayout === '2' ? 5 : safeLayout === '3' ? 4 : 3;
     let cy = copyY;
 
     flyerFill(ops, ar, ag, ab); flyerPdfText(ops, brand.toUpperCase().slice(0, 32), copyX, cy, mode === 'featured' ? 7.5 : 5.7, 2); cy -= mode === 'featured' ? 16 : 12;
@@ -1382,7 +1386,7 @@ async function buildFlyerPdf({ products, title, subtitle, description, layout, o
       if (cy < y + 42) break;
       const bullet = `• ${item}`;
       const chars = Math.max(18, Math.floor(copyW / (highlightSize * 0.48)));
-      const result = drawLines(ops, bullet, copyX, cy, chars, highlightSize, 1, [0.34,0.32,0.29], mode === 'featured' ? 2 : 2, highlightSize + 2.5);
+      const result = drawLines(ops, bullet, copyX, cy, chars, highlightSize, 1, [0.34,0.32,0.29], mode === 'featured' ? 3 : 2, highlightSize + 2.5);
       cy = result.y - 1;
     }
 
@@ -1395,8 +1399,10 @@ async function buildFlyerPdf({ products, title, subtitle, description, layout, o
 
     if (showPrices) {
       const price = Number(product.salePrice ?? product.price ?? 0);
+      const priceSize = mode === 'featured' ? 18 : safeLayout === '2' ? 12 : 10;
+      const priceY = Math.max(y + 18, Math.min(cy - 2, y + h - 18));
       flyerFill(ops, ar, ag, ab);
-      flyerPdfText(ops, `$${price.toFixed(2)}`, copyX, y + 17, mode === 'featured' ? 18 : safeLayout === '2' ? 12 : 10, 2);
+      flyerPdfText(ops, `$${price.toFixed(2)}`, copyX, priceY, priceSize, 2);
     }
   };
 
@@ -1426,14 +1432,19 @@ async function buildFlyerPdf({ products, title, subtitle, description, layout, o
 
     const top = headerBottom - 24;
     const footerH = 24;
-    const availableH = Math.max(120, top - margin - footerH);
+    const availableH = Math.max(180, top - margin - footerH);
     const gap = safeLayout === '1' ? 0 : 10;
+    const rowsOnPage = Math.max(1, Math.ceil(page.length / config.cols));
     const cardW = config.cols === 1 ? contentW : (contentW - gap * (config.cols - 1)) / config.cols;
-    const cardH = config.rows === 1 ? availableH : (availableH - gap * (config.rows - 1)) / config.rows;
+    // Match the live preview: do not force a second empty row when there are only
+    // a few products. Cards use the available page height, but shrink naturally
+    // when only one row is needed so the price/description stay visually close.
+    const targetRowH = safeLayout === '1' ? availableH : (safeLayout === '2' ? 235 : safeLayout === '3' ? 245 : 255);
+    const cardH = Math.min(availableH, Math.max(190, rowsOnPage === 1 ? targetRowH : (availableH - gap * (rowsOnPage - 1)) / rowsOnPage));
     page.forEach((product, idx) => {
       const row = Math.floor(idx / config.cols), col = idx % config.cols;
       const x = margin + col * (cardW + gap);
-      const yCard = config.rows === 1 ? margin + footerH : margin + footerH + (config.rows - 1 - row) * (cardH + gap);
+      const yCard = margin + footerH + (rowsOnPage - 1 - row) * (cardH + gap);
       drawProduct(ops, product, pageIndex * config.perPage + idx, x, yCard, cardW, cardH, config.mode);
     });
 
@@ -1495,6 +1506,14 @@ app.post('/api/admin/flyers/pdf', requireOrdersAccess, async (req, res) => {
     const products = ids.map(id => all.find(p => String(p.id) === id)).filter(Boolean).map(p => ({
       id: p.id, name: p.name, description: p.description || '', category: p.category, brand: p.brand || '', productType: p.productType || '', sku: p.sku || '', salePrice: Number(p.salePrice ?? p.price ?? 0), stock: Number(p.stock || 0), image: p.image || '', images: Array.isArray(p.images) ? p.images.filter(Boolean) : []
     }));
+    let imageData = body.imageData;
+    if (typeof imageData === 'string') { try { imageData = JSON.parse(imageData); } catch { imageData = {}; } }
+    if (imageData && typeof imageData === 'object') {
+      products.forEach(product => {
+        const data = imageData[String(product.id)];
+        if (typeof data === 'string' && data.startsWith('data:image/')) product.imageData = data;
+      });
+    }
     if (!products.length) return res.status(404).json({ error: 'No se encontraron los productos seleccionados.' });
     const pdf = await buildFlyerPdf({
       products,
