@@ -1146,23 +1146,61 @@ function parseJpegSize(buffer) {
   return null;
 }
 
+function flyerImageTool() {
+  // Docker instala ImageMagick con apk; algunos entornos lo exponen como magick y
+  // otros conservan convert. No depender de /opt/... evita que el PDF pierda imágenes.
+  try {
+    execFileSync('magick', ['-version'], { stdio: 'ignore', timeout: 5000 });
+    return 'magick';
+  } catch {}
+  try {
+    execFileSync('convert', ['-version'], { stdio: 'ignore', timeout: 5000 });
+    return 'convert';
+  } catch {}
+  return null;
+}
+
 async function flyerImageJpeg(url) {
   try {
-    const rawUrl = String(url || '');
+    const rawUrl = String(url || '').trim();
+    if (!rawUrl) return null;
     let input;
     if (rawUrl.startsWith('/uploads/')) {
-      const local = path.join(__dirname, rawUrl.replace(/^\//, ''));
+      const local = path.join(UPLOADS_DIR, path.basename(rawUrl));
+      if (!fs.existsSync(local)) return null;
       input = fs.readFileSync(local);
     } else {
-      const response = await fetch(absoluteImage(rawUrl), { headers: { 'User-Agent': 'YHORS-STORE Flyer/1.0' }, signal: AbortSignal.timeout(9000) });
-      if (!response.ok) return null;
+      const target = absoluteImage(rawUrl);
+      const headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131 Safari/537.36',
+        'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+        'Referer': SITE_URL + '/'
+      };
+      let response = await fetch(target, { headers, redirect: 'follow', signal: AbortSignal.timeout(12000) });
+      if (!response.ok) {
+        // Algunos CDNs rechazan Referer; reintentar de forma más simple.
+        response = await fetch(target, { headers: { 'User-Agent': headers['User-Agent'], 'Accept': 'image/*,*/*;q=0.8' }, redirect: 'follow', signal: AbortSignal.timeout(12000) });
+      }
+      if (!response.ok) {
+        console.warn('[YHORS] Flyer image HTTP', response.status, target);
+        return null;
+      }
       input = Buffer.from(await response.arrayBuffer());
+      if (!input.length) return null;
     }
-    const jpeg = execFileSync('/opt/imagemagick/bin/magick', ['-', '-auto-orient', '-strip', '-quality', '88', 'jpg:-'], { input, timeout: 15000, maxBuffer: 12 * 1024 * 1024 });
+
+    const tool = flyerImageTool();
+    if (!tool) {
+      console.warn('[YHORS] ImageMagick no está disponible para el PDF del flyer.');
+      return null;
+    }
+    const jpeg = execFileSync(tool, ['-', '-auto-orient', '-strip', '-quality', '88', 'jpg:-'], {
+      input, timeout: 20000, maxBuffer: 24 * 1024 * 1024
+    });
     const size = parseJpegSize(jpeg);
     return size ? { data: jpeg, width: size.width, height: size.height } : null;
   } catch (error) {
-    console.warn('[YHORS] Flyer image skipped:', String(error?.message || error).slice(0, 180));
+    console.warn('[YHORS] Flyer image skipped:', String(error?.message || error).slice(0, 220));
     return null;
   }
 }
@@ -1228,8 +1266,14 @@ async function buildFlyerPdf({ products, title, subtitle, description, layout, o
 
   const imageCache = new Map();
   for (const product of cleanProducts) {
-    const url = Array.isArray(product.images) && product.images.length ? product.images[0] : product.image;
-    if (url && !imageCache.has(url)) imageCache.set(url, await flyerImageJpeg(url));
+    const urls = [...new Set([
+      ...(Array.isArray(product.images) ? product.images : []),
+      product.image || ''
+    ].filter(Boolean))].slice(0, 4);
+    for (const url of urls) {
+      if (imageCache.has(url)) continue;
+      imageCache.set(url, await flyerImageJpeg(url));
+    }
   }
   const logoPath = path.join(__dirname, 'public', 'assets', 'yhors-logo-pdf.jpg');
   let logoJpeg = null;
@@ -1252,8 +1296,12 @@ async function buildFlyerPdf({ products, title, subtitle, description, layout, o
     const cardY = y;
     flyerFill(ops, 1, 1, 1); flyerStroke(ops, 0.87, 0.84, 0.79); flyerRoundRect(ops, x, cardY, w, h, 8, true);
     flyerFill(ops, 0.965, 0.95, 0.92); ops.push(`${x} ${cardY + h - imgH} ${imgW} ${imgH} re f`);
-    const imageUrl = Array.isArray(product.images) && product.images.length ? product.images[0] : product.image;
-    const image = imageCache.get(imageUrl);
+    const imageUrls = [...new Set([
+      ...(Array.isArray(product.images) ? product.images : []),
+      product.image || ''
+    ].filter(Boolean))].slice(0, 4);
+    const imageEntry = imageUrls.map(url => ({ url, image: imageCache.get(url) })).find(entry => entry.image);
+    const image = imageEntry?.image || null;
     if (image) {
       const objName = `Im${usedImages.length + 1}`;
       usedImages.push({ name: objName, image });
