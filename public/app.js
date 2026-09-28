@@ -618,6 +618,7 @@ if (path === `${ADMIN_PATH}/usuarios` || path === `${ADMIN_PATH}/usuarios/`) {
     return panel === 'seguridad' ? renderAdminSecurity(true) : renderAdminUsers('usuarios');
   }
   if (path === `${ADMIN_PATH}/inventario` || path === `${ADMIN_PATH}/inventario/`) return renderAdminInventory();
+  if (path === '/buscar-productos' || path === '/buscar-productos/') return renderInternalCatalog();
   if (path === '/mi-cuenta' || path === '/mi-cuenta/') return renderMyAccount();
   if (path === '/pedido' || path === '/pedido/') return checkoutPage();
   return renderStore();
@@ -904,6 +905,171 @@ async function renderProductDetail(product, products, storefront) {
   });
 }
 
+async function renderInternalCatalog() {
+  const session = await request('/api/admin/session').catch(() => ({ authenticated: false }));
+  if (!session.authenticated) return renderLogin();
+  const allowed = ['admin', 'store_manager', 'vendedor', 'orders'];
+  if (!allowed.includes(String(session.role || '').toLowerCase())) return renderStore();
+
+  let products = [];
+  try { products = await request('/api/internal/catalog'); }
+  catch (error) {
+    app.innerHTML = `<main class="internal-catalog-page"><div class="internal-catalog-empty"><span class="eyebrow">Catálogo interno</span><h1>No se pudo cargar el catálogo</h1><p>${escapeHTML(error.message || 'Intenta nuevamente.')}</p><button class="button" id="retryInternalCatalog">Reintentar</button></div></main>`;
+    document.querySelector('#retryInternalCatalog')?.addEventListener('click', renderInternalCatalog);
+    return;
+  }
+
+  const brands = [...new Set(products.map(product => String(product.brand || '').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
+  const categoriesForFilter = [...new Set(products.map(product => String(product.category || '').trim()).filter(Boolean))];
+  const state = { query: '', brand: '', category: '', sort: 'name', selected: new Set(), notes: {} };
+
+  const renderCard = product => {
+    const stock = Number(product.stock || 0);
+    const image = productImages(product)[0];
+    const selected = state.selected.has(product.id);
+    return `<article class="internal-product-card ${selected ? 'is-selected' : ''}" data-product-card="${escapeHTML(product.id)}">
+      <div class="internal-product-card-top">
+        <label class="internal-product-check"><input type="checkbox" data-internal-select="${escapeHTML(product.id)}" ${selected ? 'checked' : ''} aria-label="Seleccionar ${escapeHTML(product.name)}"><span></span></label>
+        <span class="internal-product-sku">${escapeHTML(product.sku || 'SIN SKU')}</span>
+      </div>
+      <div class="internal-product-image"><img src="${escapeHTML(image)}" data-fallback alt="${escapeHTML(product.name)}"></div>
+      <div class="internal-product-body">
+        <span class="internal-product-brand">${escapeHTML(product.brand || 'YHORS')}</span>
+        <h2>${escapeHTML(product.name || 'Producto')}</h2>
+        <div class="internal-product-meta"><span>${escapeHTML(categories[product.category] || product.category || 'Producto')}</span><span>${escapeHTML(product.productType || 'Catálogo')}</span></div>
+        <div class="internal-product-bottom"><strong>${money(product.salePrice ?? product.price ?? 0)}</strong><span class="internal-stock ${stock > 0 ? 'available' : 'empty'}"><i></i>${stock > 0 ? `${stock} disponibles` : 'Sin stock'}</span></div>
+      </div>
+    </article>`;
+  };
+
+  const getFiltered = () => {
+    const query = state.query.toLowerCase();
+    return products.filter(product => {
+      const hay = `${product.name || ''} ${product.sku || ''} ${product.brand || ''} ${product.productType || ''} ${categories[product.category] || product.category || ''}`.toLowerCase();
+      return (!query || hay.includes(query)) && (!state.brand || String(product.brand || '') === state.brand) && (!state.category || String(product.category || '') === state.category);
+    }).sort((a,b) => {
+      if (state.sort === 'priceAsc') return Number(a.salePrice ?? a.price ?? 0) - Number(b.salePrice ?? b.price ?? 0);
+      if (state.sort === 'priceDesc') return Number(b.salePrice ?? b.price ?? 0) - Number(a.salePrice ?? a.price ?? 0);
+      if (state.sort === 'stockDesc') return Number(b.stock || 0) - Number(a.stock || 0);
+      if (state.sort === 'recent') return String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || ''));
+      return String(a.name || '').localeCompare(String(b.name || ''), 'es');
+    });
+  };
+
+  app.innerHTML = `<main class="internal-catalog-page">
+    <div class="internal-catalog-wrap">
+      <header class="internal-catalog-header">
+        <div class="internal-catalog-brand"><a class="brand" href="/">YHORS</a><div><span class="eyebrow">Catálogo interno</span><h1>Buscar productos</h1><p>Consulta precios y existencias sin entrar a la administración.</p></div></div>
+        <div class="internal-catalog-actions"><a class="button secondary" href="${escapeHTML(orderBackHref(session.role))}" data-smooth-route>← Volver</a>${accountMenu(session)}</div>
+      </header>
+      <section class="internal-search-panel">
+        <div class="internal-search-main"><span aria-hidden="true">⌕</span><input id="internalSearch" type="search" placeholder="Buscar por nombre, SKU, marca o modelo…" autocomplete="off"><button type="button" id="internalSearchButton">Buscar</button></div>
+        <div class="internal-filter-row">
+          <label><span>Marca</span><select id="internalBrand"><option value="">Todas las marcas</option>${brands.map(brand => `<option value="${escapeHTML(brand)}">${escapeHTML(brand)}</option>`).join('')}</select></label>
+          <label><span>Categoría</span><select id="internalCategory"><option value="">Todas las categorías</option>${categoriesForFilter.map(category => `<option value="${escapeHTML(category)}">${escapeHTML(categories[category] || category)}</option>`).join('')}</select></label>
+          <label><span>Ordenar</span><select id="internalSort"><option value="name">Nombre A–Z</option><option value="priceAsc">Precio menor</option><option value="priceDesc">Precio mayor</option><option value="stockDesc">Mayor stock</option><option value="recent">Más recientes</option></select></label>
+        </div>
+      </section>
+      <section class="internal-results-head"><div><span class="eyebrow">Inventario de consulta</span><h2 id="internalResultsCount">${products.length} productos</h2></div><div class="internal-selection-summary" id="internalSelectionSummary">0 seleccionados</div></section>
+      <section class="internal-products-grid" id="internalProductsGrid"></section>
+    </div>
+    <div class="internal-selection-bar" id="internalSelectionBar" hidden><div><strong id="internalSelectionCount">0 productos</strong><span>seleccionados para acciones</span></div><div><button type="button" class="button secondary" id="internalClearSelection">Limpiar</button><button type="button" class="button primary" id="internalCreateFlyer">📰 Crear Flyer</button></div></div>
+    <div class="generate-modal internal-flyer-modal" id="internalFlyerModal" hidden><div class="generate-modal-backdrop" data-close-flyer></div><div class="generate-modal-dialog internal-flyer-dialog" role="dialog" aria-modal="true" aria-labelledby="internalFlyerTitle">
+      <div class="generate-modal-head"><div><span class="eyebrow">Diseño YHORS</span><h2 id="internalFlyerTitle">📰 Generar Flyer</h2><p class="internal-flyer-lead">Convierte los productos seleccionados en un PDF listo para abrir, revisar e imprimir.</p></div><button type="button" class="generate-modal-close" data-close-flyer aria-label="Cerrar">×</button></div>
+      <div class="internal-flyer-form">
+        <div class="internal-flyer-field full"><label for="flyerTitle">Título *</label><input id="flyerTitle" value="Recién llegados" maxlength="90"></div>
+        <div class="internal-flyer-field full"><label for="flyerSubtitle">Subtítulo <small>(opcional)</small></label><input id="flyerSubtitle" placeholder="Ej: Línea HIKSEMI · Almacenamiento, Memorias & USB" maxlength="140"></div>
+        <div class="internal-flyer-field"><label for="flyerDescription">Descripción</label><select id="flyerDescription"><option value="Comercial enriquecida">Comercial enriquecida</option><option value="Minimalista">Minimalista</option><option value="Promocional">Promocional</option></select></div>
+        <div class="internal-flyer-field"><label for="flyerLayout">Layout</label><select id="flyerLayout"><option value="4">Grid 4 columnas</option><option value="3">Grid 3 columnas</option><option value="2">Grid 2 columnas</option></select></div>
+        <label class="internal-flyer-check full"><input id="flyerShowPrices" type="checkbox" checked><span><strong>Mostrar precios</strong><small>Los precios son los de venta vigentes.</small></span></label>
+        <div class="internal-flyer-field full"><label for="flyerTheme">Tema <small>(opcional)</small></label><select id="flyerTheme"><option>Sin tema</option><option>Corporativo YHORS</option><option>Recién llegados</option><option>Promociones</option><option>Oferta especial</option></select></div>
+        <div class="internal-flyer-field full"><label>Color de acento</label><div class="internal-accent-row"><button type="button" class="internal-accent active" data-accent="#1fa463" style="--accent:#1fa463"></button><button type="button" class="internal-accent" data-accent="#e53935" style="--accent:#e53935"></button><button type="button" class="internal-accent" data-accent="#2f6be5" style="--accent:#2f6be5"></button><button type="button" class="internal-accent" data-accent="#9337e5" style="--accent:#9337e5"></button><button type="button" class="internal-accent" data-accent="#ef650d" style="--accent:#ef650d"></button><button type="button" class="internal-accent" data-accent="#162033" style="--accent:#162033"></button><input id="flyerCustomAccent" type="color" value="#1fa463" title="Color personalizado"></div></div>
+        <div class="internal-flyer-field full"><label for="flyerLogo">Logo destacado en header <small>(opcional)</small></label><select id="flyerLogo"><option value="yhors">YHORS</option><option value="none">Sin logo destacado</option></select></div>
+        <label class="internal-flyer-check full"><input id="flyerContact" type="checkbox"><span><strong>📇 Incluir mi info de contacto</strong><small>Agrega el nombre y teléfono configurados para el flyer.</small></span></label>
+        <details class="internal-flyer-notes full"><summary>📣 Notas promocionales por producto <small>(opcional)</small></summary><p>Ej: “10+1 GRATIS”, “Solo por hoy”, “Hasta agotar stock”. Aparecerá como una banda roja en cada producto.</p><div id="internalFlyerNotesList"></div></details>
+      </div>
+      <div class="generate-modal-actions"><span class="generate-picker-hint" id="internalFlyerHint">0 productos seleccionados</span><button type="button" class="button secondary" data-close-flyer>Cancelar</button><button type="button" class="button primary" id="internalGenerateFlyer">Generar Flyer</button></div>
+    </div></div>
+  </main>`;
+
+  const grid = document.querySelector('#internalProductsGrid');
+  const renderResults = () => {
+    const filtered = getFiltered();
+    grid.innerHTML = filtered.length ? filtered.map(renderCard).join('') : `<div class="internal-no-results"><span>⌕</span><strong>No encontramos productos</strong><small>Prueba con otro nombre, marca o categoría.</small></div>`;
+    const count = document.querySelector('#internalResultsCount');
+    if (count) count.textContent = `${filtered.length} producto${filtered.length === 1 ? '' : 's'}`;
+    wireImageFallback(grid);
+    grid.querySelectorAll('[data-internal-select]').forEach(input => input.addEventListener('change', () => {
+      if (input.checked) state.selected.add(input.dataset.internalSelect); else state.selected.delete(input.dataset.internalSelect);
+      updateSelectionUI();
+      const card = input.closest('.internal-product-card'); card?.classList.toggle('is-selected', input.checked);
+    }));
+  };
+  const updateSelectionUI = () => {
+    const count = state.selected.size;
+    document.querySelector('#internalSelectionCount').textContent = `${count} producto${count === 1 ? '' : 's'}`;
+    document.querySelector('#internalSelectionSummary').textContent = `${count} seleccionado${count === 1 ? '' : 's'}`;
+    document.querySelector('#internalSelectionBar').hidden = count === 0;
+  };
+  const openFlyer = () => {
+    if (!state.selected.size) return;
+    const modal = document.querySelector('#internalFlyerModal');
+    const selected = products.filter(product => state.selected.has(product.id));
+    const notesList = document.querySelector('#internalFlyerNotesList');
+    notesList.innerHTML = selected.map(product => `<label class="internal-note-row"><img src="${escapeHTML(productImages(product)[0])}" data-fallback alt=""><span><strong>${escapeHTML(product.name)}</strong><input type="text" data-flyer-note="${escapeHTML(product.id)}" placeholder="Nota promocional…" maxlength="70"></span></label>`).join('');
+    wireImageFallback(notesList);
+    document.querySelector('#internalFlyerHint').textContent = `${selected.length} producto${selected.length === 1 ? '' : 's'} seleccionados`;
+    modal.hidden = false; requestAnimationFrame(() => modal.classList.add('is-open')); document.body.classList.add('generate-modal-open');
+  };
+  const closeFlyer = () => { const modal=document.querySelector('#internalFlyerModal'); modal?.classList.remove('is-open'); document.body.classList.remove('generate-modal-open'); setTimeout(()=>{ if(modal) modal.hidden=true; },180); };
+  document.querySelector('#internalSearch').addEventListener('input', event => { state.query = event.target.value.trim(); renderResults(); });
+  document.querySelector('#internalSearchButton').addEventListener('click', () => { state.query = document.querySelector('#internalSearch').value.trim(); renderResults(); document.querySelector('#internalSearch').focus(); });
+  document.querySelector('#internalBrand').addEventListener('change', event => { state.brand = event.target.value; renderResults(); });
+  document.querySelector('#internalCategory').addEventListener('change', event => { state.category = event.target.value; renderResults(); });
+  document.querySelector('#internalSort').addEventListener('change', event => { state.sort = event.target.value; renderResults(); });
+  document.querySelector('#internalClearSelection').addEventListener('click', () => { state.selected.clear(); renderResults(); updateSelectionUI(); });
+  document.querySelector('#internalCreateFlyer').addEventListener('click', openFlyer);
+  document.querySelectorAll('[data-close-flyer]').forEach(button => button.addEventListener('click', closeFlyer));
+  document.querySelectorAll('.internal-accent').forEach(button => button.addEventListener('click', () => { document.querySelectorAll('.internal-accent').forEach(item=>item.classList.remove('active')); button.classList.add('active'); document.querySelector('#flyerCustomAccent').value = button.dataset.accent; }));
+  document.querySelector('#flyerCustomAccent').addEventListener('input', event => { document.querySelectorAll('.internal-accent').forEach(item=>item.classList.remove('active')); });
+  document.querySelector('#internalGenerateFlyer').addEventListener('click', async () => {
+    const selectedIds = [...state.selected];
+    if (!selectedIds.length) return;
+    const tab = window.open('', '_blank');
+    if (!tab) { alert('El navegador bloqueó la nueva pestaña. Permite ventanas emergentes para YHORS y vuelve a intentarlo.'); return; }
+    tab.document.write('<title>Generando flyer…</title><body style="font-family:Arial,sans-serif;padding:40px;text-align:center"><h2>Generando flyer YHORS…</h2><p>Preparando el PDF.</p></body>'); tab.document.close();
+    const notes = {}; document.querySelectorAll('[data-flyer-note]').forEach(input => { if (input.value.trim()) notes[input.dataset.flyerNote] = input.value.trim(); });
+    const options = {
+      title: document.querySelector('#flyerTitle').value.trim() || 'Selección YHORS',
+      subtitle: document.querySelector('#flyerSubtitle').value.trim(),
+      description: document.querySelector('#flyerDescription').value,
+      layout: document.querySelector('#flyerLayout').value,
+      showPrices: document.querySelector('#flyerShowPrices').checked,
+      theme: document.querySelector('#flyerTheme').value,
+      accent: document.querySelector('#flyerCustomAccent').value,
+      logo: document.querySelector('#flyerLogo').value,
+      includeContact: document.querySelector('#flyerContact').checked,
+      contact: document.querySelector('#flyerContact').checked ? `${session.username || 'YHORS'} · ${session.role === 'vendedor' ? 'Vendedor' : session.role === 'store_manager' ? 'Jefe de tienda' : 'Administración'}` : '',
+      notes
+    };
+    const button = document.querySelector('#internalGenerateFlyer'); button.disabled = true; button.textContent = 'Generando…';
+    try {
+      const response = await fetch('/api/internal/catalog/flyer', { method:'POST', credentials:'same-origin', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ productIds:selectedIds, options }) });
+      if (!response.ok) { const json = await response.json().catch(()=>({})); throw new Error(json.error || 'No se pudo generar el flyer.'); }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      tab.location.href = url;
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      closeFlyer();
+    } catch (error) {
+      tab.close();
+      alert(error.message || 'No se pudo generar el flyer.');
+    } finally { button.disabled = false; button.textContent = 'Generar Flyer'; }
+  });
+  wireAccountMenu();
+  renderResults(); updateSelectionUI();
+}
+
 async function renderStore() {
   const categoryKey = currentCategoryFromPath();
   let products = [], storefront = { whatsappNumber: '', heroProductIds: [], featuredProductIds: [] };
@@ -1162,12 +1328,12 @@ function adminSectionNav(session = {}, active = '') {
   const link = (key, href, label) => `<a href="${href}" class="admin-section-link${active === key ? ' active' : ''}" data-smooth-route>${label}</a>`;
   if (limitedOperations) {
     return `<nav class="admin-section-nav admin-section-nav--compact" id="adminSectionNav" aria-label="Secciones operativas">
-      <details class="admin-nav-group"><summary>Operación</summary><div class="admin-nav-group-links">${link('ventas-generales', `${ADMIN_PATH}/ventas-generales`, 'VENTAS GENERALES')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('generar-orden', `${ADMIN_PATH}/generar-orden`, 'GENERAR ORDEN')}</div></details>
+      <details class="admin-nav-group"><summary>Operación</summary><div class="admin-nav-group-links">${link('buscar-productos', '/buscar-productos', 'BUSCAR PRODUCTOS')}${link('ventas-generales', `${ADMIN_PATH}/ventas-generales`, 'VENTAS GENERALES')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('generar-orden', `${ADMIN_PATH}/generar-orden`, 'GENERAR ORDEN')}</div></details>
     </nav>`;
   }
   const group = (label, activeKeys, items, open = false) => `<details class="admin-nav-group${activeKeys.includes(active) ? ' has-active' : ''}"${open ? ' open' : ''}><summary><span>${label}</span>${activeKeys.includes(active) ? '<i aria-hidden="true"></i>' : ''}</summary><div class="admin-nav-group-links">${items}</div></details>`;
   return `<nav class="admin-section-nav" id="adminSectionNav" aria-label="Administración YHORS">
-    ${group('Operación', ['web','inventario','pedidos','generar-orden'], `${link('web', ADMIN_PATH, 'PÁGINA WEB')}${link('inventario', `${ADMIN_PATH}/inventario`, 'INVENTARIO')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('generar-orden', `${ADMIN_PATH}/generar-orden`, 'GENERAR ORDEN')}`)}
+    ${group('Operación', ['web','buscar-productos','inventario','pedidos','generar-orden'], `${link('web', ADMIN_PATH, 'PÁGINA WEB')}${link('buscar-productos', '/buscar-productos', 'BUSCAR PRODUCTOS')}${link('inventario', `${ADMIN_PATH}/inventario`, 'INVENTARIO')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('generar-orden', `${ADMIN_PATH}/generar-orden`, 'GENERAR ORDEN')}`)}
     ${group('Gestión', ['usuarios','auditoria'], `${link('usuarios', `${ADMIN_PATH}/usuarios`, 'USUARIOS')}${link('auditoria', `${ADMIN_PATH}/auditoria`, 'AUDITORÍA')}`)}
     ${group('Finanzas', ['resumen-financiero','ventas-generales','multas','calculo-comision'], `${link('resumen-financiero', `${ADMIN_PATH}/resumen-financiero`, 'RESUMEN FINANCIERO')}${link('ventas-generales', `${ADMIN_PATH}/ventas-generales`, 'VENTAS GENERALES')}${link('multas', `${ADMIN_PATH}/multas`, 'MULTAS')}${link('calculo-comision', `${ADMIN_PATH}/calculo-comision`, 'CÁLCULO DE COMISIÓN')}`)}
   </nav>`;
