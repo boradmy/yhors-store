@@ -3615,3 +3615,17 @@ body.generate-modal-open{overflow:hidden}
 @media(max-width:760px){.catalog-search-toolbar{grid-template-columns:1fr 1fr}.catalog-clear-selection{width:100%;grid-column:auto}}
 
 .flyer-create-icon{display:inline-grid;place-items:center;width:18px;height:18px;margin-right:5px;font-size:1rem;line-height:1;color:currentColor}.catalog-create-flyer{font-weight:850;letter-spacing:-.01em}.catalog-create-flyer:hover .flyer-create-icon{transform:rotate(12deg) scale(1.08)}
+
+
+/* Flyer/catalog final polish · 2026.09.28 */
+.catalog-search-toolbar{grid-template-columns:minmax(250px,1.8fr) repeat(4,minmax(105px,.58fr)) auto auto}
+.catalog-search-toolbar .catalog-invert-button,
+.catalog-search-toolbar .catalog-clear-selection{height:48px;min-width:104px;padding:0 14px;white-space:nowrap}
+@media(max-width:1100px){.catalog-search-toolbar{grid-template-columns:minmax(220px,1fr) repeat(2,minmax(120px,.7fr)) auto auto}.catalog-search-toolbar select:nth-of-type(3),.catalog-search-toolbar select:nth-of-type(4){display:none}}
+@media(max-width:760px){.catalog-search-toolbar{grid-template-columns:1fr 1fr}.catalog-main-search{grid-column:1/-1}.catalog-search-toolbar select{width:100%}.catalog-search-toolbar .catalog-invert-button,.catalog-search-toolbar .catalog-clear-selection{width:100%;min-width:0}}
+
+/* Descripción comercial: más presencia sin perder el acabado ligero. */
+.flyer-highlights{margin:4px 0 0;padding-left:15px;color:#716b63;font-size:.54rem;line-height:1.35;display:grid;gap:2px}
+.flyer-highlights li{overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow-wrap:anywhere}
+.flyer-preview-card-info ul{margin:3px 0 0;padding-left:15px;display:grid;gap:2px;color:#716b63;font-size:.52rem;line-height:1.35}
+.flyer-preview-card-info li{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;overflow-wrap:anywhere;white-space:normal}

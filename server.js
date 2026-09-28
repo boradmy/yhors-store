@@ -1398,7 +1398,7 @@ async function buildFlyerPdf({ products, title, subtitle, description, layout, o
     let imageX = x, imageY = y, imageW = w, imageH = h;
     let copyX = x, copyY = y + h, copyW = w;
     if (mode === 'grid') {
-      imageH = Math.min(h * 0.48, safeLayout === '4' ? 135 : 165);
+      imageH = Math.min(h * 0.30, safeLayout === '4' ? 104 : 165);
       // PDF coordinates start at the bottom-left. The preview places the image
       // in the TOP section of the card, so the image box must start at the top
       // of the card rather than at `y`. The previous value made the image render
@@ -1459,7 +1459,7 @@ async function buildFlyerPdf({ products, title, subtitle, description, layout, o
     const titleLines = mode === 'featured' ? 3 : safeLayout === '2' ? 3 : 2;
     const metaSize = mode === 'featured' ? 8 : safeLayout === '2' ? 6.3 : 5.6;
     const highlightSize = mode === 'featured' ? 7.6 : safeLayout === '2' ? 6.2 : safeLayout === '3' ? 5.8 : 5.35;
-    const maxHighlights = mode === 'featured' ? 5 : safeLayout === '2' ? 5 : 4;
+    const maxHighlights = 5;
     const trim = (value, max) => {
       const text = String(value || '').replace(/\s+/g, ' ').trim();
       if (text.length <= max) return text;
@@ -1486,13 +1486,13 @@ async function buildFlyerPdf({ products, title, subtitle, description, layout, o
     // commercial block and remains light/elegant rather than bold.
     const highlights = flyerProductHighlights(product).slice(0, maxHighlights);
     let descriptionLinesUsed = 0;
-    const descriptionMaxLines = mode === 'featured' ? 4 : safeLayout === '2' ? 5 : safeLayout === '3' ? 4 : 4;
+    const descriptionMaxLines = 5;
     for (const item of highlights) {
-      if (cy < y + (mode === 'featured' ? 58 : 40) || descriptionLinesUsed >= descriptionMaxLines) break;
+      if (cy < y + (mode === 'featured' ? 58 : 28) || descriptionLinesUsed >= descriptionMaxLines) break;
       const bullet = `• ${item}`;
       const chars = charsFor(copyW - 5, highlightSize, 0.50);
       const remaining = Math.max(1, descriptionMaxLines - descriptionLinesUsed);
-      const result = drawLines(ops, bullet, copyX + 5, cy, chars, highlightSize, 1, [0.38,0.36,0.33], Math.min(mode === 'featured' ? 2 : 1, remaining), highlightSize + 2.2);
+      const result = drawLines(ops, bullet, copyX + 6, cy, chars, highlightSize, 1, [0.38,0.36,0.33], Math.min(2, remaining), highlightSize + 2.2);
       descriptionLinesUsed += result.lines.length;
       cy = result.y - 0.5;
     }
