@@ -3207,6 +3207,7 @@ function flyerPreviewDraftFromModal(modal, selected) {
     subtitle: modal.querySelector('#flyerSubtitle')?.value.trim() || '',
     description: modal.querySelector('#flyerDescription')?.value.trim() || '',
     layout: modal.querySelector('#flyerLayout')?.value || '4',
+    orientation: modal.querySelector('#flyerOrientation')?.value || 'portrait',
     showPrices: !!modal.querySelector('#flyerShowPrices')?.checked,
     theme: modal.querySelector('#flyerTheme')?.value || 'none',
     accent: modal.querySelector('#flyerAccent')?.value || '#b58a43',
@@ -3222,17 +3223,41 @@ function flyerPreviewDraftFromModal(modal, selected) {
 }
 
 function flyerMiniPreview(products, draft) {
-  const cols = Math.max(1, Math.min(4, Number(draft.layout || 4)));
-  const shown = products.slice(0, 6);
+  const layout = String(draft.layout || '4');
+  const cols = Math.max(1, Math.min(4, Number(layout)));
+  const orientation = draft.orientation === 'landscape' ? 'landscape' : 'portrait';
+  const shown = products.slice(0, layout === '1' ? 1 : 6);
   const extra = Math.max(0, products.length - shown.length);
-  return `<div class="flyer-preview-page theme-${escapeHTML(draft.theme || 'none')}" style="--flyer-accent:${escapeHTML(draft.accent || '#b58a43')};--flyer-cols:${cols}">
+  const card = (p, i, featured = false) => {
+    const stock = Number(p.stock || 0);
+    const highlights = flyerProductHighlights(p).slice(0, 3);
+    const note = draft.notes?.[p.id] || '';
+    return `<article class="flyer-preview-card ${featured ? 'is-featured' : ''}">
+      <div class="flyer-preview-card-image"><img src="${escapeHTML(catalogProductImage(p))}" alt="${escapeHTML(p.name || 'Producto')}" data-fallback><span class="flyer-index">${String(i + 1).padStart(2,'0')}</span>${note ? `<span class="flyer-promo">${escapeHTML(note)}</span>` : ''}</div>
+      <div class="flyer-preview-card-info">
+        <span class="flyer-brand">${escapeHTML(p.brand || categories[p.category] || 'YHORS')}</span>
+        <h2>${escapeHTML(p.name || 'Producto')}</h2>
+        <div class="flyer-meta-line"><span>${escapeHTML(p.productType || categories[p.category] || 'Producto')}</span><span>SKU ${escapeHTML(p.sku || '—')}</span></div>
+        ${highlights.length ? `<ul>${highlights.map(x=>`<li>${escapeHTML(x)}</li>`).join('')}</ul>` : ''}
+        <div class="flyer-preview-price-row">${draft.showPrices ? `<strong>${money(p.salePrice ?? p.price ?? 0)}</strong>` : ''}<span class="flyer-stock ${stock > 0 ? 'available' : 'empty'}">${stock > 0 ? `${stock} disponibles` : 'Sin stock'}</span></div>
+      </div>
+    </article>`;
+  };
+  let body = '';
+  if (layout === '1') {
+    const p = shown[0];
+    body = p ? `<div class="flyer-preview-featured">${card(p,0,true)}</div>` : '';
+  } else {
+    body = `<div class="flyer-preview-products flyer-preview-layout-${layout}">${shown.map((p,i)=>card(p,i)).join('')}</div>`;
+  }
+  return `<div class="flyer-preview-page theme-${escapeHTML(draft.theme || 'none')} orientation-${orientation} layout-${layout}" style="--flyer-accent:${escapeHTML(draft.accent || '#b58a43')};--flyer-cols:${cols}">
     <header class="flyer-preview-header">
       ${draft.logo !== 'none' ? '<div class="flyer-preview-logo">YHORS<span>STORE</span></div>' : ''}
       <div><span class="eyebrow">YHORS · SELECCIÓN COMERCIAL</span><h1>${escapeHTML(draft.title || 'Recién Llegados')}</h1>${draft.subtitle ? `<p>${escapeHTML(draft.subtitle)}</p>` : ''}${draft.description ? `<small>${escapeHTML(draft.description)}</small>` : ''}</div>
     </header>
-    <div class="flyer-preview-products" style="--flyer-cols:${cols}">${shown.map((p,i)=>flyerProductPreviewCard(p,i,draft,true)).join('')}</div>
+    ${body}
     ${extra ? `<div class="flyer-preview-more">+ ${extra} producto${extra===1?'':'s'} más</div>` : ''}
-    <footer><span>YHORS · más que un producto</span><span>${products.length} producto${products.length===1?'':'s'}</span></footer>
+    <footer><span>YHORS · más que un producto</span><span>${products.length} producto${products.length===1?'':'s'} · ${orientation === 'landscape' ? 'A4 horizontal' : 'A4 vertical'}</span></footer>
   </div>`;
 }
 
@@ -3254,7 +3279,8 @@ function flyerGeneratorModal(products = [], selectedIds = []) {
 
           <div class="flyer-section-title"><span>02</span><div><strong>Composición</strong><small>Elige cómo se presentan los productos</small></div></div>
           <div class="flyer-form-grid two">
-            <label><span>Layout</span><select id="flyerLayout"><option value="4">Grid 4 · catálogo</option><option value="3">Grid 3 · editorial</option><option value="2">Grid 2 · destacado</option><option value="1">Producto destacado</option></select></label>
+            <label><span>Layout</span><select id="flyerLayout"><option value="4">Grid 4 · catálogo compacto</option><option value="3">Grid 3 · catálogo equilibrado</option><option value="2">Grid 2 · editorial grande</option><option value="1">Producto destacado · protagonista</option></select></label>
+            <label><span>Orientación</span><select id="flyerOrientation"><option value="portrait">Vertical · A4</option><option value="landscape">Horizontal · A4</option></select></label>
             <label><span>Tema</span><select id="flyerTheme"><option value="none">YHORS Minimal</option><option value="editorial">Editorial</option><option value="luxury">Luxury</option><option value="midnight">Midnight</option></select></label>
           </div>
           <div class="flyer-toggle-row"><label class="flyer-check"><input id="flyerShowPrices" type="checkbox" checked><span>Mostrar precios</span></label><label class="flyer-check"><input id="flyerContact" type="checkbox"><span>Incluir contacto</span></label></div>
@@ -3289,7 +3315,7 @@ async function renderAdminCatalogSearch() {
     <div class="admin-top"><div><a class="brand" href="${ADMIN_PATH}">YHORS</a><h1 class="admin-title">Buscar productos</h1></div><div class="admin-top-actions">${accountMenu(session)}</div></div>
     ${adminSectionNav(session, 'buscar-productos')}
     <section class="catalog-search-hero"><div><span class="eyebrow">Catálogo interno · ${escapeHTML(roleLabel)}</span><h2>Encuentra. Consulta. Selecciona.</h2><p>Precios de venta, stock, marca y datos comerciales en una sola vista. Disponible para vendedores, jefes y administradores.</p></div><div class="catalog-search-count"><strong id="catalogResultCount">0</strong><span>productos visibles</span></div></section>
-    <section class="catalog-search-toolbar"><label class="catalog-main-search"><span>⌕</span><input id="catalogMainSearch" type="search" placeholder="Buscar por código, nombre, modelo o marca…" autocomplete="off"><button id="catalogClearSearch" type="button" aria-label="Limpiar">×</button></label><select id="catalogBrandFilter"><option value="">Todas las marcas</option>${brands.map(b=>`<option value="${escapeHTML(b)}">${escapeHTML(b)}</option>`).join('')}</select><select id="catalogCategoryFilter"><option value="">Todas las categorías</option>${categoryEntries.map(([k,v])=>`<option value="${escapeHTML(k)}">${escapeHTML(v)}</option>`).join('')}</select><select id="catalogStockFilter"><option value="">Todo el stock</option><option value="available">Disponibles</option><option value="empty">Sin stock</option></select><select id="catalogSort"><option value="name">Nombre A–Z</option><option value="price-asc">Precio menor</option><option value="price-desc">Precio mayor</option><option value="stock-desc">Mayor stock</option></select><button class="button primary catalog-search-button" id="catalogSearchButton" type="button">⌕ Buscar</button><button class="button secondary catalog-invert-button" id="catalogInvertButton" type="button">⇄ Invertir</button></section>
+    <section class="catalog-search-toolbar"><label class="catalog-main-search"><span>⌕</span><input id="catalogMainSearch" type="search" placeholder="Buscar por código, nombre, modelo o marca…" autocomplete="off"><button id="catalogClearSearch" type="button" aria-label="Limpiar">×</button></label><select id="catalogBrandFilter"><option value="">Todas las marcas</option>${brands.map(b=>`<option value="${escapeHTML(b)}">${escapeHTML(b)}</option>`).join('')}</select><select id="catalogCategoryFilter"><option value="">Todas las categorías</option>${categoryEntries.map(([k,v])=>`<option value="${escapeHTML(k)}">${escapeHTML(v)}</option>`).join('')}</select><select id="catalogStockFilter"><option value="">Todo el stock</option><option value="available">Disponibles</option><option value="empty">Sin stock</option></select><select id="catalogSort"><option value="name">Nombre A–Z</option><option value="price-asc">Precio menor</option><option value="price-desc">Precio mayor</option><option value="stock-desc">Mayor stock</option></select><button class="button primary catalog-search-button" id="catalogSearchButton" type="button">⌕ Buscar</button><button class="button secondary catalog-invert-button" id="catalogInvertButton" type="button">⇄ Invertir</button><button class="button secondary catalog-clear-selection" id="catalogClearSelection" type="button">⌫ Olvidar</button></section>
     <section class="catalog-search-meta"><div><span class="eyebrow">Selección para flyer</span><strong id="catalogSelectionCount">0 seleccionados</strong></div><button type="button" class="button secondary small" id="catalogGenerateFlyer" disabled>🎨 Crear Flyer</button></section>
     <section class="catalog-search-grid" id="catalogSearchGrid"></section>
   </div></main>`;
@@ -3347,7 +3373,7 @@ async function renderAdminCatalogSearch() {
     refreshPreview();
     modal?.querySelector('#generateFlyerButton')?.addEventListener('click',()=>{
       const draft=flyerPreviewDraftFromModal(modal, selected);
-      const key=flyerDraftKey(); localStorage.setItem(key,JSON.stringify({...draft,createdAt:Date.now()}));
+      const key=flyerDraftKey(); localStorage.setItem(key,JSON.stringify({...draft, products:selected, createdAt:Date.now()}));
       const tab=window.open(`/yhors/flyer?draft=${encodeURIComponent(key)}`,'_blank');
       if(!tab) window.location.href=`/yhors/flyer?draft=${encodeURIComponent(key)}`;
       close();
@@ -3355,6 +3381,7 @@ async function renderAdminCatalogSearch() {
   };
   flyerButton.addEventListener('click',openFlyer);
   document.querySelector('#catalogInvertButton')?.addEventListener('click',()=>{products.forEach(p=>{const id=String(p.id); if(selectedIds.has(id)) selectedIds.delete(id); else selectedIds.add(id);}); draw();});
+  document.querySelector('#catalogClearSelection')?.addEventListener('click',()=>{selectedIds.clear(); draw();});
   document.querySelector('#catalogSearchButton')?.addEventListener('click',draw);
   [searchInput,brandFilter,categoryFilter,stockFilter,sortSelect].forEach(el=>el?.addEventListener(el===searchInput?'input':'change',draw));
   document.querySelector('#catalogClearSearch')?.addEventListener('click',()=>{searchInput.value='';draw();searchInput.focus();});
@@ -3368,35 +3395,52 @@ async function renderFlyerPreview() {
   let draft = null;
   try { draft = JSON.parse(localStorage.getItem(key) || 'null'); } catch (_) {}
   if (!draft) { app.innerHTML='<main class="flyer-missing"><h1>Flyer no encontrado</h1><p>Genera nuevamente el flyer desde Buscar Productos.</p></main>'; return; }
-  const products = await request('/api/admin/catalog-products').catch(() => []);
-  const session = await request('/api/admin/session').catch(() => ({ username: '', name: '' }));
-  const selected = (draft.ids || []).map(id => products.find(p=>String(p.id)===String(id))).filter(Boolean);
+
+  // The draft carries a product snapshot so the generated tab does not depend on a second API call/auth race.
+  let products = Array.isArray(draft.products) ? draft.products : [];
+  if (!products.length && Array.isArray(draft.ids)) {
+    products = await request('/api/admin/catalog-products').catch(() => []);
+    products = draft.ids.map(id => products.find(p=>String(p.id)===String(id))).filter(Boolean);
+  }
+  const session = draft.contact ? await request('/api/admin/session').catch(() => ({ username: '', name: '' })) : null;
+  const selected = products;
   const accent = draft.accent || '#b58a43';
   const columns = Math.max(1, Math.min(4, Number(draft.layout || 4)));
+  const layout = String(draft.layout || '4');
   const theme = draft.theme || 'none';
+  const orientation = draft.orientation === 'landscape' ? 'landscape' : 'portrait';
   const logo = draft.logo !== 'none';
   const contact = draft.contact ? `<div class="flyer-contact"><strong>${escapeHTML(session?.name || session?.username || 'Equipo YHORS')}</strong><span>${escapeHTML(session?.username || '')}</span></div>` : '';
   const pages = [];
-  const perPage = columns === 1 ? 1 : columns === 2 ? 4 : columns === 3 ? 6 : 8;
+  let perPage = orientation === 'landscape' ? (layout === '1' ? 1 : layout === '2' ? 4 : layout === '3' ? 6 : 8) : (layout === '1' ? 1 : layout === '2' ? 4 : layout === '3' ? 6 : 8);
+  if (layout === '1' && selected.length > 1) perPage = orientation === 'landscape' ? 2 : 1;
   for (let i=0;i<selected.length;i+=perPage) pages.push(selected.slice(i,i+perPage));
   if (!pages.length) pages.push([]);
-  const pagesMarkup = pages.map((page,pageIndex)=>`<section class="flyer-sheet ${pageIndex===0?'flyer-cover-sheet':''}">
-    <header class="flyer-header">
-      ${logo ? `<div class="flyer-logo">YHORS<span>STORE</span></div>` : ''}
-      <div class="flyer-header-copy"><span class="eyebrow">YHORS · SELECCIÓN COMERCIAL</span><h1>${escapeHTML(draft.title || 'Recién Llegados')}</h1>${draft.subtitle ? `<p class="flyer-subtitle">${escapeHTML(draft.subtitle)}</p>` : ''}${draft.description ? `<p class="flyer-description">${escapeHTML(draft.description)}</p>` : ''}</div>
-      <div class="flyer-date">${new Intl.DateTimeFormat('es-EC',{dateStyle:'medium'}).format(new Date())}<small>Página ${pageIndex+1} / ${pages.length}</small></div>
-    </header>
-    <div class="flyer-products" style="--flyer-cols:${columns}">${page.map((p,idx)=>flyerProductPreviewCard(p,i+idx,draft,false)).join('')}</div>
-    <footer class="flyer-footer"><span>YHORS · más que un producto</span>${contact}</footer>
-  </section>`).join('');
-  app.innerHTML=`<main class="flyer-page theme-${escapeHTML(theme)}" style="--flyer-accent:${escapeHTML(accent)};--flyer-cols:${columns}">
-    <div class="flyer-toolbar no-print"><div><span class="eyebrow">Flyer generado</span><strong>${escapeHTML(draft.title || 'Recién Llegados')}</strong><small>${selected.length} producto${selected.length===1?'':'s'} · ${pages.length} página${pages.length===1?'':'s'}</small></div><div><button type="button" class="button secondary" id="flyerBack">← Volver al catálogo</button><button type="button" class="button primary" id="flyerPdf">Guardar como PDF</button></div></div>
+  const pagesMarkup = pages.map((page,pageIndex)=>{
+    let productsMarkup;
+    if (layout === '1') {
+      productsMarkup = page.map((p,idx)=>`<div class="flyer-featured-wrap">${flyerProductPreviewCard(p, pageIndex*perPage+idx, draft, false)}</div>`).join('');
+    } else {
+      productsMarkup = page.map((p,idx)=>flyerProductPreviewCard(p,pageIndex*perPage+idx,draft,false)).join('');
+    }
+    return `<section class="flyer-sheet orientation-${orientation} layout-${layout} ${pageIndex===0?'flyer-cover-sheet':''}">
+      <header class="flyer-header">
+        ${logo ? `<div class="flyer-logo">YHORS<span>STORE</span></div>` : ''}
+        <div class="flyer-header-copy"><span class="eyebrow">YHORS · SELECCIÓN COMERCIAL</span><h1>${escapeHTML(draft.title || 'Recién Llegados')}</h1>${draft.subtitle ? `<p class="flyer-subtitle">${escapeHTML(draft.subtitle)}</p>` : ''}${draft.description ? `<p class="flyer-description">${escapeHTML(draft.description)}</p>` : ''}</div>
+        <div class="flyer-date">${new Intl.DateTimeFormat('es-EC',{dateStyle:'medium'}).format(new Date())}<small>Página ${pageIndex+1} / ${pages.length}</small></div>
+      </header>
+      <div class="flyer-products flyer-products-layout-${layout}" style="--flyer-cols:${columns}">${productsMarkup}</div>
+      <footer class="flyer-footer"><span>YHORS · más que un producto</span>${contact}</footer>
+    </section>`;
+  }).join('');
+
+  app.innerHTML=`<main class="flyer-page theme-${escapeHTML(theme)} orientation-${orientation}" style="--flyer-accent:${escapeHTML(accent)};--flyer-cols:${columns}">
+    <div class="flyer-toolbar no-print"><div><span class="eyebrow">Flyer generado</span><strong>${escapeHTML(draft.title || 'Recién Llegados')}</strong><small>${selected.length} producto${selected.length===1?'':'s'} · ${pages.length} página${pages.length===1?'':'s'} · A4 ${orientation === 'landscape' ? 'horizontal' : 'vertical'}</small></div><div><button type="button" class="button secondary" id="flyerBack">← Volver al catálogo</button><button type="button" class="button primary" id="flyerPdf">Guardar / PDF</button></div></div>
     <div class="flyer-generated-wrap">${pagesMarkup}</div>
   </main>`;
   document.querySelector('#flyerPdf')?.addEventListener('click',()=>window.print());
   document.querySelector('#flyerBack')?.addEventListener('click',()=>{ window.location.href=`${ADMIN_PATH}/buscar-productos`; });
   wireImageFallback(document.querySelector('.flyer-page'));
-  try { localStorage.removeItem(key); } catch (_) {}
 }
 
 async function renderAdminInventory() {
