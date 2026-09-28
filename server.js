@@ -1160,6 +1160,18 @@ function flyerImageTool() {
   return null;
 }
 
+function flyerIsJpeg(buffer) {
+  return Buffer.isBuffer(buffer) && buffer.length > 10 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[buffer.length - 2] === 0xff && buffer[buffer.length - 1] === 0xd9;
+}
+
+function flyerIsPng(buffer) {
+  return Buffer.isBuffer(buffer) && buffer.length > 8 && buffer.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10]));
+}
+
+function flyerIsWebp(buffer) {
+  return Buffer.isBuffer(buffer) && buffer.length > 16 && buffer.toString('ascii', 0, 4) === 'RIFF' && buffer.toString('ascii', 8, 12) === 'WEBP';
+}
+
 async function flyerImageJpeg(url) {
   try {
     const rawUrl = String(url || '').trim();
@@ -1181,22 +1193,25 @@ async function flyerImageJpeg(url) {
         'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
         'Referer': SITE_URL + '/'
       };
-      const candidates = [
-        target,
-        `https://images.weserv.nl/?url=${encodeURIComponent(target)}`,
-        `https://wsrv.nl/?url=${encodeURIComponent(target)}`
-      ];
+      // Try the original first, then force a real JPEG through the image proxy.
+      // Some product hosts (Pinterest/AVIF/WebP endpoints) return a format that
+      // the server-side ImageMagick build cannot decode reliably. The proxy is
+      // asked explicitly for JPG so the PDF always receives a PDF-safe image.
+      const proxyUrl = `https://wsrv.nl/?url=${encodeURIComponent(target)}&output=jpg&q=90&w=1600`;
+      const proxyUrl2 = `https://images.weserv.nl/?url=${encodeURIComponent(target)}&output=jpg&q=90&w=1600`;
+      const candidates = [proxyUrl, proxyUrl2, target];
       for (const candidate of candidates) {
         try {
           const response = await fetch(candidate, {
-            headers: candidate === target ? headers : { 'User-Agent': headers['User-Agent'], 'Accept': 'image/*,*/*;q=0.8' },
+            headers: candidate === target ? headers : { 'User-Agent': headers['User-Agent'], 'Accept': 'image/jpeg,image/*,*/*;q=0.8' },
             redirect: 'follow',
             signal: AbortSignal.timeout(15000)
           });
           if (!response.ok) continue;
           const bytes = Buffer.from(await response.arrayBuffer());
           const type = String(response.headers.get('content-type') || '').toLowerCase();
-          if (bytes.length > 100 && (!type || type.startsWith('image/') || type.includes('octet-stream'))) {
+          const looksLikeImage = flyerIsJpeg(bytes) || flyerIsPng(bytes) || flyerIsWebp(bytes) || type.startsWith('image/');
+          if (bytes.length > 100 && looksLikeImage) {
             input = bytes;
             break;
           }
@@ -1204,7 +1219,16 @@ async function flyerImageJpeg(url) {
       }
     }
 
-    if (!input || !input.length) return null;
+    if (!input || input.length < 100) return null;
+
+    // JPEG can be embedded directly. This avoids a second conversion step and,
+    // importantly, prevents ImageMagick from trying to decode an already-valid
+    // JPEG data URL and producing the blank image seen in the flyer PDF.
+    if (flyerIsJpeg(input)) {
+      const size = parseJpegSize(input);
+      if (size) return { data: input, width: size.width, height: size.height };
+    }
+
     const tool = flyerImageTool();
     if (!tool) {
       console.warn('[YHORS] ImageMagick no está disponible para el PDF del flyer.');
@@ -1217,7 +1241,7 @@ async function flyerImageJpeg(url) {
     const size = parseJpegSize(jpeg);
     return size ? { data: jpeg, width: size.width, height: size.height } : null;
   } catch (error) {
-    console.warn('[YHORS] Flyer image skipped:', String(error?.message || error).slice(0, 260));
+    console.warn('[YHORS] Flyer image skipped:', String(error?.message || error).slice(0, 320));
     return null;
   }
 }
@@ -1444,7 +1468,9 @@ async function buildFlyerPdf({ products, title, subtitle, description, layout, o
     page.forEach((product, idx) => {
       const row = Math.floor(idx / config.cols), col = idx % config.cols;
       const x = margin + col * (cardW + gap);
-      const yCard = margin + footerH + (rowsOnPage - 1 - row) * (cardH + gap);
+        const yCard = rowsOnPage === 1
+        ? top - cardH
+        : margin + footerH + (rowsOnPage - 1 - row) * (cardH + gap);
       drawProduct(ops, product, pageIndex * config.perPage + idx, x, yCard, cardW, cardH, config.mode);
     });
 
