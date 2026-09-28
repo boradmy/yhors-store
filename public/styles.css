@@ -3562,3 +3562,21 @@ body.generate-modal-open{overflow:hidden}
 
 .catalog-search-toolbar .catalog-clear-selection{height:48px;padding:0 14px;white-space:nowrap;color:var(--ink)}
 @media(max-width:760px){.catalog-search-toolbar .catalog-clear-selection{width:100%}}
+
+/* ===== Flyer v5 refinements ===== */
+.catalog-create-flyer{display:inline-flex;align-items:center;justify-content:center;gap:8px;font-weight:800;letter-spacing:.01em}
+.flyer-create-icon{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:7px;background:linear-gradient(135deg,#b58a43,#d3aa68);color:#fff;font-size:.72rem;line-height:1;box-shadow:0 2px 7px rgba(181,138,67,.2)}
+.catalog-invert-button,.catalog-clear-selection{display:inline-flex;align-items:center;justify-content:center;gap:6px}
+.catalog-clear-selection{border-color:#d9d1c5!important;background:#fff!important;color:#5c554d!important}
+.catalog-clear-selection:hover{border-color:#b58a43!important;color:#171513!important;background:#fbf8f2!important}
+.flyer-contact-field{display:grid;gap:6px;margin:-4px 0 16px!important}
+.flyer-contact-field>span{font-size:.66rem;color:#625d56;font-weight:800}
+.flyer-contact-field input{box-sizing:border-box;width:100%;border:1px solid #ddd8cf;border-radius:9px;background:#fff;color:#26231f;padding:10px 11px;font:inherit;font-size:.76rem;outline:0}
+.flyer-contact-field input:focus{border-color:#b58a43;box-shadow:0 0 0 3px rgba(181,138,67,.1)}
+.flyer-preview-price-row{justify-content:flex-start!important}
+.flyer-preview-price-row strong{font-size:1rem!important}
+.flyer-product-bottom{justify-content:flex-start!important}
+@media(max-width:1050px){.catalog-search-toolbar{grid-template-columns:minmax(230px,1.8fr) repeat(4,minmax(118px,.62fr)) auto auto}.catalog-clear-selection{grid-column:auto}}
+@media(max-width:760px){.catalog-search-toolbar{grid-template-columns:1fr 1fr}.catalog-clear-selection{grid-column:auto;width:100%}.catalog-create-flyer{width:100%}}
+.flyer-contact-field.is-muted{opacity:.58}
+.flyer-contact-field.is-muted input{background:#f7f5f1}

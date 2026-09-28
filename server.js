@@ -715,6 +715,7 @@ app.use((req, res, next) => {
   next();
 });
 app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 app.use(cookieParser());
 
 
@@ -1212,7 +1213,7 @@ function flyerRoundRect(ops, x, y, w, h, r = 7, fill = false) {
 }
 
 
-async function buildFlyerPdf({ products, title, subtitle, description, layout, orientation, showPrices, theme, accent, logo, contact, notes }) {
+async function buildFlyerPdf({ products, title, subtitle, description, layout, orientation, showPrices, theme, accent, logo, contact, contactName, notes }) {
   const isLandscape = orientation === 'landscape';
   const W = isLandscape ? 842 : 595;
   const H = isLandscape ? 595 : 842;
@@ -1292,10 +1293,7 @@ async function buildFlyerPdf({ products, title, subtitle, description, layout, o
       flyerFill(ops, 0.25, 0.20, 0.12); flyerPdfText(ops, note.slice(0, featured ? 55 : 28), copyX + 6, Math.max(cardY + 35, cy + 3), featured ? 7 : 5.5, 2);
     }
     const price = Number(product.salePrice ?? product.price ?? 0);
-    const stock = Number(product.stock || 0);
     flyerFill(ops, ar, ag, ab); flyerPdfText(ops, showPrices ? `$${price.toFixed(2)}` : '', copyX, cardY + 18, featured ? 18 : (cols === 4 ? 9 : 11), 2);
-    flyerFill(ops, stock > 0 ? 0.16 : 0.55, stock > 0 ? 0.43 : 0.20, stock > 0 ? 0.29 : 0.17);
-    flyerPdfText(ops, stock > 0 ? `${stock} disponibles` : 'Sin stock', x + w - 8, cardY + 19, featured ? 8 : 5.8, 2, 'right');
   };
 
   for (let pageIndex = 0; pageIndex < pages.length; pageIndex++) {
@@ -1341,7 +1339,10 @@ async function buildFlyerPdf({ products, title, subtitle, description, layout, o
     }
     flyerStroke(ops, 0.86, 0.83, 0.78); flyerLine(ops, margin, margin + 14, W - margin, margin + 14, 0.7);
     flyerFill(ops, 0.45, 0.43, 0.40); flyerPdfText(ops, 'YHORS · MÁS QUE UN PRODUCTO', margin, margin + 3, 5.5, 1);
-    flyerPdfText(ops, `${cleanProducts.length} producto${cleanProducts.length === 1 ? '' : 's'}`, W - margin, margin + 3, 5.5, 1, 'right');
+    if (contact) {
+      flyerFill(ops, ar, ag, ab); flyerPdfText(ops, `Contacto: ${contactName || 'Equipo YHORS'}`, W / 2, margin + 3, 5.5, 2, 'center');
+    }
+    flyerFill(ops, 0.45, 0.43, 0.40); flyerPdfText(ops, `${cleanProducts.length} producto${cleanProducts.length === 1 ? '' : 's'}`, W - margin, margin + 3, 5.5, 1, 'right');
     streams.push(ops.join('\n'));
   }
 
@@ -1390,8 +1391,16 @@ async function buildFlyerPdf({ products, title, subtitle, description, layout, o
 app.post('/api/admin/flyers/pdf', requireOrdersAccess, async (req, res) => {
   try {
     const body = req.body || {};
-    const ids = Array.isArray(body.ids) ? [...new Set(body.ids.map(String))].slice(0, 80) : [];
+    let rawIds = body.ids;
+    if (typeof rawIds === 'string') {
+      try { rawIds = JSON.parse(rawIds); } catch { rawIds = rawIds.split(',').map(x => x.trim()).filter(Boolean); }
+    }
+    const ids = Array.isArray(rawIds) ? [...new Set(rawIds.map(String))].slice(0, 80) : [];
     if (!ids.length) return res.status(400).json({ error: 'Selecciona al menos un producto.' });
+    let parsedNotes = body.notes;
+    if (typeof parsedNotes === 'string') {
+      try { parsedNotes = JSON.parse(parsedNotes); } catch { parsedNotes = {}; }
+    }
     const all = readProducts().map(normalizeProduct);
     const products = ids.map(id => all.find(p => String(p.id) === id)).filter(Boolean).map(p => ({
       id: p.id, name: p.name, description: p.description || '', category: p.category, brand: p.brand || '', productType: p.productType || '', sku: p.sku || '', salePrice: Number(p.salePrice ?? p.price ?? 0), stock: Number(p.stock || 0), image: p.image || '', images: Array.isArray(p.images) ? p.images.filter(Boolean) : []
@@ -1408,8 +1417,9 @@ app.post('/api/admin/flyers/pdf', requireOrdersAccess, async (req, res) => {
       theme: String(body.theme || 'none'),
       accent: String(body.accent || '#b58a43'),
       logo: body.logo !== 'none',
-      contact: Boolean(body.contact),
-      notes: body.notes && typeof body.notes === 'object' ? body.notes : {}
+      contact: body.contact === true || body.contact === 'true' || body.contact === 'on',
+      contactName: String(body.contactName || '').slice(0, 100),
+      notes: parsedNotes && typeof parsedNotes === 'object' ? parsedNotes : {}
     });
     const safeTitle = String(body.title || 'flyer').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9_-]+/g,'-').replace(/^-+|-+$/g,'').slice(0, 60) || 'flyer';
     res.setHeader('Content-Type', 'application/pdf');

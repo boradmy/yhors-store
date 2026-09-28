@@ -3185,7 +3185,6 @@ function flyerProductHighlights(product) {
 }
 
 function flyerProductPreviewCard(product, index, draft, compact = false) {
-  const stock = Number(product.stock || 0);
   const highlights = flyerProductHighlights(product);
   const note = draft.notes?.[product.id] || '';
   return `<article class="flyer-product ${compact ? 'flyer-product-compact' : ''}">
@@ -3195,7 +3194,7 @@ function flyerProductPreviewCard(product, index, draft, compact = false) {
       <h2>${escapeHTML(product.name)}</h2>
       <div class="flyer-meta-line"><span>${escapeHTML(product.productType || categories[product.category] || 'Producto')}</span><span>SKU ${escapeHTML(product.sku || '—')}</span></div>
       ${highlights.length && !compact ? `<ul class="flyer-highlights">${highlights.map(x=>`<li>${escapeHTML(x)}</li>`).join('')}</ul>` : ''}
-      <div class="flyer-product-bottom">${draft.showPrices ? `<strong class="flyer-price">${money(product.salePrice ?? product.price ?? 0)}</strong>` : '<span></span>'}<span class="flyer-stock ${stock > 0 ? 'available' : 'empty'}">${stock > 0 ? `${stock} disponibles` : 'Sin stock'}</span></div>
+      ${draft.showPrices ? `<div class="flyer-product-bottom"><strong class="flyer-price">${money(product.salePrice ?? product.price ?? 0)}</strong></div>` : ''}
     </div>
   </article>`;
 }
@@ -3213,6 +3212,7 @@ function flyerPreviewDraftFromModal(modal, selected) {
     accent: modal.querySelector('#flyerAccent')?.value || '#b58a43',
     logo: modal.querySelector('#flyerLogo')?.value || 'yhors',
     contact: !!modal.querySelector('#flyerContact')?.checked,
+    contactName: modal.querySelector('#flyerContactName')?.value.trim() || '',
     notes: {}
   };
   modal.querySelectorAll('[data-flyer-note-row]').forEach(row=>{
@@ -3229,7 +3229,6 @@ function flyerMiniPreview(products, draft) {
   const shown = products.slice(0, layout === '1' ? 1 : 6);
   const extra = Math.max(0, products.length - shown.length);
   const card = (p, i, featured = false) => {
-    const stock = Number(p.stock || 0);
     const highlights = flyerProductHighlights(p).slice(0, 3);
     const note = draft.notes?.[p.id] || '';
     return `<article class="flyer-preview-card ${featured ? 'is-featured' : ''}">
@@ -3239,7 +3238,7 @@ function flyerMiniPreview(products, draft) {
         <h2>${escapeHTML(p.name || 'Producto')}</h2>
         <div class="flyer-meta-line"><span>${escapeHTML(p.productType || categories[p.category] || 'Producto')}</span><span>SKU ${escapeHTML(p.sku || '—')}</span></div>
         ${highlights.length ? `<ul>${highlights.map(x=>`<li>${escapeHTML(x)}</li>`).join('')}</ul>` : ''}
-        <div class="flyer-preview-price-row">${draft.showPrices ? `<strong>${money(p.salePrice ?? p.price ?? 0)}</strong>` : ''}<span class="flyer-stock ${stock > 0 ? 'available' : 'empty'}">${stock > 0 ? `${stock} disponibles` : 'Sin stock'}</span></div>
+        ${draft.showPrices ? `<div class="flyer-preview-price-row"><strong>${money(p.salePrice ?? p.price ?? 0)}</strong></div>` : ''}
       </div>
     </article>`;
   };
@@ -3261,7 +3260,7 @@ function flyerMiniPreview(products, draft) {
   </div>`;
 }
 
-function flyerGeneratorModal(products = [], selectedIds = []) {
+function flyerGeneratorModal(products = [], selectedIds = [], defaultContactName = '') {
   const selected = products.filter(p => selectedIds.includes(String(p.id)));
   const notes = selected.map(p => ({ id: p.id, note: '' }));
   return `<div class="flyer-modal" id="flyerModal" role="dialog" aria-modal="true" aria-labelledby="flyerModalTitle">
@@ -3284,6 +3283,7 @@ function flyerGeneratorModal(products = [], selectedIds = []) {
             <label><span>Tema</span><select id="flyerTheme"><option value="none">YHORS Minimal</option><option value="editorial">Editorial</option><option value="luxury">Luxury</option><option value="midnight">Midnight</option></select></label>
           </div>
           <div class="flyer-toggle-row"><label class="flyer-check"><input id="flyerShowPrices" type="checkbox" checked><span>Mostrar precios</span></label><label class="flyer-check"><input id="flyerContact" type="checkbox"><span>Incluir contacto</span></label></div>
+          <label id="flyerContactNameWrap" class="flyer-contact-field"><span>Nombre / contacto que aparecerá en el flyer</span><input id="flyerContactName" maxlength="100" value="${escapeHTML(defaultContactName)}" placeholder="Ej.: Juan Pérez · Ventas YHORS"></label>
 
           <div class="flyer-section-title"><span>03</span><div><strong>Identidad</strong><small>Colores y marca YHORS</small></div></div>
           <div class="flyer-color-row"><div><span>Color de acento</span><div class="flyer-swatches"><button type="button" class="flyer-swatch active" data-flyer-accent="#b58a43" style="--swatch:#b58a43" aria-label="Dorado"></button><button type="button" class="flyer-swatch" data-flyer-accent="#171513" style="--swatch:#171513" aria-label="Negro"></button><button type="button" class="flyer-swatch" data-flyer-accent="#2f67d8" style="--swatch:#2f67d8" aria-label="Azul"></button><button type="button" class="flyer-swatch" data-flyer-accent="#8d3bd8" style="--swatch:#8d3bd8" aria-label="Violeta"></button><button type="button" class="flyer-swatch" data-flyer-accent="#e85c12" style="--swatch:#e85c12" aria-label="Naranja"></button><button type="button" class="flyer-swatch" data-flyer-accent="#1b6f45" style="--swatch:#1b6f45" aria-label="Verde"></button></div></div><input type="hidden" id="flyerAccent" value="#b58a43"></div>
@@ -3316,7 +3316,7 @@ async function renderAdminCatalogSearch() {
     ${adminSectionNav(session, 'buscar-productos')}
     <section class="catalog-search-hero"><div><span class="eyebrow">Catálogo interno · ${escapeHTML(roleLabel)}</span><h2>Encuentra. Consulta. Selecciona.</h2><p>Precios de venta, stock, marca y datos comerciales en una sola vista. Disponible para vendedores, jefes y administradores.</p></div><div class="catalog-search-count"><strong id="catalogResultCount">0</strong><span>productos visibles</span></div></section>
     <section class="catalog-search-toolbar"><label class="catalog-main-search"><span>⌕</span><input id="catalogMainSearch" type="search" placeholder="Buscar por código, nombre, modelo o marca…" autocomplete="off"><button id="catalogClearSearch" type="button" aria-label="Limpiar">×</button></label><select id="catalogBrandFilter"><option value="">Todas las marcas</option>${brands.map(b=>`<option value="${escapeHTML(b)}">${escapeHTML(b)}</option>`).join('')}</select><select id="catalogCategoryFilter"><option value="">Todas las categorías</option>${categoryEntries.map(([k,v])=>`<option value="${escapeHTML(k)}">${escapeHTML(v)}</option>`).join('')}</select><select id="catalogStockFilter"><option value="">Todo el stock</option><option value="available">Disponibles</option><option value="empty">Sin stock</option></select><select id="catalogSort"><option value="name">Nombre A–Z</option><option value="price-asc">Precio menor</option><option value="price-desc">Precio mayor</option><option value="stock-desc">Mayor stock</option></select><button class="button primary catalog-search-button" id="catalogSearchButton" type="button">⌕ Buscar</button><button class="button secondary catalog-invert-button" id="catalogInvertButton" type="button">⇄ Invertir</button><button class="button secondary catalog-clear-selection" id="catalogClearSelection" type="button">⌫ Olvidar</button></section>
-    <section class="catalog-search-meta"><div><span class="eyebrow">Selección para flyer</span><strong id="catalogSelectionCount">0 seleccionados</strong></div><button type="button" class="button secondary small" id="catalogGenerateFlyer" disabled>🎨 Crear Flyer</button></section>
+    <section class="catalog-search-meta"><div><span class="eyebrow">Selección para flyer</span><strong id="catalogSelectionCount">0 seleccionados</strong></div><button type="button" class="button secondary small catalog-create-flyer" id="catalogGenerateFlyer" disabled><span class="flyer-create-icon" aria-hidden="true">✦</span> Crear flyer</button></section>
     <section class="catalog-search-grid" id="catalogSearchGrid"></section>
   </div></main>`;
   wireAccountMenu();
@@ -3355,7 +3355,7 @@ async function renderAdminCatalogSearch() {
     if (!selectedIds.size) return;
     const selected = products.filter(p=>selectedIds.has(String(p.id)));
     document.querySelector('#flyerModal')?.remove();
-    document.body.insertAdjacentHTML('beforeend', flyerGeneratorModal(products, selected.map(p=>String(p.id))));
+    document.body.insertAdjacentHTML('beforeend', flyerGeneratorModal(products, selected.map(p=>String(p.id)), session.username || ''));
     const modal=document.querySelector('#flyerModal');
     const close=()=>{modal?.remove();document.body.classList.remove('no-scroll');};
     modal?.querySelectorAll('[data-flyer-close]').forEach(el=>el.addEventListener('click',close));
@@ -3366,40 +3366,42 @@ async function renderAdminCatalogSearch() {
       if (preview) preview.innerHTML = flyerMiniPreview(selected, draft);
       const countEl = modal?.querySelector('#flyerPreviewCount');
       if (countEl) countEl.textContent = `${selected.length} producto${selected.length===1?'':'s'}`;
+      const contactField = modal?.querySelector('#flyerContactNameWrap');
+      if (contactField) contactField.classList.toggle('is-muted', !draft.contact);
       wireImageFallback(preview);
     };
     modal?.querySelectorAll('[data-flyer-accent]').forEach(btn=>btn.addEventListener('click',()=>{modal.querySelectorAll('.flyer-swatch').forEach(x=>x.classList.remove('active'));btn.classList.add('active');modal.querySelector('#flyerAccent').value=btn.dataset.flyerAccent;refreshPreview();}));
     modal?.querySelectorAll('input,select,textarea').forEach(el=>el.addEventListener(el.type==='text'||el.tagName==='TEXTAREA'?'input':'change',refreshPreview));
     refreshPreview();
-    modal?.querySelector('#generateFlyerButton')?.addEventListener('click',async()=>{
+    modal?.querySelector('#generateFlyerButton')?.addEventListener('click',()=>{
       const button = modal.querySelector('#generateFlyerButton');
       const draft=flyerPreviewDraftFromModal(modal, selected);
-      const tab=window.open('about:blank','_blank','noopener');
+      const targetName = `yhors_flyer_pdf_${Date.now()}`;
+      const tab=window.open('', targetName);
       if(!tab){ alert('Permite las ventanas emergentes para abrir el PDF en una pestaña nueva.'); return; }
       button.disabled=true;
-      button.textContent='Generando PDF…';
-      try {
-        const response = await fetch('/api/admin/flyers/pdf', {
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({ ...draft, ids:selected.map(p=>String(p.id)) })
-        });
-        if(!response.ok) throw new Error((await response.json().catch(()=>({})))?.error || 'No se pudo generar el PDF.');
-        const blob=await response.blob();
-        const url=URL.createObjectURL(blob);
-        tab.location.href=url;
-        setTimeout(()=>URL.revokeObjectURL(url),120000);
-        close();
-      } catch(error) {
-        try{tab.close();}catch(_){ }
-        button.disabled=false;
-        button.textContent='Generar PDF ↗';
-        alert(error.message || 'No se pudo generar el PDF.');
-      }
+      button.innerHTML='<span class="flyer-create-icon" aria-hidden="true">◌</span> Generando PDF…';
+      const form=document.createElement('form');
+      form.method='POST';
+      form.action='/api/admin/flyers/pdf';
+      form.target=targetName;
+      form.style.display='none';
+      const payload={...draft, ids:selected.map(p=>String(p.id))};
+      Object.entries(payload).forEach(([key,value])=>{
+        const input=document.createElement('input');
+        input.type='hidden';
+        input.name=key;
+        input.value=typeof value==='object' ? JSON.stringify(value) : String(value ?? '');
+        form.appendChild(input);
+      });
+      document.body.appendChild(form);
+      form.submit();
+      form.remove();
+      setTimeout(()=>close(),250);
     });
   };
   flyerButton.addEventListener('click',openFlyer);
-  document.querySelector('#catalogInvertButton')?.addEventListener('click',()=>{products.forEach(p=>{const id=String(p.id); if(selectedIds.has(id)) selectedIds.delete(id); else selectedIds.add(id);}); draw();});
+  document.querySelector('#catalogInvertButton')?.addEventListener('click',()=>{getFiltered().forEach(p=>{const id=String(p.id); if(selectedIds.has(id)) selectedIds.delete(id); else selectedIds.add(id);}); draw();});
   document.querySelector('#catalogClearSelection')?.addEventListener('click',()=>{selectedIds.clear(); draw();});
   document.querySelector('#catalogSearchButton')?.addEventListener('click',draw);
   [searchInput,brandFilter,categoryFilter,stockFilter,sortSelect].forEach(el=>el?.addEventListener(el===searchInput?'input':'change',draw));
