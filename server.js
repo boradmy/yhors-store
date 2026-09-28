@@ -1287,11 +1287,36 @@ function flyerFill(ops, r, g, b) { ops.push(`${r} ${g} ${b} rg`); }
 function flyerStroke(ops, r, g, b) { ops.push(`${r} ${g} ${b} RG`); }
 function flyerLine(ops, x1, y1, x2, y2, width = 0.5) { ops.push(`${width} w ${x1} ${y1} m ${x2} ${y2} l S`); }
 function flyerRect(ops, x, y, w, h, width = 0.6) { ops.push(`${width} w ${x} ${y} ${w} ${h} re S`); }
-function flyerRoundRect(ops, x, y, w, h, r = 7, fill = false) {
+function flyerRoundRect(ops, x, y, w, h, r = 6, fill = false, width = 0.6) {
+  // Rounded rectangle with genuinely straight sides and only the four corners
+  // rounded. The previous PDF version used a larger/visually heavier curve
+  // that made the card sides look bowed.
   const k = 0.5522847498;
   const rr = Math.max(0, Math.min(r, Math.min(w, h) / 2));
   const c = rr * k;
-  ops.push(`${0.6} w ${x + rr} ${y} m ${x + w - rr} ${y} l ${x + w - rr + c} ${y} ${x + w} ${y + rr - c} ${x + w} ${y + rr} c ${x + w} ${y + h - rr} ${x + w - rr + c} ${y + h} ${x + w - rr} ${y + h} c ${x + rr} ${y + h} ${x} ${y + h - rr + c} ${x} ${y + h - rr} c ${x} ${y + rr} ${x + rr - c} ${y} ${x + rr} ${y} c ${fill ? 'f' : 'S'}`);
+  ops.push(`${width} w ${x + rr} ${y} m ${x + w - rr} ${y}`);
+  ops.push(`${x + w - rr + c} ${y} ${x + w} ${y + rr - c} ${x + w} ${y + rr} c`);
+  ops.push(`${x + w} ${y + h - rr} l`);
+  ops.push(`${x + w} ${y + h - rr + c} ${x + w - rr + c} ${y + h} ${x + w - rr} ${y + h} c`);
+  ops.push(`${x + rr} ${y + h} l`);
+  ops.push(`${x + rr - c} ${y + h} ${x} ${y + h - rr + c} ${x} ${y + h - rr} c`);
+  ops.push(`${x} ${y + rr} l`);
+  ops.push(`${x} ${y + rr - c} ${x + rr - c} ${y} ${x + rr} ${y} c`);
+  ops.push(fill ? 'f' : 'S');
+}
+
+function flyerTopPanel(ops, x, y, w, h, r = 7) {
+  // Cream image panel: rounded only at the top corners, straight on the
+  // bottom edge so it reads like the elegant preview card.
+  const k = 0.5522847498;
+  const rr = Math.max(0, Math.min(r, Math.min(w, h) / 2));
+  const c = rr * k;
+  ops.push(`1 1 1 rg`);
+  ops.push(`${x} ${y} m ${x + w} ${y} l ${x + w} ${y + h - rr} l`);
+  ops.push(`${x + w} ${y + h - rr + c} ${x + w - rr + c} ${y + h} ${x + w - rr} ${y + h} c`);
+  ops.push(`${x + rr} ${y + h} l`);
+  ops.push(`${x + rr - c} ${y + h} ${x} ${y + h - rr + c} ${x} ${y + h - rr} c`);
+  ops.push(`h f`);
 }
 
 
@@ -1352,7 +1377,7 @@ async function buildFlyerPdf({ products, title, subtitle, description, layout, o
     // zona de imagen lo tape.
     flyerFill(ops, 1, 1, 1);
     flyerStroke(ops, 0.88, 0.86, 0.82);
-    flyerRoundRect(ops, x, y, w, h, 9, true);
+    flyerRoundRect(ops, x, y, w, h, 6, true, 0.65);
 
     const imageUrls = [...new Set([
       product.imageData || '',
@@ -1372,24 +1397,24 @@ async function buildFlyerPdf({ products, title, subtitle, description, layout, o
       imageY = y + h - imageH;
       copyY = imageY - 10;
       copyX = x + 10; copyW = w - 20;
+      // Panel de imagen: mismo lenguaje visual de la vista previa: crema,
+      // limpio y recto en la parte inferior, con curvas discretas solo arriba.
       flyerFill(ops, 0.965, 0.95, 0.92);
-      // Panel de imagen: mantiene el look crema de la vista previa, pero sin
-      // crear un segundo marco independiente. El marco real es el exterior.
-      flyerRoundRect(ops, imageX + 1, imageY, imageW - 2, imageH, 8, true);
+      flyerTopPanel(ops, imageX + 0.6, imageY, imageW - 1.2, imageH, 7);
     } else if (mode === 'horizontal') {
       imageW = w * 0.43;
       copyX = x + imageW + gap;
       copyW = w - imageW - gap - 12;
       copyY = y + h - 16;
-      flyerFill(ops, 0.965, 0.95, 0.92); flyerRoundRect(ops, x, y, imageW, h, 8, true);
-      flyerStroke(ops, 0.91, 0.88, 0.83); flyerRoundRect(ops, x, y, imageW, h, 8, false);
+      flyerFill(ops, 0.965, 0.95, 0.92); flyerRoundRect(ops, x, y, imageW, h, 6, true);
+      flyerStroke(ops, 0.91, 0.88, 0.83); flyerRoundRect(ops, x, y, imageW, h, 6, false);
     } else {
       imageW = w * 0.48;
       copyX = x + imageW + 20;
       copyW = w - imageW - 32;
       copyY = y + h - 28;
-      flyerFill(ops, 0.965, 0.95, 0.92); flyerRoundRect(ops, x, y, imageW, h, 8, true);
-      flyerStroke(ops, 0.91, 0.88, 0.83); flyerRoundRect(ops, x, y, imageW, h, 8, false);
+      flyerFill(ops, 0.965, 0.95, 0.92); flyerRoundRect(ops, x, y, imageW, h, 6, true);
+      flyerStroke(ops, 0.91, 0.88, 0.83); flyerRoundRect(ops, x, y, imageW, h, 6, false);
     }
 
     if (image) {
@@ -1456,7 +1481,7 @@ async function buildFlyerPdf({ products, title, subtitle, description, layout, o
     // por los laterales y llega hasta debajo del precio, sin ser cortado por
     // el panel de imagen ni por los textos.
     flyerStroke(ops, 0.88, 0.86, 0.82);
-    flyerRoundRect(ops, x, y, w, h, 9, false);
+    flyerRoundRect(ops, x, y, w, h, 6, false, 0.65);
   };
 
   for (let pageIndex = 0; pageIndex < pages.length; pageIndex++) {
