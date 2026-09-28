@@ -3231,7 +3231,8 @@ function flyerMiniPreview(products, draft) {
   const card = (p, i, featured = false) => {
     const highlights = flyerProductHighlights(p).slice(0, 3);
     const note = draft.notes?.[p.id] || '';
-    return `<article class="flyer-preview-card ${featured ? 'is-featured' : ''}">
+    const cardClass = `flyer-preview-card ${featured ? 'is-featured' : ''} layout-card-${layout}`;
+    return `<article class="${cardClass}">
       <div class="flyer-preview-card-image"><img src="${escapeHTML(catalogProductImage(p))}" alt="${escapeHTML(p.name || 'Producto')}" data-fallback><span class="flyer-index">${String(i + 1).padStart(2,'0')}</span>${note ? `<span class="flyer-promo">${escapeHTML(note)}</span>` : ''}</div>
       <div class="flyer-preview-card-info">
         <span class="flyer-brand">${escapeHTML(p.brand || categories[p.category] || 'YHORS')}</span>
@@ -3316,7 +3317,7 @@ async function renderAdminCatalogSearch() {
     ${adminSectionNav(session, 'buscar-productos')}
     <section class="catalog-search-hero"><div><span class="eyebrow">Catálogo interno · ${escapeHTML(roleLabel)}</span><h2>Encuentra. Consulta. Selecciona.</h2><p>Precios de venta, stock, marca y datos comerciales en una sola vista. Disponible para vendedores, jefes y administradores.</p></div><div class="catalog-search-count"><strong id="catalogResultCount">0</strong><span>productos visibles</span></div></section>
     <section class="catalog-search-toolbar"><label class="catalog-main-search"><span>⌕</span><input id="catalogMainSearch" type="search" placeholder="Buscar por código, nombre, modelo o marca…" autocomplete="off"><button id="catalogClearSearch" type="button" aria-label="Limpiar">×</button></label><select id="catalogBrandFilter"><option value="">Todas las marcas</option>${brands.map(b=>`<option value="${escapeHTML(b)}">${escapeHTML(b)}</option>`).join('')}</select><select id="catalogCategoryFilter"><option value="">Todas las categorías</option>${categoryEntries.map(([k,v])=>`<option value="${escapeHTML(k)}">${escapeHTML(v)}</option>`).join('')}</select><select id="catalogStockFilter"><option value="">Todo el stock</option><option value="available">Disponibles</option><option value="empty">Sin stock</option></select><select id="catalogSort"><option value="name">Nombre A–Z</option><option value="price-asc">Precio menor</option><option value="price-desc">Precio mayor</option><option value="stock-desc">Mayor stock</option></select><button class="button primary catalog-search-button" id="catalogSearchButton" type="button">⌕ Buscar</button><button class="button secondary catalog-invert-button" id="catalogInvertButton" type="button">⇄ Invertir</button><button class="button secondary catalog-clear-selection" id="catalogClearSelection" type="button">⌫ Olvidar</button></section>
-    <section class="catalog-search-meta"><div><span class="eyebrow">Selección para flyer</span><strong id="catalogSelectionCount">0 seleccionados</strong></div><button type="button" class="button secondary small catalog-create-flyer" id="catalogGenerateFlyer" disabled><span class="flyer-create-icon" aria-hidden="true">✦</span> Crear flyer</button></section>
+    <section class="catalog-search-meta"><div><span class="eyebrow">Selección para flyer</span><strong id="catalogSelectionCount">0 seleccionados</strong></div><button type="button" class="button secondary small catalog-create-flyer" id="catalogGenerateFlyer" disabled><span class="flyer-create-icon" aria-hidden="true">✧</span> Crear Flyer</button></section>
     <section class="catalog-search-grid" id="catalogSearchGrid"></section>
   </div></main>`;
   wireAccountMenu();
@@ -3373,31 +3374,37 @@ async function renderAdminCatalogSearch() {
     modal?.querySelectorAll('[data-flyer-accent]').forEach(btn=>btn.addEventListener('click',()=>{modal.querySelectorAll('.flyer-swatch').forEach(x=>x.classList.remove('active'));btn.classList.add('active');modal.querySelector('#flyerAccent').value=btn.dataset.flyerAccent;refreshPreview();}));
     modal?.querySelectorAll('input,select,textarea').forEach(el=>el.addEventListener(el.type==='text'||el.tagName==='TEXTAREA'?'input':'change',refreshPreview));
     refreshPreview();
-    modal?.querySelector('#generateFlyerButton')?.addEventListener('click',()=>{
+    modal?.querySelector('#generateFlyerButton')?.addEventListener('click',async()=>{
       const button = modal.querySelector('#generateFlyerButton');
       const draft=flyerPreviewDraftFromModal(modal, selected);
       const targetName = `yhors_flyer_pdf_${Date.now()}`;
-      const tab=window.open('', targetName);
+      const tab=window.open('about:blank', targetName);
       if(!tab){ alert('Permite las ventanas emergentes para abrir el PDF en una pestaña nueva.'); return; }
       button.disabled=true;
       button.innerHTML='<span class="flyer-create-icon" aria-hidden="true">◌</span> Generando PDF…';
-      const form=document.createElement('form');
-      form.method='POST';
-      form.action='/api/admin/flyers/pdf';
-      form.target=targetName;
-      form.style.display='none';
-      const payload={...draft, ids:selected.map(p=>String(p.id))};
-      Object.entries(payload).forEach(([key,value])=>{
-        const input=document.createElement('input');
-        input.type='hidden';
-        input.name=key;
-        input.value=typeof value==='object' ? JSON.stringify(value) : String(value ?? '');
-        form.appendChild(input);
-      });
-      document.body.appendChild(form);
-      form.submit();
-      form.remove();
-      setTimeout(()=>close(),250);
+      try {
+        const payload={...draft, ids:selected.map(p=>String(p.id))};
+        const body=new URLSearchParams();
+        Object.entries(payload).forEach(([key,value])=>body.set(key, typeof value==='object' ? JSON.stringify(value) : String(value ?? '')));
+        const response=await fetch('/api/admin/flyers/pdf',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'},body});
+        if(!response.ok) {
+          let message='No se pudo generar el PDF.';
+          try { const data=await response.json(); message=data.error||message; } catch (_) {}
+          throw new Error(message);
+        }
+        const blob=await response.blob();
+        if(!blob.size) throw new Error('El PDF generado está vacío.');
+        const url=URL.createObjectURL(blob);
+        tab.location.replace(url);
+        setTimeout(()=>URL.revokeObjectURL(url),120000);
+        setTimeout(()=>close(),250);
+      } catch(error) {
+        tab.document.open();
+        tab.document.write('<!doctype html><html><head><title>Error generando flyer</title><style>body{font-family:Arial,sans-serif;padding:40px;background:#f7f5f1;color:#171513}main{max-width:680px;margin:10vh auto;background:#fff;padding:32px;border-radius:16px;border:1px solid #ddd8cf}h1{margin-top:0}p{color:#625d56}</style></head><body><main><h1>No se pudo generar el PDF</h1><p>'+escapeHTML(error?.message||'Ocurrió un error inesperado.')+'</p><p>Cierra esta pestaña y vuelve a intentarlo.</p></main></body></html>');
+        tab.document.close();
+        button.disabled=false;
+        button.innerHTML='<span class="flyer-create-icon" aria-hidden="true">✧</span> Generar PDF ↗';
+      }
     });
   };
   flyerButton.addEventListener('click',openFlyer);
