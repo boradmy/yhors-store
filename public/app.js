@@ -1214,7 +1214,7 @@ async function renderAdminGenerateOrder() {
       <div class="generate-order-header"><div><span class="eyebrow">Nueva orden</span><h2>Orden de venta</h2><p>Registra al cliente, selecciona sus productos y asigna el vendedor responsable.</p></div><div class="generate-doc-badge"><span>DOCUMENTO</span><strong>ORDEN DE PEDIDO</strong><small>YHORS · ${new Date().toLocaleDateString('es-EC')}</small></div></div>
       <div class="generate-top-grid">
         <section class="generate-card customer-card"><div class="generate-card-head"><div><span class="generate-card-kicker">01 · Cliente</span><h3>Información del cliente</h3></div><button type="button" class="button secondary small" id="openCustomerModal">Agregar cliente →</button></div><div id="customerSummary">${customerSummaryMarkup(customer)}</div></section>
-        <section class="generate-card seller-card"><div class="generate-card-kicker">02 · Responsable</div><h3>Vendedor</h3><p>Define quién queda responsable de esta orden.</p><label class="generate-field"><span>Vendedor asignado</span><select id="generateSeller"><option value="">Sin asignar</option>${sellers.map(s => `<option value="${escapeHTML(s.id)}" ${s.id === session.accountId ? 'selected' : ''}>${escapeHTML(s.name)} · @${escapeHTML(s.username)}</option>`).join('')}</select></label><small class="generate-field-note">${role === 'vendedor' || role === 'orders' ? 'Puedes generar la orden con tu usuario o asignarla a otro vendedor.' : 'Puedes cambiar el vendedor antes de generar la orden.'}</small></section>
+        <section class="generate-card seller-card"><div class="generate-card-kicker">02 · Responsable</div><h3>Vendedor</h3><p>Define quién queda responsable de esta orden.</p><div class="fine-person-field generate-seller-field"><span>Vendedor asignado</span><button type="button" class="fine-person-picker-trigger" id="generateSellerPickerOpen" aria-haspopup="dialog" aria-controls="generateSellerPickerModal"><span class="fine-person-picker-avatar" id="generateSellerAvatar">?</span><span class="fine-person-picker-copy"><strong id="generateSellerName">Sin asignar</strong><small id="generateSellerUsername">Puedes buscar y seleccionar un vendedor</small></span><span class="fine-person-picker-chevron">⌄</span></button><input type="hidden" id="generateSeller" value="${sellers.some(s => s.id === session.accountId) ? escapeHTML(session.accountId) : ''}"></div><small class="generate-field-note">${role === 'vendedor' || role === 'orders' ? 'Puedes generar la orden con tu usuario o asignarla a otro vendedor.' : 'Puedes cambiar el vendedor antes de generar la orden.'}</small></section>
       </div>
       <section class="generate-card generate-products-card"><div class="generate-card-head"><div><span class="generate-card-kicker">03 · Productos</span><h3>Detalle de la orden</h3></div><button type="button" class="button primary small" id="openProductPicker">+ Agregar productos</button></div><div class="generate-products-table-head"><span>Producto</span><span>Cant.</span><span>Precio</span><span>Total</span><span></span></div><div id="generateOrderLines">${generateOrderProductRows(lines)}</div></section>
       <section class="generate-bottom-grid">
@@ -1224,6 +1224,7 @@ async function renderAdminGenerateOrder() {
     </section>
     <div class="generate-modal" id="customerModal" hidden><div class="generate-modal-backdrop" data-close-generate-modal="customerModal"></div><div class="generate-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="customerModalTitle"><div class="generate-modal-head"><div><span class="eyebrow">Datos del cliente</span><h2 id="customerModalTitle">Registrar cliente</h2></div><button type="button" class="generate-modal-close" data-close-generate-modal="customerModal">×</button></div><form id="generateCustomerForm"><div class="form-grid"><div class="field full"><label for="genCustomerName">Nombre completo</label><input id="genCustomerName" required maxlength="100" placeholder="Nombre del cliente"></div><div class="field"><label for="genCustomerCedula">Cédula / RUC</label><input id="genCustomerCedula" required inputmode="numeric" maxlength="13" placeholder="0102030405"></div><div class="field"><label for="genCustomerPhone">Celular</label><input id="genCustomerPhone" required maxlength="40" placeholder="099 999 9999"></div><div class="field"><label for="genCustomerEmail">Correo</label><input id="genCustomerEmail" type="email" maxlength="120" placeholder="cliente@correo.com"></div><div class="field"><label for="genCustomerCity">Ciudad</label><input id="genCustomerCity" required maxlength="80" placeholder="Quito"></div><div class="field full"><label for="genCustomerAddress">Dirección</label><input id="genCustomerAddress" maxlength="240" placeholder="Dirección de entrega"></div><div class="field full"><label for="genCustomerMaps">Google Maps (opcional)</label><input id="genCustomerMaps" type="url" maxlength="500" placeholder="https://maps.google.com/..."></div></div><div class="generate-modal-actions"><button type="button" class="button secondary" data-close-generate-modal="customerModal">Cancelar</button><button type="submit" class="button primary">Guardar cliente</button></div></form></div></div></div>
     <div class="generate-modal" id="productPickerModal" hidden><div class="generate-modal-backdrop" data-close-generate-modal="productPickerModal"></div><div class="generate-modal-dialog generate-product-picker" role="dialog" aria-modal="true" aria-labelledby="productPickerTitle"><div class="generate-modal-head"><div><span class="eyebrow">Catálogo YHORS</span><h2 id="productPickerTitle">Agregar productos</h2></div><button type="button" class="generate-modal-close" data-close-generate-modal="productPickerModal">×</button></div><div class="generate-picker-toolbar"><input id="generateProductSearch" type="search" placeholder="Buscar por nombre, SKU, marca…"><select id="generateProductCategory"><option value="">Todas las categorías</option><option value="elegant">Elegante</option><option value="sports">Deportes</option><option value="tech">Tech</option><option value="cosplay">Cosplay</option><option value="pets">Mascotas</option><option value="details">Details</option><option value="collectibles">Coleccionables</option></select></div><div class="generate-picker-list" id="generatePickerList"></div><div class="generate-modal-actions"><span class="generate-picker-hint">Puedes agregar varios productos y cantidades antes de cerrar.</span><button type="button" class="button primary" data-close-generate-modal="productPickerModal">Listo</button></div></div></div></div>
+    <div class="generate-modal fine-person-modal" id="generateSellerPickerModal" hidden><div class="generate-modal-backdrop" data-close-generate-seller></div><div class="generate-modal-dialog fine-person-picker-dialog" role="dialog" aria-modal="true" aria-labelledby="generateSellerPickerTitle"><div class="generate-modal-head"><div><span class="eyebrow">Nueva orden · Responsable</span><h2 id="generateSellerPickerTitle">Seleccionar vendedor</h2><p class="fine-person-picker-subtitle">Busca al vendedor que quedará responsable de esta orden.</p></div><button type="button" class="generate-modal-close" data-close-generate-seller aria-label="Cerrar">×</button></div><div class="fine-person-picker-toolbar"><input id="generateSellerSearch" type="search" placeholder="Buscar por nombre o usuario…" autocomplete="off"></div><div class="fine-person-picker-count" id="generateSellerPickerCount"></div><div class="fine-person-picker-list" id="generateSellerPickerList"></div></div></div></div>
   </div></main>`;
 
   const openModal = id => { const modal = document.getElementById(id); if (!modal) return; modal.hidden = false; requestAnimationFrame(() => modal.classList.add('is-open')); document.body.classList.add('generate-modal-open'); };
@@ -1231,6 +1232,62 @@ async function renderAdminGenerateOrder() {
   document.querySelectorAll('[data-close-generate-modal]').forEach(el => el.addEventListener('click', () => closeModal(el.dataset.closeGenerateModal)));
   document.querySelector('#openCustomerModal')?.addEventListener('click', () => { fillCustomerForm(); openModal('customerModal'); });
   document.querySelector('#openProductPicker')?.addEventListener('click', () => { drawPicker(); openModal('productPickerModal'); });
+
+  const generateSellerModal = document.querySelector('#generateSellerPickerModal');
+  const generateSellerSearch = document.querySelector('#generateSellerSearch');
+  const generateSellerList = document.querySelector('#generateSellerPickerList');
+  const generateSellerCount = document.querySelector('#generateSellerPickerCount');
+  const generateSellerInput = document.querySelector('#generateSeller');
+  const generateSellerName = document.querySelector('#generateSellerName');
+  const generateSellerUsername = document.querySelector('#generateSellerUsername');
+  const generateSellerAvatar = document.querySelector('#generateSellerAvatar');
+  const sellerInitials = name => (String(name || 'V').trim().split(/\s+/).slice(0,2).map(part => part[0]).join('') || 'V').toUpperCase();
+  const updateGenerateSellerDisplay = () => {
+    const selected = sellers.find(s => String(s.id) === String(generateSellerInput?.value || ''));
+    if (!selected) {
+      if (generateSellerName) generateSellerName.textContent = 'Sin asignar';
+      if (generateSellerUsername) generateSellerUsername.textContent = 'Puedes buscar y seleccionar un vendedor';
+      if (generateSellerAvatar) generateSellerAvatar.textContent = '?';
+      return;
+    }
+    if (generateSellerName) generateSellerName.textContent = selected.name || selected.username || 'Vendedor';
+    if (generateSellerUsername) generateSellerUsername.textContent = `@${selected.username || 'usuario'}`;
+    if (generateSellerAvatar) generateSellerAvatar.textContent = sellerInitials(selected.name || selected.username);
+  };
+  const renderGenerateSellerPicker = () => {
+    if (!generateSellerList) return;
+    const query = (generateSellerSearch?.value || '').trim().toLowerCase();
+    const filtered = sellers.filter(s => `${s.name || ''} ${s.username || ''}`.toLowerCase().includes(query));
+    if (generateSellerCount) generateSellerCount.textContent = `${filtered.length} vendedor${filtered.length === 1 ? '' : 'es'} disponible${filtered.length === 1 ? '' : 's'}`;
+    generateSellerList.innerHTML = filtered.length ? filtered.map(s => {
+      const selected = String(generateSellerInput?.value || '') === String(s.id);
+      return `<button type="button" class="fine-person-option${selected ? ' is-selected' : ''}" data-select-generate-seller="${escapeHTML(s.id)}"><span class="fine-person-option-avatar">${escapeHTML(sellerInitials(s.name || s.username))}</span><span class="fine-person-option-copy"><strong>${escapeHTML(s.name || s.username || 'Vendedor')}</strong><small>@${escapeHTML(s.username || 'usuario')} · Vendedor</small></span><span class="fine-person-option-check">${selected ? '✓' : '›'}</span></button>`;
+    }).join('') : `<div class="fine-person-empty"><span>⌕</span><strong>No encontramos a ese vendedor</strong><small>Prueba con otro nombre o usuario.</small></div>`;
+  };
+  const openGenerateSellerPicker = () => {
+    if (!generateSellerModal) return;
+    generateSellerModal.hidden = false;
+    document.body.classList.add('generate-modal-open');
+    requestAnimationFrame(() => { generateSellerModal.classList.add('is-open'); generateSellerSearch?.focus(); });
+    renderGenerateSellerPicker();
+  };
+  const closeGenerateSellerPicker = () => {
+    if (!generateSellerModal) return;
+    generateSellerModal.classList.remove('is-open');
+    setTimeout(() => { if (generateSellerModal) generateSellerModal.hidden = true; if (!document.querySelector('.generate-modal.is-open')) document.body.classList.remove('generate-modal-open'); }, 180);
+  };
+  document.querySelector('#generateSellerPickerOpen')?.addEventListener('click', openGenerateSellerPicker);
+  generateSellerSearch?.addEventListener('input', renderGenerateSellerPicker);
+  generateSellerModal?.querySelectorAll('[data-close-generate-seller]').forEach(el => el.addEventListener('click', closeGenerateSellerPicker));
+  generateSellerModal?.addEventListener('click', event => {
+    const option = event.target.closest('[data-select-generate-seller]');
+    if (!option) return;
+    if (generateSellerInput) generateSellerInput.value = option.dataset.selectGenerateSeller || '';
+    updateGenerateSellerDisplay();
+    closeGenerateSellerPicker();
+  });
+  document.addEventListener('keydown', event => { if (event.key === 'Escape' && generateSellerModal?.classList.contains('is-open')) closeGenerateSellerPicker(); });
+  updateGenerateSellerDisplay();
 
   function fillCustomerForm() {
     document.querySelector('#genCustomerName').value = customer.name || '';

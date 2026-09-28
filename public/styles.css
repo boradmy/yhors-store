@@ -1926,6 +1926,7 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}.brand{letter-sp
 .generate-customer-summary span{font-size:.62rem;letter-spacing:.1em;color:var(--muted);font-weight:800}
 .generate-customer-summary strong{font-size:.88rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .seller-card{background:linear-gradient(145deg,#fff,#f8f5ee)}
+.generate-seller-field{margin-top:17px}.generate-seller-field>span{display:block}.generate-seller-field .fine-person-picker-trigger{min-height:62px;border-color:#cfcac0;border-radius:12px;background:#fff}.generate-seller-field .fine-person-picker-trigger:hover{border-color:#b6914c}.generate-seller-field .fine-person-picker-copy strong{font-size:.92rem}.generate-seller-field .fine-person-picker-copy small{font-size:.72rem}.generate-seller-field .fine-person-picker-avatar{background:#171717}
 .generate-field{display:grid;gap:7px;margin-top:17px}
 .generate-field>span{font-size:.68rem;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
 .generate-field input,.generate-field select,.generate-field textarea{width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid #cfcac0;border-radius:8px;background:#fff;font:inherit}
