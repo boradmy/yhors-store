@@ -1117,13 +1117,25 @@ function ordersListMarkup(orders = [], options = {}) {
       <div class="order-assignment">
         <div class="order-assignment-head"><span class="order-label">Asignado a</span><small>${isSellerRole(currentRole) ? 'Vendedor asignado a este pedido' : 'Vendedor responsable'}</small></div>
         ${canAssign
-          ? `<select class="order-assignment-select" data-order-assignment="${escapeHTML(order.id)}" disabled><option value="">Sin asignar</option>${(() => {
+          ? (() => {
               const list = [...sellers];
-              if (order.assignedSellerId && !list.some(s => s.id === order.assignedSellerId)) {
+              if (order.assignedSellerId && !list.some(s => String(s.id) === String(order.assignedSellerId))) {
                 list.unshift({ id: order.assignedSellerId, name: order.assignedSellerName || 'Vendedor asignado', username: 'asignado' });
               }
-              return list.map(s => `<option value="${escapeHTML(s.id)}" ${s.id === order.assignedSellerId ? 'selected' : ''}>${escapeHTML(s.name)} · @${escapeHTML(s.username)}</option>`).join('');
-            })()}</select>`
+              const selected = list.find(s => String(s.id) === String(order.assignedSellerId));
+              const selectedName = selected?.name || 'Sin asignar';
+              const selectedUsername = selected ? `@${selected.username || 'usuario'}` : 'Puedes seleccionar un vendedor';
+              const initials = selected ? (String(selected.name || selected.username || 'V').trim().split(/\s+/).slice(0,2).map(part => part[0]).join('') || 'V').toUpperCase() : '?';
+              const options = list.map(s => `<option value="${escapeHTML(s.id)}" ${String(s.id) === String(order.assignedSellerId) ? 'selected' : ''}>${escapeHTML(s.name)} · @${escapeHTML(s.username || 'usuario')}</option>`).join('');
+              return `<div class="order-assignment-picker">
+                <select class="order-assignment-select order-assignment-picker-source" data-order-assignment="${escapeHTML(order.id)}" aria-hidden="true" tabindex="-1" disabled><option value="">Sin asignar</option>${options}</select>
+                <button type="button" class="fine-person-picker-trigger order-assignment-picker-trigger" data-order-assignment-picker="${escapeHTML(order.id)}" disabled aria-haspopup="dialog" aria-controls="orderSellerPickerModal">
+                  <span class="fine-person-picker-avatar">${escapeHTML(initials)}</span>
+                  <span class="fine-person-picker-copy"><strong>${escapeHTML(selectedName)}</strong><small>${escapeHTML(selectedUsername)}</small></span>
+                  <span class="fine-person-picker-chevron">⌄</span>
+                </button>
+              </div>`;
+            })()
           : `<div class="order-assignment-readonly">${escapeHTML(sellerName(order))}</div>`}
       </div>
       <div class="admin-order-footer">
@@ -2027,6 +2039,114 @@ async function renderAdminOrders() {
     });
     list.innerHTML=ordersListMarkup(filtered, { canDelete, canAssign, sellers, role: session.role, products: orderProducts });
 
+    let updateOrderAssignmentDisplay = () => {};
+    // Selector elegante de vendedor para "Pedidos → Asignado a".
+    // Reutiliza el mismo lenguaje visual del selector de "Nueva orden" y "Multas".
+    if (canAssign) {
+      const previousOrderSellerModal = document.querySelector('#orderSellerPickerModal');
+      if (previousOrderSellerModal) {
+        previousOrderSellerModal.remove();
+        document.body.classList.remove('generate-modal-open');
+      }
+      const orderSellerModal = document.createElement('div');
+      orderSellerModal.className = 'generate-modal fine-person-modal';
+      orderSellerModal.id = 'orderSellerPickerModal';
+      orderSellerModal.hidden = true;
+      orderSellerModal.innerHTML = `<div class="generate-modal-backdrop" data-close-order-seller-picker></div>
+        <div class="generate-modal-dialog fine-person-picker-dialog" role="dialog" aria-modal="true" aria-labelledby="orderSellerPickerTitle">
+          <div class="generate-modal-head">
+            <div><span class="eyebrow">Pedidos · Responsable</span><h2 id="orderSellerPickerTitle">Seleccionar vendedor</h2><p class="fine-person-picker-subtitle">Busca al vendedor que quedará responsable de este pedido.</p></div>
+            <button type="button" class="generate-modal-close" data-close-order-seller-picker aria-label="Cerrar">×</button>
+          </div>
+          <div class="fine-person-picker-toolbar"><input id="orderSellerSearch" type="search" placeholder="Buscar por nombre o usuario…" autocomplete="off"></div>
+          <div class="fine-person-picker-count" id="orderSellerPickerCount"></div>
+          <div class="fine-person-picker-list" id="orderSellerPickerList"></div>
+        </div>`;
+      document.body.appendChild(orderSellerModal);
+
+      let activeOrderSellerId = null;
+      const orderSellerSearch = orderSellerModal.querySelector('#orderSellerSearch');
+      const orderSellerList = orderSellerModal.querySelector('#orderSellerPickerList');
+      const orderSellerCount = orderSellerModal.querySelector('#orderSellerPickerCount');
+      const orderSellerInitials = name => (String(name || 'V').trim().split(/\\s+/).slice(0,2).map(part => part[0]).join('') || 'V').toUpperCase();
+      const getOrderSellerOptions = id => {
+        const select = list.querySelector(`[data-order-assignment="${CSS.escape(String(id))}"]`);
+        const optionIds = Array.from(select?.options || []).map(option => option.value);
+        const result = optionIds.map(optionId => sellers.find(s => String(s.id) === String(optionId))).filter(Boolean);
+        const selectedOrder = orders.find(o => String(o.id) === String(id));
+        if (selectedOrder?.assignedSellerId && !result.some(s => String(s.id) === String(selectedOrder.assignedSellerId))) {
+          result.unshift({ id: selectedOrder.assignedSellerId, name: selectedOrder.assignedSellerName || 'Vendedor asignado', username: 'asignado' });
+        }
+        return result;
+      };
+      const renderOrderSellerPicker = () => {
+        if (!orderSellerList || !activeOrderSellerId) return;
+        const query = (orderSellerSearch?.value || '').trim().toLowerCase();
+        const options = getOrderSellerOptions(activeOrderSellerId);
+        const select = list.querySelector(`[data-order-assignment="${CSS.escape(String(activeOrderSellerId))}"]`);
+        const currentValue = select?.value || '';
+        const filteredSellers = options.filter(s => `${s.name || ''} ${s.username || ''}`.toLowerCase().includes(query));
+        const totalCount = options.length;
+        if (orderSellerCount) orderSellerCount.textContent = `${filteredSellers.length} de ${totalCount} vendedor${totalCount === 1 ? '' : 'es'} disponible${totalCount === 1 ? '' : 's'}`;
+        orderSellerList.innerHTML = `<button type="button" class="fine-person-option${!currentValue ? ' is-selected' : ''}" data-order-select-seller="">
+            <span class="fine-person-option-avatar">—</span><span class="fine-person-option-copy"><strong>Sin asignar</strong><small>Este pedido quedará pendiente de asignación</small></span><span class="fine-person-option-check">${!currentValue ? '✓' : '›'}</span>
+          </button>${filteredSellers.length ? filteredSellers.map(s => {
+            const selected = String(currentValue) === String(s.id);
+            return `<button type="button" class="fine-person-option${selected ? ' is-selected' : ''}" data-order-select-seller="${escapeHTML(s.id)}"><span class="fine-person-option-avatar">${escapeHTML(orderSellerInitials(s.name || s.username))}</span><span class="fine-person-option-copy"><strong>${escapeHTML(s.name || s.username || 'Vendedor')}</strong><small>@${escapeHTML(s.username || 'usuario')} · Vendedor</small></span><span class="fine-person-option-check">${selected ? '✓' : '›'}</span></button>`;
+          }).join('') : `<div class="fine-person-empty"><span>⌕</span><strong>No encontramos a ese vendedor</strong><small>Prueba con otro nombre o usuario.</small></div>`}`;
+      };
+      updateOrderAssignmentDisplay = id => {
+        const select = list.querySelector(`[data-order-assignment="${CSS.escape(String(id))}"]`);
+        const trigger = list.querySelector(`[data-order-assignment-picker="${CSS.escape(String(id))}"]`);
+        if (!select || !trigger) return;
+        const option = select.options[select.selectedIndex];
+        const label = (option?.textContent || '').trim();
+        const seller = sellers.find(s => String(s.id) === String(select.value));
+        const name = seller?.name || (select.value ? label.split(' · @')[0] : 'Sin asignar');
+        const username = seller?.username ? `@${seller.username}` : (select.value ? (label.split(' · @')[1] ? `@${label.split(' · @')[1]}` : 'Vendedor asignado') : 'Puedes seleccionar un vendedor');
+        const avatar = trigger.querySelector('.fine-person-picker-avatar');
+        const strong = trigger.querySelector('.fine-person-picker-copy strong');
+        const small = trigger.querySelector('.fine-person-picker-copy small');
+        if (avatar) avatar.textContent = select.value ? orderSellerInitials(name) : '?';
+        if (strong) strong.textContent = name;
+        if (small) small.textContent = username;
+      };
+
+      const openOrderSellerPicker = id => {
+        const trigger = list.querySelector(`[data-order-assignment-picker="${CSS.escape(String(id))}"]`);
+        if (!trigger || trigger.disabled) return;
+        activeOrderSellerId = id;
+        if (orderSellerSearch) orderSellerSearch.value = '';
+        orderSellerModal.hidden = false;
+        document.body.classList.add('generate-modal-open');
+        requestAnimationFrame(() => { orderSellerModal.classList.add('is-open'); orderSellerSearch?.focus(); });
+        renderOrderSellerPicker();
+      };
+      const closeOrderSellerPicker = () => {
+        orderSellerModal.classList.remove('is-open');
+        setTimeout(() => {
+          orderSellerModal.hidden = true;
+          if (!document.querySelector('.generate-modal.is-open')) document.body.classList.remove('generate-modal-open');
+        }, 180);
+        activeOrderSellerId = null;
+      };
+      list.querySelectorAll('[data-order-assignment-picker]').forEach(button => button.addEventListener('click', () => openOrderSellerPicker(button.dataset.orderAssignmentPicker)));
+      orderSellerSearch?.addEventListener('input', renderOrderSellerPicker);
+      orderSellerModal.querySelectorAll('[data-close-order-seller-picker]').forEach(el => el.addEventListener('click', closeOrderSellerPicker));
+      orderSellerModal.addEventListener('click', event => {
+        const option = event.target.closest('[data-order-select-seller]');
+        if (!option || !activeOrderSellerId) return;
+        const select = list.querySelector(`[data-order-assignment="${CSS.escape(String(activeOrderSellerId))}"]`);
+        if (!select) return;
+        select.value = option.dataset.orderSelectSeller || '';
+        select.dataset.changed = 'true';
+        updateOrderAssignmentDisplay(activeOrderSellerId);
+        closeOrderSellerPicker();
+      });
+      orderSellerModal.addEventListener('keydown', event => { if (event.key === 'Escape' && orderSellerModal.classList.contains('is-open')) closeOrderSellerPicker(); });
+      list.querySelectorAll('[data-order-assignment-picker]').forEach(button => updateOrderAssignmentDisplay(button.dataset.orderAssignmentPicker));
+    }
+
     // Los campos del pedido permanecen bloqueados hasta pulsar "Editar pedido".
     // Los cambios de estado se guardan junto con nota y asignación.
     list.querySelectorAll('[data-order-toggle]').forEach(button=>button.addEventListener('click',()=>{ const details=document.querySelector(`#orderDetails-${button.dataset.orderToggle}`); if(!details) return; const opening=details.hidden; details.hidden=!opening; button.setAttribute('aria-expanded',String(opening)); button.closest('.admin-order')?.classList.toggle('is-open',opening); }));
@@ -2146,6 +2266,8 @@ async function renderAdminOrders() {
       textarea.disabled = false;
       if (statusSelect) statusSelect.disabled = false;
       if (assignment) assignment.disabled = false;
+      const assignmentPicker = list.querySelector(`[data-order-assignment-picker="${id}"]`);
+      if (assignmentPicker) assignmentPicker.disabled = false;
       const productsButton = list.querySelector(`[data-order-items-edit="${id}"]`);
       if (productsButton) { productsButton.disabled = false; productsButton.hidden = false; }
       textarea.focus();
@@ -2173,6 +2295,8 @@ async function renderAdminOrders() {
       if (textarea) { textarea.value = order.internalNote || ''; textarea.disabled = true; }
       if (statusSelect) { statusSelect.value = order.status || 'Pendiente'; statusSelect.disabled = true; statusSelect.className = `status-select-${statusClass(order.status || 'Pendiente')}`; }
       if (assignment) { assignment.value = order.assignedSellerId || ''; assignment.disabled = true; assignment.dataset.changed = 'false'; }
+      const assignmentPicker = list.querySelector(`[data-order-assignment-picker="${id}"]`);
+      if (assignmentPicker) { assignmentPicker.disabled = true; updateOrderAssignmentDisplay(id); }
 
       closeOrderEditor(id);
       editingOrders.delete(id);
@@ -2263,6 +2387,8 @@ async function renderAdminOrders() {
           assignment.value = order.assignedSellerId || '';
           assignment.disabled = true;
         }
+        const assignmentPicker = list.querySelector(`[data-order-assignment-picker="${id}"]`);
+        if (assignmentPicker) { assignmentPicker.disabled = true; updateOrderAssignmentDisplay(id); }
         if (editButton) {
           editButton.disabled = false;
           editButton.textContent = 'Editar pedido';
@@ -2316,6 +2442,8 @@ async function renderAdminOrders() {
           assignment.dataset.changed = 'false';
           assignment.disabled = true;
         }
+        const assignmentPicker = list.querySelector(`[data-order-assignment-picker="${id}"]`);
+        if (assignmentPicker) { assignmentPicker.disabled = true; updateOrderAssignmentDisplay(id); }
         if (editButton) {
           editButton.disabled = false;
           editButton.textContent = 'Editar pedido';

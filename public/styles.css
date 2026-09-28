@@ -3342,3 +3342,23 @@ body.generate-modal-open{overflow:hidden}
   .fine-person-option { grid-template-columns: 38px 1fr auto; padding: 10px; }
   .fine-person-option-avatar { width: 38px; height: 38px; }
 }
+
+
+/* Selector elegante de responsable en Pedidos */
+.order-assignment-picker{width:100%}
+.order-assignment-picker-source{display:none!important}
+.order-assignment-picker-trigger{
+  min-height:62px;
+  border-color:#cfcac0;
+  border-radius:12px;
+  background:#fff;
+}
+.order-assignment-picker-trigger:hover{border-color:#b6914c}
+.order-assignment-picker-trigger:disabled{opacity:.62;cursor:not-allowed;box-shadow:none}
+.order-assignment-picker-trigger:disabled:hover{border-color:#cfcac0}
+.order-assignment-picker-trigger .fine-person-picker-copy strong{font-size:.92rem}
+.order-assignment-picker-trigger .fine-person-picker-copy small{font-size:.72rem}
+.order-assignment-picker-trigger .fine-person-picker-avatar{background:#171717}
+@media(max-width:620px){
+  .order-assignment-picker-trigger{min-height:58px}
+}
