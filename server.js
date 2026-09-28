@@ -1288,7 +1288,10 @@ function flyerStroke(ops, r, g, b) { ops.push(`${r} ${g} ${b} RG`); }
 function flyerLine(ops, x1, y1, x2, y2, width = 0.5) { ops.push(`${width} w ${x1} ${y1} m ${x2} ${y2} l S`); }
 function flyerRect(ops, x, y, w, h, width = 0.6) { ops.push(`${width} w ${x} ${y} ${w} ${h} re S`); }
 function flyerRoundRect(ops, x, y, w, h, r = 7, fill = false) {
-  ops.push(`${0.6} w ${x} ${y} ${w} ${h} re ${fill ? 'f' : 'S'}`);
+  const k = 0.5522847498;
+  const rr = Math.max(0, Math.min(r, Math.min(w, h) / 2));
+  const c = rr * k;
+  ops.push(`${0.6} w ${x + rr} ${y} m ${x + w - rr} ${y} l ${x + w - rr + c} ${y} ${x + w} ${y + rr - c} ${x + w} ${y + rr} c ${x + w} ${y + h - rr} ${x + w - rr + c} ${y + h} ${x + w - rr} ${y + h} c ${x + rr} ${y + h} ${x} ${y + h - rr + c} ${x} ${y + h - rr} c ${x} ${y + rr} ${x + rr - c} ${y} ${x + rr} ${y} c ${fill ? 'f' : 'S'}`);
 }
 
 
@@ -1363,19 +1366,26 @@ async function buildFlyerPdf({ products, title, subtitle, description, layout, o
       imageY = y + h - imageH;
       copyY = imageY - 10;
       copyX = x + 10; copyW = w - 20;
-      flyerFill(ops, 0.965, 0.95, 0.92); ops.push(`${imageX} ${imageY} ${imageW} ${imageH} re f`);
+      flyerFill(ops, 0.965, 0.95, 0.92);
+      flyerRoundRect(ops, imageX, imageY, imageW, imageH, 8, true);
+      flyerStroke(ops, 0.91, 0.88, 0.83);
+      flyerRoundRect(ops, imageX, imageY, imageW, imageH, 8, false);
+      flyerStroke(ops, 0.91, 0.88, 0.83);
+      flyerLine(ops, x + 1, imageY, x + w - 1, imageY, 0.45);
     } else if (mode === 'horizontal') {
       imageW = w * 0.43;
       copyX = x + imageW + gap;
       copyW = w - imageW - gap - 12;
       copyY = y + h - 16;
-      flyerFill(ops, 0.965, 0.95, 0.92); ops.push(`${x} ${y} ${imageW} ${h} re f`);
+      flyerFill(ops, 0.965, 0.95, 0.92); flyerRoundRect(ops, x, y, imageW, h, 8, true);
+      flyerStroke(ops, 0.91, 0.88, 0.83); flyerRoundRect(ops, x, y, imageW, h, 8, false);
     } else {
       imageW = w * 0.48;
       copyX = x + imageW + 20;
       copyW = w - imageW - 32;
       copyY = y + h - 28;
-      flyerFill(ops, 0.965, 0.95, 0.92); ops.push(`${x} ${y} ${imageW} ${h} re f`);
+      flyerFill(ops, 0.965, 0.95, 0.92); flyerRoundRect(ops, x, y, imageW, h, 8, true);
+      flyerStroke(ops, 0.91, 0.88, 0.83); flyerRoundRect(ops, x, y, imageW, h, 8, false);
     }
 
     if (image) {
@@ -1429,10 +1439,13 @@ async function buildFlyerPdf({ products, title, subtitle, description, layout, o
     if (showPrices) {
       const price = Number(product.salePrice ?? product.price ?? 0);
       const priceSize = mode === 'featured' ? 18 : safeLayout === '2' ? 12 : 10;
-      // Keep the price pinned to the bottom of the card, matching the live
-      // preview. It must not move upward when the description has fewer/more
-      // lines, otherwise the PDF looks different from the preview.
-      const priceY = y + 18;
+      // The live preview keeps the price close to the commercial copy.
+      // Use a small lower safe-zone instead of pinning it to the absolute
+      // bottom of a tall card; this avoids the large visual gap seen in the
+      // previous PDF while still protecting the price from text collisions.
+      const priceFloor = y + (mode === 'featured' ? 24 : 22);
+      const priceCeiling = y + (mode === 'featured' ? 42 : safeLayout === '2' ? 52 : 44);
+      const priceY = Math.max(priceFloor, Math.min(priceCeiling, cy - 2));
       flyerFill(ops, ar, ag, ab);
       flyerPdfText(ops, `$${price.toFixed(2)}`, copyX, priceY, priceSize, 2);
     }
@@ -1471,8 +1484,14 @@ async function buildFlyerPdf({ products, title, subtitle, description, layout, o
     // Match the live preview: do not force a second empty row when there are only
     // a few products. Cards use the available page height, but shrink naturally
     // when only one row is needed so the price/description stay visually close.
-    const targetRowH = safeLayout === '1' ? availableH : (safeLayout === '2' ? 235 : safeLayout === '3' ? 245 : 255);
-    const cardH = Math.min(availableH, Math.max(190, rowsOnPage === 1 ? targetRowH : (availableH - gap * (rowsOnPage - 1)) / rowsOnPage));
+    // Keep the PDF cards compact like the live preview instead of stretching
+    // each row to fill the entire printable area. This keeps the description
+    // and price visually close to the product card rather than leaving a large
+    // empty gap underneath.
+    const targetRowH = safeLayout === '1' ? availableH : (safeLayout === '2' ? 285 : safeLayout === '3' ? 255 : 245);
+    const cardH = safeLayout === '1'
+      ? availableH
+      : Math.min(availableH, Math.max(205, targetRowH));
     page.forEach((product, idx) => {
       const row = Math.floor(idx / config.cols), col = idx % config.cols;
       const x = margin + col * (cardW + gap);

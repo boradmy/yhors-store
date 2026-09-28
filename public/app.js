@@ -3421,10 +3421,20 @@ async function renderAdminCatalogSearch() {
       const targetName = `yhors_flyer_pdf_${Date.now()}`;
       const tab=window.open('about:blank', targetName);
       if(!tab){ alert('Permite las ventanas emergentes para abrir el PDF en una pestaña nueva.'); return; }
+      // The PDF can take a few seconds because the selected product images may
+      // need to be downloaded and converted. Never leave the user staring at
+      // a blank about:blank tab while that work is happening.
+      try {
+        tab.document.open();
+        tab.document.write('<!doctype html><html><head><title>YHORS · Generando PDF</title><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#eeece6;color:#171513;font-family:Arial,Helvetica,sans-serif}.loader{width:min(460px,calc(100vw - 40px));background:#fff;border:1px solid #ddd8cf;border-radius:18px;padding:36px;text-align:center;box-shadow:0 18px 60px rgba(30,25,20,.12)}.mark{width:58px;height:58px;margin:0 auto 20px;border:3px solid #e5e0d7;border-top-color:#b58a43;border-radius:50%;animation:spin 1s linear infinite}.eyebrow{font-size:11px;font-weight:800;letter-spacing:.18em;color:#b58a43;text-transform:uppercase}.loader h1{font-size:24px;margin:10px 0 8px}.loader p{margin:0;color:#6d675f;line-height:1.55}.status{margin-top:20px;padding-top:16px;border-top:1px solid #eee9e1;font-size:12px;color:#8a837a}@keyframes spin{to{transform:rotate(360deg)}}</style></head><body><main class="loader"><div class="mark"></div><div class="eyebrow">YHORS · FLYER</div><h1>Generando tu PDF…</h1><p>Estamos preparando las imágenes y armando el diseño. Esta pestaña permanecerá abierta mientras termina.</p><div class="status" id="status">Preparando productos…</div></main></body></html>');
+        tab.document.close();
+      } catch (_) {}
       button.disabled=true;
       button.innerHTML='<span class="flyer-create-icon" aria-hidden="true">◌</span> Generando PDF…';
       try {
+        try { if(tab.document?.getElementById('status')) tab.document.getElementById('status').textContent='Cargando imágenes del flyer…'; } catch (_) {}
         const imageData = await prepareFlyerImages(selected);
+        try { if(tab.document?.getElementById('status')) tab.document.getElementById('status').textContent='Diseñando páginas y generando PDF…'; } catch (_) {}
         const payload={...draft, ids:selected.map(p=>String(p.id)), imageData};
         const body=new URLSearchParams();
         Object.entries(payload).forEach(([key,value])=>body.set(key, typeof value==='object' ? JSON.stringify(value) : String(value ?? '')));
