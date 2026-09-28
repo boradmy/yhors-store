@@ -1281,7 +1281,15 @@ async function renderAdminFines() {
       <div class="section-heading"><div><span class="eyebrow" id="fineFormEyebrow">Finanzas · Control</span><h2 id="fineFormTitle">Registrar multa</h2></div><p id="fineFormHelp">La multa se descuenta automáticamente de la comisión del período en el que esté registrada.</p></div>
       <input type="hidden" id="fineEditId" value="">
       <div class="fines-form-grid">
-        <label><span>Vendedor / Jefe de Tienda</span><select id="fineUser"><option value="">Selecciona una persona</option></select></label>
+        <div class="fine-person-field">
+          <span>Vendedor / Jefe de Tienda</span>
+          <input type="hidden" id="fineUser" value="">
+          <button type="button" class="fine-person-picker-trigger" id="finePersonPickerOpen" aria-haspopup="dialog">
+            <span class="fine-person-picker-avatar" id="finePersonAvatar">?</span>
+            <span class="fine-person-picker-copy"><strong id="finePersonName">Selecciona una persona</strong><small id="finePersonRole">Vendedor o Jefe de Tienda</small></span>
+            <span class="fine-person-picker-chevron">⌄</span>
+          </button>
+        </div>
         <label><span>Valor</span><input id="fineAmount" type="number" min="0.01" step="0.01" placeholder="0,00"></label>
         <label><span>Fecha</span><input id="fineDate" type="date" value="${today}"></label>
         <label class="fines-reason"><span>Motivo</span><textarea id="fineReason" rows="3" maxlength="500" placeholder="¿Por qué se aplica la multa?"></textarea></label>
@@ -1302,37 +1310,133 @@ async function renderAdminFines() {
       <div class="fines-summary" id="finesSummary"></div>
       <div class="fines-list" id="finesList"><div class="commission-loading">Cargando multas…</div></div>
     </section>
+
+    <div class="generate-modal fine-person-modal" id="finePersonPickerModal" hidden>
+      <div class="generate-modal-backdrop" data-close-fine-person-picker></div>
+      <div class="generate-modal-dialog fine-person-picker-dialog" role="dialog" aria-modal="true" aria-labelledby="finePersonPickerTitle">
+        <div class="generate-modal-head">
+          <div><span class="eyebrow">Finanzas · Personal</span><h2 id="finePersonPickerTitle">Seleccionar persona</h2><p class="fine-person-picker-subtitle">Busca a quién se aplicará la multa.</p></div>
+          <button type="button" class="generate-modal-close" data-close-fine-person-picker aria-label="Cerrar">×</button>
+        </div>
+        <div class="fine-person-picker-toolbar">
+          <input id="finePersonSearch" type="search" placeholder="Buscar por nombre o usuario…" autocomplete="off">
+          <div class="fine-person-picker-tabs" role="tablist" aria-label="Tipo de persona">
+            <button type="button" class="fine-person-tab is-active" data-person-role="all">Todos</button>
+            <button type="button" class="fine-person-tab" data-person-role="vendedor">Vendedores</button>
+            <button type="button" class="fine-person-tab" data-person-role="store_manager">Jefes de Tienda</button>
+          </div>
+        </div>
+        <div class="fine-person-picker-count" id="finePersonPickerCount"></div>
+        <div class="fine-person-picker-list" id="finePersonPickerList"></div>
+      </div>
+    </div>
   </div></main>`;
 
-  const userSelect = document.querySelector('#fineUser');
   const message = document.querySelector('#fineMessage');
+  let eligibleUsers = [];
   try {
     const users = await request('/api/admin/users');
     const list = Array.isArray(users?.users) ? users.users : (Array.isArray(users) ? users : []);
-    const eligible = list.filter(user => user.active !== false && ['vendedor','store_manager'].includes(String(user.role || '').toLowerCase()));
-    userSelect.innerHTML = '<option value="">Selecciona una persona</option>' + eligible.map(user => {
-      const role = String(user.role).toLowerCase() === 'store_manager' ? 'Jefe de Tienda' : 'Vendedor';
-      return `<option value="${escapeHTML(user.id)}">${escapeHTML(user.name || user.username || 'Usuario')} · ${role}</option>`;
-    }).join('');
+    eligibleUsers = list.filter(user => user.active !== false && ['vendedor','store_manager'].includes(String(user.role || '').toLowerCase()));
   } catch (error) {
-    // Algunas instalaciones devuelven el listado en /api/admin/usuarios.
     try {
       const users = await request('/api/admin/usuarios');
       const list = Array.isArray(users?.users) ? users.users : (Array.isArray(users) ? users : []);
-      const eligible = list.filter(user => user.active !== false && ['vendedor','store_manager'].includes(String(user.role || '').toLowerCase()));
-      userSelect.innerHTML = '<option value="">Selecciona una persona</option>' + eligible.map(user => {
-        const role = String(user.role).toLowerCase() === 'store_manager' ? 'Jefe de Tienda' : 'Vendedor';
-        return `<option value="${escapeHTML(user.id)}">${escapeHTML(user.name || user.username || 'Usuario')} · ${role}</option>`;
-      }).join('');
+      eligibleUsers = list.filter(user => user.active !== false && ['vendedor','store_manager'].includes(String(user.role || '').toLowerCase()));
     } catch (fallbackError) {
-      userSelect.innerHTML = '<option value="">No se pudieron cargar las cuentas</option>';
+      eligibleUsers = [];
     }
   }
 
+  const finePersonModal = document.querySelector('#finePersonPickerModal');
+  const finePersonSearch = document.querySelector('#finePersonSearch');
+  const finePersonList = document.querySelector('#finePersonPickerList');
+  const finePersonCount = document.querySelector('#finePersonPickerCount');
+  const finePersonInput = document.querySelector('#fineUser');
+  const finePersonName = document.querySelector('#finePersonName');
+  const finePersonRole = document.querySelector('#finePersonRole');
+  const finePersonAvatar = document.querySelector('#finePersonAvatar');
+  let finePersonRoleFilter = 'all';
+
+  const roleLabel = user => String(user?.role || '').toLowerCase() === 'store_manager' ? 'Jefe de Tienda' : 'Vendedor';
+  const userDisplayName = user => user?.name || user?.username || 'Usuario';
+  const initials = name => (String(name || 'U').trim().split(/\s+/).slice(0,2).map(part => part[0]).join('') || 'U').toUpperCase();
+
+  const renderFinePersonPicker = () => {
+    if (!finePersonList) return;
+    const query = (finePersonSearch?.value || '').trim().toLowerCase();
+    const filtered = eligibleUsers.filter(user => {
+      const role = String(user.role || '').toLowerCase();
+      if (finePersonRoleFilter !== 'all' && role !== finePersonRoleFilter) return false;
+      const hay = `${userDisplayName(user)} ${user.username || ''}`.toLowerCase();
+      return !query || hay.includes(query);
+    });
+    if (finePersonCount) finePersonCount.textContent = `${filtered.length} persona${filtered.length === 1 ? '' : 's'} disponible${filtered.length === 1 ? '' : 's'}`;
+    finePersonList.innerHTML = filtered.length ? filtered.map(user => {
+      const role = roleLabel(user);
+      const selected = String(finePersonInput?.value || '') === String(user.id);
+      return `<button type="button" class="fine-person-option${selected ? ' is-selected' : ''}" data-select-fine-person="${escapeHTML(user.id)}">
+        <span class="fine-person-option-avatar">${escapeHTML(initials(userDisplayName(user)))}</span>
+        <span class="fine-person-option-copy"><strong>${escapeHTML(userDisplayName(user))}</strong><small>@${escapeHTML(user.username || 'usuario')} · ${role}</small></span>
+        <span class="fine-person-option-check">${selected ? '✓' : '›'}</span>
+      </button>`;
+    }).join('') : `<div class="fine-person-empty"><span>⌕</span><strong>No encontramos a esa persona</strong><small>Prueba con otro nombre, usuario o cambia el tipo de persona.</small></div>`;
+  };
+
+  const openFinePersonPicker = () => {
+    if (!finePersonModal) return;
+    finePersonModal.hidden = false;
+    document.body.classList.add('generate-modal-open');
+    requestAnimationFrame(() => { finePersonModal.classList.add('is-open'); finePersonSearch?.focus(); });
+    renderFinePersonPicker();
+  };
+  const closeFinePersonPicker = () => {
+    if (!finePersonModal) return;
+    finePersonModal.classList.remove('is-open');
+    setTimeout(() => { if (finePersonModal) finePersonModal.hidden = true; if (!document.querySelector('.generate-modal.is-open')) document.body.classList.remove('generate-modal-open'); }, 180);
+  };
+  const updateFinePersonDisplay = () => {
+    const selected = eligibleUsers.find(user => String(user.id) === String(finePersonInput?.value || ''));
+    if (!selected) {
+      if (finePersonName) finePersonName.textContent = 'Selecciona una persona';
+      if (finePersonRole) finePersonRole.textContent = 'Vendedor o Jefe de Tienda';
+      if (finePersonAvatar) finePersonAvatar.textContent = '?';
+      return;
+    }
+    if (finePersonName) finePersonName.textContent = userDisplayName(selected);
+    if (finePersonRole) finePersonRole.textContent = `${roleLabel(selected)} · @${selected.username || 'usuario'}`;
+    if (finePersonAvatar) finePersonAvatar.textContent = initials(userDisplayName(selected));
+  };
+  document.querySelector('#finePersonPickerOpen')?.addEventListener('click', openFinePersonPicker);
+  finePersonModal?.querySelectorAll('[data-close-fine-person-picker]').forEach(el => el.addEventListener('click', closeFinePersonPicker));
+  finePersonSearch?.addEventListener('input', renderFinePersonPicker);
+  finePersonModal?.addEventListener('click', event => {
+    const tab = event.target.closest('[data-person-role]');
+    if (tab) {
+      finePersonRoleFilter = tab.dataset.personRole || 'all';
+      finePersonModal.querySelectorAll('[data-person-role]').forEach(button => button.classList.toggle('is-active', button === tab));
+      renderFinePersonPicker();
+      return;
+    }
+    const option = event.target.closest('[data-select-fine-person]');
+    if (option) {
+      if (finePersonInput) finePersonInput.value = option.dataset.selectFinePerson;
+      updateFinePersonDisplay();
+      closeFinePersonPicker();
+    }
+  });
+  const finePersonEscapeHandler = event => { if (event.key === 'Escape' && finePersonModal?.classList.contains('is-open')) closeFinePersonPicker(); };
+  document.addEventListener('keydown', finePersonEscapeHandler);
+
   const filterUser = document.querySelector('#fineFilterUser');
-  if (filterUser && userSelect) {
-    filterUser.innerHTML = '<option value="">Todos</option>' + Array.from(userSelect.options).slice(1).map(option => option.outerHTML).join('');
+
+  if (filterUser) {
+    filterUser.innerHTML = '<option value="">Todos</option>' + eligibleUsers.map(user => {
+      const role = roleLabel(user);
+      return `<option value="${escapeHTML(user.id)}">${escapeHTML(userDisplayName(user))} · ${role}</option>`;
+    }).join('');
   }
+  updateFinePersonDisplay();
 
   const renderFines = async () => {
     const from = document.querySelector('#fineFrom')?.value || '';
@@ -1392,7 +1496,8 @@ async function renderAdminFines() {
     if (fineFormHelp) fineFormHelp.textContent = 'La multa se descuenta automáticamente de la comisión del período en el que esté registrada.';
     if (document.querySelector('#saveFine')) document.querySelector('#saveFine').textContent = 'Guardar multa';
     if (cancelFineEdit) cancelFineEdit.hidden = true;
-    if (userSelect) userSelect.value = '';
+    if (finePersonInput) finePersonInput.value = '';
+    updateFinePersonDisplay();
     if (document.querySelector('#fineAmount')) document.querySelector('#fineAmount').value = '';
     if (document.querySelector('#fineDate')) document.querySelector('#fineDate').value = today;
     if (document.querySelector('#fineReason')) document.querySelector('#fineReason').value = '';
@@ -1402,7 +1507,7 @@ async function renderAdminFines() {
   document.querySelector('#saveFine')?.addEventListener('click', async () => {
     const button = document.querySelector('#saveFine');
     const editId = fineEditId?.value || '';
-    const userId = userSelect?.value || '';
+    const userId = finePersonInput?.value || '';
     const amount = Number(document.querySelector('#fineAmount')?.value || 0);
     const date = document.querySelector('#fineDate')?.value || '';
     const reason = document.querySelector('#fineReason')?.value?.trim() || '';
@@ -1410,7 +1515,8 @@ async function renderAdminFines() {
       if (message) { message.hidden = false; message.className = 'message error'; message.textContent = 'Completa la persona, valor, fecha y motivo.'; }
       return;
     }
-    const userLabel = userSelect.options[userSelect.selectedIndex]?.textContent || 'usuario';
+    const selectedUser = eligibleUsers.find(user => String(user.id) === String(userId));
+    const userLabel = selectedUser ? `${userDisplayName(selectedUser)} · ${roleLabel(selectedUser)}` : 'usuario';
     const confirmed = await showYhorsConfirm(editId ? '¿Guardar cambios de esta multa?' : '¿Seguro que quieres guardar esta multa?', editId ? `Se actualizará la multa de ${escapeHTML(userLabel)} a ${money(amount)}.` : `Se registrará ${money(amount)} a ${escapeHTML(userLabel)} y se descontará de su comisión.`);
     if (!confirmed) return;
     button.disabled = true;
@@ -1441,7 +1547,8 @@ async function renderAdminFines() {
         if (document.querySelector('#fineAmount')) document.querySelector('#fineAmount').value = Number(fine.amount || 0).toFixed(2);
         if (document.querySelector('#fineDate')) document.querySelector('#fineDate').value = fine.date || today;
         if (document.querySelector('#fineReason')) document.querySelector('#fineReason').value = fine.reason || '';
-        if (userSelect) userSelect.value = fine.userId || '';
+        if (finePersonInput) finePersonInput.value = fine.userId || '';
+        updateFinePersonDisplay();
         if (document.querySelector('#saveFine')) document.querySelector('#saveFine').textContent = 'Guardar cambios';
         if (cancelFineEdit) cancelFineEdit.hidden = false;
         document.querySelector('#fineAmount')?.focus();
