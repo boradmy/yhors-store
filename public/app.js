@@ -608,6 +608,7 @@ async function renderCurrentRoute() {
   if (path === `${ADMIN_PATH}/ventas-generales` || path === `${ADMIN_PATH}/ventas-generales/`) return renderAdminSales();
   if (path === `${ADMIN_PATH}/resumen-financiero` || path === `${ADMIN_PATH}/resumen-financiero/`) return renderAdminFinancial();
   if (path === `${ADMIN_PATH}/calculo-comision` || path === `${ADMIN_PATH}/calculo-comision/`) return renderAdminCommission();
+  if (path === `${ADMIN_PATH}/multas` || path === `${ADMIN_PATH}/multas/`) return renderAdminFines();
   if (path === `${ADMIN_PATH}/pedidos` || path === `${ADMIN_PATH}/pedidos/`) return renderAdminOrders();
   if (path === `${ADMIN_PATH}/generar-orden` || path === `${ADMIN_PATH}/generar-orden/`) return renderAdminGenerateOrder();
     if (path === `${ADMIN_PATH}/auditoria` || path === `${ADMIN_PATH}/auditoria/`) return renderAdminAudit();
@@ -1092,7 +1093,7 @@ function ordersListMarkup(orders = [], options = {}) {
     </div>`;
   };
   if (!orders.length) return '<div class="empty">No hay pedidos que coincidan con los filtros.</div>';
-  const renderOrder = order => `<article class="admin-order admin-order-compact${order.assignedSellerId ? '' : ' admin-order-unassigned'}" data-order-search="${escapeHTML(`${order.orderNumber} ${order.customer?.name || ''} ${order.customer?.cedula || ''} ${order.customer?.phone || ''} ${order.customer?.email || ''} ${(order.items || []).map(i => `${i.sku} ${i.name}`).join(' ')}`.toLowerCase())}" data-order-status="${escapeHTML(order.status || '')}" data-order-date="${escapeHTML(String(order.createdAt || '').slice(0,10))}">
+  const renderOrder = order => `<article class="admin-order admin-order-compact${order.assignedSellerId ? '' : ' admin-order-unassigned'}" data-order-id="${escapeHTML(order.id)}" data-order-search="${escapeHTML(`${order.orderNumber} ${order.customer?.name || ''} ${order.customer?.cedula || ''} ${order.customer?.phone || ''} ${order.customer?.email || ''} ${(order.items || []).map(i => `${i.sku} ${i.name}`).join(' ')}`.toLowerCase())}" data-order-status="${escapeHTML(order.status || '')}" data-order-date="${escapeHTML(String(order.createdAt || '').slice(0,10))}">
     <button type="button" class="admin-order-summary" data-order-toggle="${escapeHTML(order.id)}" aria-expanded="false">
       <span class="order-summary-date">${escapeHTML(shortDate(order.createdAt))}</span>
       <span class="order-summary-main"><strong>#${escapeHTML(order.orderNumber)}</strong><b>${escapeHTML(order.customer?.name || 'Cliente')}</b><small class="order-summary-item">${escapeHTML((order.items?.[0]?.quantity || 1) + '× ' + (order.items?.[0]?.name || 'Sin productos'))}${(order.items?.length || 0) > 1 ? ` · +${order.items.length - 1} más` : ''}</small></span>
@@ -1156,7 +1157,7 @@ function adminSectionNav(session = {}, active = '') {
   return `<nav class="admin-section-nav" id="adminSectionNav" aria-label="Administración YHORS">
     ${group('Operación', ['web','inventario','pedidos','generar-orden'], `${link('web', ADMIN_PATH, 'PÁGINA WEB')}${link('inventario', `${ADMIN_PATH}/inventario`, 'INVENTARIO')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('generar-orden', `${ADMIN_PATH}/generar-orden`, 'GENERAR ORDEN')}`)}
     ${group('Gestión', ['usuarios','auditoria'], `${link('usuarios', `${ADMIN_PATH}/usuarios`, 'USUARIOS')}${link('auditoria', `${ADMIN_PATH}/auditoria`, 'AUDITORÍA')}`)}
-    ${group('Finanzas', ['resumen-financiero','ventas-generales','calculo-comision'], `${link('resumen-financiero', `${ADMIN_PATH}/resumen-financiero`, 'RESUMEN FINANCIERO')}${link('ventas-generales', `${ADMIN_PATH}/ventas-generales`, 'VENTAS GENERALES')}${link('calculo-comision', `${ADMIN_PATH}/calculo-comision`, 'CÁLCULO DE COMISIÓN')}`)}
+    ${group('Finanzas', ['resumen-financiero','ventas-generales','multas','calculo-comision'], `${link('resumen-financiero', `${ADMIN_PATH}/resumen-financiero`, 'RESUMEN FINANCIERO')}${link('ventas-generales', `${ADMIN_PATH}/ventas-generales`, 'VENTAS GENERALES')}${link('multas', `${ADMIN_PATH}/multas`, 'MULTAS')}${link('calculo-comision', `${ADMIN_PATH}/calculo-comision`, 'CÁLCULO DE COMISIÓN')}`)}
   </nav>`;
 }
 
@@ -1262,6 +1263,146 @@ async function renderAdminGenerateOrder() {
 }
 
 
+
+async function renderAdminFines() {
+  const session = await request('/api/admin/session').catch(() => ({ authenticated: false }));
+  if (!session.authenticated) return renderLogin();
+  if (String(session.role || '').toLowerCase() !== 'admin') return renderAdminOrders();
+
+  const localToday = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Guayaquil' });
+  const today = localToday();
+  const monthStart = `${today.slice(0, 7)}-01`;
+  const nav = adminSectionNav(session, 'multas');
+
+  app.innerHTML = `<main class="admin-shell fines-shell"><div class="admin-wrap">
+    <div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Multas</h1><p class="admin-subtitle">Descuentos que se aplican directamente a la comisión del vendedor o Jefe de Tienda.</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>
+    ${nav}
+    <section class="admin-panel fines-panel">
+      <div class="section-heading"><div><span class="eyebrow">Finanzas · Control</span><h2>Registrar multa</h2></div><p>La multa se descuenta automáticamente de la comisión del período en el que esté registrada.</p></div>
+      <div class="fines-form-grid">
+        <label><span>Vendedor / Jefe de Tienda</span><select id="fineUser"><option value="">Selecciona una persona</option></select></label>
+        <label><span>Valor</span><input id="fineAmount" type="number" min="0.01" step="0.01" placeholder="0,00"></label>
+        <label><span>Fecha</span><input id="fineDate" type="date" value="${today}"></label>
+        <label class="fines-reason"><span>Motivo</span><textarea id="fineReason" rows="3" maxlength="500" placeholder="¿Por qué se aplica la multa?"></textarea></label>
+      </div>
+      <div class="fines-actions"><button type="button" class="button primary small" id="saveFine">Guardar multa</button><span class="message" id="fineMessage" hidden></span></div>
+    </section>
+
+    <section class="admin-panel fines-panel">
+      <div class="section-heading"><div><span class="eyebrow">Historial</span><h2>Multas registradas</h2></div><p>Estas multas son las que se toman en cuenta para calcular las comisiones.</p></div>
+      <div class="commission-toolbar">
+        <div class="commission-date-range"><label class="commission-date-filter"><span>Desde</span><input id="fineFrom" type="date" value="${monthStart}"></label><label class="commission-date-filter"><span>Hasta</span><input id="fineTo" type="date" value="${today}"></label></div>
+        <button type="button" class="button small" id="fineRefresh">Actualizar</button>
+      </div>
+      <div class="fines-summary" id="finesSummary"></div>
+      <div class="fines-list" id="finesList"><div class="commission-loading">Cargando multas…</div></div>
+    </section>
+  </div></main>`;
+
+  const userSelect = document.querySelector('#fineUser');
+  const message = document.querySelector('#fineMessage');
+  try {
+    const users = await request('/api/admin/users');
+    const list = Array.isArray(users?.users) ? users.users : (Array.isArray(users) ? users : []);
+    const eligible = list.filter(user => user.active !== false && ['vendedor','store_manager'].includes(String(user.role || '').toLowerCase()));
+    userSelect.innerHTML = '<option value="">Selecciona una persona</option>' + eligible.map(user => {
+      const role = String(user.role).toLowerCase() === 'store_manager' ? 'Jefe de Tienda' : 'Vendedor';
+      return `<option value="${escapeHTML(user.id)}">${escapeHTML(user.name || user.username || 'Usuario')} · ${role}</option>`;
+    }).join('');
+  } catch (error) {
+    // Algunas instalaciones devuelven el listado en /api/admin/usuarios.
+    try {
+      const users = await request('/api/admin/usuarios');
+      const list = Array.isArray(users?.users) ? users.users : (Array.isArray(users) ? users : []);
+      const eligible = list.filter(user => user.active !== false && ['vendedor','store_manager'].includes(String(user.role || '').toLowerCase()));
+      userSelect.innerHTML = '<option value="">Selecciona una persona</option>' + eligible.map(user => {
+        const role = String(user.role).toLowerCase() === 'store_manager' ? 'Jefe de Tienda' : 'Vendedor';
+        return `<option value="${escapeHTML(user.id)}">${escapeHTML(user.name || user.username || 'Usuario')} · ${role}</option>`;
+      }).join('');
+    } catch (fallbackError) {
+      userSelect.innerHTML = '<option value="">No se pudieron cargar las cuentas</option>';
+    }
+  }
+
+  const renderFines = async () => {
+    const from = document.querySelector('#fineFrom')?.value || '';
+    const to = document.querySelector('#fineTo')?.value || '';
+    const list = document.querySelector('#finesList');
+    const summary = document.querySelector('#finesSummary');
+    if (!list) return;
+    if (from && to && from > to) {
+      list.innerHTML = '<div class="commission-empty">La fecha inicial no puede ser posterior a la fecha final.</div>';
+      if (summary) summary.innerHTML = '';
+      return;
+    }
+    list.innerHTML = '<div class="commission-loading">Cargando multas…</div>';
+    try {
+      const result = await request(`/api/admin/multas?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
+      const fines = Array.isArray(result.fines) ? result.fines : [];
+      if (summary) summary.innerHTML = `<div><span>PERÍODO</span><strong>${escapeHTML(from || 'Todo')} → ${escapeHTML(to || 'Todo')}</strong></div><div><span>MULTAS</span><strong>${fines.length}</strong></div><div><span>TOTAL DESCONTADO</span><strong>${money(result.total || 0)}</strong></div>`;
+      list.innerHTML = fines.length ? fines.map(fine => {
+        const role = fine.userRole === 'store_manager' ? 'Jefe de Tienda' : 'Vendedor';
+        return `<article class="fine-row">
+          <div class="fine-row-main"><div><strong>${escapeHTML(fine.userName || 'Usuario')}</strong><small>@${escapeHTML(fine.username || '')} · ${role}</small></div><time>${escapeHTML(fine.date || '')}</time></div>
+          <p>${escapeHTML(fine.reason || 'Sin motivo')}</p>
+          <div class="fine-row-footer"><strong>${money(fine.amount || 0)}</strong><button type="button" class="button danger small" data-delete-fine="${escapeHTML(fine.id)}">Eliminar</button></div>
+        </article>`;
+      }).join('') : '<div class="commission-empty">No hay multas registradas en este período.</div>';
+    } catch (error) {
+      list.innerHTML = `<div class="commission-empty">${escapeHTML(error.message || 'No se pudieron cargar las multas.')}</div>`;
+    }
+  };
+
+  document.querySelector('#fineRefresh')?.addEventListener('click', renderFines);
+  document.querySelector('#fineFrom')?.addEventListener('change', renderFines);
+  document.querySelector('#fineTo')?.addEventListener('change', renderFines);
+
+  document.querySelector('#saveFine')?.addEventListener('click', async () => {
+    const button = document.querySelector('#saveFine');
+    const userId = userSelect?.value || '';
+    const amount = Number(document.querySelector('#fineAmount')?.value || 0);
+    const date = document.querySelector('#fineDate')?.value || '';
+    const reason = document.querySelector('#fineReason')?.value?.trim() || '';
+    if (!userId || !amount || amount <= 0 || !date || !reason) {
+      if (message) { message.hidden = false; message.className = 'message error'; message.textContent = 'Completa la persona, valor, fecha y motivo.'; }
+      return;
+    }
+    const userLabel = userSelect.options[userSelect.selectedIndex]?.textContent || 'usuario';
+    const confirmed = await showYhorsConfirm('¿Seguro que quieres guardar esta multa?', `Se registrará ${money(amount)} a ${escapeHTML(userLabel)} y se descontará de su comisión.`);
+    if (!confirmed) return;
+    button.disabled = true;
+    try {
+      await request('/api/admin/multas', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ userId, amount, date, reason }) });
+      document.querySelector('#fineAmount').value = '';
+      document.querySelector('#fineReason').value = '';
+      if (message) { message.hidden = false; message.className = 'message success'; message.textContent = 'Multa registrada correctamente.'; }
+      await renderFines();
+    } catch (error) {
+      if (message) { message.hidden = false; message.className = 'message error'; message.textContent = error.message || 'No se pudo registrar la multa.'; }
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  document.querySelector('#finesList')?.addEventListener('click', async event => {
+    const button = event.target.closest('[data-delete-fine]');
+    if (!button) return;
+    const confirmed = await showYhorsConfirm('¿Eliminar esta multa?', 'Al eliminarla dejará de descontarse de la comisión del período correspondiente.');
+    if (!confirmed) return;
+    button.disabled = true;
+    try {
+      await request(`/api/admin/multas/${encodeURIComponent(button.dataset.deleteFine)}`, { method:'DELETE' });
+      await renderFines();
+    } catch (error) {
+      button.disabled = false;
+      alert(error.message || 'No se pudo eliminar la multa.');
+    }
+  });
+
+  await renderFines();
+  wireAccountMenu();
+}
+
 async function renderAdminCommission() {
   const session = await request('/api/admin/session').catch(() => ({ authenticated: false }));
   if (!session.authenticated) return renderLogin();
@@ -1281,7 +1422,7 @@ async function renderAdminCommission() {
       </div>
       <div class="commission-message" id="commissionMessage" hidden></div>
       <div class="commission-summary" id="commissionSummary"></div>
-      <div class="commission-table-wrap"><table class="commission-table"><thead><tr><th>USUARIO</th><th>ROL</th><th>PEDIDOS</th><th>VENTAS COMISIONABLES</th><th>% COMISIÓN</th><th>COMISIÓN</th><th>ACCIÓN</th></tr></thead><tbody id="commissionTableBody"><tr><td colspan="7" class="commission-loading">Calculando…</td></tr></tbody></table></div>
+      <div class="commission-table-wrap"><table class="commission-table"><thead><tr><th>USUARIO</th><th>ROL</th><th>PEDIDOS</th><th>VENTAS COMISIONABLES</th><th>% COMISIÓN</th><th>MULTAS</th><th>COMISIÓN NETA</th><th>ACCIÓN</th></tr></thead><tbody id="commissionTableBody"><tr><td colspan="8" class="commission-loading">Calculando…</td></tr></tbody></table></div>
       <div class="commission-note"><strong>Importante:</strong> al pulsar <strong>Pagar comisión</strong>, el valor se registra automáticamente en <strong>Resumen Financiero → Gastos</strong> como un gasto normal, con su concepto, fecha y detalle.</div>
     </section>
   </div></main>`;
@@ -1296,12 +1437,12 @@ async function renderAdminCommission() {
     const summary = document.querySelector('#commissionSummary');
     if (!body) return;
     if (from && to && from > to) {
-      body.innerHTML = '<tr><td colspan="7" class="commission-empty">La fecha inicial no puede ser posterior a la fecha final.</td></tr>';
+      body.innerHTML = '<tr><td colspan="8" class="commission-empty">La fecha inicial no puede ser posterior a la fecha final.</td></tr>';
       if (summary) summary.innerHTML = '';
       return;
     }
     if (message) message.hidden = true;
-    body.innerHTML = '<tr><td colspan="7" class="commission-loading">Calculando comisiones…</td></tr>';
+    body.innerHTML = '<tr><td colspan="8" class="commission-loading">Calculando comisiones…</td></tr>';
     try {
       const result = await request(`/api/admin/calculo-comision?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
       const rows = Array.isArray(result.rows) ? result.rows : [];
@@ -1312,24 +1453,29 @@ async function renderAdminCommission() {
         const roleLabel = row.role === 'store_manager' ? 'Jefe de Tienda' : 'Vendedor';
         const defaultRate = row.paid ? Number(row.paidRate || 0) : 0;
         const amount = row.paid ? Number(row.paidAmount || 0) : 0;
+        const gross = row.paid ? Number(row.paidGrossAmount || 0) : 0;
+        const fines = Number(row.fines || 0);
         return `<tr class="${row.role === 'store_manager' ? 'commission-manager-row' : ''}">
           <td><strong>${escapeHTML(row.name || 'Sin nombre')}</strong><small>${escapeHTML(row.username ? '@' + row.username : '')}</small></td>
           <td>${escapeHTML(roleLabel)}</td>
           <td>${Number(row.orderCount || 0)}</td>
           <td><strong>${moneyCell(row.sales)}</strong></td>
           <td><div class="commission-rate-wrap"><input type="number" min="0.01" max="100" step="0.01" value="${defaultRate || ''}" data-commission-rate="${escapeHTML(String(row.userId))}" ${row.paid ? 'disabled' : ''}><span>%</span></div></td>
-          <td><strong data-commission-amount="${escapeHTML(String(row.userId))}">${row.paid ? moneyCell(amount) : moneyCell(0)}</strong></td>
+          <td><strong class="${fines > 0 ? 'commission-fine-amount' : ''}" data-commission-fines="${escapeHTML(String(row.userId))}">${moneyCell(fines)}</strong></td>
+          <td><strong data-commission-amount="${escapeHTML(String(row.userId))}">${row.paid ? moneyCell(amount) : moneyCell(0)}</strong>${row.paid ? `<small class="commission-gross-detail">Bruta ${moneyCell(gross)} · multas ${moneyCell(fines)}</small>` : ''}</td>
           <td>${row.paid
             ? `<span class="commission-paid">Pagada · ${Number(row.paidRate || 0).toFixed(2)}%</span>`
             : `<button type="button" class="button primary small commission-pay-button" data-pay-commission="${escapeHTML(String(row.userId))}" ${Number(row.sales || 0) <= 0 ? 'disabled' : ''}>Pagar comisión</button>`}</td>
         </tr>`;
-      }).join('') : '<tr><td colspan="7" class="commission-empty">No hay vendedores o Jefe de Tienda disponibles.</td></tr>';
+      }).join('') : '<tr><td colspan="8" class="commission-empty">No hay vendedores o Jefe de Tienda disponibles.</td></tr>';
 
       body.querySelectorAll('[data-commission-rate]').forEach(input => {
         const update = () => {
           const rate = Number(input.value || 0);
           const row = rows.find(item => String(item.userId) === String(input.dataset.commissionRate));
-          const amount = row ? Number(row.sales || 0) * Math.max(0, Math.min(100, rate)) / 100 : 0;
+          const gross = row ? Number(row.sales || 0) * Math.max(0, Math.min(100, rate)) / 100 : 0;
+          const fineAmount = row ? Number(row.fines || 0) : 0;
+          const amount = Math.max(0, gross - fineAmount);
           const target = body.querySelector(`[data-commission-amount="${CSS.escape(String(input.dataset.commissionRate))}"]`);
           if (target) target.textContent = moneyCell(amount);
         };
@@ -1338,7 +1484,7 @@ async function renderAdminCommission() {
       });
     } catch (error) {
       if (message) { message.hidden = false; message.className = 'commission-message error'; message.textContent = error.message || 'No se pudo calcular las comisiones.'; }
-      body.innerHTML = '<tr><td colspan="7" class="commission-empty">No se pudo cargar la información.</td></tr>';
+      body.innerHTML = '<tr><td colspan="8" class="commission-empty">No se pudo cargar la información.</td></tr>';
     }
   };
 
@@ -1808,12 +1954,30 @@ async function renderAdminOrders() {
 
     const refreshOrderItemsView = order => {
       const view = list.querySelector(`[data-order-items-view="${order.id}"]`);
-      if (!view) return;
-      view.innerHTML = (order.items || []).map(item => {
-        const isRental = item.purchaseMode === 'rental';
-        const days = Number(item.rentalDays || 1);
-        return `<div class="admin-order-item"><span><strong>${escapeHTML(item.quantity)}×</strong> ${escapeHTML(item.name)} <small>SKU: ${escapeHTML(item.sku || '—')} · ${isRental ? `Alquiler · ${days} día${days === 1 ? '' : 's'} · ${money(item.unitPrice)}/día` : 'Compra'}</small></span><strong>${money(item.subtotal)}</strong></div>`;
-      }).join('');
+      if (view) {
+        view.innerHTML = (order.items || []).map(item => {
+          const isRental = item.purchaseMode === 'rental';
+          const days = Number(item.rentalDays || 1);
+          return `<div class="admin-order-item"><span><strong>${escapeHTML(item.quantity)}×</strong> ${escapeHTML(item.name)} <small>SKU: ${escapeHTML(item.sku || '—')} · ${isRental ? `Alquiler · ${days} día${days === 1 ? '' : 's'} · ${money(item.unitPrice)}/día` : 'Compra'}</small></span><strong>${money(item.subtotal)}</strong></div>`;
+        }).join('');
+      }
+
+      // Mantener sincronizado el total visible del pedido sin recargar la página.
+      const card = list.querySelector(`[data-order-id="${CSS.escape(String(order.id))}"]`) || list.querySelector(`.admin-order[data-order-id="${CSS.escape(String(order.id))}"]`);
+      const target = card || list.querySelector(`[data-order-items-view="${order.id}"]`)?.closest('.admin-order');
+      if (target) {
+        const summaryTotal = target.querySelector('.order-summary-total');
+        if (summaryTotal) summaryTotal.textContent = money(order.total);
+        const detailTotal = target.querySelector('.order-total');
+        if (detailTotal) detailTotal.textContent = money(order.total);
+        const detailSmall = target.querySelector('.admin-order-grid .order-total')?.parentElement?.querySelector('small');
+        if (detailSmall) detailSmall.textContent = `Subtotal ${money(order.subtotal ?? order.total)} · Envío ${money(order.shippingCost ?? 0)}`;
+        const firstSummaryItem = target.querySelector('.order-summary-item');
+        if (firstSummaryItem) {
+          const first = order.items?.[0];
+          firstSummaryItem.textContent = first ? `${first.quantity || 1}× ${first.name || 'Sin productos'}${(order.items?.length || 0) > 1 ? ` · +${order.items.length - 1} más` : ''}` : 'Sin productos';
+        }
+      }
     };
 
     list.querySelectorAll('[data-order-note-save]').forEach(button=>button.addEventListener('click',async()=>{

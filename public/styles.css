@@ -3092,3 +3092,78 @@ body.generate-modal-open{overflow:hidden}
     flex-basis:34px;
   }
 }
+
+
+/* V15.6 — Multas y comisión neta */
+.fines-shell .fines-panel { margin-top: 18px; }
+.fines-form-grid {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.2fr) minmax(150px, .6fr) minmax(150px, .6fr);
+  gap: 16px;
+  align-items: start;
+}
+.fines-form-grid label { display: flex; flex-direction: column; gap: 7px; }
+.fines-form-grid label > span { font-size: 12px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #766f63; }
+.fines-form-grid input,
+.fines-form-grid select,
+.fines-form-grid textarea {
+  width: 100%;
+  border: 1px solid #ddd7cc;
+  border-radius: 10px;
+  padding: 11px 12px;
+  background: #fff;
+  font: inherit;
+  box-sizing: border-box;
+}
+.fines-form-grid textarea { resize: vertical; min-height: 82px; }
+.fines-reason { grid-column: 1 / -1; }
+.fines-actions { display: flex; align-items: center; gap: 12px; margin-top: 16px; }
+.fines-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 16px 0;
+}
+.fines-summary > div,
+.commission-gross-detail {
+  color: #777065;
+}
+.fines-summary > div {
+  padding: 12px 14px;
+  border: 1px solid #e4ded3;
+  border-radius: 12px;
+  background: #faf9f6;
+}
+.fines-summary span { display: block; font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; margin-bottom: 4px; }
+.fines-summary strong { font-size: 17px; }
+.fines-list { display: grid; gap: 10px; }
+.fine-row {
+  border: 1px solid #e4ded3;
+  border-radius: 14px;
+  padding: 14px 16px;
+  background: #fff;
+}
+.fine-row-main { display: flex; justify-content: space-between; gap: 16px; align-items: center; }
+.fine-row-main strong { display: block; font-size: 15px; }
+.fine-row-main small { display: block; color: #7d766b; margin-top: 3px; }
+.fine-row-main time { color: #7d766b; font-size: 13px; white-space: nowrap; }
+.fine-row p { margin: 10px 0; color: #4f4a43; }
+.fine-row-footer { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.fine-row-footer > strong { font-size: 18px; }
+.commission-fine-amount { color: #a23b2e; }
+.commission-gross-detail { display: block; font-size: 10px; font-weight: 500; margin-top: 3px; }
+.commission-table th:nth-child(6),
+.commission-table td:nth-child(6) { min-width: 90px; }
+.commission-table th:nth-child(7),
+.commission-table td:nth-child(7) { min-width: 125px; }
+
+@media (max-width: 800px) {
+  .fines-form-grid { grid-template-columns: 1fr 1fr; }
+  .fines-reason { grid-column: 1 / -1; }
+  .fines-summary { grid-template-columns: 1fr; }
+}
+@media (max-width: 560px) {
+  .fines-form-grid { grid-template-columns: 1fr; }
+  .fines-reason { grid-column: auto; }
+  .fine-row-main { align-items: flex-start; flex-direction: column; gap: 6px; }
+}

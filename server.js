@@ -144,6 +144,7 @@ function auditOrderSnapshot(order) {
 
 
 const EXPENSES_FILE = path.join(DATA_DIR, 'expenses.json');
+const FINES_FILE = path.join(DATA_DIR, 'fines.json');
 const UPLOADS_DIR = process.env.YHORS_STORAGE_DIR ? path.join(STORAGE_ROOT, 'uploads') : path.join(__dirname, 'uploads');
 const BACKUPS_DIR = process.env.YHORS_STORAGE_DIR ? path.join(STORAGE_ROOT, 'backups') : path.join(__dirname, 'data', 'backups');
 const BACKUP_RETENTION = Math.max(3, Math.min(100, Number.parseInt(process.env.YHORS_BACKUP_RETENTION || '30', 10) || 30));
@@ -1751,6 +1752,23 @@ function writeExpenses(expenses) {
   fs.renameSync(temporaryFile, EXPENSES_FILE);
 }
 
+function readFines() {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(FINES_FILE, 'utf8'));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeFines(fines) {
+  maybeAutoBackup();
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  const temporaryFile = `${FINES_FILE}.tmp`;
+  fs.writeFileSync(temporaryFile, `${JSON.stringify(fines, null, 2)}\n`, 'utf8');
+  fs.renameSync(temporaryFile, FINES_FILE);
+}
+
 function readOrders() {
   const raw = fs.readFileSync(ORDERS_FILE, 'utf8');
   const parsed = JSON.parse(raw);
@@ -2738,6 +2756,7 @@ app.get('/api/admin/resumen-financiero', requireAdmin, (req, res) => {
   const users = readUsers();
   const sellerMap = new Map(users.filter(user => isSellerRole(user.role)).map(user => [String(user.id), user]));
   const expenses = readExpenses();
+  const fines = readFines();
   const from = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.from || '')) ? String(req.query.from) : '';
   const to = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.to || '')) ? String(req.query.to) : '';
   const localDate = value => {
@@ -3082,10 +3101,102 @@ app.delete('/api/admin/gastos/:id', requireAdmin, (req, res) => {
 });
 
 
+
+app.get('/api/admin/multas', requireAdmin, (req, res) => {
+  const fines = readFines();
+  const users = readUsers();
+  const userMap = new Map(users.map(user => [String(user.id), user]));
+  const from = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.from || '')) ? String(req.query.from) : '';
+  const to = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.to || '')) ? String(req.query.to) : '';
+
+  const rows = fines
+    .filter(fine => (!from || String(fine.date || '') >= from) && (!to || String(fine.date || '') <= to))
+    .map(fine => {
+      const user = userMap.get(String(fine.userId));
+      return {
+        ...fine,
+        userName: fine.userName || user?.name || 'Usuario',
+        userRole: fine.userRole || (isStoreManager(user?.role) ? 'store_manager' : 'vendedor')
+      };
+    })
+    .sort((a, b) => String(b.date || b.createdAt || '').localeCompare(String(a.date || a.createdAt || '')));
+
+  const total = rows.reduce((sum, fine) => sum + Number(fine.amount || 0), 0);
+  return res.json({ fines: rows, total: Math.round(total * 100) / 100, filters: { from, to } });
+});
+
+app.post('/api/admin/multas', requireAdmin, (req, res) => {
+  const userId = cleanText(req.body?.userId, 100);
+  const reason = cleanText(req.body?.reason, 500);
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(String(req.body?.date || '')) ? String(req.body.date) : '';
+  const amount = Number(req.body?.amount);
+
+  if (!userId) return res.status(400).json({ error: 'Selecciona un vendedor o Jefe de Tienda.' });
+  if (!reason) return res.status(400).json({ error: 'Escribe el motivo de la multa.' });
+  if (!date) return res.status(400).json({ error: 'Selecciona una fecha válida.' });
+  if (!Number.isFinite(amount) || amount <= 0 || amount > 100000000) {
+    return res.status(400).json({ error: 'Ingresa un valor de multa válido.' });
+  }
+
+  const users = readUsers();
+  const user = users.find(item =>
+    String(item.id) === userId &&
+    item.active !== false &&
+    (isSellerRole(item.role) || isStoreManager(item.role))
+  );
+  if (!user) return res.status(404).json({ error: 'El usuario seleccionado no es un vendedor o Jefe de Tienda activo.' });
+
+  const fine = {
+    id: crypto.randomUUID(),
+    date,
+    userId: user.id,
+    userName: user.name || user.username || 'Usuario',
+    username: user.username || '',
+    userRole: isStoreManager(user.role) ? 'store_manager' : 'vendedor',
+    amount: Math.round(amount * 100) / 100,
+    reason,
+    createdAt: new Date().toISOString(),
+    createdBy: getSession(req)?.accountId || null
+  };
+
+  const fines = readFines();
+  fines.push(fine);
+  writeFines(fines);
+  auditLog(req, 'Multa registrada', 'Finanzas', {
+    fineId: fine.id,
+    userId: fine.userId,
+    username: fine.username,
+    role: fine.userRole,
+    amount: fine.amount,
+    reason: fine.reason,
+    date: fine.date
+  });
+  return res.status(201).json(fine);
+});
+
+app.delete('/api/admin/multas/:id', requireAdmin, (req, res) => {
+  const fines = readFines();
+  const fine = fines.find(item => String(item.id) === String(req.params.id));
+  if (!fine) return res.status(404).json({ error: 'Multa no encontrada.' });
+
+  const next = fines.filter(item => String(item.id) !== String(req.params.id));
+  writeFines(next);
+  auditLog(req, 'Multa eliminada', 'Finanzas', {
+    fineId: fine.id,
+    userId: fine.userId,
+    username: fine.username,
+    amount: fine.amount,
+    reason: fine.reason,
+    date: fine.date
+  });
+  return res.status(204).end();
+});
+
 app.get('/api/admin/calculo-comision', requireAdmin, (req, res) => {
   const orders = readOrders();
   const users = readUsers();
   const expenses = readExpenses();
+  const fines = readFines();
   const from = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.from || '')) ? String(req.query.from) : '';
   const to = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.to || '')) ? String(req.query.to) : '';
   const localDate = value => {
@@ -3135,15 +3246,27 @@ app.get('/api/admin/calculo-comision', requireAdmin, (req, res) => {
     .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))[0] || null;
 
   const round = value => Math.round(Number(value || 0) * 100) / 100;
+  const finesByUser = new Map();
+  for (const fine of fines) {
+    const fineDate = String(fine.date || '');
+    if (!fineDate || (from && fineDate < from) || (to && fineDate > to)) continue;
+    const key = String(fine.userId || '');
+    finesByUser.set(key, round((finesByUser.get(key) || 0) + Number(fine.amount || 0)));
+  }
+
   const normalized = [...rows.values(), managerRow].map(row => {
     const paid = paidFor(row.userId);
+    const finesAmount = round(finesByUser.get(String(row.userId)) || 0);
     return {
       ...row,
       sales: round(row.sales),
+      fines: finesAmount,
       paid: Boolean(paid),
       paidExpenseId: paid?.id || null,
       paidAmount: round(paid?.amount || 0),
-      paidRate: Number(paid?.commissionRate || 0)
+      paidRate: Number(paid?.commissionRate || 0),
+      paidGrossAmount: round(paid?.commissionGrossAmount || 0),
+      paidFines: round(paid?.commissionFines || 0)
     };
   });
   const totalSales = round(normalized.reduce((sum, row) => sum + row.sales, 0) - managerRow.sales);
@@ -3179,6 +3302,7 @@ app.post('/api/admin/calculo-comision/pagar', requireAdmin, (req, res) => {
   if (!user && !isManager) return res.status(404).json({ error: 'Usuario no encontrado.' });
 
   const orders = readOrders();
+  const fines = readFines();
   const qualifyingStatuses = new Set(['Enviado', 'Entregado']);
   const localDate = value => {
     const date = new Date(value);
@@ -3192,9 +3316,16 @@ app.post('/api/admin/calculo-comision/pagar', requireAdmin, (req, res) => {
     if (isManager || String(order.assignedSellerId || '') === String(user.id)) sales += Number(order.total || 0);
   }
   sales = Math.round(sales * 100) / 100;
-  const amount = Math.round(sales * (rate / 100) * 100) / 100;
+  const grossAmount = Math.round(sales * (rate / 100) * 100) / 100;
+  const fineAmount = Math.round(fines
+    .filter(fine => String(fine.userId || '') === String(user?.id || userId)
+      && String(fine.date || '') >= from
+      && String(fine.date || '') <= to)
+    .reduce((sum, fine) => sum + Number(fine.amount || 0), 0) * 100) / 100;
+  const amount = Math.max(0, Math.round((grossAmount - fineAmount) * 100) / 100);
   if (sales <= 0) return res.status(400).json({ error: 'No hay ventas Enviado o Entregado para calcular esta comisión en el período.' });
-  if (amount <= 0) return res.status(400).json({ error: 'La comisión calculada es $0,00.' });
+  if (grossAmount <= 0) return res.status(400).json({ error: 'La comisión bruta calculada es $0,00.' });
+  if (amount <= 0) return res.status(400).json({ error: 'Las multas consumen toda la comisión de este período. No hay saldo de comisión para pagar.' });
 
   const expenses = readExpenses();
   const existing = expenses.find(expense => expense.type === 'commission'
@@ -3211,8 +3342,10 @@ app.post('/api/admin/calculo-comision/pagar', requireAdmin, (req, res) => {
     date: to,
     description: `Comisión — ${recipientName}`,
     amount,
-    note: `Comisión ${rate}% sobre ${sales.toFixed(2)} de ventas Enviado + Entregado · período ${from} → ${to}.`,
+    note: `Comisión ${rate}% sobre ${sales.toFixed(2)} de ventas Enviado + Entregado · bruta ${grossAmount.toFixed(2)} · multas ${fineAmount.toFixed(2)} · neta ${amount.toFixed(2)} · período ${from} → ${to}.`,
     type: 'commission',
+    commissionGrossAmount: grossAmount,
+    commissionFines: fineAmount,
     commissionUserId: user?.id || 'store_manager',
     commissionRole: isManager ? 'store_manager' : 'vendedor',
     commissionFrom: from,
