@@ -1398,7 +1398,7 @@ async function buildFlyerPdf({ products, title, subtitle, description, layout, o
     let imageX = x, imageY = y, imageW = w, imageH = h;
     let copyX = x, copyY = y + h, copyW = w;
     if (mode === 'grid') {
-      imageH = Math.min(h * 0.30, safeLayout === '4' ? 104 : 165);
+      imageH = Math.min(h * 0.38, safeLayout === '4' ? 112 : 175);
       // PDF coordinates start at the bottom-left. The preview places the image
       // in the TOP section of the card, so the image box must start at the top
       // of the card rather than at `y`. The previous value made the image render
@@ -1438,7 +1438,7 @@ async function buildFlyerPdf({ products, title, subtitle, description, layout, o
     if (image) {
       const objName = `Im${usedImages.length + 1}`;
       usedImages.push({ name: objName, image });
-      const pad = mode === 'featured' ? 14 : 8;
+      const pad = mode === 'featured' ? 14 : 6;
       const boxX = imageX + pad, boxY = imageY + pad, boxW = imageW - pad * 2, boxH = imageH - pad * 2;
       const scale = Math.min(boxW / image.width, boxH / image.height);
       const drawW = Math.max(1, image.width * scale), drawH = Math.max(1, image.height * scale);
