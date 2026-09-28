@@ -1311,7 +1311,8 @@ function flyerTopPanel(ops, x, y, w, h, r = 7) {
   const k = 0.5522847498;
   const rr = Math.max(0, Math.min(r, Math.min(w, h) / 2));
   const c = rr * k;
-  ops.push(`1 1 1 rg`);
+  // Preview uses a warm cream image panel; keep the PDF identical.
+  ops.push(`0.965 0.95 0.92 rg`);
   ops.push(`${x} ${y} m ${x + w} ${y} l ${x + w} ${y + h - rr} l`);
   ops.push(`${x + w} ${y + h - rr + c} ${x + w - rr + c} ${y + h} ${x + w - rr} ${y + h} c`);
   ops.push(`${x + rr} ${y + h} l`);
@@ -1349,10 +1350,18 @@ async function buildFlyerPdf({ products, title, subtitle, description, layout, o
   try { logoJpeg = fs.readFileSync(logoPath); } catch {}
   const logoSize = logoJpeg ? parseJpegSize(logoJpeg) : null;
 
-  const config = {
+  // Match the compact, elegant preview density in the real PDF. Portrait
+  // flyers can use three rows for the 4-column layout (12 products/page),
+  // while landscape keeps the more open 2-row composition.
+  const config = isLandscape ? {
     '4': { cols: 4, rows: 2, mode: 'grid', perPage: 8 },
     '3': { cols: 3, rows: 2, mode: 'grid', perPage: 6 },
     '2': { cols: 2, rows: 2, mode: 'horizontal', perPage: 4 },
+    '1': { cols: 1, rows: 1, mode: 'featured', perPage: 1 }
+  }[safeLayout] : {
+    '4': { cols: 4, rows: 3, mode: 'grid', perPage: 12 },
+    '3': { cols: 3, rows: 3, mode: 'grid', perPage: 9 },
+    '2': { cols: 2, rows: 3, mode: 'horizontal', perPage: 6 },
     '1': { cols: 1, rows: 1, mode: 'featured', perPage: 1 }
   }[safeLayout];
   const pages = [];
@@ -1437,30 +1446,45 @@ async function buildFlyerPdf({ products, title, subtitle, description, layout, o
     flyerFill(ops, 1, 1, 1); flyerPdfText(ops, String(globalIndex + 1).padStart(2, '0'), x + 20.5, y + h - 19.5, 6, 2, 'center');
 
     const brand = String(product.brand || '').trim() || 'YHORS';
-    const titleSize = mode === 'featured' ? 20 : safeLayout === '2' ? 11.2 : safeLayout === '3' ? 9.3 : 8.2;
-    const titleChars = Math.max(13, Math.floor(copyW / (titleSize * 0.48)));
-    const metaSize = mode === 'featured' ? 8 : safeLayout === '2' ? 6.3 : 5.8;
-    const highlightSize = mode === 'featured' ? 8 : safeLayout === '2' ? 6.2 : safeLayout === '3' ? 5.9 : 5.6;
-    const maxHighlights = mode === 'featured' ? 6 : safeLayout === '2' ? 5 : safeLayout === '3' ? 4 : 3;
+    const titleSize = mode === 'featured' ? 20 : safeLayout === '2' ? 11.2 : safeLayout === '3' ? 9.3 : 8.0;
+    // Conservative character limits keep the Helvetica-Bold title inside the
+    // card even for long model names. Never let the PDF text cross the border.
+    const titleChars = mode === 'featured' ? 34 : safeLayout === '2' ? 27 : safeLayout === '3' ? 24 : 21;
+    const titleLines = mode === 'featured' ? 4 : safeLayout === '2' ? 3 : 2;
+    const metaSize = mode === 'featured' ? 8 : safeLayout === '2' ? 6.3 : 5.6;
+    const highlightSize = mode === 'featured' ? 8 : safeLayout === '2' ? 6.2 : safeLayout === '3' ? 5.8 : 5.35;
+    const maxHighlights = mode === 'featured' ? 6 : safeLayout === '2' ? 5 : 4;
+    const trim = (value, max) => {
+      const text = String(value || '').replace(/\s+/g, ' ').trim();
+      if (text.length <= max) return text;
+      return text.slice(0, Math.max(1, max - 1)).replace(/\s+$/, '') + '…';
+    };
     let cy = copyY;
 
-    flyerFill(ops, ar, ag, ab); flyerPdfText(ops, brand.toUpperCase().slice(0, 32), copyX, cy, mode === 'featured' ? 7.5 : 5.7, 2); cy -= mode === 'featured' ? 16 : 12;
-    const titleResult = drawLines(ops, product.name || 'Producto', copyX, cy, titleChars, titleSize, 2, [0.08,0.075,0.07], mode === 'featured' ? 4 : safeLayout === '2' ? 3 : 3, titleSize + 2);
+    flyerFill(ops, ar, ag, ab);
+    flyerPdfText(ops, trim(brand.toUpperCase(), 20), copyX, cy, mode === 'featured' ? 7.5 : 5.7, 2);
+    cy -= mode === 'featured' ? 16 : 11;
+
+    const titleResult = drawLines(ops, product.name || 'Producto', copyX, cy, titleChars, titleSize, 2, [0.08,0.075,0.07], titleLines, titleSize + 2);
     cy = titleResult.y - 2;
 
-    const metaParts = [product.productType || '', product.sku ? `SKU ${product.sku}` : ''].filter(Boolean);
-    const metaText = metaParts.join(' · ');
-    const metaChars = Math.max(20, Math.floor(copyW / (metaSize * 0.50)));
-    const metaResult = drawLines(ops, metaText, copyX, cy, metaChars, metaSize, 1, [0.45,0.43,0.40], mode === 'featured' ? 2 : 2, metaSize + 2.5);
-    cy = metaResult.y - 2;
+    // Keep type and SKU on their own compact lines, as in the preview. This
+    // avoids the old "product type · SKU" line overflowing the card.
+    const typeText = trim(product.productType || 'Producto', safeLayout === '4' ? 20 : 28);
+    const skuText = product.sku ? `SKU ${trim(product.sku, safeLayout === '4' ? 22 : 34)}` : '';
+    flyerFill(ops, 0.45,0.43,0.40);
+    if (typeText) { flyerPdfText(ops, typeText, copyX, cy, metaSize, 1); cy -= metaSize + 3; }
+    if (skuText) { flyerPdfText(ops, skuText, copyX, cy, metaSize, 1); cy -= metaSize + 4; }
 
+    // The description gets a subtle right indent so it reads as a separate
+    // commercial block and remains light/elegant rather than bold.
     const highlights = flyerProductHighlights(product).slice(0, maxHighlights);
     for (const item of highlights) {
-      if (cy < y + 42) break;
+      if (cy < y + 40) break;
       const bullet = `• ${item}`;
-      const chars = Math.max(18, Math.floor(copyW / (highlightSize * 0.48)));
-      const result = drawLines(ops, bullet, copyX, cy, chars, highlightSize, 1, [0.34,0.32,0.29], mode === 'featured' ? 3 : 2, highlightSize + 2.5);
-      cy = result.y - 1;
+      const chars = Math.max(18, safeLayout === '4' ? 28 : Math.floor((copyW - 5) / (highlightSize * 0.48)));
+      const result = drawLines(ops, bullet, copyX + 5, cy, chars, highlightSize, 1, [0.38,0.36,0.33], 1, highlightSize + 2.2);
+      cy = result.y - 0.5;
     }
 
     const note = notes?.[String(product.id)] || '';
@@ -1472,11 +1496,10 @@ async function buildFlyerPdf({ products, title, subtitle, description, layout, o
 
     if (showPrices) {
       const price = Number(product.salePrice ?? product.price ?? 0);
-      const priceSize = mode === 'featured' ? 18 : safeLayout === '2' ? 12 : 10;
-      // Keep every price on the same visual baseline at the bottom of its
-      // card, just like the preview. This prevents short descriptions from
-      // pushing the price upward.
-      const priceY = y + (mode === 'featured' ? 24 : safeLayout === '2' ? 18 : 18);
+      const priceSize = mode === 'featured' ? 18 : safeLayout === '2' ? 12 : safeLayout === '3' ? 10.5 : 10;
+      // Price is anchored close to the card bottom, matching the preview
+      // instead of floating halfway up when the description is short.
+      const priceY = y + (mode === 'featured' ? 20 : 13);
       flyerFill(ops, ar, ag, ab);
       flyerPdfText(ops, `$${price.toFixed(2)}`, copyX, priceY, priceSize, 2);
     }
@@ -1520,8 +1543,8 @@ async function buildFlyerPdf({ products, title, subtitle, description, layout, o
     const cardW = config.cols === 1 ? contentW : (contentW - gap * (config.cols - 1)) / config.cols;
     // Keep the PDF composition compact and top-aligned like the live preview.
     // In particular, layout 2 should not stretch to fill the whole A4 page.
-    const preferredRowH = safeLayout === '1' ? availableH : (safeLayout === '2' ? 225 : safeLayout === '3' ? 205 : 185);
-    const minimumRowH = safeLayout === '2' ? 210 : safeLayout === '3' ? 195 : 175;
+    const preferredRowH = safeLayout === '1' ? availableH : (safeLayout === '2' ? 205 : safeLayout === '3' ? 195 : 178);
+    const minimumRowH = safeLayout === '2' ? 190 : safeLayout === '3' ? 180 : 168;
     const cardH = safeLayout === '1'
       ? availableH
       : Math.min(preferredRowH, Math.max(minimumRowH, (availableH - gap * (rowsOnPage - 1)) / rowsOnPage));
