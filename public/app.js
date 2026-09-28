@@ -619,7 +619,7 @@ if (path === `${ADMIN_PATH}/usuarios` || path === `${ADMIN_PATH}/usuarios/`) {
   }
   if (path === `${ADMIN_PATH}/inventario` || path === `${ADMIN_PATH}/inventario/`) return renderAdminInventory();
   if (path === `${ADMIN_PATH}/buscar-productos` || path === `${ADMIN_PATH}/buscar-productos/`) return renderAdminCatalogSearch();
-  if (path === '/yhors/flyer' || path === '/yhors/flyer/') return renderFlyerPreview();
+  if (path === '/yhors/flyer' || path === '/yhors/flyer/') { window.location.replace(`${ADMIN_PATH}/buscar-productos`); return; }
   if (path === '/mi-cuenta' || path === '/mi-cuenta/') return renderMyAccount();
   if (path === '/pedido' || path === '/pedido/') return checkoutPage();
   return renderStore();
@@ -3296,7 +3296,7 @@ function flyerGeneratorModal(products = [], selectedIds = []) {
           <div id="flyerLivePreview" class="flyer-live-canvas"></div>
         </section>
       </div>
-      <div class="flyer-modal-foot"><span><strong>${selected.length}</strong> producto${selected.length===1?'':'s'} seleccionado${selected.length===1?'':'s'}</span><div><button type="button" class="button secondary" data-flyer-close>Cancelar</button><button type="button" class="button primary" id="generateFlyerButton">Abrir Flyer ↗</button></div></div>
+      <div class="flyer-modal-foot"><span><strong>${selected.length}</strong> producto${selected.length===1?'':'s'} seleccionado${selected.length===1?'':'s'}</span><div><button type="button" class="button secondary" data-flyer-close>Cancelar</button><button type="button" class="button primary" id="generateFlyerButton">Generar PDF ↗</button></div></div>
     </div>
   </div>`;
 }
@@ -3371,12 +3371,31 @@ async function renderAdminCatalogSearch() {
     modal?.querySelectorAll('[data-flyer-accent]').forEach(btn=>btn.addEventListener('click',()=>{modal.querySelectorAll('.flyer-swatch').forEach(x=>x.classList.remove('active'));btn.classList.add('active');modal.querySelector('#flyerAccent').value=btn.dataset.flyerAccent;refreshPreview();}));
     modal?.querySelectorAll('input,select,textarea').forEach(el=>el.addEventListener(el.type==='text'||el.tagName==='TEXTAREA'?'input':'change',refreshPreview));
     refreshPreview();
-    modal?.querySelector('#generateFlyerButton')?.addEventListener('click',()=>{
+    modal?.querySelector('#generateFlyerButton')?.addEventListener('click',async()=>{
+      const button = modal.querySelector('#generateFlyerButton');
       const draft=flyerPreviewDraftFromModal(modal, selected);
-      const key=flyerDraftKey(); localStorage.setItem(key,JSON.stringify({...draft, products:selected, createdAt:Date.now()}));
-      const tab=window.open(`/yhors/flyer?draft=${encodeURIComponent(key)}`,'_blank');
-      if(!tab) window.location.href=`/yhors/flyer?draft=${encodeURIComponent(key)}`;
-      close();
+      const tab=window.open('about:blank','_blank','noopener');
+      if(!tab){ alert('Permite las ventanas emergentes para abrir el PDF en una pestaña nueva.'); return; }
+      button.disabled=true;
+      button.textContent='Generando PDF…';
+      try {
+        const response = await fetch('/api/admin/flyers/pdf', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({ ...draft, ids:selected.map(p=>String(p.id)) })
+        });
+        if(!response.ok) throw new Error((await response.json().catch(()=>({})))?.error || 'No se pudo generar el PDF.');
+        const blob=await response.blob();
+        const url=URL.createObjectURL(blob);
+        tab.location.href=url;
+        setTimeout(()=>URL.revokeObjectURL(url),120000);
+        close();
+      } catch(error) {
+        try{tab.close();}catch(_){ }
+        button.disabled=false;
+        button.textContent='Generar PDF ↗';
+        alert(error.message || 'No se pudo generar el PDF.');
+      }
     });
   };
   flyerButton.addEventListener('click',openFlyer);

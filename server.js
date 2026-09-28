@@ -1123,6 +1123,308 @@ function buildOrderPdf(order) {
   return Buffer.from(pdf, 'latin1');
 }
 
+
+
+// Flyer PDF server-side: genera el PDF real (como las órdenes) y lo entrega inline
+// para que el navegador abra directamente el documento PDF en una pestaña nueva.
+function parseJpegSize(buffer) {
+  if (!Buffer.isBuffer(buffer) || buffer.length < 4 || buffer[0] !== 0xff || buffer[1] !== 0xd8) return null;
+  let offset = 2;
+  while (offset + 9 < buffer.length) {
+    if (buffer[offset] !== 0xff) { offset += 1; continue; }
+    const marker = buffer[offset + 1];
+    offset += 2;
+    if (marker === 0xd8 || marker === 0xd9) continue;
+    if (offset + 2 > buffer.length) break;
+    const length = buffer.readUInt16BE(offset);
+    if (length < 2 || offset + length > buffer.length) break;
+    const isSof = (marker >= 0xc0 && marker <= 0xc3) || (marker >= 0xc5 && marker <= 0xc7) || (marker >= 0xc9 && marker <= 0xcb) || (marker >= 0xcd && marker <= 0xcf);
+    if (isSof && length >= 7) return { width: buffer.readUInt16BE(offset + 5), height: buffer.readUInt16BE(offset + 3) };
+    offset += length;
+  }
+  return null;
+}
+
+async function flyerImageJpeg(url) {
+  try {
+    const rawUrl = String(url || '');
+    let input;
+    if (rawUrl.startsWith('/uploads/')) {
+      const local = path.join(__dirname, rawUrl.replace(/^\//, ''));
+      input = fs.readFileSync(local);
+    } else {
+      const response = await fetch(absoluteImage(rawUrl), { headers: { 'User-Agent': 'YHORS-STORE Flyer/1.0' }, signal: AbortSignal.timeout(9000) });
+      if (!response.ok) return null;
+      input = Buffer.from(await response.arrayBuffer());
+    }
+    const jpeg = execFileSync('/opt/imagemagick/bin/magick', ['-', '-auto-orient', '-strip', '-quality', '88', 'jpg:-'], { input, timeout: 15000, maxBuffer: 12 * 1024 * 1024 });
+    const size = parseJpegSize(jpeg);
+    return size ? { data: jpeg, width: size.width, height: size.height } : null;
+  } catch (error) {
+    console.warn('[YHORS] Flyer image skipped:', String(error?.message || error).slice(0, 180));
+    return null;
+  }
+}
+
+function hexRgb(hex, fallback = [0.71, 0.54, 0.26]) {
+  const m = String(hex || '').match(/^#?([0-9a-f]{6})$/i);
+  if (!m) return fallback;
+  return [0, 2, 4].map(i => parseInt(m[1].slice(i, i + 2), 16) / 255);
+}
+
+function flyerProductHighlights(product) {
+  const raw = String(product?.description || '').replace(/\r/g, '');
+  if (!raw) return [];
+  return raw.split(/\n|•|\s+-\s+/).map(x => x.replace(/^[-–—*]\s*/, '').trim()).filter(Boolean).slice(0, 5);
+}
+
+function flyerWrap(text, maxChars) {
+  const value = String(text ?? '').replace(/\s+/g, ' ').trim();
+  if (!value) return [];
+  const words = value.split(' ');
+  const lines = [];
+  let current = '';
+  for (const word of words) {
+    if (!current) current = word;
+    else if ((current + ' ' + word).length <= maxChars) current += ` ${word}`;
+    else { lines.push(current); current = word; }
+  }
+  if (current) lines.push(current);
+  return lines;
+}
+
+function flyerPdfText(ops, text, x, y, size = 8, font = 1, align = 'left') {
+  const raw = String(text ?? '');
+  const value = pdfEscape(raw);
+  const approx = raw.length * size * 0.50;
+  let tx = x;
+  if (align === 'right') tx = x - approx;
+  if (align === 'center') tx = x - approx / 2;
+  ops.push(`BT /F${font} ${size} Tf ${tx.toFixed(2)} ${y.toFixed(2)} Td (${value}) Tj ET`);
+}
+
+function flyerFill(ops, r, g, b) { ops.push(`${r} ${g} ${b} rg`); }
+function flyerStroke(ops, r, g, b) { ops.push(`${r} ${g} ${b} RG`); }
+function flyerLine(ops, x1, y1, x2, y2, width = 0.5) { ops.push(`${width} w ${x1} ${y1} m ${x2} ${y2} l S`); }
+function flyerRect(ops, x, y, w, h, width = 0.6) { ops.push(`${width} w ${x} ${y} ${w} ${h} re S`); }
+function flyerRoundRect(ops, x, y, w, h, r = 7, fill = false) {
+  ops.push(`${0.6} w ${x} ${y} ${w} ${h} re ${fill ? 'f' : 'S'}`);
+}
+
+
+async function buildFlyerPdf({ products, title, subtitle, description, layout, orientation, showPrices, theme, accent, logo, contact, notes }) {
+  const isLandscape = orientation === 'landscape';
+  const W = isLandscape ? 842 : 595;
+  const H = isLandscape ? 595 : 842;
+  const margin = isLandscape ? 34 : 32;
+  const contentW = W - margin * 2;
+  const [ar, ag, ab] = hexRgb(accent);
+  const safeLayout = ['1','2','3','4'].includes(String(layout)) ? String(layout) : '4';
+  const cols = safeLayout === '1' ? 1 : Number(safeLayout);
+  const rows = safeLayout === '1' ? 1 : 2;
+  const perPage = safeLayout === '1' ? 1 : cols * rows;
+  const cleanProducts = Array.isArray(products) ? products : [];
+
+  const imageCache = new Map();
+  for (const product of cleanProducts) {
+    const url = Array.isArray(product.images) && product.images.length ? product.images[0] : product.image;
+    if (url && !imageCache.has(url)) imageCache.set(url, await flyerImageJpeg(url));
+  }
+  const logoPath = path.join(__dirname, 'public', 'assets', 'yhors-logo-pdf.jpg');
+  let logoJpeg = null;
+  try { logoJpeg = fs.readFileSync(logoPath); } catch {}
+  const logoSize = logoJpeg ? parseJpegSize(logoJpeg) : null;
+
+  const pages = [];
+  for (let i = 0; i < Math.max(1, cleanProducts.length); i += perPage) pages.push(cleanProducts.slice(i, i + perPage));
+  if (!pages.length) pages.push([]);
+
+  const streams = [];
+  const usedImages = [];
+  const drawProduct = (ops, product, index, x, y, w, h, featured = false) => {
+    const gap = featured ? 18 : 8;
+    const imgW = featured ? w * 0.46 : w;
+    const imgH = featured ? h : Math.min(h * 0.52, 170);
+    const copyX = featured ? x + imgW + gap : x;
+    const copyW = featured ? w - imgW - gap : w;
+    const copyY = featured ? y : y + h - imgH - gap;
+    const cardY = y;
+    flyerFill(ops, 1, 1, 1); flyerStroke(ops, 0.87, 0.84, 0.79); flyerRoundRect(ops, x, cardY, w, h, 8, true);
+    flyerFill(ops, 0.965, 0.95, 0.92); ops.push(`${x} ${cardY + h - imgH} ${imgW} ${imgH} re f`);
+    const imageUrl = Array.isArray(product.images) && product.images.length ? product.images[0] : product.image;
+    const image = imageCache.get(imageUrl);
+    if (image) {
+      const objName = `Im${usedImages.length + 1}`;
+      usedImages.push({ name: objName, image });
+      const pad = featured ? 12 : 7;
+      const boxX = x + pad, boxY = cardY + h - imgH + pad, boxW = imgW - pad * 2, boxH = imgH - pad * 2;
+      const scale = Math.min(boxW / image.width, boxH / image.height);
+      const drawW = image.width * scale, drawH = image.height * scale;
+      const dx = boxX + (boxW - drawW) / 2, dy = boxY + (boxH - drawH) / 2;
+      ops.push(`q ${drawW.toFixed(2)} 0 0 ${drawH.toFixed(2)} ${dx.toFixed(2)} ${dy.toFixed(2)} cm /${objName} Do Q`);
+    }
+    flyerFill(ops, 1, 1, 1); flyerStroke(ops, ar, ag, ab); ops.push(`${ar} ${ag} ${ab} rg`);
+    const badgeY = cardY + h - 18;
+    flyerRoundRect(ops, x + 8, badgeY - 8, 25, 17, 8, true);
+    flyerFill(ops, 1, 1, 1); flyerPdfText(ops, String(index + 1).padStart(2,'0'), x + 20.5, badgeY - 2.5, 6, 2, 'center');
+
+    let cy = featured ? cardY + h - 20 : cardY + h - imgH - 16;
+    const brand = String(product.brand || '').trim() || 'YHORS';
+    flyerFill(ops, ar, ag, ab); flyerPdfText(ops, brand.toUpperCase(), copyX, cy, featured ? 7 : 5.7, 2); cy -= featured ? 17 : 13;
+    flyerFill(ops, 0.08, 0.075, 0.07);
+    const nameLines = flyerWrap(product.name || 'Producto', featured ? 38 : (cols === 4 ? 18 : cols === 3 ? 23 : 31));
+    nameLines.slice(0, featured ? 4 : 3).forEach(line => { flyerPdfText(ops, line, copyX, cy, featured ? 18 : (cols === 4 ? 8 : cols === 3 ? 8.8 : 10), 2); cy -= featured ? 20 : 10; });
+    const meta = [product.productType || '', product.sku ? `SKU ${product.sku}` : ''].filter(Boolean).join(' · ');
+    flyerFill(ops, 0.45, 0.43, 0.40); flyerPdfText(ops, meta, copyX, cy - 1, featured ? 8 : 5.8, 1); cy -= featured ? 17 : 12;
+    const highlights = flyerProductHighlights(product).slice(0, featured ? 5 : (cols === 2 ? 3 : 2));
+    if (highlights.length) {
+      flyerFill(ops, 0.34, 0.32, 0.29);
+      for (const hline of highlights) {
+        const line = `• ${hline}`;
+        const wrapped = flyerWrap(line, featured ? 55 : (cols === 4 ? 23 : cols === 3 ? 29 : 36));
+        wrapped.slice(0, featured ? 2 : 1).forEach(t => { flyerPdfText(ops, t, copyX, cy, featured ? 7.5 : 5.7, 1); cy -= featured ? 10 : 8; });
+        if (cy < cardY + 42) break;
+      }
+    }
+    const note = notes?.[String(product.id)] || '';
+    if (note) {
+      flyerFill(ops, 0.98, 0.91, 0.72); ops.push(`${0.98} ${0.91} ${0.72} rg ${copyX} ${Math.max(cardY + 28, cy - 3)} ${Math.min(copyW, featured ? 230 : copyW)} 18 re f`);
+      flyerFill(ops, 0.25, 0.20, 0.12); flyerPdfText(ops, note.slice(0, featured ? 55 : 28), copyX + 6, Math.max(cardY + 35, cy + 3), featured ? 7 : 5.5, 2);
+    }
+    const price = Number(product.salePrice ?? product.price ?? 0);
+    const stock = Number(product.stock || 0);
+    flyerFill(ops, ar, ag, ab); flyerPdfText(ops, showPrices ? `$${price.toFixed(2)}` : '', copyX, cardY + 18, featured ? 18 : (cols === 4 ? 9 : 11), 2);
+    flyerFill(ops, stock > 0 ? 0.16 : 0.55, stock > 0 ? 0.43 : 0.20, stock > 0 ? 0.29 : 0.17);
+    flyerPdfText(ops, stock > 0 ? `${stock} disponibles` : 'Sin stock', x + w - 8, cardY + 19, featured ? 8 : 5.8, 2, 'right');
+  };
+
+  for (let pageIndex = 0; pageIndex < pages.length; pageIndex++) {
+    const page = pages[pageIndex];
+    const ops = [];
+    flyerFill(ops, 1, 1, 1); ops.push(`0 0 ${W} ${H} re f`);
+    flyerFill(ops, 0.07, 0.065, 0.06); flyerStroke(ops, ar, ag, ab);
+    let y = H - margin;
+    if (logo && logoJpeg && logoSize) {
+      const lw = 72, lh = lw * logoSize.height / logoSize.width;
+      ops.push(`q ${lw} 0 0 ${lh} ${margin} ${y - lh + 3} cm /Logo Do Q`);
+    } else if (logo) {
+      flyerPdfText(ops, 'YHORS', margin, y - 12, 18, 2);
+    }
+    const headerX = logo ? margin + 92 : margin;
+    flyerFill(ops, ar, ag, ab); flyerPdfText(ops, 'YHORS · SELECCIÓN COMERCIAL', headerX, y - 4, 7, 2);
+    flyerFill(ops, 0.06, 0.055, 0.05); flyerPdfText(ops, title || 'Recién Llegados', headerX, y - 28, isLandscape ? 27 : 25, 2);
+    let hy = y - 45;
+    if (subtitle) { flyerFill(ops, 0.36, 0.34, 0.31); flyerPdfText(ops, subtitle, headerX, hy, 8, 1); hy -= 13; }
+    if (description) { flyerFill(ops, 0.42, 0.39, 0.36); flyerWrap(description, isLandscape ? 100 : 78).slice(0,2).forEach(line => { flyerPdfText(ops, line, headerX, hy, 6.8, 1); hy -= 9; }); }
+    flyerFill(ops, 0.45, 0.43, 0.40); flyerPdfText(ops, new Intl.DateTimeFormat('es-EC',{dateStyle:'medium'}).format(new Date()), W - margin, y - 4, 7, 1, 'right');
+    flyerPdfText(ops, `PÁGINA ${pageIndex + 1} / ${pages.length}`, W - margin, y - 17, 6, 1, 'right');
+    const headerBottom = Math.min(hy, y - 55);
+    flyerStroke(ops, 0.86, 0.83, 0.78); flyerLine(ops, margin, headerBottom - 8, W - margin, headerBottom - 8, 0.7);
+
+    const top = headerBottom - 24;
+    const footerH = 24;
+    const availableH = top - margin - footerH;
+    if (safeLayout === '1') {
+      const cardW = contentW;
+      const cardH = availableH;
+      drawProduct(ops, page[0], pageIndex * perPage, margin, margin + footerH, cardW, cardH, true);
+    } else {
+      const gap = 10;
+      const cardW = (contentW - gap * (cols - 1)) / cols;
+      const cardH = (availableH - gap) / 2;
+      page.forEach((product, idx) => {
+        const row = Math.floor(idx / cols), col = idx % cols;
+        const x = margin + col * (cardW + gap);
+        const yCard = margin + footerH + (1 - row) * (cardH + gap);
+        drawProduct(ops, product, pageIndex * perPage + idx, x, yCard, cardW, cardH, false);
+      });
+    }
+    flyerStroke(ops, 0.86, 0.83, 0.78); flyerLine(ops, margin, margin + 14, W - margin, margin + 14, 0.7);
+    flyerFill(ops, 0.45, 0.43, 0.40); flyerPdfText(ops, 'YHORS · MÁS QUE UN PRODUCTO', margin, margin + 3, 5.5, 1);
+    flyerPdfText(ops, `${cleanProducts.length} producto${cleanProducts.length === 1 ? '' : 's'}`, W - margin, margin + 3, 5.5, 1, 'right');
+    streams.push(ops.join('\n'));
+  }
+
+  const objects = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    `<< /Type /Pages /Kids [${streams.map((_,i)=>`${3 + i * 2} 0 R`).join(' ')}] /Count ${streams.length} >>`
+  ];
+  const pageObjectNos = [];
+  streams.forEach((stream, i) => {
+    const pageNo = 3 + i * 2, contentNo = pageNo + 1;
+    pageObjectNos.push(pageNo);
+    const imageRefs = usedImages.map((_, idx) => `/Im${idx + 1} ${0} 0 R`).join(' ');
+    // Image object numbers are added after all page/content objects are known.
+    objects.push(`PAGE_PLACEHOLDER_${pageNo}`);
+    objects.push(`<< /Length ${Buffer.byteLength(stream, 'latin1')} >>\nstream\n${stream}\nendstream`);
+  });
+  const firstImageObject = objects.length + 1;
+  const logoObject = logoJpeg ? firstImageObject + usedImages.length : null;
+  const normalFontObject = (logoJpeg ? logoObject + 1 : firstImageObject + usedImages.length);
+  const boldFontObject = normalFontObject + 1;
+  // Replace page placeholders now that image/font object numbers are known.
+  streams.forEach((_, i) => {
+    const pageNo = 3 + i * 2;
+    const contentNo = pageNo + 1;
+    const xobjects = [];
+    usedImages.forEach((_, idx) => xobjects.push(`/Im${idx + 1} ${firstImageObject + idx} 0 R`));
+    if (logoJpeg) xobjects.push(`/Logo ${logoObject} 0 R`);
+    objects[2 + i * 2] = `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] /Resources << /ProcSet [/PDF /Text /ImageC] /Font << /F1 ${normalFontObject} 0 R /F2 ${boldFontObject} 0 R >> /XObject << ${xobjects.join(' ')} >> >> /Contents ${contentNo} 0 R >>`;
+  });
+  usedImages.forEach(({ image }) => {
+    objects.push(`<< /Type /XObject /Subtype /Image /Width ${image.width} /Height ${image.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${image.data.length} >>\nstream\n${image.data.toString('latin1')}\nendstream`);
+  });
+  if (logoJpeg && logoSize) objects.push(`<< /Type /XObject /Subtype /Image /Width ${logoSize.width} /Height ${logoSize.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${logoJpeg.length} >>\nstream\n${logoJpeg.toString('latin1')}\nendstream`);
+  objects.push('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>');
+  objects.push('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>');
+  let pdf = '%PDF-1.4\n';
+  const offsets = [0];
+  objects.forEach((object,index)=>{ offsets.push(Buffer.byteLength(pdf,'latin1')); pdf += `${index+1} 0 obj\n${object}\nendobj\n`; });
+  const xref = Buffer.byteLength(pdf,'latin1');
+  pdf += `xref\n0 ${objects.length+1}\n0000000000 65535 f \n`;
+  for (let i=1;i<offsets.length;i++) pdf += `${String(offsets[i]).padStart(10,'0')} 00000 n \n`;
+  pdf += `trailer\n<< /Size ${objects.length+1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+  return Buffer.from(pdf,'latin1');
+}
+
+app.post('/api/admin/flyers/pdf', requireOrdersAccess, async (req, res) => {
+  try {
+    const body = req.body || {};
+    const ids = Array.isArray(body.ids) ? [...new Set(body.ids.map(String))].slice(0, 80) : [];
+    if (!ids.length) return res.status(400).json({ error: 'Selecciona al menos un producto.' });
+    const all = readProducts().map(normalizeProduct);
+    const products = ids.map(id => all.find(p => String(p.id) === id)).filter(Boolean).map(p => ({
+      id: p.id, name: p.name, description: p.description || '', category: p.category, brand: p.brand || '', productType: p.productType || '', sku: p.sku || '', salePrice: Number(p.salePrice ?? p.price ?? 0), stock: Number(p.stock || 0), image: p.image || '', images: Array.isArray(p.images) ? p.images.filter(Boolean) : []
+    }));
+    if (!products.length) return res.status(404).json({ error: 'No se encontraron los productos seleccionados.' });
+    const pdf = await buildFlyerPdf({
+      products,
+      title: String(body.title || 'Recién Llegados').slice(0, 90),
+      subtitle: String(body.subtitle || '').slice(0, 140),
+      description: String(body.description || '').slice(0, 280),
+      layout: String(body.layout || '4'),
+      orientation: body.orientation === 'landscape' ? 'landscape' : 'portrait',
+      showPrices: body.showPrices !== false,
+      theme: String(body.theme || 'none'),
+      accent: String(body.accent || '#b58a43'),
+      logo: body.logo !== 'none',
+      contact: Boolean(body.contact),
+      notes: body.notes && typeof body.notes === 'object' ? body.notes : {}
+    });
+    const safeTitle = String(body.title || 'flyer').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9_-]+/g,'-').replace(/^-+|-+$/g,'').slice(0, 60) || 'flyer';
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="YHORS-Flyer-${safeTitle}.pdf"`);
+    res.setHeader('Content-Length', pdf.length);
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    res.end(pdf);
+  } catch (error) {
+    console.error('[YHORS] Error generando Flyer PDF:', error);
+    res.status(500).json({ error: 'No se pudo generar el PDF del flyer.' });
+  }
+});
+
 app.get('/robots.txt', (_, res) => {
   res.status(200)
     .set('Content-Type', 'text/plain; charset=utf-8')
