@@ -1346,7 +1346,13 @@ async function buildFlyerPdf({ products, title, subtitle, description, layout, o
 
   const drawProduct = (ops, product, globalIndex, x, y, w, h, mode) => {
     const gap = 8;
-    flyerFill(ops, 1, 1, 1); flyerStroke(ops, 0.87, 0.84, 0.79); flyerRoundRect(ops, x, y, w, h, 8, true);
+    // Outer card: this is the same elegant frame used by the live preview.
+    // Keep the frame around the COMPLETE product card, including the commercial
+    // copy and price, rather than framing only the image area.
+    flyerFill(ops, 1, 1, 1);
+    flyerStroke(ops, 0.87, 0.84, 0.79);
+    flyerRoundRect(ops, x, y, w, h, 10, true);
+    flyerStroke(ops, 0.89, 0.86, 0.81);
 
     const imageUrls = [...new Set([
       product.imageData || '',
@@ -1367,9 +1373,9 @@ async function buildFlyerPdf({ products, title, subtitle, description, layout, o
       copyY = imageY - 10;
       copyX = x + 10; copyW = w - 20;
       flyerFill(ops, 0.965, 0.95, 0.92);
-      flyerRoundRect(ops, imageX, imageY, imageW, imageH, 8, true);
-      flyerStroke(ops, 0.91, 0.88, 0.83);
-      flyerRoundRect(ops, imageX, imageY, imageW, imageH, 8, false);
+      // Image panel sits inside the outer card frame. Keep the lower edge clean
+      // so the text section visually belongs to the same card.
+      flyerRoundRect(ops, imageX + 1, imageY, imageW - 2, imageH, 8, true);
       flyerStroke(ops, 0.91, 0.88, 0.83);
       flyerLine(ops, x + 1, imageY, x + w - 1, imageY, 0.45);
     } else if (mode === 'horizontal') {
@@ -1439,13 +1445,11 @@ async function buildFlyerPdf({ products, title, subtitle, description, layout, o
     if (showPrices) {
       const price = Number(product.salePrice ?? product.price ?? 0);
       const priceSize = mode === 'featured' ? 18 : safeLayout === '2' ? 12 : 10;
-      // The live preview keeps the price close to the commercial copy.
-      // Use a small lower safe-zone instead of pinning it to the absolute
-      // bottom of a tall card; this avoids the large visual gap seen in the
-      // previous PDF while still protecting the price from text collisions.
-      const priceFloor = y + (mode === 'featured' ? 24 : 22);
-      const priceCeiling = y + (mode === 'featured' ? 42 : safeLayout === '2' ? 52 : 44);
-      const priceY = Math.max(priceFloor, Math.min(priceCeiling, cy - 2));
+      // Keep the price in the same visual flow as the preview: directly after
+      // the commercial copy, while still reserving a small bottom safety zone.
+      const priceFloor = y + (mode === 'featured' ? 24 : 20);
+      const priceCeiling = y + (mode === 'featured' ? 72 : safeLayout === '2' ? 58 : 54);
+      const priceY = Math.max(priceFloor, Math.min(priceCeiling, cy - 1));
       flyerFill(ops, ar, ag, ab);
       flyerPdfText(ops, `$${price.toFixed(2)}`, copyX, priceY, priceSize, 2);
     }
@@ -1481,23 +1485,18 @@ async function buildFlyerPdf({ products, title, subtitle, description, layout, o
     const gap = safeLayout === '1' ? 0 : 10;
     const rowsOnPage = Math.max(1, Math.ceil(page.length / config.cols));
     const cardW = config.cols === 1 ? contentW : (contentW - gap * (config.cols - 1)) / config.cols;
-    // Match the live preview: do not force a second empty row when there are only
-    // a few products. Cards use the available page height, but shrink naturally
-    // when only one row is needed so the price/description stay visually close.
-    // Keep the PDF cards compact like the live preview instead of stretching
-    // each row to fill the entire printable area. This keeps the description
-    // and price visually close to the product card rather than leaving a large
-    // empty gap underneath.
-    const targetRowH = safeLayout === '1' ? availableH : (safeLayout === '2' ? 285 : safeLayout === '3' ? 255 : 245);
+    // Anchor the FIRST row directly under the header. The previous PDF placed
+    // rows from the footer upward, which created the large empty band seen in
+    // the screenshot. Calculate the card height from the actual number of rows
+    // and then place every row from the header downward, like the preview.
+    const preferredRowH = safeLayout === '1' ? availableH : (safeLayout === '2' ? 285 : safeLayout === '3' ? 255 : 245);
     const cardH = safeLayout === '1'
       ? availableH
-      : Math.min(availableH, Math.max(205, targetRowH));
+      : Math.min(preferredRowH, Math.max(205, (availableH - gap * (rowsOnPage - 1)) / rowsOnPage));
     page.forEach((product, idx) => {
       const row = Math.floor(idx / config.cols), col = idx % config.cols;
       const x = margin + col * (cardW + gap);
-        const yCard = rowsOnPage === 1
-        ? top - cardH
-        : margin + footerH + (rowsOnPage - 1 - row) * (cardH + gap);
+      const yCard = top - cardH - row * (cardH + gap);
       drawProduct(ops, product, pageIndex * config.perPage + idx, x, yCard, cardW, cardH, config.mode);
     });
 
