@@ -2971,3 +2971,124 @@ body.generate-modal-open{overflow:hidden}
     min-width:185px;
   }
 }
+
+/* V15.5.1 — Seguridad robusta y cabecera móvil */
+.users-module-switch{
+  display:flex;
+  align-items:center;
+  gap:3px;
+  width:max-content;
+  max-width:100%;
+  padding:4px;
+  margin:-4px 0 18px;
+  border:1px solid var(--line,#ded8cc);
+  border-radius:12px;
+  background:#f5f2ec;
+}
+.users-module-tab{
+  border:0;
+  background:transparent;
+  color:#716c64;
+  min-height:38px;
+  padding:0 18px;
+  border-radius:9px;
+  font:inherit;
+  font-size:.72rem;
+  font-weight:850;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+  cursor:pointer;
+}
+.users-module-tab.is-active{
+  background:#111;
+  color:#fff;
+  box-shadow:0 3px 9px rgba(0,0,0,.12);
+}
+.users-module-tab:disabled{opacity:.55;cursor:wait}
+
+@media(max-width:800px){
+  .admin-top{
+    align-items:flex-start;
+    gap:12px;
+  }
+  .admin-top-actions.account-page-actions{
+    display:flex;
+    align-items:center;
+    justify-content:flex-end;
+    gap:8px;
+    flex:0 0 auto;
+    padding-top:2px;
+  }
+  .account-page-actions .account-back-button{
+    min-height:44px;
+    height:44px;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    padding:0 11px;
+    border-radius:11px;
+    box-sizing:border-box;
+    font-size:.76rem;
+  }
+  .account-page-actions .account-menu-wrap{
+    display:flex;
+    align-items:center;
+    flex:0 0 auto;
+  }
+  .account-page-actions .account-menu-trigger{
+    width:48px;
+    min-width:48px;
+    height:48px;
+    min-height:48px;
+    padding:5px;
+    box-sizing:border-box;
+  }
+  .account-page-actions .account-menu-avatar{
+    width:36px;
+    height:36px;
+    flex-basis:36px;
+  }
+  .account-page-actions .account-menu-caret{
+    display:none;
+  }
+  .users-module-switch{
+    width:100%;
+    box-sizing:border-box;
+    margin-top:-4px;
+  }
+  .users-module-tab{
+    flex:1 1 0;
+    padding:0 10px;
+  }
+}
+@media(max-width:430px){
+  .admin-top{
+    gap:8px;
+  }
+  .admin-top .admin-title{
+    font-size:1.55rem;
+  }
+  .admin-top .admin-subtitle{
+    font-size:.82rem;
+  }
+  .admin-top-actions.account-page-actions{
+    gap:6px;
+  }
+  .account-page-actions .account-back-button{
+    min-height:42px;
+    height:42px;
+    padding:0 9px;
+    font-size:.7rem;
+  }
+  .account-page-actions .account-menu-trigger{
+    width:44px;
+    min-width:44px;
+    height:44px;
+    min-height:44px;
+  }
+  .account-page-actions .account-menu-avatar{
+    width:34px;
+    height:34px;
+    flex-basis:34px;
+  }
+}

@@ -1985,130 +1985,135 @@ async function renderAdminSecurity(embedded = false) {
   if (!session.authenticated) return renderLogin();
   if (session.role !== 'admin') return renderAdminOrders();
 
-  let data = await request('/api/admin/security/overview').catch(() => null);
-  let alertData = await request('/api/admin/security/alerts').catch(() => ({ alerts: [], summary: { total: 0 } }));
-  if (!data || !Array.isArray(data.users)) {
-    data = { version: 'V15.4', generatedAt: new Date().toISOString(), totals: {}, users: [] };
-  }
-  if (!alertData || typeof alertData !== 'object') {
-    alertData = { alerts: [], summary: { total: 0 } };
-  }
-  if (!data) {
-    const alertSeverityLabel = severity => ({ critical:'Crítica', high:'Alta', medium:'Media', low:'Baja' }[severity] || 'Aviso');
-  const alertIcon = severity => ({ critical:'!', high:'!', medium:'•', low:'i' }[severity] || 'i');
-  const alerts = Array.isArray(alertData.alerts) ? alertData.alerts : [];
-  const alertMarkup = alerts.length
-    ? alerts.map(alert => `<article class="security-alert-card ${escapeHTML(alert.severity)}">
-        <div class="security-alert-icon">${alertIcon(alert.severity)}</div>
-        <div class="security-alert-content">
-          <div class="security-alert-top"><strong>${escapeHTML(alert.title)}</strong><span>${escapeHTML(alertSeverityLabel(alert.severity))}</span></div>
-          <p>${escapeHTML(alert.description)}</p>
-          <small>${alert.username ? `Usuario: ${escapeHTML(alert.username)} · ` : ''}${alert.ip ? `IP: ${escapeHTML(alert.ip)} · ` : ''}${alert.windowMinutes ? `Ventana: ${alert.windowMinutes} min` : ''}</small>
+  try {
+    const [overview, alertsResponse] = await Promise.all([
+      request('/api/admin/security/overview').catch(() => null),
+      request('/api/admin/security/alerts').catch(() => ({ alerts: [], summary: { total: 0, critical: 0, high: 0, medium: 0 } }))
+    ]);
+
+    const data = overview && typeof overview === 'object' ? overview : {};
+    const users = Array.isArray(data.users) ? data.users : [];
+    const alertData = alertsResponse && typeof alertsResponse === 'object' ? alertsResponse : {};
+    const alerts = Array.isArray(alertData.alerts) ? alertData.alerts : [];
+    const totals = data.totals && typeof data.totals === 'object' ? data.totals : {};
+    const fmtNumber = value => Number.isFinite(Number(value)) ? Number(value) : 0;
+    const severityLabel = severity => ({ critical:'Crítica', high:'Alta', medium:'Media', low:'Baja' }[severity] || 'Aviso');
+    const alertIcon = severity => ({ critical:'!', high:'!', medium:'•', low:'i' }[severity] || 'i');
+
+    const cards = [
+      ['USUARIOS ACTIVOS', fmtNumber(totals.activeUsers), 'Cuentas con acceso permitido'],
+      ['SESIONES ACTIVAS', fmtNumber(totals.activeSessions), 'Sesiones en este servidor'],
+      ['PASSKEYS', fmtNumber(totals.passkeys), 'Credenciales registradas'],
+      ['CUENTAS BLOQUEADAS', fmtNumber(totals.lockedUsers), 'Requieren revisión'],
+      ['ALERTAS ACTIVAS', fmtNumber(alertData.summary?.total), 'Patrones que requieren atención']
+    ];
+
+    const rows = users.map(row => {
+      const id = escapeHTML(row?.id || '');
+      const name = escapeHTML(row?.name || row?.username || 'Usuario');
+      const username = escapeHTML(row?.username || '');
+      const role = escapeHTML(securityRoleLabel(row?.role || ''));
+      const initial = escapeHTML(String(row?.name || row?.username || '?').trim().slice(0, 1).toUpperCase());
+      const activeSessions = fmtNumber(row?.activeSessions);
+      const passkeyCount = fmtNumber(row?.passkeyCount);
+      const failedAttempts = fmtNumber(row?.failedAttempts);
+      const status = securityStatusPill({
+        locked: Boolean(row?.locked),
+        permanentLock: Boolean(row?.permanentLock),
+        lockRemainingSeconds: fmtNumber(row?.lockRemainingSeconds),
+        active: row?.active !== false
+      });
+
+      return `<article class="security-user-card" data-security-user="${id}">
+        <div class="security-user-main">
+          <div class="security-avatar">${initial}</div>
+          <div><strong>${name}</strong><small>@${username} · ${role}</small></div>
         </div>
-      </article>`).join('')
-    : `<div class="security-alert-empty"><strong>Sin alertas activas</strong><span>No se detectaron patrones anormales en la actividad reciente.</span></div>`;
-
-  app.innerHTML = `<main class="admin-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">${embedded ? 'Usuarios' : 'Seguridad'}</h1><p class="admin-subtitle">No se pudo cargar el centro de seguridad.</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>${adminSectionNav(session, 'usuarios')}${embedded ? `<div class="users-module-switch" role="tablist" aria-label="Usuarios y seguridad"><button type="button" class="users-module-tab" data-open-users>Usuarios</button><button type="button" class="users-module-tab is-active" data-open-security>Seguridad</button></div>` : ''}<section class="admin-panel"><div class="message error">Intenta recargar esta sección.</div></section></div></main>`;
-    return;
-  }
-
-  const fmtDate = value => value ? new Intl.DateTimeFormat('es-EC', { dateStyle:'short', timeStyle:'short' }).format(new Date(value)) : 'Nunca';
-  const totals = data.totals || {};
-  const cards = [
-    ['USUARIOS ACTIVOS', Number(totals.activeUsers || 0), 'Cuentas con acceso permitido'],
-    ['SESIONES ACTIVAS', Number(totals.activeSessions || 0), 'Sesiones en este servidor'],
-    ['PASSKEYS', Number(totals.passkeys || 0), 'Credenciales registradas'],
-    ['CUENTAS BLOQUEADAS', Number(totals.lockedUsers || 0), 'Requieren revisión'],
-    ['ALERTAS ACTIVAS', Number(alertData.summary?.total || 0), 'Patrones que requieren atención']
-  ];
-  const rows = data.users.map(row => `<article class="security-user-card" data-security-user="${escapeHTML(row.id)}">
-    <div class="security-user-main">
-      <div class="security-avatar">${escapeHTML(String(row.name || row.username || '?').trim().slice(0,1).toUpperCase())}</div>
-      <div><strong>${escapeHTML(row.name)}</strong><small>@${escapeHTML(row.username)} · ${escapeHTML(securityRoleLabel(row.role))}</small></div>
-    </div>
-    <div class="security-user-status">${securityStatusPill(row)}</div>
-    <div class="security-user-metrics">
-      <span><b>${row.activeSessions}</b> sesión${row.activeSessions === 1 ? '' : 'es'}</span>
-      <span><b>${row.passkeyCount}</b> Passkey${row.passkeyCount === 1 ? '' : 's'}${row.passkeyAllowed ? '' : ' · bloqueadas'}</span>
-      <span>${row.failedAttempts ? `${row.failedAttempts} intento(s) fallido(s)` : 'Sin intentos fallidos recientes'}</span>
-    </div>
-    <div class="security-user-actions">
-      ${row.locked ? `<button type="button" class="button secondary small" data-security-reset="${escapeHTML(row.id)}">Desbloquear</button>` : ''}
-      ${row.activeSessions ? `<button type="button" class="button secondary small" data-security-sessions="${escapeHTML(row.id)}">Cerrar sesiones</button>` : ''}
-      ${row.passkeyCount ? `<button type="button" class="button secondary small" data-security-passkeys="${escapeHTML(row.id)}">Revocar Passkeys</button>` : ''}
-    </div>
-  </article>`).join('');
-
-  app.innerHTML = `<main class="admin-shell"><div class="admin-wrap">
-    <div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">${embedded ? 'Usuarios' : 'Seguridad'}</h1><p class="admin-subtitle">${embedded ? 'Cuentas, acceso y protección de YHORS' : 'Centro de control de acceso de YHORS'}</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>
-    ${adminSectionNav(session, 'usuarios')}
-    ${embedded ? `<div class="users-module-switch" role="tablist" aria-label="Usuarios y seguridad"><button type="button" class="users-module-tab" data-open-users>Usuarios</button><button type="button" class="users-module-tab is-active" data-open-security>Seguridad</button></div>` : ''}
-    <section class="admin-panel security-panel">
-      <div class="security-hero">
-        <div><span class="eyebrow">V15.4 · PROTECCIÓN DE ACCESO</span><h2>Seguridad y sesiones</h2><p>Controla cuentas, bloqueos, Passkeys y sesiones activas desde un solo lugar.</p></div>
-        <div class="security-live"><span></span> Sistema protegido</div>
-      </div>
-      <div class="security-metrics">${cards.map(([label,value,help]) => `<div class="security-metric"><span>${label}</span><strong>${value}</strong><small>${help}</small></div>`).join('')}</div>
-      <div class="section-heading security-section-heading"><div><span class="eyebrow">CUENTAS</span><h3>Estado de acceso</h3></div><p>Las acciones sensibles quedan registradas automáticamente en Auditoría.</p></div>
-      <div class="security-users-list">${rows || '<p class="backup-empty">No hay cuentas registradas.</p>'}</div>
-      <div class="security-alerts-section">
-        <div class="section-heading security-section-heading">
-          <div><span class="eyebrow">V15.5 · ALERTAS</span><h3>Actividad que requiere atención</h3></div>
-          <p>${Number(alertData.summary?.total || 0)} alerta(s) detectada(s) en la actividad reciente.</p>
+        <div class="security-user-status">${status}</div>
+        <div class="security-user-metrics">
+          <span><b>${activeSessions}</b> sesión${activeSessions === 1 ? '' : 'es'}</span>
+          <span><b>${passkeyCount}</b> Passkey${passkeyCount === 1 ? '' : 's'}${row?.passkeyAllowed ? '' : ' · bloqueadas'}</span>
+          <span>${failedAttempts ? `${failedAttempts} intento(s) fallido(s)` : 'Sin intentos fallidos recientes'}</span>
         </div>
-        <div class="security-alerts-list">${alertMarkup}</div>
-      </div>
-      <div class="security-note"><strong>Protección activa</strong><span>Contraseñas con hash · sesiones del lado del servidor · límite de intentos · bloqueo progresivo · WebAuthn / Passkeys · auditoría de seguridad</span></div>
-    </section>
-  </div></main>`;
+        <div class="security-user-actions">
+          ${row?.locked ? `<button type="button" class="button secondary small" data-security-reset="${id}">Desbloquear</button>` : ''}
+          ${activeSessions ? `<button type="button" class="button secondary small" data-security-sessions="${id}">Cerrar sesiones</button>` : ''}
+          ${passkeyCount ? `<button type="button" class="button secondary small" data-security-passkeys="${id}">Revocar Passkeys</button>` : ''}
+        </div>
+      </article>`;
+    }).join('');
 
-  const refresh = async () => {
-    const fresh = await request('/api/admin/security/overview').catch(() => null);
-    if (fresh) renderAdminSecurity(true);
-  };
-  document.querySelectorAll('[data-security-reset]').forEach(button => button.addEventListener('click', async () => {
-    if (!confirm('¿Seguro que quieres desbloquear esta cuenta?')) return;
-    try { await request(`/api/admin/security/users/${encodeURIComponent(button.dataset.securityReset)}/reset-lock`, { method:'POST' }); alert('Cuenta desbloqueada.'); await refresh(); }
-    catch (error) { alert(error.message); }
-  }));
-  document.querySelectorAll('[data-security-sessions]').forEach(button => button.addEventListener('click', async () => {
-    if (!confirm('¿Cerrar todas las sesiones activas de este usuario?')) return;
-    try { const result = await request(`/api/admin/security/users/${encodeURIComponent(button.dataset.securitySessions)}/revoke-sessions`, { method:'POST' }); alert(`${result.sessionsRevoked || 0} sesión(es) cerrada(s).`); await refresh(); }
-    catch (error) { alert(error.message); }
-  }));
-  document.querySelectorAll('[data-security-passkeys]').forEach(button => button.addEventListener('click', async () => {
-    if (!confirm('¿Seguro que quieres revocar todas las Passkeys de esta cuenta? Tendrá que volver a registrarlas.')) return;
-    try { await request(`/api/admin/users/${encodeURIComponent(button.dataset.securityPasskeys)}/passkeys`, { method:'DELETE' }); alert('Passkeys revocadas.'); await refresh(); }
-    catch (error) { alert(error.message); }
-  }));
-  wireAccountMenu();
-  document.querySelectorAll('[data-open-users]').forEach(button => {
-    button.addEventListener('click', async () => {
+    const alertMarkup = alerts.length
+      ? alerts.map(alert => `<article class="security-alert-card ${escapeHTML(alert?.severity || 'medium')}">
+          <div class="security-alert-icon">${alertIcon(alert?.severity)}</div>
+          <div class="security-alert-content">
+            <div class="security-alert-top"><strong>${escapeHTML(alert?.title || 'Actividad detectada')}</strong><span>${escapeHTML(severityLabel(alert?.severity))}</span></div>
+            <p>${escapeHTML(alert?.description || 'Se detectó actividad que requiere atención.')}</p>
+            <small>${alert?.username ? `Usuario: ${escapeHTML(alert.username)} · ` : ''}${alert?.ip ? `IP: ${escapeHTML(alert.ip)} · ` : ''}${alert?.windowMinutes ? `Ventana: ${escapeHTML(alert.windowMinutes)} min` : ''}</small>
+          </div>
+        </article>`).join('')
+      : `<div class="security-alert-empty"><strong>Sin alertas activas</strong><span>No se detectaron patrones anormales en la actividad reciente.</span></div>`;
+
+    app.innerHTML = `<main class="admin-shell"><div class="admin-wrap">
+      <div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">${embedded ? 'Usuarios' : 'Seguridad'}</h1><p class="admin-subtitle">${embedded ? 'Cuentas, acceso y protección de YHORS' : 'Centro de control de acceso de YHORS'}</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>
+      ${adminSectionNav(session, 'usuarios')}
+      ${embedded ? `<div class="users-module-switch" role="tablist" aria-label="Usuarios y seguridad"><button type="button" class="users-module-tab" data-open-users>Usuarios</button><button type="button" class="users-module-tab is-active" data-open-security>Seguridad</button></div>` : ''}
+      <section class="admin-panel security-panel">
+        <div class="security-hero"><div><span class="eyebrow">V15.4 · PROTECCIÓN DE ACCESO</span><h2>Seguridad y sesiones</h2><p>Controla cuentas, bloqueos, Passkeys y sesiones activas desde un solo lugar.</p></div><div class="security-live"><span></span> Sistema protegido</div></div>
+        <div class="security-metrics">${cards.map(([label,value,help]) => `<div class="security-metric"><span>${label}</span><strong>${value}</strong><small>${help}</small></div>`).join('')}</div>
+        <div class="section-heading security-section-heading"><div><span class="eyebrow">CUENTAS</span><h3>Estado de acceso</h3></div><p>Las acciones sensibles quedan registradas automáticamente en Auditoría.</p></div>
+        <div class="security-users-list">${rows || '<p class="backup-empty">No hay cuentas registradas.</p>'}</div>
+        <div class="security-alerts-section"><div class="section-heading security-section-heading"><div><span class="eyebrow">V15.5 · ALERTAS</span><h3>Actividad que requiere atención</h3></div><p>${fmtNumber(alertData.summary?.total)} alerta(s) detectada(s) en la actividad reciente.</p></div><div class="security-alerts-list">${alertMarkup}</div></div>
+        <div class="security-note"><strong>Protección activa</strong><span>Contraseñas con hash · sesiones del lado del servidor · límite de intentos · bloqueo progresivo · WebAuthn / Passkeys · auditoría de seguridad</span></div>
+      </section>
+    </div></main>`;
+
+    wireAccountMenu();
+
+    document.querySelectorAll('[data-security-reset]').forEach(button => button.addEventListener('click', async () => {
+      if (!confirm('¿Seguro que quieres desbloquear esta cuenta?')) return;
+      try { await request(`/api/admin/security/users/${encodeURIComponent(button.dataset.securityReset)}/reset-lock`, { method:'POST' }); alert('Cuenta desbloqueada.'); await renderAdminSecurity(true); }
+      catch (error) { alert(error.message); }
+    }));
+    document.querySelectorAll('[data-security-sessions]').forEach(button => button.addEventListener('click', async () => {
+      if (!confirm('¿Cerrar todas las sesiones activas de este usuario?')) return;
+      try { const result = await request(`/api/admin/security/users/${encodeURIComponent(button.dataset.securitySessions)}/revoke-sessions`, { method:'POST' }); alert(`${result.sessionsRevoked || 0} sesión(es) cerrada(s).`); await renderAdminSecurity(true); }
+      catch (error) { alert(error.message); }
+    }));
+    document.querySelectorAll('[data-security-passkeys]').forEach(button => button.addEventListener('click', async () => {
+      if (!confirm('¿Seguro que quieres revocar todas las Passkeys de esta cuenta? Tendrá que volver a registrarlas.')) return;
+      try { await request(`/api/admin/users/${encodeURIComponent(button.dataset.securityPasskeys)}/passkeys`, { method:'DELETE' }); alert('Passkeys revocadas.'); await renderAdminSecurity(true); }
+      catch (error) { alert(error.message); }
+    }));
+
+    document.querySelectorAll('[data-open-users]').forEach(button => button.addEventListener('click', async () => {
       button.disabled = true;
-      try {
-        history.pushState({}, '', `${ADMIN_PATH}/usuarios`);
-        await renderAdminUsers('usuarios');
-      } catch (error) {
-        console.error('[YHORS] No se pudo volver a Usuarios:', error);
-        alert('No se pudo abrir Usuarios. Intenta nuevamente.');
-      } finally {
-        button.disabled = false;
-      }
-    });
-  });
-  document.querySelectorAll('[data-open-security]').forEach(button => {
-    button.addEventListener('click', async () => {
+      try { history.pushState({}, '', `${ADMIN_PATH}/usuarios`); await renderAdminUsers('usuarios'); }
+      catch (error) { console.error('[YHORS] No se pudo volver a Usuarios:', error); }
+      finally { button.disabled = false; }
+    }));
+    document.querySelectorAll('[data-open-security]').forEach(button => button.addEventListener('click', async () => {
       button.disabled = true;
-      try {
-        history.pushState({}, '', `${ADMIN_PATH}/usuarios?panel=seguridad`);
-        await renderAdminSecurity(true);
-      } catch (error) {
-        console.error('[YHORS] No se pudo actualizar Seguridad:', error);
-      } finally {
-        button.disabled = false;
-      }
-    });
-  });
+      try { history.pushState({}, '', `${ADMIN_PATH}/usuarios?panel=seguridad`); await renderAdminSecurity(true); }
+      catch (error) { console.error('[YHORS] No se pudo actualizar Seguridad:', error); }
+      finally { button.disabled = false; }
+    }));
+  } catch (error) {
+    console.error('[YHORS] Error al renderizar Seguridad:', error);
+    const username = escapeHTML(session.username || 'Usuario');
+    const role = escapeHTML(userRoleLabel(session.role || ''));
+    app.innerHTML = `<main class="admin-shell"><div class="admin-wrap">
+      <div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Usuarios</h1><p class="admin-subtitle">Cuentas, acceso y protección de YHORS</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>
+      ${adminSectionNav(session, 'usuarios')}
+      <div class="users-module-switch" role="tablist" aria-label="Usuarios y seguridad"><button type="button" class="users-module-tab" data-open-users>Usuarios</button><button type="button" class="users-module-tab is-active" data-open-security>Seguridad</button></div>
+      <section class="admin-panel security-panel"><div class="security-hero"><div><span class="eyebrow">V15.5 · ALERTAS</span><h2>Seguridad y sesiones</h2><p>El panel se abrió, pero algunos datos no pudieron cargarse. Puedes volver a intentarlo.</p></div><div class="security-live"><span></span> Sistema protegido</div></div>
+      <div class="security-alert-empty"><strong>Centro de seguridad disponible</strong><span>Usuario: ${username} · Rol: ${role}</span><button type="button" class="button secondary small" id="securityRetry">Reintentar</button></div></section>
+    </div></main>`;
+    wireAccountMenu();
+    document.querySelector('#securityRetry')?.addEventListener('click', () => renderAdminSecurity(true));
+    document.querySelectorAll('[data-open-users]').forEach(button => button.addEventListener('click', async () => { history.pushState({}, '', `${ADMIN_PATH}/usuarios`); await renderAdminUsers('usuarios'); }));
+    document.querySelectorAll('[data-open-security]').forEach(button => button.addEventListener('click', () => renderAdminSecurity(true)));
+  }
 }
 
 async function renderAdminAudit() {
