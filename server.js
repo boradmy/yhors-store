@@ -1446,6 +1446,23 @@ async function buildFlyerPdf({ products, title, subtitle, description, layout, o
       ops.push(`q ${drawW.toFixed(2)} 0 0 ${drawH.toFixed(2)} ${dx.toFixed(2)} ${dy.toFixed(2)} cm /${objName} Do Q`);
     }
 
+    // Promotional note: mirror the live preview exactly by placing the
+    // per-product promotion as a gold ribbon over the bottom of the image
+    // panel. Previously it was drawn inside the copy area only when there
+    // happened to be enough vertical space, so compact PDFs could silently
+    // lose labels such as “ULTIMA UNIDAD”.
+    const note = String(notes?.[String(product.id)] || '').replace(/\s+/g, ' ').trim();
+    if (note) {
+      const ribbonH = mode === 'featured' ? 24 : 18;
+      const ribbonY = imageY;
+      flyerFill(ops, ar, ag, ab);
+      ops.push(`${imageX} ${ribbonY} ${imageW} ${ribbonH} re f`);
+      flyerFill(ops, 1, 1, 1);
+      const promoSize = mode === 'featured' ? 7.2 : 5.6;
+      const promoMax = mode === 'featured' ? 58 : safeLayout === '4' ? 28 : 42;
+      flyerPdfText(ops, trim(note.toUpperCase(), promoMax), imageX + imageW / 2, ribbonY + (ribbonH - promoSize) / 2 + 1.5, promoSize, 2, 'center');
+    }
+
     flyerFill(ops, ar, ag, ab); flyerRoundRect(ops, x + 8, y + h - 25, 25, 17, 8, true);
     flyerFill(ops, 1, 1, 1); flyerPdfText(ops, String(globalIndex + 1).padStart(2, '0'), x + 20.5, y + h - 19.5, 6, 2, 'center');
 
@@ -1495,13 +1512,6 @@ async function buildFlyerPdf({ products, title, subtitle, description, layout, o
       const result = drawLines(ops, bullet, copyX + 6, cy, chars, highlightSize, 1, [0.38,0.36,0.33], Math.min(2, remaining), highlightSize + 2.2);
       descriptionLinesUsed += result.lines.length;
       cy = result.y - 0.5;
-    }
-
-    const note = notes?.[String(product.id)] || '';
-    if (note && cy > y + 45) {
-      const noteW = Math.min(copyW, mode === 'featured' ? 250 : copyW);
-      flyerFill(ops, 0.98, 0.91, 0.72); ops.push(`${copyX} ${Math.max(y + 32, cy - 4)} ${noteW} 18 re f`);
-      flyerFill(ops, 0.25, 0.20, 0.12); flyerPdfText(ops, note.slice(0, mode === 'featured' ? 60 : 32), copyX + 6, Math.max(y + 39, cy + 2), mode === 'featured' ? 7 : 5.5, 2);
     }
 
     if (showPrices) {
