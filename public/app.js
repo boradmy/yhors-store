@@ -2105,9 +2105,10 @@ async function renderAdminSalesHistory() {
     if(from&&to&&from>to){list.innerHTML='<div class="sales-empty">La fecha inicial no puede ser posterior a la fecha final.</div>';return;}
     try {
       const params=new URLSearchParams({from,to,q,sellerId}); const rows=await request(`/api/admin/historial-ventas?${params}`);
-      summary.innerHTML=`<article class="financial-metric sales"><span>VENTAS NOTIFICADAS</span><strong>${rows.length}</strong><small>${from||'Todo'} → ${to||'Todo'}</small></article><article class="financial-metric profit"><span>TOTAL VENDIDO</span><strong>${moneyCell(rows.reduce((sum,r)=>sum+Number(r.total||0),0))}</strong><small>Historial de ventas</small></article>`;
+      const historyTotal = rows.reduce((sum,r)=>sum+Number(r.total||0),0);
+      summary.innerHTML=`<article class="financial-metric sales"><span>VENTAS NOTIFICADAS</span><strong>${rows.length}</strong><small>${from||'Todo'} → ${to||'Todo'}</small></article><article class="financial-metric profit"><span>TOTAL VENDIDO</span><strong>${money(historyTotal)}</strong><small>Historial de ventas</small></article>`;
       if (!rows.length) { list.innerHTML='<div class="sales-empty">No hay ventas notificadas que coincidan con los filtros.</div>'; return; }
-      const body=rows.map(r=>`<tr><td>${escapeHTML(shortDate(r.notifiedAt||r.createdAt))}</td><td><strong>#${escapeHTML(r.orderNumber||'—')}</strong></td><td>${escapeHTML(r.customer?.name||'Cliente')}<small>${escapeHTML(r.customer?.cedula||'')}</small></td><td>${escapeHTML(r.assignedSellerName||'Sin vendedor')}</td><td>${escapeHTML(r.status||'—')}</td><td><strong>${moneyCell(r.total)}</strong></td><td><button class="button pdf-order small" type="button" data-history-pdf="${escapeHTML(r.id)}">PDF</button>${canDelete ? ` <button class="button danger small" type="button" data-history-delete="${escapeHTML(r.id)}">Eliminar</button>` : ''}</td></tr>`).join('');
+      const body=rows.map(r=>`<tr><td>${escapeHTML(shortDate(r.notifiedAt||r.createdAt))}</td><td><strong>#${escapeHTML(r.orderNumber||'—')}</strong></td><td>${escapeHTML(r.customer?.name||'Cliente')}<small>${escapeHTML(r.customer?.cedula||'')}</small></td><td>${escapeHTML(r.assignedSellerName||'Sin vendedor')}</td><td>${escapeHTML(r.status||'—')}</td><td><strong>${money(r.total)}</strong></td><td><button class="button pdf-order small" type="button" data-history-pdf="${escapeHTML(r.id)}">PDF</button>${canDelete ? ` <button class="button danger small" type="button" data-history-delete="${escapeHTML(r.id)}">Eliminar</button>` : ''}</td></tr>`).join('');
       list.innerHTML='<table class="sales-table"><thead><tr><th>FECHA</th><th>VENTA</th><th>CLIENTE</th><th>VENDEDOR</th><th>ESTADO</th><th>TOTAL</th><th></th></tr></thead><tbody>'+body+'</tbody></table>';
     } catch(e) { list.innerHTML=`<div class="sales-empty">${escapeHTML(e.message||'No se pudo cargar el historial.')}</div>`; }
   };
@@ -2617,6 +2618,37 @@ async function renderAdminOrders() {
       }
     };
 
+    const syncNotifySaleButton = (order, orderCard) => {
+      if (!orderCard) return;
+      const footer = orderCard.querySelector('.admin-order-footer');
+      if (!footer) return;
+      let notify = footer.querySelector('[data-order-notify-sale]');
+      const eligible = ['Enviado','Entregado'].includes(String(order.status || ''));
+      if (eligible && !notify) {
+        const saveButton = footer.querySelector('[data-order-note-save]');
+        notify = document.createElement('button');
+        notify.type = 'button';
+        notify.className = 'button primary small';
+        notify.dataset.orderNotifySale = order.id;
+        notify.textContent = 'NOTIFICAR VENTA';
+        if (saveButton) footer.insertBefore(notify, saveButton); else footer.appendChild(notify);
+        wireNotifySaleButton(notify);
+      } else if (!eligible && notify) {
+        notify.remove();
+      }
+    };
+
+    const wireNotifySaleButton = button => {
+      if (!button || button.dataset.notifyWired === 'true') return;
+      button.dataset.notifyWired = 'true';
+      button.addEventListener('click',async()=>{
+        const order=orders.find(o=>o.id===button.dataset.orderNotifySale); if(!order)return;
+        const ok=await showYhorsConfirm('¿Notificar esta venta?', `El pedido #${escapeHTML(order.orderNumber)} pasará a Historial de ventas y dejará de ser editable desde Pedidos.`); if(!ok)return;
+        button.disabled=true;
+        try { await request(`/api/admin/orders/${order.id}/notificar-venta`,{method:'POST'}); orders=orders.filter(o=>o.id!==order.id); drawOrders(); } catch(e){button.disabled=false; alert(e.message);} 
+      });
+    };
+
     list.querySelectorAll('[data-order-note-save]').forEach(button=>button.addEventListener('click',async()=>{
       const id=button.dataset.orderNoteSave;
       const textarea=list.querySelector(`[data-order-note="${id}"]`);
@@ -2719,6 +2751,7 @@ async function renderAdminOrders() {
           statusSelect.className = `status-select-${statusClass(updated.status || 'Pendiente')}`;
           statusSelect.disabled = true;
         }
+        syncNotifySaleButton(updated, orderCard);
         if (assignment) {
           assignment.value = updated.assignedSellerId || '';
           assignment.dataset.changed = 'false';
@@ -2746,12 +2779,7 @@ async function renderAdminOrders() {
       }
     }));
 
-    list.querySelectorAll('[data-order-notify-sale]').forEach(button=>button.addEventListener('click',async()=>{
-      const order=orders.find(o=>o.id===button.dataset.orderNotifySale); if(!order)return;
-      const ok=await showYhorsConfirm('¿Notificar esta venta?', `El pedido #${escapeHTML(order.orderNumber)} pasará a Historial de ventas y dejará de ser editable desde Pedidos.`); if(!ok)return;
-      button.disabled=true;
-      try { await request(`/api/admin/orders/${order.id}/notificar-venta`,{method:'POST'}); orders=orders.filter(o=>o.id!==order.id); drawOrders(); } catch(e){button.disabled=false; alert(e.message);} 
-    }));
+    list.querySelectorAll('[data-order-notify-sale]').forEach(wireNotifySaleButton);
 
     list.querySelectorAll('[data-order-delete]').forEach(button=>button.addEventListener('click',async()=>{
       const order=orders.find(o=>o.id===button.dataset.orderDelete); if(!order) return;
