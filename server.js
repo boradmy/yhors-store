@@ -26,10 +26,6 @@ const DATA_FILE = path.join(DATA_DIR, 'products.json');
 const STOREFRONT_FILE = path.join(DATA_DIR, 'storefront.json');
 const CLASSIFICATIONS_FILE = path.join(DATA_DIR, 'classifications.json');
 const ORDERS_FILE = path.join(DATA_DIR, 'orders.json');
-const QUOTES_FILE = path.join(DATA_DIR, 'quotes.json');
-const SALES_FILE = path.join(DATA_DIR, 'sales.json');
-const PAYMENTS_FILE = path.join(DATA_DIR, 'payments.json');
-const INVOICES_FILE = path.join(DATA_DIR, 'invoices.json');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const AUDIT_FILE = path.join(DATA_DIR, 'audit.json');
 const AUDIT_MAX_RECORDS = 50000;
@@ -607,23 +603,16 @@ function writeUsers(users) {
   fs.writeFileSync(USERS_FILE, `${JSON.stringify(users, null, 2)}\n`, 'utf8');
 }
 
-function isBcryptHash(value) {
-  return /^\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53}$/.test(String(value || '').trim());
-}
-
-function ensureUserSeed(users, username, name, password, role, passwordHash = '') {
+function ensureUserSeed(users, username, name, password, role) {
   const normalized = normalizeUsername(username);
-  if (!normalized || !USER_ROLES.has(role)) return users;
+  if (!normalized || !password || !USER_ROLES.has(role)) return users;
   const existing = users.find(user => user.username === normalized);
   if (existing) return users;
-  const suppliedHash = String(passwordHash || '').trim();
-  const suppliedPassword = String(password || '');
-  if (!suppliedHash && !suppliedPassword) return users;
   users.push({
     id: crypto.randomUUID(),
     name: normalizeUserName(name) || normalized,
     username: normalized,
-    passwordHash: isBcryptHash(suppliedHash) ? suppliedHash : bcrypt.hashSync(suppliedPassword, 12),
+    passwordHash: bcrypt.hashSync(String(password), 12),
     role,
     active: true,
     system: true,
@@ -636,34 +625,8 @@ function ensureUserSeed(users, username, name, password, role, passwordHash = ''
 function ensureUsers() {
   let users = readUsers();
   const before = JSON.stringify(users);
-  users = users.map(user => ({ ...user, role: normalizeRole(user.role), username: normalizeUsername(user.username) }));
-
-  // Si Render ya tiene un disco persistente creado por una versión anterior,
-  // recuperamos las cuentas de sistema que vienen con el proyecto sin tocar
-  // contraseñas ni cuentas creadas manualmente. Esto evita que un despliegue
-  // nuevo deje fuera al administrador original solo porque users.json ya existía.
-  try {
-    const bundledUsersFile = path.join(__dirname, 'data', 'users.json');
-    if (process.env.YHORS_STORAGE_DIR && fs.existsSync(bundledUsersFile)) {
-      const bundledUsers = JSON.parse(fs.readFileSync(bundledUsersFile, 'utf8'));
-      if (Array.isArray(bundledUsers)) {
-        for (const bundled of bundledUsers) {
-          if (!bundled?.system || !bundled?.username || !bundled?.passwordHash) continue;
-          const normalized = normalizeUsername(bundled.username);
-          if (!users.some(user => user.id === bundled.id || user.username === normalized)) {
-            users.push({ ...bundled, username: normalized, role: normalizeRole(bundled.role) });
-          }
-        }
-      }
-    }
-  } catch (_) {
-    // Si el seed de usuarios no puede leerse, conservamos el almacenamiento existente.
-  }
-
-  // La cuenta configurada en Render/local solo se crea si no existe todavía.
-  // Las cuentas existentes (incluida la administración creada en versiones
-  // anteriores) se conservan para no cortar el acceso durante un despliegue.
-  users = ensureUserSeed(users, ADMIN_USER, 'Administrador principal', ADMIN_PASSWORD, 'admin', ADMIN_PASSWORD_HASH);
+  users = users.map(user => ({ ...user, role: normalizeRole(user.role) }));
+  users = ensureUserSeed(users, ADMIN_USER, 'Administrador principal', ADMIN_PASSWORD, 'admin');
 
   // Migración: elimina la antigua cuenta del sistema "ventas" / "Ventas / Pedidos".
   // Ya no se vuelve a crear desde variables de entorno.
@@ -714,13 +677,13 @@ function validateNewUser(input, users, currentId = '') {
 
 function ensureStorage() {
   fs.mkdirSync(DATA_DIR, { recursive: true });
+  ensureUsers();
   fs.mkdirSync(UPLOADS_DIR, { recursive: true });
   fs.mkdirSync(BACKUPS_DIR, { recursive: true });
+  ensureSecurityFile();
 
-  // Primera ejecución con disco vacío: copia primero los datos que viajan con
-  // el código y solo después ejecuta las migraciones/semillas. Antes ocurría
-  // al revés y el disco persistente podía recibir una cuenta administrativa
-  // distinta de la cuenta incluida en data/users.json.
+  // Primera ejecución con disco vacío: copia los datos que viajan con el código.
+  // Nunca sobrescribe un archivo que ya exista en el almacenamiento persistente.
   if (process.env.YHORS_STORAGE_DIR) {
     const seedFiles = ['products.json', 'storefront.json', 'classifications.json', 'orders.json', 'users.json', 'security.json', 'expenses.json'];
     for (const fileName of seedFiles) {
@@ -744,8 +707,6 @@ function ensureStorage() {
     if (!fs.existsSync(target)) fs.writeFileSync(target, fileName === 'orders.json' ? '[]\n' : fileName === 'products.json' ? '[]\n' : fileName === 'storefront.json' ? '{\n  "heroProductIds": [],\n  "featuredProductIds": []\n}\n' : '{\n  "brands": {},\n  "productTypes": {}\n}\n', 'utf8');
   }
   if (!fs.existsSync(EXPENSES_FILE)) fs.writeFileSync(EXPENSES_FILE, '[]\n', 'utf8');
-  ensureSecurityFile();
-  ensureUsers();
 }
 ensureStorage();
 migrateAllOrderStorageToEncryption();
@@ -2373,89 +2334,6 @@ function writeFines(fines) {
   fs.renameSync(temporaryFile, FINES_FILE);
 }
 
-
-function readQuotes() {
-  try {
-    const parsed = JSON.parse(fs.readFileSync(QUOTES_FILE, 'utf8'));
-    return Array.isArray(parsed) ? parsed : [];
-  } catch { return []; }
-}
-function writeQuotes(quotes) {
-  maybeAutoBackup();
-  const temporaryFile = `${QUOTES_FILE}.tmp`;
-  fs.writeFileSync(temporaryFile, `${JSON.stringify(quotes, null, 2)}\n`, 'utf8');
-  fs.renameSync(temporaryFile, QUOTES_FILE);
-}
-function readSales() {
-  try {
-    const parsed = JSON.parse(fs.readFileSync(SALES_FILE, 'utf8'));
-    return Array.isArray(parsed) ? parsed : [];
-  } catch { return []; }
-}
-function writeSales(sales) {
-  maybeAutoBackup();
-  const temporaryFile = `${SALES_FILE}.tmp`;
-  fs.writeFileSync(temporaryFile, `${JSON.stringify(sales, null, 2)}\n`, 'utf8');
-  fs.renameSync(temporaryFile, SALES_FILE);
-}
-function readPayments() {
-  try { const parsed = JSON.parse(fs.readFileSync(PAYMENTS_FILE, 'utf8')); return Array.isArray(parsed) ? parsed : []; }
-  catch { return []; }
-}
-function writePayments(items) {
-  maybeAutoBackup();
-  const temporaryFile = `${PAYMENTS_FILE}.tmp`;
-  fs.writeFileSync(temporaryFile, `${JSON.stringify(items, null, 2)}\n`, 'utf8');
-  fs.renameSync(temporaryFile, PAYMENTS_FILE);
-}
-function readInvoices() {
-  try { const parsed = JSON.parse(fs.readFileSync(INVOICES_FILE, 'utf8')); return Array.isArray(parsed) ? parsed : []; }
-  catch { return []; }
-}
-function writeInvoices(items) {
-  maybeAutoBackup();
-  const temporaryFile = `${INVOICES_FILE}.tmp`;
-  fs.writeFileSync(temporaryFile, `${JSON.stringify(items, null, 2)}\n`, 'utf8');
-  fs.renameSync(temporaryFile, INVOICES_FILE);
-}
-function paymentSummary(saleId, total) {
-  const payments = readPayments().filter(p => p.saleId === saleId);
-  const paid = Math.round(payments.reduce((sum,p)=>sum + Number(p.amount||0),0)*100)/100;
-  const balance = Math.max(0, Math.round((Number(total||0)-paid)*100)/100);
-  return { paid, balance, status: balance <= 0 ? 'Pagada' : paid > 0 ? 'Abono' : 'Pendiente', payments };
-}
-function nextDocumentNumber(items, prefix) {
-  const max = items.reduce((highest, item) => {
-    const match = String(item.number || '').match(new RegExp(`^${prefix}-(\\d+)`, 'i'));
-    return match ? Math.max(highest, Number(match[1])) : highest;
-  }, 0);
-  return `${prefix}-${String(max + 1).padStart(4, '0')}`;
-}
-function normalizeCommercialItems(items = []) {
-  return (Array.isArray(items) ? items : []).map(item => ({
-    productId: String(item.productId || ''),
-    sku: cleanText(item.sku, 80),
-    name: cleanText(item.name, 180),
-    quantity: Math.max(1, Math.min(999, Number(item.quantity || 1))),
-    unitPrice: Math.max(0, Number(item.unitPrice || item.price || 0)),
-    total: Math.max(0, Number(item.total || ((Number(item.quantity || 1)) * Number(item.unitPrice || item.price || 0))))
-  })).filter(item => item.productId && item.name);
-}
-function validateQuoteInput(input = {}) {
-  const customer = input.customer || {};
-  const name = cleanText(customer.name, 100);
-  const phone = cleanText(customer.phone, 40);
-  const cedula = cleanText(customer.cedula, 13).replace(/\D/g, '');
-  const email = cleanText(customer.email, 120);
-  const items = normalizeCommercialItems(input.items);
-  if (!name) return { error: 'Ingresa el nombre del cliente.' };
-  if (!items.length) return { error: 'Agrega al menos un producto a la cotización.' };
-  if (cedula && !/^\d{10,13}$/.test(cedula)) return { error: 'La cédula/RUC no es válida.' };
-  const subtotal = items.reduce((sum, item) => sum + item.total, 0);
-  const notes = cleanText(input.notes, 500);
-  return { customer: { name, phone, cedula, email }, items, subtotal, total: subtotal, notes };
-}
-
 function readOrders() {
   const raw = fs.readFileSync(ORDERS_FILE, 'utf8');
   const parsed = JSON.parse(raw);
@@ -3380,306 +3258,6 @@ app.post('/api/admin/generar-orden', requireOrdersAccess, async (req, res) => {
   });
   try { await sendOrderConfirmationEmail(order); } catch (emailError) { console.error('[YHORS] No se pudo enviar la confirmación por correo:', emailError.message); }
   return res.status(201).json({ orderId: order.id, orderNumber: order.orderNumber, status: order.status, total: order.total, assignedSellerId });
-});
-
-
-app.get('/api/admin/cotizaciones', requireOrdersAccess, (req, res) => {
-  return res.json(readQuotes());
-});
-
-app.post('/api/admin/cotizaciones', requireOrdersAccess, (req, res) => {
-  const result = validateQuoteInput(req.body || {});
-  if (result.error) return res.status(400).json(result);
-  const session = getSession(req);
-  const quotes = readQuotes();
-  const quote = {
-    id: crypto.randomUUID(),
-    number: nextDocumentNumber(quotes, 'COT'),
-    status: 'Vigente',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    sellerId: session.accountId || null,
-    sellerName: session.name || session.username || '',
-    ...result
-  };
-  quotes.unshift(quote);
-  writeQuotes(quotes);
-  auditLog(req, 'Cotización creada', 'Cotizaciones', { quoteId: quote.id, number: quote.number, total: quote.total });
-  return res.status(201).json(quote);
-});
-
-app.patch('/api/admin/cotizaciones/:id', requireOrdersAccess, (req, res) => {
-  const quotes = readQuotes();
-  const quote = quotes.find(item => item.id === req.params.id);
-  if (!quote) return res.status(404).json({ error: 'Cotización no encontrada.' });
-  const allowed = ['Vigente', 'Aceptada', 'Vencida', 'Cancelada'];
-  const status = cleanText(req.body?.status, 30);
-  if (!allowed.includes(status)) return res.status(400).json({ error: 'Estado de cotización no válido.' });
-  quote.status = status;
-  quote.updatedAt = new Date().toISOString();
-  writeQuotes(quotes);
-  auditLog(req, 'Estado de cotización actualizado', 'Cotizaciones', { quoteId: quote.id, number: quote.number, status });
-  return res.json(quote);
-});
-
-app.post('/api/admin/cotizaciones/:id/convertir-pedido', requireOrdersAccess, (req, res) => {
-  const quotes = readQuotes();
-  const quote = quotes.find(item => item.id === req.params.id);
-  if (!quote) return res.status(404).json({ error: 'Cotización no encontrada.' });
-  if (quote.status === 'Cancelada') return res.status(400).json({ error: 'No puedes convertir una cotización cancelada.' });
-  const products = readProducts().map(normalizeProduct);
-  const purchaseDemand = new Map();
-  let items;
-  try {
-    items = quote.items.map(item => {
-      const product = products.find(p => String(p.id) === String(item.productId));
-      if (!product) throw new Error(`El producto “${item.name}” ya no está disponible.`);
-      const quantity = Number(item.quantity || 1);
-      purchaseDemand.set(String(product.id), (purchaseDemand.get(String(product.id)) || 0) + quantity);
-      return { ...product, productId: product.id, quantity, price: Number(item.unitPrice || product.salePrice || 0), purchaseMode: 'purchase', deviceIdentifiers: [] };
-    });
-  } catch (error) {
-    return res.status(400).json({ error: error.message });
-  }
-  const previousProducts = products.map(product => ({ ...product }));
-  let updatedProducts;
-  try {
-    updatedProducts = applyPurchaseStock(previousProducts, purchaseDemand);
-  } catch (error) {
-    return res.status(400).json({ error: error.message });
-  }
-  const orders = readOrders();
-  const order = {
-    id: crypto.randomUUID(),
-    orderNumber: nextOrderNumber(orders),
-    status: 'Pendiente',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    assignedSellerId: quote.sellerId || null,
-    source: 'quotation',
-    quotationId: quote.id,
-    customer: quote.customer,
-    deliveryMethod: 'office',
-    items,
-    subtotal: quote.total,
-    shipping: 0,
-    total: quote.total,
-    notes: quote.notes || ''
-  };
-  try {
-    writeProducts(updatedProducts);
-    orders.unshift(order);
-    writeOrders(orders);
-    quote.status = 'Aceptada';
-    quote.convertedOrderId = order.id;
-    quote.updatedAt = new Date().toISOString();
-    writeQuotes(quotes);
-  } catch (error) {
-    try { writeProducts(previousProducts); } catch (_) {}
-    return res.status(500).json({ error: 'No se pudo convertir la cotización en pedido.' });
-  }
-  auditLog(req, 'Cotización convertida en pedido', 'Cotizaciones', { quoteId: quote.id, number: quote.number, orderId: order.id, orderNumber: order.orderNumber });
-  return res.status(201).json({ orderId: order.id, orderNumber: order.orderNumber, quoteNumber: quote.number });
-});
-
-app.get('/api/admin/ventas', requireOrdersAccess, (req, res) => {
-  return res.json(readSales());
-});
-
-app.post('/api/admin/ventas', requireOrdersAccess, (req, res) => {
-  const orderId = cleanText(req.body?.orderId, 100);
-  if (!orderId) return res.status(400).json({ error: 'Selecciona un pedido.' });
-  const orders = readOrders();
-  const order = orders.find(item => item.id === orderId);
-  if (!order) return res.status(404).json({ error: 'Pedido no encontrado.' });
-  if (String(order.status).toLowerCase() === 'cancelado') return res.status(400).json({ error: 'No puedes registrar como venta un pedido cancelado.' });
-  const sales = readSales();
-  const existing = sales.find(item => item.orderId === order.id);
-  if (existing) return res.status(409).json({ error: `Este pedido ya está registrado como venta ${existing.number}.`, sale: existing });
-  const session = getSession(req);
-  const sale = {
-    id: crypto.randomUUID(),
-    number: nextDocumentNumber(sales, 'VTA'),
-    orderId: order.id,
-    orderNumber: order.orderNumber,
-    customer: order.customer || {},
-    items: order.items || [],
-    subtotal: Number(order.subtotal || 0),
-    shipping: Number(order.shipping || 0),
-    total: Number(order.total || 0),
-    status: 'Registrada',
-    createdAt: new Date().toISOString(),
-    sellerId: order.assignedSellerId || session.accountId || null,
-    sellerName: order.assignedSellerName || session.name || session.username || '',
-    paymentMethod: cleanText(req.body?.paymentMethod, 40) || 'Pendiente',
-    paymentStatus: 'Pendiente',
-    paidAmount: 0,
-    balance: Number(order.total || 0)
-  };
-  sales.unshift(sale);
-  writeSales(sales);
-  auditLog(req, 'Venta registrada', 'Ventas', { saleId: sale.id, number: sale.number, orderId: order.id, orderNumber: order.orderNumber, total: sale.total });
-  return res.status(201).json(sale);
-});
-
-app.post('/api/admin/ventas/directa', requireOrdersAccess, async (req, res) => {
-  const session = getSession(req);
-  const result = validateOrder(req.body || {}, { requireDeviceIdentifiers: true });
-  if (result.error) return res.status(400).json(result);
-  const hasSellerSelection = Object.prototype.hasOwnProperty.call(req.body || {}, 'assignedSellerId');
-  const requestedSellerId = hasSellerSelection && req.body.assignedSellerId !== null && req.body.assignedSellerId !== '' ? String(req.body.assignedSellerId) : null;
-  let sellerId = null;
-  if (requestedSellerId) {
-    const seller = readUsers().find(user => user.id === requestedSellerId && user.active !== false && isSellerRole(user.role));
-    if (!seller) return res.status(400).json({ error: 'El vendedor seleccionado no es válido o no está activo.' });
-    sellerId = seller.id;
-  } else if (isSellerRole(session.role) && !hasSellerSelection) {
-    sellerId = session.accountId || null;
-  }
-  const internalNote = cleanText(req.body?.internalNote, 500);
-  const previousProducts = result.stockProducts.map(product => ({ ...product }));
-  let updatedProducts;
-  try {
-    updatedProducts = applyPurchaseStock(previousProducts, result.purchaseDemand);
-    writeProducts(updatedProducts);
-  } catch (error) {
-    return res.status(400).json({ error: error.message || 'No se pudo actualizar el inventario.' });
-  }
-  const sales = readSales();
-  const sale = {
-    id: crypto.randomUUID(),
-    number: nextDocumentNumber(sales, 'VTA'),
-    orderId: null,
-    orderNumber: null,
-    source: 'direct',
-    customer: result.order.customer || {},
-    items: result.order.items || [],
-    subtotal: Number(result.order.subtotal || 0),
-    shipping: Number(result.order.shipping || 0),
-    total: Number(result.order.total || 0),
-    status: 'Registrada',
-    createdAt: new Date().toISOString(),
-    sellerId,
-    sellerName: session.name || session.username || '',
-    internalNote,
-    deliveryMethod: result.order.deliveryMethod || 'office',
-    paymentMethod: cleanText(req.body?.paymentMethod, 40) || 'Pendiente',
-    paymentStatus: 'Pendiente',
-    paidAmount: 0,
-    balance: Number(result.order.total || 0)
-  };
-  try {
-    sales.unshift(sale);
-    writeSales(sales);
-  } catch (error) {
-    try { writeProducts(previousProducts); } catch (_) {}
-    return res.status(500).json({ error: 'No se pudo registrar la venta. El inventario fue restaurado.' });
-  }
-  auditLog(req, 'Venta directa registrada', 'Ventas', {
-    saleId: sale.id,
-    number: sale.number,
-    total: sale.total,
-    sellerId,
-    internalNote,
-    inventory: { synchronized: true, movements: auditStockMovementDiff(previousProducts, updatedProducts, 'Venta directa') }
-  });
-  return res.status(201).json(sale);
-});
-
-
-app.get('/api/admin/facturacion', requireOrdersAccess, (req, res) => {
-  const sales = readSales();
-  const invoices = readInvoices();
-  const enriched = sales.map(s => {
-    const invoice = invoices.find(i => i.saleId === s.id);
-    const summary = paymentSummary(s.id, s.total);
-    return { ...s, invoiceNumber: invoice?.number || null, ...summary };
-  });
-  return res.json(enriched);
-});
-
-app.post('/api/admin/facturacion/:saleId/factura', requireOrdersAccess, (req, res) => {
-  const sales = readSales();
-  const sale = sales.find(s => s.id === req.params.saleId);
-  if (!sale) return res.status(404).json({ error: 'Venta no encontrada.' });
-  const invoices = readInvoices();
-  const existing = invoices.find(i => i.saleId === sale.id);
-  if (existing) return res.json(existing);
-  const invoice = {
-    id: crypto.randomUUID(),
-    number: nextDocumentNumber(invoices, 'FAC'),
-    saleId: sale.id,
-    saleNumber: sale.number,
-    createdAt: new Date().toISOString(),
-    status: 'Emitida',
-    customer: sale.customer || {},
-    items: sale.items || [],
-    subtotal: Number(sale.subtotal || 0),
-    shipping: Number(sale.shipping || 0),
-    total: Number(sale.total || 0),
-    paymentMethod: sale.paymentMethod || 'Pendiente',
-    sellerName: sale.sellerName || ''
-  };
-  invoices.unshift(invoice);
-  writeInvoices(invoices);
-  auditLog(req, 'Factura emitida', 'Facturación', { invoiceId: invoice.id, number: invoice.number, saleId: sale.id, total: invoice.total });
-  return res.status(201).json(invoice);
-});
-
-app.get('/api/admin/facturacion/:saleId/documento', requireOrdersAccess, (req, res) => {
-  const sale = readSales().find(s => s.id === req.params.saleId);
-  if (!sale) return res.status(404).send('Venta no encontrada.');
-  const invoice = readInvoices().find(i => i.saleId === sale.id) || {
-    number: 'BORRADOR', status: 'Pendiente', createdAt: new Date().toISOString(),
-    customer: sale.customer || {}, items: sale.items || [], subtotal: sale.subtotal || 0, shipping: sale.shipping || 0, total: sale.total || 0,
-    paymentMethod: sale.paymentMethod || 'Pendiente', sellerName: sale.sellerName || ''
-  };
-  const esc = escapeEmailHtml;
-  const rows = (invoice.items || []).map(i => `<tr><td>${esc(i.name || '')}<br><small>${esc(i.sku || '')}</small></td><td>${Number(i.quantity||0)}</td><td>$${Number(i.unitPrice||i.price||0).toFixed(2)}</td><td>$${Number(i.total||0).toFixed(2)}</td></tr>`).join('');
-  const summary = paymentSummary(sale.id, invoice.total);
-  res.type('html').send(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>${esc(invoice.number)} · YHORS</title>
-  <style>
-  @page{size:A4;margin:14mm}body{font-family:Arial,sans-serif;color:#2f2a24;margin:0;background:#fff} .sheet{max-width:820px;margin:auto}
-  .head{border:1px solid #d7c59a;border-radius:18px;padding:24px;background:#faf6eb}.brand{font-size:28px;font-weight:800;letter-spacing:3px}.muted{color:#756d62}
-  .tag{display:inline-block;padding:6px 12px;border-radius:999px;background:#e9ddbb;font-size:12px;font-weight:700;letter-spacing:.5px}
-  .grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin:20px 0}.card{border:1px solid #e1dbcf;border-radius:14px;padding:16px}
-  table{width:100%;border-collapse:collapse;margin-top:18px}th{background:#f1ead8;text-align:left;font-size:12px}th,td{padding:10px;border-bottom:1px solid #eee}td:nth-child(n+2),th:nth-child(n+2){text-align:right}
-  .totals{margin-left:auto;max-width:310px;margin-top:18px}.line{display:flex;justify-content:space-between;padding:6px}.total{font-size:20px;font-weight:800;border-top:2px solid #d7c59a;padding-top:12px}.actions{margin:20px 0;text-align:right}.btn{border:0;border-radius:10px;padding:10px 16px;background:#2f2a24;color:#fff;font-weight:700;cursor:pointer}
-  @media print{.actions{display:none}.sheet{max-width:none}}
-  </style></head><body><main class="sheet"><div class="actions"><button class="btn" onclick="window.print()">Imprimir / Guardar PDF</button></div>
-  <section class="head"><div class="brand">YHORS</div><div class="muted">Documento comercial</div><p><span class="tag">${esc(invoice.status)}</span> &nbsp; <strong>${esc(invoice.number)}</strong></p></section>
-  <section class="grid"><div class="card"><strong>Cliente</strong><p>${esc(invoice.customer?.name||'Consumidor final')}<br>${esc(invoice.customer?.idNumber||invoice.customer?.ruc||'')}<br>${esc(invoice.customer?.email||'')}</p></div>
-  <div class="card"><strong>Venta</strong><p>${esc(sale.number)}<br>Vendedor: ${esc(invoice.sellerName||'—')}<br>Pago: ${esc(invoice.paymentMethod||'Pendiente')}</p></div></section>
-  <table><thead><tr><th>Producto</th><th>Cant.</th><th>Precio</th><th>Total</th></tr></thead><tbody>${rows}</tbody></table>
-  <div class="totals"><div class="line"><span>Subtotal</span><strong>$${Number(invoice.subtotal||0).toFixed(2)}</strong></div><div class="line"><span>Envío</span><strong>$${Number(invoice.shipping||0).toFixed(2)}</strong></div><div class="line total"><span>TOTAL</span><strong>$${Number(invoice.total||0).toFixed(2)}</strong></div><div class="line"><span>Pagado</span><strong>$${summary.paid.toFixed(2)}</strong></div><div class="line"><span>Saldo</span><strong>$${summary.balance.toFixed(2)}</strong></div></div>
-  <p class="muted" style="margin-top:35px">Generado por YHORS · ${new Date(invoice.createdAt).toLocaleString('es-EC')}</p></main></body></html>`);
-});
-
-app.get('/api/admin/pagos/:saleId', requireOrdersAccess, (req, res) => {
-  const sale = readSales().find(s => s.id === req.params.saleId);
-  if (!sale) return res.status(404).json({ error: 'Venta no encontrada.' });
-  return res.json(paymentSummary(sale.id, sale.total));
-});
-
-app.post('/api/admin/pagos/:saleId', requireOrdersAccess, (req, res) => {
-  const sales = readSales();
-  const sale = sales.find(s => s.id === req.params.saleId);
-  if (!sale) return res.status(404).json({ error: 'Venta no encontrada.' });
-  const amount = Math.round(Number(req.body?.amount || 0) * 100) / 100;
-  const method = cleanText(req.body?.method, 40) || 'Efectivo';
-  if (!Number.isFinite(amount) || amount <= 0) return res.status(400).json({ error: 'Ingresa un valor de pago válido.' });
-  const current = paymentSummary(sale.id, sale.total);
-  if (amount > current.balance + 0.01) return res.status(400).json({ error: `El saldo pendiente es $${current.balance.toFixed(2)}.` });
-  const payments = readPayments();
-  const payment = { id: crypto.randomUUID(), number: nextDocumentNumber(payments, 'PAG'), saleId: sale.id, saleNumber: sale.number, amount, method, note: cleanText(req.body?.note, 300), createdAt: new Date().toISOString() };
-  payments.unshift(payment);
-  writePayments(payments);
-  const after = paymentSummary(sale.id, sale.total);
-  const saleIndex = sales.findIndex(s => s.id === sale.id);
-  sales[saleIndex] = { ...sales[saleIndex], paidAmount: after.paid, balance: after.balance, paymentStatus: after.status, paymentMethod: method, updatedAt: new Date().toISOString() };
-  writeSales(sales);
-  auditLog(req, 'Pago registrado', 'Pagos', { paymentId: payment.id, paymentNumber: payment.number, saleId: sale.id, amount, method, balance: after.balance });
-  return res.status(201).json({ payment, ...after });
 });
 
 app.get('/api/admin/session', (req, res) => { const session = getSession(req); return res.json({ authenticated: Boolean(session), username: session?.user || null, role: session?.role || null }); });

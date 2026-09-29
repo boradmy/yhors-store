@@ -32,27 +32,7 @@ function productSlug(product) {
 function productHref(product) { return `/producto/${encodeURIComponent(productSlug(product))}`; }
 
 async function request(url, options = {}) {
-  // Las peticiones de la SPA no deben dejar la pantalla en blanco si Render
-  // tarda en despertar o una API queda colgada. Cada petición obtiene un
-  // límite razonable, salvo que el llamador entregue su propio signal.
-  const controller = options.signal ? null : new AbortController();
-  const timeoutMs = Math.max(3000, Number(options.timeoutMs || 12000));
-  const timer = controller ? window.setTimeout(() => controller.abort(), timeoutMs) : null;
-  const fetchOptions = { credentials: 'same-origin', ...options, headers: { ...(options.headers || {}) } };
-  delete fetchOptions.timeoutMs;
-  if (controller) fetchOptions.signal = controller.signal;
-  let response;
-  try {
-    response = await fetch(url, fetchOptions);
-  } catch (fetchError) {
-    const error = new Error(fetchError?.name === 'AbortError'
-      ? 'YHORS está tardando demasiado en responder. Recarga la página e inténtalo nuevamente.'
-      : 'No se pudo conectar con YHORS. Verifica la conexión y vuelve a intentarlo.');
-    error.code = fetchError?.name === 'AbortError' ? 'REQUEST_TIMEOUT' : 'REQUEST_NETWORK_ERROR';
-    throw error;
-  } finally {
-    if (timer) window.clearTimeout(timer);
-  }
+  const response = await fetch(url, { credentials: 'same-origin', ...options, headers: { ...(options.headers || {}) } });
   const json = response.status === 204 ? null : await response.json().catch(() => ({}));
   if (!response.ok) {
     const error = new Error(json.error || (response.status === 401 ? 'Tu sesión administrativa expiró. Inicia sesión nuevamente.' : 'No se pudo completar la operación.'));
@@ -559,7 +539,7 @@ async function renderAdminAfterLogin(session) {
   if (!isAdminRoute) target = limitedRole ? `${ADMIN_PATH}/pedidos` : ADMIN_PATH;
 
   if (limitedRole) {
-    const allowed = [`${ADMIN_PATH}/ventas-generales`, `${ADMIN_PATH}/pedidos`, `${ADMIN_PATH}/ventas/nueva`, `${ADMIN_PATH}/buscar-productos`];
+    const allowed = [`${ADMIN_PATH}/ventas-generales`, `${ADMIN_PATH}/pedidos`, `${ADMIN_PATH}/generar-orden`, `${ADMIN_PATH}/buscar-productos`];
     if (!allowed.includes(target.replace(/\/$/, ''))) target = `${ADMIN_PATH}/pedidos`;
   }
 
@@ -622,163 +602,15 @@ async function navigateToRoute(href, { replace = false } = {}) {
   }
 }
 
-async 
-function commercialCustomerFields(prefix = 'com') {
-  return `<div class="commercial-customer-grid">
-    <label><span>Cliente</span><input id="${prefix}CustomerName" maxlength="100" placeholder="Nombre completo"></label>
-    <label><span>Cédula / RUC</span><input id="${prefix}CustomerCedula" inputmode="numeric" maxlength="13" placeholder="Opcional"></label>
-    <label><span>Teléfono</span><input id="${prefix}CustomerPhone" maxlength="40" placeholder="099 999 9999"></label>
-    <label><span>Correo</span><input id="${prefix}CustomerEmail" type="email" maxlength="120" placeholder="correo@ejemplo.com"></label>
-  </div>`;
-}
-
-function commercialProductPicker(products, prefix = 'com') {
-  return `<div class="commercial-picker">
-    <input id="${prefix}ProductSearch" type="search" placeholder="Buscar producto por nombre o SKU…" autocomplete="off">
-    <div id="${prefix}ProductResults" class="commercial-product-results"></div>
-  </div>`;
-}
-
-function commercialProductRows(lines, prefix = 'com') {
-  return lines.length ? lines.map((line,index) => `<div class="commercial-line" data-${prefix}-line="${escapeHTML(line.productId)}">
-    <div><strong>${escapeHTML(line.name)}</strong><small>SKU: ${escapeHTML(line.sku || '—')}</small></div>
-    <input type="number" min="1" max="999" value="${Number(line.quantity)||1}" data-${prefix}-qty="${index}">
-    <strong>${money(line.unitPrice)}</strong>
-    <strong>${money((Number(line.quantity)||1)*Number(line.unitPrice||0))}</strong>
-    <button type="button" class="button secondary small" data-${prefix}-remove="${index}">×</button>
-  </div>`).join('') : `<div class="commercial-empty">Agrega productos para comenzar.</div>`;
-}
-
-async function renderAdminCotizaciones() {
-  const session = await request('/api/admin/session').catch(() => ({authenticated:false}));
-  if (!session.authenticated) return renderLogin();
-  const products = await request('/api/admin/order-products').catch(() => []);
-  let quotes = await request('/api/admin/cotizaciones').catch(() => []);
-  let lines = [];
-  app.innerHTML = `<main class="admin-shell"><div class="admin-wrap">
-    <div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Cotizaciones</h1><p class="admin-subtitle">Prepara propuestas comerciales sin comprometer inventario.</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>
-    ${adminSectionNav(session,'cotizaciones')}
-    <section class="commercial-page">
-      <div class="commercial-hero"><div><span class="eyebrow">Fase 2 · Comercial</span><h2>Nueva cotización</h2><p>Arma una propuesta, guárdala y conviértela en pedido cuando el cliente la acepte.</p></div><span class="commercial-badge">COTIZACIÓN</span></div>
-      <section class="commercial-card">${commercialCustomerFields('quote')}
-        <div class="commercial-products-head"><h3>Productos</h3><strong id="quoteTotal">$0,00</strong></div>
-        ${commercialProductPicker(products,'quote')}
-        <div class="commercial-table-head"><span>Producto</span><span>Cant.</span><span>Precio</span><span>Total</span><span></span></div>
-        <div id="quoteLines">${commercialProductRows(lines,'quote')}</div>
-        <label class="commercial-notes"><span>Notas comerciales</span><textarea id="quoteNotes" maxlength="500" placeholder="Vigencia, condiciones, promoción, etc."></textarea></label>
-        <div class="commercial-actions"><button class="button primary" id="saveQuote">Guardar cotización</button></div>
-      </section>
-      <section class="commercial-card"><div class="commercial-products-head"><div><h3>Cotizaciones recientes</h3><p>Las cotizaciones no descuentan stock hasta convertirse en pedido.</p></div></div><div id="quotesList">${commercialQuotesMarkup(quotes)}</div></section>
-    </section>
-  </div></main>`;
-
-  const renderResults = () => {
-    const q = (document.querySelector('#quoteProductSearch')?.value || '').toLowerCase().trim();
-    const filtered = products.filter(p => !q || `${p.name} ${p.sku} ${p.brand||''}`.toLowerCase().includes(q)).slice(0,8);
-    document.querySelector('#quoteProductResults').innerHTML = filtered.map(p => `<button type="button" class="commercial-product-option" data-quote-add="${escapeHTML(p.id)}"><span>${escapeHTML(p.name)}</span><small>${escapeHTML(p.sku||'—')} · ${money(p.salePrice||0)}</small></button>`).join('') || '<div class="commercial-empty">No encontramos productos.</div>';
-  };
-  const redraw = () => {
-    document.querySelector('#quoteLines').innerHTML = commercialProductRows(lines,'quote');
-    document.querySelector('#quoteTotal').textContent = money(lines.reduce((s,l)=>s+(Number(l.quantity)||1)*Number(l.unitPrice||0),0));
-  };
-  document.querySelector('#quoteProductSearch').addEventListener('input',renderResults);
-  renderResults();
-  document.querySelector('#quoteProductResults').addEventListener('click',e=>{
-    const b=e.target.closest('[data-quote-add]'); if(!b)return;
-    const p=products.find(x=>String(x.id)===String(b.dataset.quoteAdd)); if(!p)return;
-    const existing=lines.find(x=>String(x.productId)===String(p.id));
-    if(existing) existing.quantity=Math.min(999,existing.quantity+1);
-    else lines.push({productId:p.id,sku:p.sku||'',name:p.name||'',quantity:1,unitPrice:Number(p.salePrice||0)});
-    redraw();
-  });
-  document.querySelector('#quoteLines').addEventListener('input',e=>{
-    const i=e.target.dataset.quoteQty; if(i===undefined)return;
-    lines[Number(i)].quantity=Math.max(1,Math.min(999,Number(e.target.value)||1)); redraw();
-  });
-  document.querySelector('#quoteLines').addEventListener('click',e=>{
-    const b=e.target.closest('[data-quote-remove]'); if(!b)return; lines.splice(Number(b.dataset.quoteRemove),1); redraw();
-  });
-  document.querySelector('#saveQuote').addEventListener('click',async()=>{
-    try{
-      const body={customer:{name:document.querySelector('#quoteCustomerName').value.trim(),cedula:document.querySelector('#quoteCustomerCedula').value.trim(),phone:document.querySelector('#quoteCustomerPhone').value.trim(),email:document.querySelector('#quoteCustomerEmail').value.trim()},items:lines,notes:document.querySelector('#quoteNotes').value.trim()};
-      const quote=await request('/api/admin/cotizaciones',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-      alert(`Cotización ${quote.number} guardada correctamente.`); await renderAdminCotizaciones();
-    }catch(e){alert(e.message);}
-  });
-  document.querySelector('#quotesList').addEventListener('click',async e=>{
-    const convert=e.target.closest('[data-quote-convert]'); if(!convert)return;
-    if(!confirm('¿Convertir esta cotización en pedido? Se reservará el stock.'))return;
-    try{const r=await request(`/api/admin/cotizaciones/${encodeURIComponent(convert.dataset.quoteConvert)}/convertir-pedido`,{method:'POST'}); alert(`Pedido ${r.orderNumber} creado.`); await renderAdminCotizaciones();}catch(err){alert(err.message);}
-  });
-}
-
-function commercialQuotesMarkup(quotes=[]) {
-  if(!quotes.length) return '<div class="commercial-empty">Todavía no tienes cotizaciones.</div>';
-  return quotes.slice(0,30).map(q=>`<article class="commercial-document">
-    <div><span class="eyebrow">${escapeHTML(q.number)}</span><h4>${escapeHTML(q.customer?.name||'Cliente sin nombre')}</h4><small>${new Date(q.createdAt).toLocaleString('es-EC',{dateStyle:'medium',timeStyle:'short'})}</small></div>
-    <strong>${money(q.total)}</strong><span class="commercial-status">${escapeHTML(q.status)}</span>
-    <button class="button secondary small" data-quote-convert="${escapeHTML(q.id)}" ${q.status==='Cancelada'||q.convertedOrderId?'disabled':''}>${q.convertedOrderId?'Convertida':'Convertir en pedido'}</button>
-  </article>`).join('');
-}
-
-async function renderAdminVentas() {
-  const session=await request('/api/admin/session').catch(()=>({authenticated:false}));
-  if(!session.authenticated)return renderLogin();
-  const sales=await request('/api/admin/ventas').catch(()=>[]);
-  const orders=await request('/api/admin/orders').catch(()=>[]);
-  const saleOrderIds=new Set(sales.map(s=>s.orderId));
-  const available=orders.filter(o=>String(o.status).toLowerCase()!=='cancelado'&&!saleOrderIds.has(o.id)).slice(0,50);
-  app.innerHTML=`<main class="admin-shell"><div class="admin-wrap">
-    <div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Ventas</h1><p class="admin-subtitle">Convierte pedidos confirmados en ventas registradas y consulta su historial.</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>
-    ${adminSectionNav(session,'ventas')}
-    <section class="commercial-page">
-      <div class="commercial-hero"><div><span class="eyebrow">Fase 2 · Comercial</span><h2>Registro de ventas</h2><p>Registra ventas directas o convierte pedidos existentes en ventas.</p></div><div class="commercial-hero-actions"><a class="button primary" href="${ADMIN_PATH}/ventas/nueva" data-smooth-route>Nueva venta →</a><span class="commercial-badge">VENTAS</span></div></div>
-      <section class="commercial-card"><h3>Pedidos listos para registrar</h3><div class="commercial-doc-list">${available.length?available.map(o=>`<article class="commercial-document"><div><span class="eyebrow">${escapeHTML(o.orderNumber)}</span><h4>${escapeHTML(o.customer?.name||'Cliente')}</h4><small>${escapeHTML(o.status)} · ${new Date(o.createdAt).toLocaleDateString('es-EC')}</small></div><strong>${money(o.total)}</strong><button class="button primary small" data-register-sale="${escapeHTML(o.id)}">Registrar venta</button></article>`).join(''):'<div class="commercial-empty">No hay pedidos pendientes de registrar como venta.</div>'}</div></section>
-      <section class="commercial-card"><h3>Ventas registradas</h3><div class="commercial-doc-list">${sales.slice(0,50).map(s=>`<article class="commercial-document"><div><span class="eyebrow">${escapeHTML(s.number)}</span><h4>${escapeHTML(s.customer?.name||'Cliente')}</h4><small>Pedido ${escapeHTML(s.orderNumber||'—')} · ${new Date(s.createdAt).toLocaleDateString('es-EC')}</small></div><strong>${money(s.total)}</strong><span class="commercial-status">${escapeHTML(s.status)}</span><button class="button secondary small" data-invoice="${escapeHTML(s.id)}">${s.invoiceNumber?'Ver factura':'Facturar'}</button><button class="button secondary small" data-pay="${escapeHTML(s.id)}">Pago</button></article>`).join('')||'<div class="commercial-empty">Aún no hay ventas registradas.</div>'}</div></section>
-    </section></div></main>`;
-  document.querySelectorAll('[data-register-sale]').forEach(btn=>btn.addEventListener('click',async()=>{try{const s=await request('/api/admin/ventas',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({orderId:btn.dataset.registerSale})});alert(`Venta ${s.number} registrada.`);await renderAdminVentas();}catch(e){alert(e.message);}}));
-  document.querySelectorAll('[data-invoice]').forEach(btn=>btn.addEventListener('click',async()=>{
-    try { const saleId=btn.dataset.invoice; const r=await request(`/api/admin/facturacion/${saleId}/factura`,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}); window.open(`/api/admin/facturacion/${saleId}/documento`,'_blank','noopener'); }
-    catch(e){ alert(e.message); }
-  }));
-  document.querySelectorAll('[data-pay]').forEach(btn=>btn.addEventListener('click',async()=>{
-    const amount=prompt('Valor del pago / abono:');
-    if(amount===null)return;
-    const method=prompt('Forma de pago (Efectivo, Transferencia, Tarjeta, etc.):','Transferencia')||'Transferencia';
-    try { const r=await request(`/api/admin/pagos/${btn.dataset.pay}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({amount:Number(amount),method})}); alert(`Pago ${r.payment.number} registrado. Saldo: ${money(r.balance)}`); await renderAdminVentas(); }
-    catch(e){ alert(e.message); }
-  }));
-
-}
-
-
-async function renderAdminFacturacion() {
-  const session=await request('/api/admin/session').catch(()=>({authenticated:false}));
-  if(!session.authenticated)return renderLogin();
-  const sales=await request('/api/admin/facturacion').catch(()=>[]);
-  app.innerHTML=`<main class="admin-shell"><div class="admin-wrap">
-    <div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Facturación y pagos</h1><p class="admin-subtitle">Emite documentos comerciales y controla pagos, abonos y saldos.</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>
-    ${adminSectionNav(session,'facturacion')}
-    <section class="commercial-page">
-      <div class="commercial-hero"><div><span class="eyebrow">Fase 3 · Finanzas</span><h2>Documentos y pagos</h2><p>Factura ventas registradas, consulta documentos y registra abonos.</p></div><div class="commercial-hero-actions"><span class="commercial-badge">FACTURACIÓN</span></div></div>
-      <section class="commercial-card"><h3>Ventas y estado de pago</h3><div class="commercial-doc-list">${sales.slice(0,100).map(s=>`<article class="commercial-document"><div><span class="eyebrow">${escapeHTML(s.number)}</span><h4>${escapeHTML(s.customer?.name||'Consumidor final')}</h4><small>${escapeHTML(s.invoiceNumber||'Sin factura')} · ${new Date(s.createdAt).toLocaleDateString('es-EC')}</small></div><div><strong>${money(s.total)}</strong><small style="display:block">Pagado ${money(s.paid)} · Saldo ${money(s.balance)}</small></div><span class="commercial-status">${escapeHTML(s.status)} · ${escapeHTML(s.status==='Pagada'?'PAGADA':s.status==='Abono'?'ABONO':'PENDIENTE')}</span><button class="button primary small" data-fact="${escapeHTML(s.id)}">${s.invoiceNumber?'Abrir documento':'Emitir factura'}</button><button class="button secondary small" data-factpay="${escapeHTML(s.id)}">Registrar pago</button></article>`).join('')||'<div class="commercial-empty">Aún no hay ventas.</div>'}</div></section>
-    </section></div></main>`;
-  document.querySelectorAll('[data-fact]').forEach(b=>b.addEventListener('click',async()=>{try{await request(`/api/admin/facturacion/${b.dataset.fact}/factura`,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});window.open(`/api/admin/facturacion/${b.dataset.fact}/documento`,'_blank','noopener');}catch(e){alert(e.message);}}));
-  document.querySelectorAll('[data-factpay]').forEach(b=>b.addEventListener('click',async()=>{const amount=prompt('Valor del pago / abono:');if(amount===null)return;const method=prompt('Forma de pago:','Transferencia')||'Transferencia';try{const r=await request(`/api/admin/pagos/${b.dataset.factpay}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({amount:Number(amount),method})});alert(`Pago ${r.payment.number} registrado. Saldo: ${money(r.balance)}`);renderAdminFacturacion();}catch(e){alert(e.message);}}));
-}
-
-function renderCurrentRoute() {
+async function renderCurrentRoute() {
   const path = window.location.pathname;
   if (path === ADMIN_PATH || path === `${ADMIN_PATH}/`) return renderAdmin();
   if (path === `${ADMIN_PATH}/ventas-generales` || path === `${ADMIN_PATH}/ventas-generales/`) return renderAdminSales();
   if (path === `${ADMIN_PATH}/resumen-financiero` || path === `${ADMIN_PATH}/resumen-financiero/`) return renderAdminFinancial();
   if (path === `${ADMIN_PATH}/calculo-comision` || path === `${ADMIN_PATH}/calculo-comision/`) return renderAdminCommission();
   if (path === `${ADMIN_PATH}/multas` || path === `${ADMIN_PATH}/multas/`) return renderAdminFines();
-  if (path === `${ADMIN_PATH}/cotizaciones` || path === `${ADMIN_PATH}/cotizaciones/`) return renderAdminCotizaciones();
-  if (path === `${ADMIN_PATH}/ventas` || path === `${ADMIN_PATH}/ventas/`) return renderAdminVentas();
-  if (path === `${ADMIN_PATH}/facturacion` || path === `${ADMIN_PATH}/facturacion/`) return renderAdminFacturacion();
   if (path === `${ADMIN_PATH}/pedidos` || path === `${ADMIN_PATH}/pedidos/`) return renderAdminOrders();
-  if (path === `${ADMIN_PATH}/ventas/nueva` || path === `${ADMIN_PATH}/ventas/nueva/`) return renderAdminNuevaVenta();
+  if (path === `${ADMIN_PATH}/generar-orden` || path === `${ADMIN_PATH}/generar-orden/`) return renderAdminGenerateOrder();
     if (path === `${ADMIN_PATH}/auditoria` || path === `${ADMIN_PATH}/auditoria/`) return renderAdminAudit();
   if (path === `${ADMIN_PATH}/seguridad` || path === `${ADMIN_PATH}/seguridad/`) return renderAdminSecurity(true);
 if (path === `${ADMIN_PATH}/usuarios` || path === `${ADMIN_PATH}/usuarios/`) {
@@ -1332,19 +1164,19 @@ function adminSectionNav(session = {}, active = '') {
   const link = (key, href, label) => `<a href="${href}" class="admin-section-link${active === key ? ' active' : ''}" data-smooth-route>${label}</a>`;
   if (limitedOperations) {
     return `<nav class="admin-section-nav admin-section-nav--compact" id="adminSectionNav" aria-label="Secciones operativas">
-      <details class="admin-nav-group"><summary>Operación</summary><div class="admin-nav-group-links">${link('buscar-productos', `${ADMIN_PATH}/buscar-productos`, 'BUSCAR PRODUCTOS')}${link('ventas-generales', `${ADMIN_PATH}/ventas-generales`, 'VENTAS GENERALES')}${link('cotizaciones', `${ADMIN_PATH}/cotizaciones`, 'COTIZACIONES')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('ventas', `${ADMIN_PATH}/ventas`, 'VENTAS')}${link('facturacion', `${ADMIN_PATH}/facturacion`, 'FACTURACIÓN')}</div></details>
+      <details class="admin-nav-group"><summary>Operación</summary><div class="admin-nav-group-links">${link('buscar-productos', `${ADMIN_PATH}/buscar-productos`, 'BUSCAR PRODUCTOS')}${link('ventas-generales', `${ADMIN_PATH}/ventas-generales`, 'VENTAS GENERALES')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('generar-orden', `${ADMIN_PATH}/generar-orden`, 'GENERAR ORDEN')}</div></details>
     </nav>`;
   }
   const group = (label, activeKeys, items, open = false) => `<details class="admin-nav-group${activeKeys.includes(active) ? ' has-active' : ''}"${open ? ' open' : ''}><summary><span>${label}</span>${activeKeys.includes(active) ? '<i aria-hidden="true"></i>' : ''}</summary><div class="admin-nav-group-links">${items}</div></details>`;
   return `<nav class="admin-section-nav" id="adminSectionNav" aria-label="Administración YHORS">
-    ${group('Operación', ['web','inventario','buscar-productos','cotizaciones','pedidos','ventas'], `${link('web', ADMIN_PATH, 'PÁGINA WEB')}${link('buscar-productos', `${ADMIN_PATH}/buscar-productos`, 'BUSCAR PRODUCTOS')}${link('inventario', `${ADMIN_PATH}/inventario`, 'INVENTARIO')}${link('cotizaciones', `${ADMIN_PATH}/cotizaciones`, 'COTIZACIONES')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('ventas', `${ADMIN_PATH}/ventas`, 'VENTAS')}`)}
+    ${group('Operación', ['web','inventario','buscar-productos','pedidos','generar-orden'], `${link('web', ADMIN_PATH, 'PÁGINA WEB')}${link('buscar-productos', `${ADMIN_PATH}/buscar-productos`, 'BUSCAR PRODUCTOS')}${link('inventario', `${ADMIN_PATH}/inventario`, 'INVENTARIO')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('generar-orden', `${ADMIN_PATH}/generar-orden`, 'GENERAR ORDEN')}`)}
     ${group('Gestión', ['usuarios','auditoria'], `${link('usuarios', `${ADMIN_PATH}/usuarios`, 'USUARIOS')}${link('auditoria', `${ADMIN_PATH}/auditoria`, 'AUDITORÍA')}`)}
-    ${group('Finanzas', ['resumen-financiero','ventas-generales','facturacion','multas','calculo-comision'], `${link('resumen-financiero', `${ADMIN_PATH}/resumen-financiero`, 'RESUMEN FINANCIERO')}${link('ventas-generales', `${ADMIN_PATH}/ventas-generales`, 'VENTAS GENERALES')}${link('facturacion', `${ADMIN_PATH}/facturacion`, 'FACTURACIÓN Y PAGOS')}${link('multas', `${ADMIN_PATH}/multas`, 'MULTAS')}${link('calculo-comision', `${ADMIN_PATH}/calculo-comision`, 'CÁLCULO DE COMISIÓN')}`)}
+    ${group('Finanzas', ['resumen-financiero','ventas-generales','multas','calculo-comision'], `${link('resumen-financiero', `${ADMIN_PATH}/resumen-financiero`, 'RESUMEN FINANCIERO')}${link('ventas-generales', `${ADMIN_PATH}/ventas-generales`, 'VENTAS GENERALES')}${link('multas', `${ADMIN_PATH}/multas`, 'MULTAS')}${link('calculo-comision', `${ADMIN_PATH}/calculo-comision`, 'CÁLCULO DE COMISIÓN')}`)}
   </nav>`;
 }
 
 function generateOrderNav(session) {
-  return adminSectionNav(session, 'ventas');
+  return adminSectionNav(session, 'generar-orden');
 }
 
 function customerSummaryMarkup(customer = {}) {
@@ -1416,7 +1248,7 @@ function generateOrderProductRows(lines = []) {
   }).join('');
 }
 
-async function renderAdminNuevaVenta() {
+async function renderAdminGenerateOrder() {
   const session = await request('/api/admin/session').catch(() => ({ authenticated: false }));
   if (!session.authenticated) return renderLogin();
   const role = String(session.role || '').toLowerCase();
@@ -1429,18 +1261,18 @@ async function renderAdminNuevaVenta() {
   let saving = false;
 
   app.innerHTML = `<main class="admin-shell generate-order-shell"><div class="admin-wrap">
-    <div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Nueva venta</h1><p class="admin-subtitle">Registra una venta directa desde YHORS sin necesidad de crear un pedido previo.</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>
+    <div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Generar orden</h1><p class="admin-subtitle">Facturación interna · crea una orden desde YHORS Administración</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>
     ${generateOrderNav(session)}
     <section class="generate-order-page">
-      <div class="generate-order-header"><div><span class="eyebrow">Venta directa</span><h2>Nueva venta</h2><p>Registra al cliente, selecciona sus productos, IMEI/series y la información interna de la operación.</p></div><div class="generate-doc-badge"><span>DOCUMENTO</span><strong>VENTA DIRECTA</strong><small>YHORS · ${new Date().toLocaleDateString('es-EC')}</small></div></div>
+      <div class="generate-order-header"><div><span class="eyebrow">Nueva orden</span><h2>Orden de venta</h2><p>Registra al cliente, selecciona sus productos y asigna el vendedor responsable.</p></div><div class="generate-doc-badge"><span>DOCUMENTO</span><strong>ORDEN DE PEDIDO</strong><small>YHORS · ${new Date().toLocaleDateString('es-EC')}</small></div></div>
       <div class="generate-top-grid">
         <section class="generate-card customer-card"><div class="generate-card-head"><div><span class="generate-card-kicker">01 · Cliente</span><h3>Información del cliente</h3></div><button type="button" class="button secondary small" id="openCustomerModal">Agregar cliente →</button></div><div id="customerSummary">${customerSummaryMarkup(customer)}</div></section>
         <section class="generate-card seller-card"><div class="generate-card-kicker">02 · Responsable</div><h3>Vendedor</h3><p>Define quién queda responsable de esta orden.</p><div class="fine-person-field generate-seller-field"><span>Vendedor asignado</span><button type="button" class="fine-person-picker-trigger" id="generateSellerPickerOpen" aria-haspopup="dialog" aria-controls="generateSellerPickerModal"><span class="fine-person-picker-avatar" id="generateSellerAvatar">?</span><span class="fine-person-picker-copy"><strong id="generateSellerName">Sin asignar</strong><small id="generateSellerUsername">Puedes buscar y seleccionar un vendedor</small></span><span class="fine-person-picker-chevron">⌄</span></button><input type="hidden" id="generateSeller" value="${sellers.some(s => s.id === session.accountId) ? escapeHTML(session.accountId) : ''}"></div><small class="generate-field-note">${role === 'vendedor' || role === 'orders' ? 'Puedes generar la orden con tu usuario o asignarla a otro vendedor.' : 'Puedes cambiar el vendedor antes de generar la orden.'}</small></section>
       </div>
-      <section class="generate-card generate-products-card"><div class="generate-card-head"><div><span class="generate-card-kicker">03 · Productos</span><h3>Detalle de la venta</h3></div><button type="button" class="button primary small" id="openProductPicker">+ Agregar productos</button></div><div class="generate-products-table-head"><span>Producto</span><span>Cant.</span><span>Precio</span><span>Total</span><span></span></div><div id="generateOrderLines">${generateOrderProductRows(lines)}</div></section>
+      <section class="generate-card generate-products-card"><div class="generate-card-head"><div><span class="generate-card-kicker">03 · Productos</span><h3>Detalle de la orden</h3></div><button type="button" class="button primary small" id="openProductPicker">+ Agregar productos</button></div><div class="generate-products-table-head"><span>Producto</span><span>Cant.</span><span>Precio</span><span>Total</span><span></span></div><div id="generateOrderLines">${generateOrderProductRows(lines)}</div></section>
       <section class="generate-bottom-grid">
-        <section class="generate-card delivery-card"><div class="generate-card-kicker">04 · Entrega</div><h3>Forma de entrega</h3><div class="generate-delivery-options"><label><input type="radio" name="generateDelivery" value="office" checked><span><strong>Retiro en oficina</strong><small>Sin costo</small></span></label><label><input type="radio" name="generateDelivery" value="local"><span><strong>Envío YHORS</strong><small>$3,00</small></span></label><label><input type="radio" name="generateDelivery" value="courier"><span><strong>Courier</strong><small>$5,00</small></span></label></div><label class="generate-field"><span>Notas de la venta</span><textarea id="generateNotes" rows="3" maxlength="500" placeholder="Referencia para el cliente, horario u otra indicación"></textarea></label><label class="generate-field"><span>Nota interna</span><textarea id="generateInternalNote" rows="2" maxlength="500" placeholder="Ej.: Guía 001-001-000123 · revisar entrega · pendiente de documento"></textarea><small class="generate-field-note">Solo para el equipo de YHORS. No se muestra al cliente.</small></label></section>
-        <section class="generate-card totals-card"><div class="generate-card-kicker">Resumen</div><div class="generate-total-line"><span>Subtotal</span><strong id="generateSubtotal">$0,00</strong></div><div class="generate-total-line"><span>Envío</span><strong id="generateShipping">$0,00</strong></div><div class="generate-grand-total"><span>Total</span><strong id="generateTotal">$0,00</strong></div><div id="generateMessage" class="message" hidden></div><button type="button" class="button generate-submit" id="generateOrderSubmit">Registrar venta <span>→</span></button></section>
+        <section class="generate-card delivery-card"><div class="generate-card-kicker">04 · Entrega</div><h3>Forma de entrega</h3><div class="generate-delivery-options"><label><input type="radio" name="generateDelivery" value="office" checked><span><strong>Retiro en oficina</strong><small>Sin costo</small></span></label><label><input type="radio" name="generateDelivery" value="local"><span><strong>Envío YHORS</strong><small>$3,00</small></span></label><label><input type="radio" name="generateDelivery" value="courier"><span><strong>Courier</strong><small>$5,00</small></span></label></div><label class="generate-field"><span>Notas de la orden</span><textarea id="generateNotes" rows="4" maxlength="500" placeholder="Referencia, horario u otra indicación"></textarea></label></section>
+        <section class="generate-card totals-card"><div class="generate-card-kicker">Resumen</div><div class="generate-total-line"><span>Subtotal</span><strong id="generateSubtotal">$0,00</strong></div><div class="generate-total-line"><span>Envío</span><strong id="generateShipping">$0,00</strong></div><div class="generate-grand-total"><span>Total</span><strong id="generateTotal">$0,00</strong></div><div id="generateMessage" class="message" hidden></div><button type="button" class="button generate-submit" id="generateOrderSubmit">Generar orden <span>→</span></button></section>
       </section>
     </section>
     <div class="generate-modal" id="customerModal" hidden><div class="generate-modal-backdrop" data-close-generate-modal="customerModal"></div><div class="generate-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="customerModalTitle"><div class="generate-modal-head"><div><span class="eyebrow">Datos del cliente</span><h2 id="customerModalTitle">Registrar cliente</h2></div><button type="button" class="generate-modal-close" data-close-generate-modal="customerModal">×</button></div><form id="generateCustomerForm"><div class="form-grid"><div class="field full"><label for="genCustomerName">Nombre completo</label><input id="genCustomerName" required maxlength="100" placeholder="Nombre del cliente"></div><div class="field"><label for="genCustomerCedula">Cédula / RUC</label><input id="genCustomerCedula" required inputmode="numeric" maxlength="13" placeholder="0102030405"></div><div class="field"><label for="genCustomerPhone">Celular</label><input id="genCustomerPhone" required maxlength="40" placeholder="099 999 9999"></div><div class="field"><label for="genCustomerEmail">Correo</label><input id="genCustomerEmail" type="email" maxlength="120" placeholder="cliente@correo.com"></div><div class="field"><label for="genCustomerCity">Ciudad</label><input id="genCustomerCity" required maxlength="80" placeholder="Quito"></div><div class="field full"><label for="genCustomerAddress">Dirección</label><input id="genCustomerAddress" maxlength="240" placeholder="Dirección de entrega"></div><div class="field full"><label for="genCustomerMaps">Google Maps (opcional)</label><input id="genCustomerMaps" type="url" maxlength="500" placeholder="https://maps.google.com/..."></div></div><div class="generate-modal-actions"><button type="button" class="button secondary" data-close-generate-modal="customerModal">Cancelar</button><button type="submit" class="button primary">Guardar cliente</button></div></form></div></div></div>
@@ -1530,14 +1362,14 @@ async function renderAdminNuevaVenta() {
   document.querySelector('#generateOrderLines')?.addEventListener('click', event => { syncDeviceIdentifiersFromDom(lines); const qtyButton = event.target.closest('[data-gen-qty]'); if (qtyButton) { const line = lines.find(item => item.id === qtyButton.dataset.genQty); if (!line) return; line.quantity = Math.max(1, Math.min(99, Number(line.quantity || 1) + Number(qtyButton.dataset.change || 0))); drawLines(); return; } const remove = event.target.closest('[data-gen-remove]'); if (remove) { lines = lines.filter(item => item.id !== remove.dataset.genRemove); drawLines(); } });
   document.querySelector('#generateOrderLines')?.addEventListener('change', event => { const select = event.target.closest('[data-gen-days]'); if (!select) return; const line = lines.find(item => item.id === select.dataset.genDays); if (!line) return; line.rentalDays = Math.max(1, Math.min(10, Number(select.value) || 1)); drawLines(); });
   document.querySelectorAll('input[name="generateDelivery"]').forEach(input => input.addEventListener('change', updateTotals));
-  document.querySelector('#generateOrderSubmit')?.addEventListener('click', async () => { if (saving) return; const message = document.querySelector('#generateMessage'); message.hidden = true; if (!customer.name || !customer.phone || !customer.cedula || !customer.city) { message.hidden = false; message.className = 'message error'; message.textContent = 'Completa los datos del cliente antes de registrar la venta.'; openModal('customerModal'); return; } if (!lines.length) { message.hidden = false; message.className = 'message error'; message.textContent = 'Agrega al menos un producto a la venta.'; openModal('productPickerModal'); return; } const deliveryMethod = document.querySelector('input[name="generateDelivery"]:checked')?.value || 'office'; if (deliveryMethod !== 'office' && !customer.address) { message.hidden = false; message.className = 'message error'; message.textContent = 'Ingresa la dirección del cliente para el envío seleccionado.'; openModal('customerModal'); return; } const submit = document.querySelector('#generateOrderSubmit');
+  document.querySelector('#generateOrderSubmit')?.addEventListener('click', async () => { if (saving) return; const message = document.querySelector('#generateMessage'); message.hidden = true; if (!customer.name || !customer.phone || !customer.cedula || !customer.city) { message.hidden = false; message.className = 'message error'; message.textContent = 'Completa los datos del cliente antes de generar la orden.'; openModal('customerModal'); return; } if (!lines.length) { message.hidden = false; message.className = 'message error'; message.textContent = 'Agrega al menos un producto a la orden.'; openModal('productPickerModal'); return; } const deliveryMethod = document.querySelector('input[name="generateDelivery"]:checked')?.value || 'office'; if (deliveryMethod !== 'office' && !customer.address) { message.hidden = false; message.className = 'message error'; message.textContent = 'Ingresa la dirección del cliente para el envío seleccionado.'; openModal('customerModal'); return; } const submit = document.querySelector('#generateOrderSubmit');
     const confirmed = await showYhorsConfirm(
-      '¿Deseas registrar esta venta?',
-      'Si continúas, la venta se registrará y se actualizará el inventario. Si eliges <strong>Cancelar</strong>, puedes seguir agregando o modificando productos.',
-      { cancelText: 'Cancelar', confirmText: 'Registrar venta' }
+      '¿Deseas generar esta orden?',
+      'Si continúas, la orden se registrará y se actualizará el inventario. Si eliges <strong>Cancelar</strong>, puedes seguir agregando o modificando productos.',
+      { cancelText: 'Cancelar', confirmText: 'Generar orden' }
     );
     if (!confirmed) return;
-    saving = true; submit.disabled = true; submit.classList.add('is-loading'); submit.innerHTML = 'Generando…'; try { const assignedSellerId = document.querySelector('#generateSeller')?.value || null; syncDeviceIdentifiersFromDom(lines); const identifierError = lines.find(line => { if (!isTechOrderProduct(line) || line.purchaseMode === 'rental') return false; const entries = line.deviceIdentifiers || []; if (entries.length < Number(line.quantity || 1)) return true; return entries.some(entry => isImeiOrderProduct(line) ? !/^\d{14,16}$/.test(String(entry.primary || '')) : !/^[A-Za-z0-9._\-/ ]{3,50}$/.test(String(entry.primary || ''))); }); if (identifierError) { message.hidden = false; message.className = 'message error'; message.textContent = isImeiOrderProduct(identifierError) ? `Completa correctamente el IMEI 1 de cada unidad de “${identifierError.name}” (14–16 dígitos).` : `Completa el número de serie de cada unidad de “${identifierError.name}”.`; saving = false; submit.disabled = false; submit.classList.remove('is-loading'); submit.innerHTML = 'Registrar venta <span>→</span>'; return; } const payload = { customer: { ...customer, notes: document.querySelector('#generateNotes').value.trim() }, internalNote: document.querySelector('#generateInternalNote')?.value.trim() || '', deliveryMethod, assignedSellerId, items: lines.map(line => ({ productId: line.productId || line.id, quantity: Number(line.quantity), purchaseMode: line.purchaseMode || 'purchase', rentalDays: line.purchaseMode === 'rental' ? Math.max(1, Number(line.rentalDays || 1)) : null, deviceIdentifiers: Array.isArray(line.deviceIdentifiers) ? line.deviceIdentifiers : [] })) }; const result = await request('/api/admin/ventas/directa', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) }); app.querySelector('.generate-order-page').innerHTML = `<div class="generate-success"><span class="success-mark">✓</span><span class="eyebrow">Venta registrada correctamente</span><h2>#${escapeHTML(result.number)}</h2><p>La venta quedó registrada en YHORS y el inventario se actualizó.</p><div class="generate-success-total">Total: <strong>${money(result.total)}</strong></div><div class="generate-success-actions"><button type="button" class="button primary" id="generateAnotherOrder">Nueva venta</button><a class="button secondary" href="${ADMIN_PATH}/ventas" data-smooth-route>Ver ventas</a></div></div>`; document.querySelector('#generateAnotherOrder')?.addEventListener('click', () => renderAdminNuevaVenta()); } catch (error) { message.hidden = false; message.className = 'message error'; message.textContent = error.message || 'No se pudo registrar la venta.'; submit.disabled = false; submit.classList.remove('is-loading'); submit.innerHTML = 'Registrar venta <span>→</span>'; saving = false; } });
+    saving = true; submit.disabled = true; submit.classList.add('is-loading'); submit.innerHTML = 'Generando…'; try { const assignedSellerId = document.querySelector('#generateSeller')?.value || null; syncDeviceIdentifiersFromDom(lines); const identifierError = lines.find(line => { if (!isTechOrderProduct(line) || line.purchaseMode === 'rental') return false; const entries = line.deviceIdentifiers || []; if (entries.length < Number(line.quantity || 1)) return true; return entries.some(entry => isImeiOrderProduct(line) ? !/^\d{14,16}$/.test(String(entry.primary || '')) : !/^[A-Za-z0-9._\-/ ]{3,50}$/.test(String(entry.primary || ''))); }); if (identifierError) { message.hidden = false; message.className = 'message error'; message.textContent = isImeiOrderProduct(identifierError) ? `Completa correctamente el IMEI 1 de cada unidad de “${identifierError.name}” (14–16 dígitos).` : `Completa el número de serie de cada unidad de “${identifierError.name}”.`; saving = false; submit.disabled = false; submit.classList.remove('is-loading'); submit.innerHTML = 'Generar orden <span>→</span>'; return; } const payload = { customer: { ...customer, notes: document.querySelector('#generateNotes').value.trim() }, deliveryMethod, assignedSellerId, items: lines.map(line => ({ productId: line.productId || line.id, quantity: Number(line.quantity), purchaseMode: line.purchaseMode || 'purchase', rentalDays: line.purchaseMode === 'rental' ? Math.max(1, Number(line.rentalDays || 1)) : null, deviceIdentifiers: Array.isArray(line.deviceIdentifiers) ? line.deviceIdentifiers : [] })) }; const result = await request('/api/admin/generar-orden', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) }); app.querySelector('.generate-order-page').innerHTML = `<div class="generate-success"><span class="success-mark">✓</span><span class="eyebrow">Orden generada correctamente</span><h2>#${escapeHTML(result.orderNumber)}</h2><p>La orden quedó registrada en YHORS y el inventario se actualizó.</p><div class="generate-success-total">Total: <strong>${money(result.total)}</strong></div><div class="generate-success-actions"><button type="button" class="button primary" id="generateAnotherOrder">Nueva orden</button><a class="button secondary" href="${ADMIN_PATH}/pedidos" data-smooth-route>Ver pedidos</a>${result.orderId ? `<button type="button" class="button secondary" data-generated-pdf="${escapeHTML(result.orderId)}">PDF de orden</button>` : ''}</div></div>`; document.querySelector('#generateAnotherOrder')?.addEventListener('click', () => renderAdminGenerateOrder()); document.querySelector('[data-generated-pdf]')?.addEventListener('click', event => { const a=document.createElement('a'); a.href=`/api/admin/orders/${encodeURIComponent(event.currentTarget.dataset.generatedPdf)}/pdf?v=${Date.now()}`; a.target='_blank'; a.rel='noopener'; a.click(); }); } catch (error) { message.hidden = false; message.className = 'message error'; message.textContent = error.message || 'No se pudo generar la orden.'; submit.disabled = false; submit.classList.remove('is-loading'); submit.innerHTML = 'Generar orden <span>→</span>'; saving = false; } });
   drawCustomer(); drawLines(); wireAccountMenu(); wireImageFallback(app);
 }
 
@@ -2233,7 +2065,7 @@ async function renderAdminOrders() {
         <button type="button" class="order-edit-remove" data-order-draft-remove="${index}" aria-label="Quitar producto">Quitar</button>
       </div>`;
     }).join('') : `<div class="generate-empty-state"><span>+</span><strong>Aún no hay productos</strong><small>Agrega productos desde el catálogo.</small></div>`;
-    return `<section class="generate-card generate-products-card order-edit-products-card"><div class="generate-card-head"><div><span class="generate-card-kicker">03 · Productos</span><h3>Detalle de la venta</h3></div><button type="button" class="button primary small" data-order-open-picker="${escapeHTML(order.id)}">+ Agregar productos</button></div><div class="generate-products-table-head"><span>Producto</span><span>Cant.</span><span>Precio</span><span>Total</span><span></span></div><div class="order-edit-lines">${rows}</div><div class="order-edit-products-note">Los cambios quedan pendientes hasta pulsar <strong>Guardar cambios</strong>.</div></section>`;
+    return `<section class="generate-card generate-products-card order-edit-products-card"><div class="generate-card-head"><div><span class="generate-card-kicker">03 · Productos</span><h3>Detalle de la orden</h3></div><button type="button" class="button primary small" data-order-open-picker="${escapeHTML(order.id)}">+ Agregar productos</button></div><div class="generate-products-table-head"><span>Producto</span><span>Cant.</span><span>Precio</span><span>Total</span><span></span></div><div class="order-edit-lines">${rows}</div><div class="order-edit-products-note">Los cambios quedan pendientes hasta pulsar <strong>Guardar cambios</strong>.</div></section>`;
   };
   const drawOrders = () => {
     const list=document.querySelector('#adminOrdersList'); if(!list) return;
@@ -4283,8 +4115,8 @@ async function renderMyAccount() {
   document.querySelectorAll('[data-delete-passkey]').forEach(btn => btn.addEventListener('click', async () => { if (!confirm('¿Revocar esta Passkey?')) return; try { await request(`/api/me/passkeys/${encodeURIComponent(btn.dataset.deletePasskey)}`, { method: 'DELETE' }); await renderMyAccount(); } catch (e) { alert(e.message); } }));
 }
 
-function renderLogin(errorMessage = '') {
-  app.innerHTML = `<main class="login-page"><section class="login-card"><a class="brand" href="/">YHORS</a><span class="eyebrow">Panel privado</span><h1>Acceso a YHORS</h1><p>Ingresa con tu cuenta autorizada.</p>${errorMessage ? `<div class="message error login-system-message">${escapeHTML(errorMessage)}</div>` : ''}<form id="loginForm" class="form-grid"><div class="field full"><label for="username">Usuario</label><input id="username" name="username" autocomplete="username webauthn" required></div><div class="field full"><label for="password">Contraseña</label><input id="password" name="password" type="password" autocomplete="current-password" required></div><div class="login-attempts" id="loginAttempts" aria-live="polite"></div><div class="form-actions"><button class="button" id="loginSubmit" type="submit">Iniciar sesión</button><button class="button secondary" id="passkeyLogin" type="button">🔐 Iniciar con Passkey</button><span class="message" id="loginMessage"></span></div></form></section></main>`;
+function renderLogin() {
+  app.innerHTML = `<main class="login-page"><section class="login-card"><a class="brand" href="/">YHORS</a><span class="eyebrow">Panel privado</span><h1>Acceso a YHORS</h1><p>Ingresa con tu cuenta autorizada.</p><form id="loginForm" class="form-grid"><div class="field full"><label for="username">Usuario</label><input id="username" name="username" autocomplete="username webauthn" required></div><div class="field full"><label for="password">Contraseña</label><input id="password" name="password" type="password" autocomplete="current-password" required></div><div class="login-attempts" id="loginAttempts" aria-live="polite"></div><div class="form-actions"><button class="button" id="loginSubmit" type="submit">Iniciar sesión</button><button class="button secondary" id="passkeyLogin" type="button">🔐 Iniciar con Passkey</button><span class="message" id="loginMessage"></span></div></form></section></main>`;
   let loginLockTimer = null;
   const attemptsBox = document.querySelector('#loginAttempts');
   const submitButton = document.querySelector('#loginSubmit');
@@ -4361,16 +4193,8 @@ document.addEventListener('click', event => {
   });
 });
 
-window.addEventListener('popstate', () => {
-  Promise.resolve(renderCurrentRoute()).catch(error => {
-    console.error('[YHORS] Error de renderizado:', error);
-    renderLogin(error?.message || 'No se pudo cargar el panel de YHORS.');
-  });
-});
-Promise.resolve(renderCurrentRoute()).catch(error => {
-  console.error('[YHORS] Error de arranque:', error);
-  renderLogin(error?.message || 'No se pudo cargar el panel de YHORS.');
-});
+window.addEventListener('popstate', () => renderCurrentRoute());
+renderCurrentRoute();
 
 document.addEventListener('change', e => { const file=e.target.closest('input[type=file][id^=\"imageFile\"]'); if(!file)return; const num=file.id==='imageFile'?1:Number(file.id.replace('imageFile','')); const preview=document.querySelector(`#productImagePreview${num}`); if(preview&&file.files?.[0]){const r=new FileReader();r.onload=()=>preview.src=r.result;r.readAsDataURL(file.files[0]);}});
 document.addEventListener('input', e => { const input=e.target.closest('input[type=url][id^=\"image\"]'); if(!input)return; const num=input.id==='image'?1:Number(input.id.replace('image','')); const preview=document.querySelector(`#productImagePreview${num}`); if(preview&&input.value.trim())preview.src=input.value.trim();});
