@@ -4612,7 +4612,7 @@ app.get('/api/admin/order-products', requireOrdersAccess, (_, res) => res.json(r
 
 // SERIES / IMEIS · configuración y gestión operativa.
 // La configuración de qué productos TEC requieren identificación solo la modifica ADMIN.
-app.get('/api/admin/series-imeis/config', requireOrdersAccess, (_, res) => {
+app.get('/api/admin/series-imeis/config', requireAdmin, (_, res) => {
   const products = readProducts().map(normalizeProduct).filter(product => isTechProduct(product));
   return res.json(products.map(product => ({
     id: product.id,
@@ -4689,7 +4689,7 @@ function collectRegisteredIdentifiers() {
   return rows.sort((a,b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
 }
 
-app.get('/api/admin/series-imeis/registered', requireOrdersAccess, (req, res) => {
+app.get('/api/admin/series-imeis/registered', requireStoreManagerOrAdmin, (req, res) => {
   const rows = collectRegisteredIdentifiers();
   const query = cleanText(req.query?.q, 120).toLocaleLowerCase('es-EC');
   const from = cleanText(req.query?.from, 10);

@@ -1167,7 +1167,7 @@ function adminSectionNav(session = {}, active = '') {
   const link = (key, href, label) => `<a href="${href}" class="admin-section-link${active === key ? ' active' : ''}" data-smooth-route>${label}</a>`;
   if (limitedOperations) {
     return `<nav class="admin-section-nav admin-section-nav--compact" id="adminSectionNav" aria-label="Secciones operativas">
-      <details class="admin-nav-group"><summary>Operación</summary><div class="admin-nav-group-links">${link('buscar-productos', `${ADMIN_PATH}/buscar-productos`, 'BUSCAR PRODUCTOS')}${link('ventas-generales', `${ADMIN_PATH}/ventas-generales`, 'VENTAS GENERALES')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('generar-orden', `${ADMIN_PATH}/generar-orden`, 'GENERAR ORDEN')}${link('historial-ventas', `${ADMIN_PATH}/historial-ventas`, 'HISTORIAL DE VENTAS')}${link('series-imeis', `${ADMIN_PATH}/series-imeis`, 'SERIES/IMEIS')}</div></details>
+      <details class="admin-nav-group"><summary>Operación</summary><div class="admin-nav-group-links">${link('buscar-productos', `${ADMIN_PATH}/buscar-productos`, 'BUSCAR PRODUCTOS')}${link('ventas-generales', `${ADMIN_PATH}/ventas-generales`, 'VENTAS GENERALES')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('generar-orden', `${ADMIN_PATH}/generar-orden`, 'GENERAR ORDEN')}${link('historial-ventas', `${ADMIN_PATH}/historial-ventas`, 'HISTORIAL DE VENTAS')}${role === 'vendedor' || role === 'orders' ? '' : link('series-imeis', `${ADMIN_PATH}/series-imeis`, 'SERIES/IMEIS')}</div></details>
     </nav>`;
   }
   const group = (label, activeKeys, items, open = false) => `<details class="admin-nav-group${activeKeys.includes(active) ? ' has-active' : ''}"${open ? ' open' : ''}><summary><span>${label}</span>${activeKeys.includes(active) ? '<i aria-hidden="true"></i>' : ''}</summary><div class="admin-nav-group-links">${items}</div></details>`;
@@ -1381,14 +1381,15 @@ async function renderAdminGenerateOrder() {
 async function renderAdminSeriesImeis() {
   const session = await request('/api/admin/session').catch(() => ({ authenticated: false }));
   if (!session.authenticated) return renderLogin();
-  if (!['admin','store_manager','vendedor','orders'].includes(String(session.role || '').toLowerCase())) return renderAdminOrders();
+  const role = String(session.role || '').toLowerCase();
+  if (!['admin','store_manager'].includes(role)) return renderAdminOrders();
 
-  const isAdmin = String(session.role || '').toLowerCase() === 'admin';
-  const isManager = isAdmin || String(session.role || '').toLowerCase() === 'store_manager';
+  const isAdmin = role === 'admin';
+  const isManager = role === 'admin' || role === 'store_manager';
   let config = [];
   let registered = [];
   try {
-    config = await request('/api/admin/series-imeis/config');
+    if (isAdmin) config = await request('/api/admin/series-imeis/config');
     registered = (await request('/api/admin/series-imeis/registered')).rows || [];
   } catch (error) {
     app.innerHTML = `<main class="admin-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Series/IMEIS</h1></div></div><div class="message error">${escapeHTML(error.message || 'No se pudo cargar Series/IMEIS.')}</div></div></main>`;
@@ -1400,10 +1401,10 @@ async function renderAdminSeriesImeis() {
     <div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">SERIES/IMEIS</h1><p class="admin-subtitle">Control de identificación de productos TEC y gestión de series e IMEIs registrados.</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>
     ${nav}
     <div class="users-module-switch" role="tablist" aria-label="Series e IMEIs">
-      <button type="button" class="users-module-tab is-active" data-series-tab="gestor">GESTOR DE SERIES</button>
-      <button type="button" class="users-module-tab" data-series-tab="registrados">SERIES / IMEIS REGISTRADOS</button>
+      ${isAdmin ? '<button type="button" class="users-module-tab is-active" data-series-tab="gestor">GESTOR DE SERIES</button>' : ''}
+      <button type="button" class="users-module-tab${isAdmin ? '' : ' is-active'}" data-series-tab="registrados">SERIES / IMEIS REGISTRADOS</button>
     </div>
-    <section class="admin-panel series-tab-panel series-config-panel" data-series-panel="gestor">
+    ${isAdmin ? `<section class="admin-panel series-tab-panel series-config-panel" data-series-panel="gestor">
       <div class="series-config-hero">
         <div class="series-config-hero-copy"><span class="eyebrow">Configuración</span><h2>Gestor de series</h2><p>Activa o desactiva la solicitud de serie/IMEI por producto TEC. Los cambios se aplican a las nuevas órdenes.</p></div>
         <div class="series-config-hero-mark" aria-hidden="true">S/I</div>
@@ -1420,8 +1421,8 @@ async function renderAdminSeriesImeis() {
       <div class="series-config-note">Los productos TEC existentes conservan la configuración actual. Si un producto está en <strong>NO SOLICITAR</strong>, Generar orden no pedirá serie/IMEI para ese producto.</div>
       <div id="seriesConfigList"></div>
       ${!isAdmin ? '<div class="message">Solo el Administrador puede modificar qué productos solicitan serie/IMEI.</div>' : ''}
-    </section>
-    <section class="admin-panel series-tab-panel" data-series-panel="registrados" hidden>
+    </section>` : ''}
+    <section class="admin-panel series-tab-panel" data-series-panel="registrados"${isAdmin ? ' hidden' : ''}>
       <div class="section-heading"><div><span class="eyebrow">Historial</span><h2>Series / IMEIS registrados <small id="seriesRegisteredCount"></small></h2></div><p>Consulta, agrega y modifica identificadores registrados en los pedidos.</p></div>
       <div class="orders-toolbar series-registered-toolbar">
         <label class="series-date-filter"><span>DESDE</span><input id="seriesFrom" type="date"></label>
