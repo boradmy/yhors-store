@@ -3629,3 +3629,19 @@ body.generate-modal-open{overflow:hidden}
 .flyer-highlights li{overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow-wrap:anywhere}
 .flyer-preview-card-info ul{margin:3px 0 0;padding-left:15px;display:grid;gap:2px;color:#716b63;font-size:.52rem;line-height:1.35}
 .flyer-preview-card-info li{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;overflow-wrap:anywhere;white-space:normal}
+
+
+/* FASE 1 · control de serie / IMEI en órdenes tech */
+.generate-product-row.has-device-identifiers{grid-template-areas:"info qty price total remove" "devices devices devices devices devices";row-gap:10px;}
+.generate-product-row.has-device-identifiers .generate-product-info{grid-area:info}
+.generate-product-row.has-device-identifiers .generate-qty{grid-area:qty}
+.generate-product-row.has-device-identifiers .generate-unit-price{grid-area:price}
+.generate-product-row.has-device-identifiers .generate-line-total{grid-area:total}
+.generate-product-row.has-device-identifiers .generate-remove{grid-area:remove}
+.device-identifiers-panel{grid-area:devices;margin:2px 0 0;padding:12px 14px;border:1px solid #e5dcc9;border-radius:14px;background:linear-gradient(180deg,#faf6ed 0%,#fff 100%);box-shadow:inset 0 1px 0 rgba(255,255,255,.9)}
+.device-identifiers-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}
+.device-identifiers-head div{display:flex;flex-direction:column;gap:3px}.device-identifiers-head strong{font-size:.76rem;letter-spacing:.04em;color:#2a2824}.device-identifiers-head small{font-size:.68rem;color:#756f65}.device-identifiers-head>span{font-size:.58rem;font-weight:800;letter-spacing:.12em;color:#b38a3e;white-space:nowrap}
+.device-identifiers-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.device-id-row{display:grid;grid-template-columns:66px minmax(0,1fr) minmax(0,1fr);gap:7px;align-items:center}.device-id-unit{font-size:.62rem;font-weight:800;color:#8d826f;text-transform:uppercase}.device-id-input{width:100%;min-width:0;border:1px solid #dcd4c5;border-radius:8px;background:#fff;padding:8px 9px;font:inherit;font-size:.72rem;outline:none}.device-id-input:focus{border-color:#b38a3e;box-shadow:0 0 0 3px rgba(179,138,62,.12)}
+@media(max-width:900px){.device-identifiers-list{grid-template-columns:1fr}.device-id-row{grid-template-columns:60px minmax(0,1fr) minmax(0,1fr)}.generate-product-row.has-device-identifiers{grid-template-areas:"info info info info" "qty price total remove" "devices devices devices devices";}}
+
+.order-device-id{color:#9a7738;font-weight:700;letter-spacing:.02em}
