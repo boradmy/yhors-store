@@ -3645,3 +3645,17 @@ body.generate-modal-open{overflow:hidden}
 @media(max-width:900px){.device-identifiers-list{grid-template-columns:1fr}.device-id-row{grid-template-columns:60px minmax(0,1fr) minmax(0,1fr)}.generate-product-row.has-device-identifiers{grid-template-areas:"info info info info" "qty price total remove" "devices devices devices devices";}}
 
 .order-device-id{color:#9a7738;font-weight:700;letter-spacing:.02em}
+
+/* FASE 2 · Cotizaciones + Ventas directas */
+.quote-history-card{margin-top:18px}
+.quote-history-list{display:grid;gap:9px}
+.quote-history-item{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:13px 14px;border:1px solid #eeeae2;border-radius:10px;background:#fff}
+.quote-history-item>div:first-child{display:grid;gap:3px;min-width:0}
+.quote-history-item>div:first-child strong{font-size:.82rem;color:var(--gold)}
+.quote-history-item>div:first-child span{font-size:.86rem;font-weight:800;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.quote-history-item>div:first-child small{font-size:.68rem;color:var(--muted)}
+.quote-history-actions{display:flex;align-items:center;justify-content:flex-end;gap:9px;flex-wrap:wrap}
+.quote-history-actions>strong{font-size:.92rem;color:var(--gold);white-space:nowrap}
+.quote-history-actions>small{font-size:.7rem;color:var(--muted)}
+.sales-history-card{margin-top:18px}
+@media(max-width:650px){.quote-history-item{align-items:flex-start;flex-direction:column}.quote-history-actions{width:100%;justify-content:space-between}.quote-history-actions .button{flex:0 0 auto}}

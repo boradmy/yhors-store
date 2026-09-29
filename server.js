@@ -26,6 +26,7 @@ const DATA_FILE = path.join(DATA_DIR, 'products.json');
 const STOREFRONT_FILE = path.join(DATA_DIR, 'storefront.json');
 const CLASSIFICATIONS_FILE = path.join(DATA_DIR, 'classifications.json');
 const ORDERS_FILE = path.join(DATA_DIR, 'orders.json');
+const QUOTES_FILE = path.join(DATA_DIR, 'quotes.json');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const AUDIT_FILE = path.join(DATA_DIR, 'audit.json');
 const AUDIT_MAX_RECORDS = 50000;
@@ -685,7 +686,7 @@ function ensureStorage() {
   // Primera ejecución con disco vacío: copia los datos que viajan con el código.
   // Nunca sobrescribe un archivo que ya exista en el almacenamiento persistente.
   if (process.env.YHORS_STORAGE_DIR) {
-    const seedFiles = ['products.json', 'storefront.json', 'classifications.json', 'orders.json', 'users.json', 'security.json', 'expenses.json'];
+    const seedFiles = ['products.json', 'storefront.json', 'classifications.json', 'orders.json', 'quotes.json', 'users.json', 'security.json', 'expenses.json'];
     for (const fileName of seedFiles) {
       const source = path.join(__dirname, 'data', fileName);
       const target = path.join(DATA_DIR, fileName);
@@ -702,9 +703,9 @@ function ensureStorage() {
     }
   }
 
-  for (const fileName of ['products.json', 'storefront.json', 'classifications.json', 'orders.json']) {
+  for (const fileName of ['products.json', 'storefront.json', 'classifications.json', 'orders.json', 'quotes.json']) {
     const target = path.join(DATA_DIR, fileName);
-    if (!fs.existsSync(target)) fs.writeFileSync(target, fileName === 'orders.json' ? '[]\n' : fileName === 'products.json' ? '[]\n' : fileName === 'storefront.json' ? '{\n  "heroProductIds": [],\n  "featuredProductIds": []\n}\n' : '{\n  "brands": {},\n  "productTypes": {}\n}\n', 'utf8');
+    if (!fs.existsSync(target)) fs.writeFileSync(target, fileName === 'orders.json' || fileName === 'quotes.json' ? '[]\n' : fileName === 'products.json' ? '[]\n' : fileName === 'storefront.json' ? '{\n  "heroProductIds": [],\n  "featuredProductIds": []\n}\n' : '{\n  "brands": {},\n  "productTypes": {}\n}\n', 'utf8');
   }
   if (!fs.existsSync(EXPENSES_FILE)) fs.writeFileSync(EXPENSES_FILE, '[]\n', 'utf8');
 }
@@ -2352,6 +2353,31 @@ function writeOrders(orders) {
   fs.renameSync(temporaryFile, ORDERS_FILE);
 }
 
+function readQuotes() {
+  if (!fs.existsSync(QUOTES_FILE)) return [];
+  try {
+    const parsed = JSON.parse(fs.readFileSync(QUOTES_FILE, 'utf8'));
+    return Array.isArray(parsed) ? parsed.map(decryptOrder) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeQuotes(quotes) {
+  maybeAutoBackup();
+  const temporaryFile = `${QUOTES_FILE}.tmp`;
+  fs.writeFileSync(temporaryFile, `${JSON.stringify(quotes.map(encryptOrder), null, 2)}\n`, 'utf8');
+  fs.renameSync(temporaryFile, QUOTES_FILE);
+}
+
+function nextQuoteNumber(quotes) {
+  const max = quotes.reduce((highest, quote) => {
+    const match = String(quote.quoteNumber || '').match(/YC-(\d+)/i);
+    return match ? Math.max(highest, Number(match[1])) : highest;
+  }, 0);
+  return `YC-${String(max + 1).padStart(4, '0')}`;
+}
+
 function nextOrderNumber(orders) {
   const max = orders.reduce((highest, order) => {
     const match = String(order.orderNumber || '').match(/YH-(\d+)/i);
@@ -3211,6 +3237,160 @@ app.post('/api/orders', async (req, res) => {
   });
   try { await sendOrderConfirmationEmail(order); } catch (emailError) { console.error('[YHORS] No se pudo enviar la confirmación por correo:', emailError.message); }
   return res.status(201).json({ orderNumber: order.orderNumber, status: order.status, total: order.total });
+});
+
+app.get('/api/admin/ventas', requireOrdersAccess, (req, res) => {
+  const session = getSession(req);
+  let sales = readOrders().filter(order => order.source === 'direct_sale');
+  if (isSellerRole(session.role)) sales = sales.filter(order => !order.assignedSellerId || order.assignedSellerId === session.accountId);
+  return res.json(sales.map(decorateOrderAssignment));
+});
+
+app.post('/api/admin/ventas', requireOrdersAccess, async (req, res) => {
+  const session = getSession(req);
+  const result = validateOrder(req.body || {}, { requireDeviceIdentifiers: true });
+  if (result.error) return res.status(400).json(result);
+
+  const hasSellerSelection = Object.prototype.hasOwnProperty.call(req.body || {}, 'assignedSellerId');
+  const requestedSellerId = hasSellerSelection && req.body.assignedSellerId !== null && req.body.assignedSellerId !== ''
+    ? String(req.body.assignedSellerId) : null;
+  let assignedSellerId = null;
+  if (requestedSellerId) {
+    const seller = readUsers().find(user => user.id === requestedSellerId && user.active !== false && isSellerRole(user.role));
+    if (!seller) return res.status(400).json({ error: 'El vendedor seleccionado no es válido o no está activo.' });
+    assignedSellerId = seller.id;
+  } else if (isSellerRole(session.role)) {
+    assignedSellerId = session.accountId || null;
+  }
+
+  const orders = readOrders();
+  const sale = {
+    id: crypto.randomUUID(),
+    orderNumber: nextOrderNumber(orders),
+    status: 'Entregado',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    assignedSellerId,
+    source: 'direct_sale',
+    saleOrigin: 'admin_direct',
+    internalNote: cleanText(req.body?.internalNote || req.body?.customer?.notes, 5000),
+    ...result.order
+  };
+
+  const previousProducts = result.stockProducts.map(product => ({ ...product }));
+  let updatedProducts;
+  try {
+    updatedProducts = applyPurchaseStock(previousProducts, result.purchaseDemand);
+    writeProducts(updatedProducts);
+    orders.unshift(sale);
+    try { writeOrders(orders); } catch (error) {
+      try { writeProducts(previousProducts); } catch (_) {}
+      throw error;
+    }
+  } catch (error) {
+    console.error('[YHORS] No se pudo registrar la venta directa:', error.message);
+    return res.status(500).json({ error: 'No se pudo registrar la venta. No se realizó el descuento de inventario.' });
+  }
+
+  auditLog(req, 'Venta directa creada', 'Ventas', {
+    orderId: sale.id,
+    orderNumber: sale.orderNumber,
+    source: 'direct_sale',
+    order: auditOrderSnapshot(sale),
+    inventory: { synchronized: true, movements: auditStockMovementDiff(previousProducts, updatedProducts, 'Venta directa') }
+  });
+  return res.status(201).json({ orderId: sale.id, orderNumber: sale.orderNumber, status: sale.status, total: sale.total });
+});
+
+app.get('/api/admin/cotizaciones', requireOrdersAccess, (req, res) => {
+  const session = getSession(req);
+  let quotes = readQuotes();
+  if (isSellerRole(session.role)) quotes = quotes.filter(q => !q.assignedSellerId || q.assignedSellerId === session.accountId);
+  return res.json(quotes.map(quote => {
+    const seller = quote.assignedSellerId ? readUsers().find(user => user.id === quote.assignedSellerId) : null;
+    return { ...quote, assignedSellerName: seller?.name || quote.assignedSellerName || null };
+  }));
+});
+
+app.post('/api/admin/cotizaciones', requireOrdersAccess, (req, res) => {
+  const session = getSession(req);
+  const result = validateOrder(req.body || {}, { requireDeviceIdentifiers: false });
+  if (result.error) return res.status(400).json(result);
+  const requestedSellerId = req.body?.assignedSellerId ? String(req.body.assignedSellerId) : null;
+  let assignedSellerId = null;
+  if (requestedSellerId) {
+    const seller = readUsers().find(user => user.id === requestedSellerId && user.active !== false && isSellerRole(user.role));
+    if (!seller) return res.status(400).json({ error: 'El vendedor seleccionado no es válido o no está activo.' });
+    assignedSellerId = seller.id;
+  } else if (isSellerRole(session.role)) assignedSellerId = session.accountId || null;
+
+  const quotes = readQuotes();
+  const quote = {
+    id: crypto.randomUUID(),
+    quoteNumber: nextQuoteNumber(quotes),
+    status: 'Pendiente',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    assignedSellerId,
+    source: 'quote',
+    internalNote: cleanText(req.body?.internalNote || req.body?.customer?.notes, 5000),
+    ...result.order
+  };
+  writeQuotes([quote, ...quotes]);
+  auditLog(req, 'Cotización creada', 'Cotizaciones', { quoteId: quote.id, quoteNumber: quote.quoteNumber, total: quote.total });
+  return res.status(201).json({ quoteId: quote.id, quoteNumber: quote.quoteNumber, status: quote.status, total: quote.total });
+});
+
+app.put('/api/admin/cotizaciones/:id', requireOrdersAccess, (req, res) => {
+  const quotes = readQuotes();
+  const index = quotes.findIndex(q => q.id === req.params.id);
+  if (index < 0) return res.status(404).json({ error: 'Cotización no encontrada.' });
+  const session = getSession(req);
+  const quote = quotes[index];
+  if (isSellerRole(session.role) && quote.assignedSellerId && quote.assignedSellerId !== session.accountId) return res.status(403).json({ error: 'Esta cotización no está asignada a tu usuario.' });
+  const status = cleanText(req.body?.status, 30);
+  if (status && !['Pendiente','Aceptada','Rechazada','Convertida'].includes(status)) return res.status(400).json({ error: 'Estado de cotización no válido.' });
+  quotes[index] = { ...quote, ...(status ? { status } : {}), updatedAt: new Date().toISOString() };
+  writeQuotes(quotes);
+  return res.json(quotes[index]);
+});
+
+app.post('/api/admin/cotizaciones/:id/convertir', requireOrdersAccess, async (req, res) => {
+  const quotes = readQuotes();
+  const quote = quotes.find(q => q.id === req.params.id);
+  if (!quote) return res.status(404).json({ error: 'Cotización no encontrada.' });
+  if (quote.status === 'Convertida') return res.status(400).json({ error: 'Esta cotización ya fue convertida en venta.' });
+  const body = req.body || {};
+  const payload = {
+    customer: quote.customer,
+    deliveryMethod: quote.delivery?.method || 'office',
+    assignedSellerId: body.assignedSellerId ?? quote.assignedSellerId ?? null,
+    items: quote.items || []
+  };
+  const result = validateOrder(payload, { requireDeviceIdentifiers: true });
+  if (result.error) return res.status(400).json({ error: result.error, needsDeviceIdentifiers: true });
+  const session = getSession(req);
+  const assignedSellerId = payload.assignedSellerId ? String(payload.assignedSellerId) : (isSellerRole(session.role) ? session.accountId : null);
+  if (assignedSellerId) {
+    const seller = readUsers().find(user => user.id === assignedSellerId && user.active !== false && isSellerRole(user.role));
+    if (!seller) return res.status(400).json({ error: 'El vendedor seleccionado no es válido.' });
+  }
+  const orders = readOrders();
+  const sale = { id: crypto.randomUUID(), orderNumber: nextOrderNumber(orders), status: 'Entregado', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), assignedSellerId, source: 'direct_sale', saleOrigin: 'quote_conversion', quoteId: quote.id, ...result.order };
+  const previousProducts = result.stockProducts.map(product => ({ ...product }));
+  try {
+    const updatedProducts = applyPurchaseStock(previousProducts, result.purchaseDemand);
+    writeProducts(updatedProducts);
+    orders.unshift(sale);
+    try { writeOrders(orders); } catch (error) { try { writeProducts(previousProducts); } catch (_) {} throw error; }
+    const quoteIndex = quotes.findIndex(q => q.id === quote.id);
+    quotes[quoteIndex] = { ...quotes[quoteIndex], status: 'Convertida', convertedOrderId: sale.id, convertedOrderNumber: sale.orderNumber, updatedAt: new Date().toISOString() };
+    writeQuotes(quotes);
+    auditLog(req, 'Cotización convertida en venta', 'Cotizaciones', { quoteId: quote.id, quoteNumber: quote.quoteNumber, orderId: sale.id, orderNumber: sale.orderNumber });
+    return res.status(201).json({ orderId: sale.id, orderNumber: sale.orderNumber, total: sale.total });
+  } catch (error) {
+    return res.status(500).json({ error: 'No se pudo convertir la cotización en venta. El inventario no fue modificado.' });
+  }
 });
 
 app.post('/api/admin/generar-orden', requireOrdersAccess, async (req, res) => {
@@ -4138,8 +4318,8 @@ app.get('/api/admin/orders/:id/pdf', requireOrdersAccess, (req, res) => {
 
 app.get('/api/admin/orders', requireOrdersAccess, (req, res) => {
   const session = getSession(req);
-  let orders = readOrders();
-// Los vendedores ven sus pedidos asignados y también los pedidos que aún no tienen vendedor,
+  let orders = readOrders().filter(order => order.source !== 'direct_sale');
+  // Los vendedores ven sus pedidos asignados y también los pedidos que aún no tienen vendedor,
   // para que puedan detectar y atender compras realizadas por la web que quedaron sin asignar.
   if (isSellerRole(session.role)) {
     orders = orders.filter(order => !order.assignedSellerId || order.assignedSellerId === session.accountId);
