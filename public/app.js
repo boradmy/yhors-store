@@ -2280,10 +2280,20 @@ async function renderAdminOrders() {
     const count = document.querySelector('#quotesModuleCount'); if (count) count.textContent = String(filtered.length);
     list.innerHTML = filtered.length ? filtered.map(q => `<article class="quote-history-item ${q.status === 'Convertida' ? 'quote-history-item--converted' : ''}"><div><strong>#${escapeHTML(q.quoteNumber)}</strong><span>${escapeHTML(q.customer?.name || 'Cliente')}</span><small>${escapeHTML(quoteLabel(q))} · ${escapeHTML(new Date(q.createdAt).toLocaleDateString('es-EC'))}</small></div><div class="quote-history-actions"><strong>${money(q.total)}</strong><button type="button" class="button secondary small" data-edit-quote="${escapeHTML(q.id)}">EDITAR</button><button type="button" class="button secondary small" data-use-quote="${escapeHTML(q.id)}">USAR EN VENTA</button><button type="button" class="button danger small" data-delete-quote="${escapeHTML(q.id)}">ELIMINAR</button></div></article>`).join('') : '<div class="generate-empty-state"><span>⌁</span><strong>No hay cotizaciones con estos filtros</strong><small>Prueba otro término, estado o rango de fechas.</small></div>';
     list.querySelectorAll('[data-edit-quote]').forEach(button => button.addEventListener('click', async () => {
-      const quote = quotes.find(item => String(item.id) === String(button.dataset.editQuote)); if (!quote) return;
-      if (quote.status === 'Convertida') { await showQuoteBlocked(quote, 'editar'); return; }
-      if (quote.status === 'Rechazada') { await showYhorsConfirm('Cotización cancelada', 'Esta cotización está cancelada y no puede volver a editarse.', { cancelText: 'Cerrar', confirmText: 'Entendido' }); return; }
-      navigateToRoute(`${ADMIN_PATH}/cotizaciones?edit=${encodeURIComponent(quote.id)}`);
+      button.disabled = true;
+      try {
+        // Siempre consultamos el servidor antes de editar. Esto evita que una cotización
+        // siga bloqueada por un estado viejo que quedó en la pantalla después de eliminar
+        // la venta vinculada.
+        const latestQuotes = await request('/api/admin/cotizaciones');
+        const quote = latestQuotes.find(item => String(item.id) === String(button.dataset.editQuote));
+        if (!quote) throw new Error('La cotización ya no está disponible.');
+        if (quote.status === 'Convertida') { await showQuoteBlocked(quote, 'editar'); return; }
+        if (quote.status === 'Rechazada') { await showYhorsConfirm('Cotización cancelada', 'Esta cotización está cancelada y no puede volver a editarse.', { cancelText: 'Cerrar', confirmText: 'Entendido' }); return; }
+        navigateToRoute(`${ADMIN_PATH}/cotizaciones?edit=${encodeURIComponent(quote.id)}`);
+      } catch (error) {
+        await showYhorsConfirm('No se pudo editar', escapeHTML(error.message || 'No se pudo validar la cotización.'), { cancelText: 'Cerrar', confirmText: 'Entendido' });
+      } finally { button.disabled = false; }
     }));
     list.querySelectorAll('[data-use-quote]').forEach(button => button.addEventListener('click', async () => {
       button.disabled = true;
@@ -2298,13 +2308,23 @@ async function renderAdminOrders() {
       } catch (error) { await showYhorsConfirm('No se pudo usar la cotización', escapeHTML(error.message || 'No se pudo validar la cotización.'), { cancelText: 'Cerrar', confirmText: 'Entendido' }); button.disabled = false; }
     }));
     list.querySelectorAll('[data-delete-quote]').forEach(button => button.addEventListener('click', async () => {
-      const quote = quotes.find(item => String(item.id) === String(button.dataset.deleteQuote)); if (!quote) return;
-      if (quote.status === 'Convertida') { await showQuoteBlocked(quote, 'eliminar'); return; }
-      const ok = await showYhorsConfirm('Eliminar cotización', `¿Deseas eliminar la cotización <strong>#${escapeHTML(quote.quoteNumber)}</strong>? Esta acción no se puede deshacer.`, { cancelText: 'Cancelar', confirmText: 'Eliminar' });
-      if (!ok) return;
       button.disabled = true;
-      try { await request(`/api/admin/cotizaciones/${encodeURIComponent(quote.id)}`, { method: 'DELETE' }); quotes = quotes.filter(item => String(item.id) !== String(quote.id)); drawQuotes(); }
-      catch (error) { button.disabled = false; await showYhorsConfirm('No se pudo eliminar', escapeHTML(error.message || 'No se pudo eliminar la cotización.'), { cancelText: 'Cerrar', confirmText: 'Entendido' }); }
+      try {
+        // No usamos el estado que quedó renderizado. Primero preguntamos al servidor si
+        // todavía existe una venta activa vinculada. Si la venta fue eliminada, la cotización
+        // queda inmediatamente disponible para eliminarse.
+        const latestQuotes = await request('/api/admin/cotizaciones');
+        const quote = latestQuotes.find(item => String(item.id) === String(button.dataset.deleteQuote));
+        if (!quote) throw new Error('La cotización ya no está disponible.');
+        if (quote.status === 'Convertida') { await showQuoteBlocked(quote, 'eliminar'); return; }
+        const ok = await showYhorsConfirm('Eliminar cotización', `¿Deseas eliminar la cotización <strong>#${escapeHTML(quote.quoteNumber)}</strong>? Esta acción no se puede deshacer.`, { cancelText: 'Cancelar', confirmText: 'Eliminar' });
+        if (!ok) return;
+        await request(`/api/admin/cotizaciones/${encodeURIComponent(quote.id)}`, { method: 'DELETE' });
+        quotes = latestQuotes.filter(item => String(item.id) !== String(quote.id));
+        drawQuotes();
+      } catch (error) {
+        await showYhorsConfirm('No se pudo eliminar', escapeHTML(error.message || 'No se pudo eliminar la cotización.'), { cancelText: 'Cerrar', confirmText: 'Entendido' });
+      } finally { button.disabled = false; }
     }));
   };
   document.querySelector('#quotesSearch')?.addEventListener('input', drawQuotes);
