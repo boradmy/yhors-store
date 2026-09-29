@@ -2316,7 +2316,8 @@ async function renderAdminOrders() {
         const latestQuotes = await request('/api/admin/cotizaciones');
         const quote = latestQuotes.find(item => String(item.id) === String(button.dataset.deleteQuote));
         if (!quote) throw new Error('La cotización ya no está disponible.');
-        if (quote.status === 'Convertida') { await showQuoteBlocked(quote, 'eliminar'); return; }
+        // Eliminar siempre se valida en el servidor. El estado visual 'Convertida' puede ser
+        // un dato antiguo; si ya no existe una venta activa vinculada, el servidor libera y elimina.
         const ok = await showYhorsConfirm('Eliminar cotización', `¿Deseas eliminar la cotización <strong>#${escapeHTML(quote.quoteNumber)}</strong>? Esta acción no se puede deshacer.`, { cancelText: 'Cancelar', confirmText: 'Eliminar' });
         if (!ok) return;
         await request(`/api/admin/cotizaciones/${encodeURIComponent(quote.id)}`, { method: 'DELETE' });

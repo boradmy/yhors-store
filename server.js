@@ -3641,8 +3641,19 @@ app.delete('/api/admin/cotizaciones/:id', requireOrdersAccess, (req, res) => {
   if (index < 0) return res.status(404).json({ error: 'Cotización no encontrada.' });
   const quote = quotes[index];
   if (isSellerRole(session.role) && quote.assignedSellerId && quote.assignedSellerId !== session.accountId) return res.status(403).json({ error: 'Esta cotización no está asignada a tu usuario.' });
-  const linkedSale = readOrders().find(order => String(order.quoteId || '') === String(quote.id) && order.source === 'direct_sale' && order.status !== 'Cancelado');
+  // El bloqueo real depende exclusivamente de que exista una venta directa ACTIVA
+  // vinculada. El estado 'Convertida' de la cotización puede haber quedado obsoleto
+  // después de eliminar una venta de prueba, por lo que no debe impedir eliminarla.
+  const linkedSale = readOrders().find(order => {
+    if (String(order.quoteId || '') !== String(quote.id)) return false;
+    if (order.source !== 'direct_sale') return false;
+    if (order.deletedAt) return false;
+    return String(order.status || '').trim().toLowerCase() !== 'cancelado';
+  });
   if (linkedSale) return res.status(409).json({ error: `Esta cotización ya fue utilizada en la venta #${linkedSale.orderNumber}. Elimina primero la venta vinculada para poder eliminar la cotización.`, quoteUsed: true, convertedOrderNumber: linkedSale.orderNumber });
+  if (quote.status === 'Convertida' || quote.convertedOrderId || quote.convertedOrderNumber) {
+    quotes[index] = { ...quote, status: 'Pendiente', convertedOrderId: null, convertedOrderNumber: null, updatedAt: new Date().toISOString() };
+  }
   quotes.splice(index, 1); writeQuotes(quotes);
   auditLog(req, 'Cotización eliminada', 'Cotizaciones', { quoteId: quote.id, quoteNumber: quote.quoteNumber, reason: 'Eliminación solicitada desde gestión de cotizaciones' });
   return res.status(204).end();
