@@ -2095,7 +2095,8 @@ async function renderAdminFinancial() {
 async function renderAdminSalesHistory() {
   const session = await request('/api/admin/session').catch(() => ({ authenticated:false }));
   if (!session.authenticated) return renderLogin();
-  const canDelete = session.role === 'admin';
+  const canDelete = String(session.role || '').trim().toLowerCase() === 'admin';
+  const shortDate = value => { const d = new Date(value); return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString('es-EC', { day:'2-digit', month:'short', year:'numeric', timeZone:'America/Guayaquil' }); };
   const sellers = await request('/api/admin/order-sellers').catch(() => []);
   const today = new Date().toLocaleDateString('en-CA');
   const sectionNav = adminSectionNav(session, 'historial-ventas');
