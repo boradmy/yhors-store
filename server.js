@@ -3366,13 +3366,31 @@ app.get('/api/admin/series-imei', requireOrdersAccess, (req, res) => {
       });
     });
   });
+  let visibleRows = rows;
   if (isSellerRole(session.role)) {
-    return res.json(rows.filter(row => {
+    visibleRows = visibleRows.filter(row => {
       const sale = orders.find(item => item.id === row.saleId);
       return !sale?.assignedSellerId || sale.assignedSellerId === session.accountId;
-    }));
+    });
   }
-  return res.json(rows);
+  const q = cleanText(req.query?.q, 120).toLowerCase();
+  const from = cleanText(req.query?.from, 20);
+  const to = cleanText(req.query?.to, 20);
+  const type = cleanText(req.query?.type, 20).toLowerCase();
+  const seller = cleanText(req.query?.seller, 160).toLowerCase();
+  const product = cleanText(req.query?.product, 200).toLowerCase();
+  if (from && to && from > to) return res.status(400).json({ error: 'La fecha inicial no puede ser posterior a la fecha final.' });
+  visibleRows = visibleRows.filter(row => {
+    const date = String(row.createdAt || '').slice(0, 10);
+    const haystack = `${row.orderNumber || ''} ${row.customerName || ''} ${row.sellerName || ''} ${row.productName || ''} ${row.sku || ''} ${row.primary || ''} ${row.secondary || ''}`.toLowerCase();
+    return (!q || haystack.includes(q))
+      && (!from || date >= from)
+      && (!to || date <= to)
+      && (!type || row.type === type)
+      && (!seller || String(row.sellerName || '').toLowerCase() === seller)
+      && (!product || String(row.productName || '').toLowerCase() === product);
+  });
+  return res.json(visibleRows);
 });
 
 app.put('/api/admin/series-imei/:saleId', requireStoreManagerOrAdmin, (req, res) => {

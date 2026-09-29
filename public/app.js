@@ -612,7 +612,9 @@ async function renderCurrentRoute() {
   if (path === `${ADMIN_PATH}/pedidos` || path === `${ADMIN_PATH}/pedidos/`) return renderAdminOrders();
   if (path === `${ADMIN_PATH}/ventas` || path === `${ADMIN_PATH}/ventas/`) return renderAdminDirectSales();
   if (path === `${ADMIN_PATH}/ventas/historial` || path === `${ADMIN_PATH}/ventas/historial/`) return renderAdminSalesHistory();
-  if (path === `${ADMIN_PATH}/series-imei` || path === `${ADMIN_PATH}/series-imei/`) return renderAdminSeriesImei();
+  if (path === `${ADMIN_PATH}/series-imei/configuraciones` || path === `${ADMIN_PATH}/series-imei/configuraciones/`) return renderAdminSeriesImeiConfig();
+  if (path === `${ADMIN_PATH}/series-imei/registrados` || path === `${ADMIN_PATH}/series-imei/registrados/`) return renderAdminSeriesImeiRegistered();
+  if (path === `${ADMIN_PATH}/series-imei` || path === `${ADMIN_PATH}/series-imei/`) { window.location.replace(`${ADMIN_PATH}/series-imei/registrados`); return; }
   if (path === `${ADMIN_PATH}/cotizaciones` || path === `${ADMIN_PATH}/cotizaciones/`) return renderAdminQuotes();
   if (path === `${ADMIN_PATH}/generar-orden` || path === `${ADMIN_PATH}/generar-orden/`) { window.location.replace(`${ADMIN_PATH}/ventas`); return; }
     if (path === `${ADMIN_PATH}/auditoria` || path === `${ADMIN_PATH}/auditoria/`) return renderAdminAudit();
@@ -1165,15 +1167,18 @@ function ordersListMarkup(orders = [], options = {}) {
 function adminSectionNav(session = {}, active = '') {
   const role = String(session?.role || '').toLowerCase();
   const limitedOperations = role === 'vendedor' || role === 'orders' || role === 'store_manager';
+  const isAdmin = role === 'admin';
   const link = (key, href, label) => `<a href="${href}" class="admin-section-link${active === key ? ' active' : ''}" data-smooth-route>${label}</a>`;
+  const seriesRegistered = link('series-imei-registrados', `${ADMIN_PATH}/series-imei/registrados`, 'SERIES / IMEI REGISTRADOS');
+  const seriesConfig = isAdmin ? link('series-imei-configuraciones', `${ADMIN_PATH}/series-imei/configuraciones`, 'SERIES/IMEI CONFIGURACIONES') : '';
   if (limitedOperations) {
     return `<nav class="admin-section-nav admin-section-nav--compact" id="adminSectionNav" aria-label="Secciones operativas">
-      <details class="admin-nav-group"><summary>Operación</summary><div class="admin-nav-group-links">${link('buscar-productos', `${ADMIN_PATH}/buscar-productos`, 'BUSCAR PRODUCTOS')}${link('cotizaciones', `${ADMIN_PATH}/cotizaciones`, 'COTIZACIONES')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('ventas', `${ADMIN_PATH}/ventas`, 'VENTAS')}${link('historial-ventas', `${ADMIN_PATH}/ventas/historial`, 'HISTORIAL DE VENTAS')}${link('series-imei', `${ADMIN_PATH}/series-imei`, 'SERIES / IMEI')}</div></details>
+      <details class="admin-nav-group"><summary>Operación</summary><div class="admin-nav-group-links">${link('buscar-productos', `${ADMIN_PATH}/buscar-productos`, 'BUSCAR PRODUCTOS')}${link('cotizaciones', `${ADMIN_PATH}/cotizaciones`, 'COTIZACIONES')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('ventas', `${ADMIN_PATH}/ventas`, 'VENTAS')}${link('historial-ventas', `${ADMIN_PATH}/ventas/historial`, 'HISTORIAL DE VENTAS')}${seriesRegistered}</div></details>
     </nav>`;
   }
   const group = (label, activeKeys, items, open = false) => `<details class="admin-nav-group${activeKeys.includes(active) ? ' has-active' : ''}"${open ? ' open' : ''}><summary><span>${label}</span>${activeKeys.includes(active) ? '<i aria-hidden="true"></i>' : ''}</summary><div class="admin-nav-group-links">${items}</div></details>`;
   return `<nav class="admin-section-nav" id="adminSectionNav" aria-label="Administración YHORS">
-    ${group('Operación', ['web','inventario','buscar-productos','cotizaciones','pedidos','ventas'], `${link('web', ADMIN_PATH, 'PÁGINA WEB')}${link('buscar-productos', `${ADMIN_PATH}/buscar-productos`, 'BUSCAR PRODUCTOS')}${link('inventario', `${ADMIN_PATH}/inventario`, 'INVENTARIO')}${link('cotizaciones', `${ADMIN_PATH}/cotizaciones`, 'COTIZACIONES')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('ventas', `${ADMIN_PATH}/ventas`, 'VENTAS')}${link('historial-ventas', `${ADMIN_PATH}/ventas/historial`, 'HISTORIAL DE VENTAS')}${link('series-imei', `${ADMIN_PATH}/series-imei`, 'SERIES / IMEI')}`)}
+    ${group('Operación', ['web','inventario','buscar-productos','cotizaciones','pedidos','ventas','historial-ventas','series-imei-registrados','series-imei-configuraciones'], `${link('web', ADMIN_PATH, 'PÁGINA WEB')}${link('buscar-productos', `${ADMIN_PATH}/buscar-productos`, 'BUSCAR PRODUCTOS')}${link('inventario', `${ADMIN_PATH}/inventario`, 'INVENTARIO')}${link('cotizaciones', `${ADMIN_PATH}/cotizaciones`, 'COTIZACIONES')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('ventas', `${ADMIN_PATH}/ventas`, 'VENTAS')}${link('historial-ventas', `${ADMIN_PATH}/ventas/historial`, 'HISTORIAL DE VENTAS')}${seriesRegistered}${seriesConfig}`)}
     ${group('Gestión', ['usuarios','auditoria'], `${link('usuarios', `${ADMIN_PATH}/usuarios`, 'USUARIOS')}${link('auditoria', `${ADMIN_PATH}/auditoria`, 'AUDITORÍA')}`)}
     ${group('Finanzas', ['resumen-financiero','ventas-generales','multas','calculo-comision'], `${link('resumen-financiero', `${ADMIN_PATH}/resumen-financiero`, 'RESUMEN FINANCIERO')}${link('ventas-generales', `${ADMIN_PATH}/ventas-generales`, 'VENTAS GENERALES')}${link('multas', `${ADMIN_PATH}/multas`, 'MULTAS')}${link('calculo-comision', `${ADMIN_PATH}/calculo-comision`, 'CÁLCULO DE COMISIÓN')}`)}
   </nav>`;
@@ -1453,52 +1458,173 @@ async function renderAdminSalesHistory() {
   await load();
 }
 
-async function renderAdminSeriesImei() {
+
+async function renderAdminSeriesImeiConfig() {
   const session = await request('/api/admin/session').catch(() => ({ authenticated:false }));
   if (!session.authenticated) return renderLogin();
   const role = String(session.role || '').toLowerCase();
-  if (!['admin','store_manager','vendedor','orders'].includes(role)) return renderAdmin();
-  const canEdit = role === 'admin' || role === 'store_manager';
+  if (role !== 'admin') return renderAdminSeriesImeiRegistered();
+
   const products = await request('/api/admin/order-products').catch(() => []);
-  const sales = await request('/api/admin/series-imei').catch(() => []);
   const productConfig = products.filter(p => String(p.category || '').toLowerCase() === 'tech');
+
   app.innerHTML = `<main class="admin-shell series-imei-shell"><div class="admin-wrap">
-    <div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Series / IMEI</h1><p class="admin-subtitle">Configura qué productos Tech solicitan identificación y corrige los identificadores de las ventas.</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>
-    ${adminSectionNav(session, 'series-imei')}
+    <div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">SERIES/IMEI CONFIGURACIONES</h1><p class="admin-subtitle">Define qué productos Tech deben solicitar serie o IMEI al momento de vender.</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>
+    ${adminSectionNav(session, 'series-imei-configuraciones')}
     <section class="admin-panel">
-      <div class="section-heading"><div><span class="eyebrow">Control de equipos</span><h2>Solicitar serie / IMEI</h2></div><p>Activa la identificación solo en los productos Tech que realmente la necesitan.</p></div>
-      <div class="series-config-grid">${productConfig.map(product => `<article class="series-config-card"><div><strong>${escapeHTML(product.name)}</strong><small>SKU: ${escapeHTML(product.sku || '—')} · ${escapeHTML(product.productType || 'Tech')}</small></div><label class="series-toggle"><input type="checkbox" data-device-toggle="${escapeHTML(product.id)}" ${product.deviceTracking !== 'none' ? 'checked' : ''} ${!canEdit ? 'disabled' : ''}><span></span><b>${product.deviceTracking !== 'none' ? 'Solicitar' : 'No solicitar'}</b></label></article>`).join('') || '<div class="generate-empty-state"><strong>No hay productos Tech.</strong></div>'}</div>
-    </section>
-    <section class="admin-panel">
-      <div class="section-heading"><div><span class="eyebrow">Registros</span><h2>Series / IMEI registrados</h2></div><p>ADMIN y JEFE DE TIENDA pueden modificar identificadores.</p></div>
-      <div class="sales-history-list" id="seriesList">${sales.length ? sales.map(row => `<article class="sales-history-card series-record" data-series-row="${escapeHTML(row.saleId)}" data-item-index="${row.itemIndex}" data-unit="${row.unit}">
-        <div class="sales-history-main"><div><span class="eyebrow">${row.type === 'imei' ? 'IMEI' : 'SERIE'} · #${escapeHTML(row.orderNumber)}</span><h3>${escapeHTML(row.productName)}</h3><small>Unidad ${row.unit} · ${escapeHTML(row.customerName || 'Cliente')} · ${escapeHTML(row.sellerName || 'Sin vendedor')}</small></div>
-        <div class="series-values"><input data-series-primary value="${escapeHTML(row.primary)}" ${canEdit?'':'disabled'}><input data-series-secondary value="${escapeHTML(row.secondary || '')}" placeholder="${row.type === 'imei' ? 'IMEI 2 (opcional)' : '—'}" ${canEdit && row.type==='imei'?'':'disabled'}></div></div>
-        ${canEdit ? `<div class="sales-history-actions"><button type="button" class="button secondary small" data-save-series>Guardar</button></div>` : ''}</article>`).join('') : '<div class="generate-empty-state"><strong>No hay series / IMEI registrados.</strong><small>Cuando una venta tenga identificación aparecerá aquí.</small></div>'}</div>
+      <div class="section-heading"><div><span class="eyebrow">Solo administración</span><h2>Solicitar / no solicitar serie o IMEI</h2></div><p>Los cambios quedan pendientes hasta que presiones <strong>Guardar cambios</strong>.</p></div>
+      <div class="series-config-toolbar">
+        <label class="sales-history-search"><span>Buscar producto</span><input id="seriesConfigSearch" type="search" placeholder="Nombre, SKU o tipo de producto…" autocomplete="off"></label>
+        <span class="series-config-count" id="seriesConfigCount"></span>
+      </div>
+      <div id="seriesConfigMessage" class="message" hidden></div>
+      <div class="series-config-grid" id="seriesConfigList"></div>
+      <div class="series-config-footer"><button type="button" class="button secondary" id="seriesConfigReset">Descartar cambios</button><button type="button" class="button primary" id="seriesConfigSave">Guardar cambios</button></div>
     </section>
   </div></main>`;
   wireAccountMenu();
 
-  document.querySelectorAll('[data-device-toggle]').forEach(input => input.addEventListener('change', async () => {
-    const id=input.dataset.deviceToggle;
-    const previous=!input.checked;
-    input.disabled=true;
+  const original = new Map(productConfig.map(p => [String(p.id), p.deviceTracking !== 'none']));
+  const pending = new Map(original);
+  const render = () => {
+    const q = document.querySelector('#seriesConfigSearch')?.value.trim().toLowerCase() || '';
+    const filtered = productConfig.filter(p => {
+      const hay = `${p.name || ''} ${p.sku || ''} ${p.productType || ''}`.toLowerCase();
+      return !q || hay.includes(q);
+    });
+    const list = document.querySelector('#seriesConfigList');
+    document.querySelector('#seriesConfigCount').textContent = `${filtered.length} de ${productConfig.length} productos`;
+    list.innerHTML = filtered.map(product => {
+      const enabled = pending.get(String(product.id));
+      return `<article class="series-config-card"><div><strong>${escapeHTML(product.name)}</strong><small>SKU: ${escapeHTML(product.sku || '—')} · ${escapeHTML(product.productType || 'Tech')}</small></div>
+        <label class="series-toggle"><input type="checkbox" data-device-pending="${escapeHTML(product.id)}" ${enabled ? 'checked' : ''}><span></span><b>${enabled ? 'Solicitar' : 'No solicitar'}</b></label></article>`;
+    }).join('') || '<div class="generate-empty-state"><strong>No se encontraron productos.</strong><small>Prueba con otro nombre o SKU.</small></div>';
+    document.querySelectorAll('[data-device-pending]').forEach(input => input.addEventListener('change', () => {
+      pending.set(String(input.dataset.devicePending), input.checked);
+      input.nextElementSibling?.nextElementSibling && (input.nextElementSibling.nextElementSibling.textContent = input.checked ? 'Solicitar' : 'No solicitar');
+    }));
+  };
+  render();
+  document.querySelector('#seriesConfigSearch')?.addEventListener('input', render);
+
+  document.querySelector('#seriesConfigReset')?.addEventListener('click', async () => {
+    if (!await showYhorsConfirm('¿Descartar cambios?', 'Se restaurará la configuración que tenía guardada antes de esta edición.', {cancelText:'Cancelar', confirmText:'Descartar'})) return;
+    original.forEach((value, key) => pending.set(key, value));
+    render();
+  });
+
+  document.querySelector('#seriesConfigSave')?.addEventListener('click', async () => {
+    const changes = productConfig.filter(p => original.get(String(p.id)) !== pending.get(String(p.id)));
+    if (!changes.length) { alert('No hay cambios pendientes para guardar.'); return; }
+    if (!await showYhorsConfirm('¿Guardar cambios?', `Se actualizarán ${changes.length} producto${changes.length === 1 ? '' : 's'} y esta configuración se aplicará a las próximas ventas.`, {cancelText:'Cancelar', confirmText:'Guardar cambios'})) return;
+    const saveBtn = document.querySelector('#seriesConfigSave');
+    saveBtn.disabled = true;
     try {
-      const result=await request(`/api/admin/products/${encodeURIComponent(id)}/device-tracking`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:input.checked})});
-      input.checked=result.deviceTracking!=='none';
-      input.nextElementSibling?.nextElementSibling && (input.nextElementSibling.nextElementSibling.textContent=input.checked?'Solicitar':'No solicitar');
-    } catch(error){ input.checked=previous; alert(error.message||'No se pudo actualizar la configuración.'); }
-    finally { input.disabled=false; }
-  }));
+      for (const product of changes) {
+        await request(`/api/admin/products/${encodeURIComponent(product.id)}/device-tracking`, {
+          method:'PUT', headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({enabled: pending.get(String(product.id))})
+        });
+      }
+      changes.forEach(product => original.set(String(product.id), pending.get(String(product.id))));
+      alert('Configuración guardada correctamente.');
+      render();
+    } catch (error) {
+      alert(error.message || 'No se pudo guardar la configuración.');
+      // Reload from server to avoid leaving a partially saved state in the UI.
+      window.location.reload();
+    } finally {
+      saveBtn.disabled = false;
+    }
+  });
+}
+
+async function renderAdminSeriesImeiRegistered() {
+  const session = await request('/api/admin/session').catch(() => ({ authenticated:false }));
+  if (!session.authenticated) return renderLogin();
+  const role = String(session.role || '').toLowerCase();
+  if (!['admin','store_manager','vendedor','orders'].includes(role)) return renderAdmin();
+
+  const sales = await request('/api/admin/series-imei').catch(() => []);
+  const sellers = [...new Set(sales.map(r => r.sellerName).filter(Boolean))].sort((a,b) => a.localeCompare(b,'es'));
+  const products = [...new Set(sales.map(r => r.productName).filter(Boolean))].sort((a,b) => a.localeCompare(b,'es'));
+  const canEdit = role === 'admin' || role === 'store_manager';
+
+  app.innerHTML = `<main class="admin-shell series-imei-shell"><div class="admin-wrap">
+    <div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Series / IMEI registrados</h1><p class="admin-subtitle">Consulta, filtra y corrige los identificadores registrados en las ventas.</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>
+    ${adminSectionNav(session, 'series-imei-registrados')}
+    <section class="admin-panel">
+      <div class="section-heading"><div><span class="eyebrow">Registros</span><h2>Series / IMEI registrados</h2></div><p>Usa fechas, búsqueda y filtros para encontrar rápidamente el registro que necesitas.</p></div>
+      <div class="series-records-toolbar">
+        <label class="sales-history-search"><span>Buscar</span><input id="seriesSearch" type="search" placeholder="Producto, SKU, serie, IMEI, venta, cliente…" autocomplete="off"></label>
+        <label class="sales-date-filter"><span>Desde</span><input id="seriesDateFrom" type="date"></label>
+        <label class="sales-date-filter"><span>Hasta</span><input id="seriesDateTo" type="date"></label>
+        <label><span>Tipo</span><select id="seriesTypeFilter"><option value="">Todos</option><option value="serial">Serie</option><option value="imei">IMEI</option></select></label>
+        <label><span>Vendedor</span><select id="seriesSellerFilter"><option value="">Todos</option>${sellers.map(v=>`<option value="${escapeHTML(v)}">${escapeHTML(v)}</option>`).join('')}</select></label>
+        <label><span>Producto</span><select id="seriesProductFilter"><option value="">Todos</option>${products.map(v=>`<option value="${escapeHTML(v)}">${escapeHTML(v)}</option>`).join('')}</select></label>
+        <button type="button" class="button secondary small" id="seriesFiltersClear">Limpiar filtros</button>
+      </div>
+      <div id="seriesRecordsMessage" class="message" hidden></div>
+      <div class="series-records-summary" id="seriesRecordsSummary"></div>
+      <div class="sales-history-list" id="seriesList"><div class="sales-loading">Cargando registros…</div></div>
+    </section>
+  </div></main>`;
+  wireAccountMenu();
+
+  let allRows = sales;
+  const renderRows = () => {
+    const q = document.querySelector('#seriesSearch')?.value.trim().toLowerCase() || '';
+    const from = document.querySelector('#seriesDateFrom')?.value || '';
+    const to = document.querySelector('#seriesDateTo')?.value || '';
+    const type = document.querySelector('#seriesTypeFilter')?.value || '';
+    const seller = document.querySelector('#seriesSellerFilter')?.value || '';
+    const product = document.querySelector('#seriesProductFilter')?.value || '';
+    const msg = document.querySelector('#seriesRecordsMessage');
+    if (from && to && from > to) {
+      msg.hidden=false; msg.className='message error'; msg.textContent='La fecha inicial no puede ser posterior a la fecha final.';
+      document.querySelector('#seriesList').innerHTML=''; return;
+    }
+    msg.hidden=true;
+    const rows = allRows.filter(row => {
+      const d = String(row.createdAt || '').slice(0,10);
+      const hay = `${row.orderNumber||''} ${row.customerName||''} ${row.sellerName||''} ${row.productName||''} ${row.sku||''} ${row.primary||''} ${row.secondary||''}`.toLowerCase();
+      return (!q || hay.includes(q)) && (!from || d >= from) && (!to || d <= to) && (!type || row.type === type) && (!seller || row.sellerName === seller) && (!product || row.productName === product);
+    });
+    document.querySelector('#seriesRecordsSummary').textContent = `${rows.length} registro${rows.length===1?'':'s'} encontrado${rows.length===1?'':'s'}`;
+    document.querySelector('#seriesList').innerHTML = rows.length ? rows.map(row => `<article class="sales-history-card series-record" data-series-row="${escapeHTML(row.saleId)}" data-item-index="${row.itemIndex}" data-unit="${row.unit}">
+      <div class="sales-history-main"><div><span class="eyebrow">${row.type === 'imei' ? 'IMEI' : 'SERIE'} · #${escapeHTML(row.orderNumber)}</span><h3>${escapeHTML(row.productName)}</h3><small>${escapeHTML(new Date(row.createdAt).toLocaleString('es-EC'))} · Unidad ${row.unit} · ${escapeHTML(row.customerName || 'Cliente')} · ${escapeHTML(row.sellerName || 'Sin vendedor')} · SKU ${escapeHTML(row.sku || '—')}</small></div>
+      <div class="series-values"><input data-series-primary value="${escapeHTML(row.primary)}" ${canEdit?'':'disabled'}><input data-series-secondary value="${escapeHTML(row.secondary || '')}" placeholder="${row.type === 'imei' ? 'IMEI 2 (opcional)' : '—'}" ${canEdit && row.type==='imei'?'':'disabled'}></div></div>
+      ${canEdit ? `<div class="sales-history-actions"><button type="button" class="button secondary small" data-save-series>Guardar</button></div>` : ''}</article>`).join('') : '<div class="generate-empty-state"><strong>No hay registros que coincidan.</strong><small>Prueba con otras fechas, filtros o términos de búsqueda.</small></div>';
+  };
+  renderRows();
+
+  ['seriesSearch','seriesDateFrom','seriesDateTo','seriesTypeFilter','seriesSellerFilter','seriesProductFilter'].forEach(id => {
+    document.querySelector('#'+id)?.addEventListener(id==='seriesSearch'?'input':'change', () => {
+      if (id==='seriesSearch') { clearTimeout(window.__yhorsSeriesSearchTimer); window.__yhorsSeriesSearchTimer=setTimeout(renderRows,200); }
+      else renderRows();
+    });
+  });
+  document.querySelector('#seriesFiltersClear')?.addEventListener('click', () => {
+    ['seriesSearch','seriesDateFrom','seriesDateTo'].forEach(id => { const el=document.querySelector('#'+id); if(el) el.value=''; });
+    ['seriesTypeFilter','seriesSellerFilter','seriesProductFilter'].forEach(id => { const el=document.querySelector('#'+id); if(el) el.value=''; });
+    renderRows();
+  });
+
   document.querySelector('#seriesList')?.addEventListener('click', async event => {
     const btn=event.target.closest('[data-save-series]');
     if(!btn)return;
     const row=btn.closest('[data-series-row]');
     const primary=row.querySelector('[data-series-primary]')?.value.trim()||'';
     const secondary=row.querySelector('[data-series-secondary]')?.value.trim()||'';
+    if(!await showYhorsConfirm('¿Guardar cambios?', 'Se modificará la serie / IMEI de esta venta. Verifica los datos antes de continuar.', {cancelText:'Cancelar', confirmText:'Guardar'})) return;
     btn.disabled=true;
-    try { await request(`/api/admin/series-imei/${encodeURIComponent(row.dataset.seriesRow)}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({itemIndex:Number(row.dataset.itemIndex),unit:Number(row.dataset.unit),primary,secondary})}); btn.textContent='Guardado ✓'; setTimeout(()=>{btn.disabled=false;btn.textContent='Guardar';},900); }
-    catch(error){ alert(error.message||'No se pudo guardar.'); btn.disabled=false; }
+    try {
+      await request(`/api/admin/series-imei/${encodeURIComponent(row.dataset.seriesRow)}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({itemIndex:Number(row.dataset.itemIndex),unit:Number(row.dataset.unit),primary,secondary})});
+      btn.textContent='Guardado ✓';
+      setTimeout(()=>{btn.disabled=false;btn.textContent='Guardar';},900);
+      const updated = allRows.find(r => String(r.saleId)===String(row.dataset.seriesRow) && Number(r.itemIndex)===Number(row.dataset.itemIndex) && Number(r.unit)===Number(row.dataset.unit));
+      if(updated){ updated.primary=primary; updated.secondary=secondary; }
+    } catch(error){ alert(error.message||'No se pudo guardar.'); btn.disabled=false; }
   });
 }
 
