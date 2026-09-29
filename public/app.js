@@ -611,6 +611,7 @@ async function renderCurrentRoute() {
   if (path === `${ADMIN_PATH}/multas` || path === `${ADMIN_PATH}/multas/`) return renderAdminFines();
   if (path === `${ADMIN_PATH}/pedidos` || path === `${ADMIN_PATH}/pedidos/`) return renderAdminOrders();
   if (path === `${ADMIN_PATH}/generar-orden` || path === `${ADMIN_PATH}/generar-orden/`) return renderAdminGenerateOrder();
+  if (path === `${ADMIN_PATH}/historial-ventas` || path === `${ADMIN_PATH}/historial-ventas/`) return renderAdminSalesHistory();
     if (path === `${ADMIN_PATH}/auditoria` || path === `${ADMIN_PATH}/auditoria/`) return renderAdminAudit();
   if (path === `${ADMIN_PATH}/seguridad` || path === `${ADMIN_PATH}/seguridad/`) return renderAdminSecurity(true);
 if (path === `${ADMIN_PATH}/usuarios` || path === `${ADMIN_PATH}/usuarios/`) {
@@ -1143,6 +1144,7 @@ function ordersListMarkup(orders = [], options = {}) {
       </div>
       <div class="admin-order-footer">
         <button class="button pdf-order small" type="button" data-order-pdf="${escapeHTML(order.id)}" title="Generar PDF de esta orden">PDF ORDEN</button>
+        ${['Enviado','Entregado'].includes(String(order.status || '')) ? `<button class="button primary small" type="button" data-order-notify-sale="${escapeHTML(order.id)}">NOTIFICAR VENTA</button>` : ''}
         <button class="button success small" type="button" data-order-note-save="${escapeHTML(order.id)}" disabled>Guardar cambios</button>
         <button class="button edit-note small" type="button" data-order-note-edit="${escapeHTML(order.id)}">Editar pedido</button>
         <button class="button order-edit-cancel small" type="button" data-order-edit-cancel="${escapeHTML(order.id)}" hidden>Cancelar</button>
@@ -1165,12 +1167,12 @@ function adminSectionNav(session = {}, active = '') {
   const link = (key, href, label) => `<a href="${href}" class="admin-section-link${active === key ? ' active' : ''}" data-smooth-route>${label}</a>`;
   if (limitedOperations) {
     return `<nav class="admin-section-nav admin-section-nav--compact" id="adminSectionNav" aria-label="Secciones operativas">
-      <details class="admin-nav-group"><summary>Operación</summary><div class="admin-nav-group-links">${link('buscar-productos', `${ADMIN_PATH}/buscar-productos`, 'BUSCAR PRODUCTOS')}${link('ventas-generales', `${ADMIN_PATH}/ventas-generales`, 'VENTAS GENERALES')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('generar-orden', `${ADMIN_PATH}/generar-orden`, 'GENERAR ORDEN')}${link('series-imeis', `${ADMIN_PATH}/series-imeis`, 'SERIES/IMEIS')}</div></details>
+      <details class="admin-nav-group"><summary>Operación</summary><div class="admin-nav-group-links">${link('buscar-productos', `${ADMIN_PATH}/buscar-productos`, 'BUSCAR PRODUCTOS')}${link('ventas-generales', `${ADMIN_PATH}/ventas-generales`, 'VENTAS GENERALES')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('generar-orden', `${ADMIN_PATH}/generar-orden`, 'GENERAR ORDEN')}${link('historial-ventas', `${ADMIN_PATH}/historial-ventas`, 'HISTORIAL DE VENTAS')}${link('series-imeis', `${ADMIN_PATH}/series-imeis`, 'SERIES/IMEIS')}</div></details>
     </nav>`;
   }
   const group = (label, activeKeys, items, open = false) => `<details class="admin-nav-group${activeKeys.includes(active) ? ' has-active' : ''}"${open ? ' open' : ''}><summary><span>${label}</span>${activeKeys.includes(active) ? '<i aria-hidden="true"></i>' : ''}</summary><div class="admin-nav-group-links">${items}</div></details>`;
   return `<nav class="admin-section-nav" id="adminSectionNav" aria-label="Administración YHORS">
-    ${group('Operación', ['web','inventario','buscar-productos','pedidos','generar-orden'], `${link('web', ADMIN_PATH, 'PÁGINA WEB')}${link('buscar-productos', `${ADMIN_PATH}/buscar-productos`, 'BUSCAR PRODUCTOS')}${link('inventario', `${ADMIN_PATH}/inventario`, 'INVENTARIO')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('generar-orden', `${ADMIN_PATH}/generar-orden`, 'GENERAR ORDEN')}`)}
+    ${group('Operación', ['web','inventario','buscar-productos','pedidos','generar-orden','historial-ventas'], `${link('web', ADMIN_PATH, 'PÁGINA WEB')}${link('buscar-productos', `${ADMIN_PATH}/buscar-productos`, 'BUSCAR PRODUCTOS')}${link('inventario', `${ADMIN_PATH}/inventario`, 'INVENTARIO')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('generar-orden', `${ADMIN_PATH}/generar-orden`, 'GENERAR ORDEN')}${link('historial-ventas', `${ADMIN_PATH}/historial-ventas`, 'HISTORIAL DE VENTAS')}`)}
     ${group('Gestión', ['usuarios','series-imeis','auditoria'], `${link('usuarios', `${ADMIN_PATH}/usuarios`, 'USUARIOS')}${link('series-imeis', `${ADMIN_PATH}/series-imeis`, 'SERIES/IMEIS')}${link('auditoria', `${ADMIN_PATH}/auditoria`, 'AUDITORÍA')}`)}
     ${group('Finanzas', ['resumen-financiero','ventas-generales','multas','calculo-comision'], `${link('resumen-financiero', `${ADMIN_PATH}/resumen-financiero`, 'RESUMEN FINANCIERO')}${link('ventas-generales', `${ADMIN_PATH}/ventas-generales`, 'VENTAS GENERALES')}${link('multas', `${ADMIN_PATH}/multas`, 'MULTAS')}${link('calculo-comision', `${ADMIN_PATH}/calculo-comision`, 'CÁLCULO DE COMISIÓN')}`)}
   </nav>`;
@@ -2090,6 +2092,30 @@ async function renderAdminFinancial() {
   await renderFinancial();
 }
 
+async function renderAdminSalesHistory() {
+  const session = await request('/api/admin/session').catch(() => ({ authenticated:false }));
+  if (!session.authenticated) return renderLogin();
+  const canDelete = session.role === 'admin';
+  const sellers = await request('/api/admin/order-sellers').catch(() => []);
+  const today = new Date().toLocaleDateString('en-CA');
+  const sectionNav = adminSectionNav(session, 'historial-ventas');
+  app.innerHTML = `<main class="admin-shell sales-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Historial de ventas</h1><p class="admin-subtitle">Ventas notificadas desde pedidos Enviados o Entregados · solo lectura después de notificarlas.</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>${sectionNav}<section class="admin-panel sales-panel"><div class="section-heading sales-heading"><div><span class="eyebrow">Ventas</span><h2>Historial de ventas</h2></div><p>Vendedores y Jefes pueden consultar el PDF. Solo Administración puede eliminar una venta del historial.</p></div><div class="sales-toolbar"><div class="sales-date-range"><label class="sales-date-filter"><span>Desde</span><input id="historyDateFrom" type="date" value="${today}"></label><label class="sales-date-filter"><span>Hasta</span><input id="historyDateTo" type="date" value="${today}"></label></div><label class="sales-status-filter"><span>Vendedor</span><select id="historySeller"><option value="">Todos los vendedores</option>${sellers.map(s=>`<option value="${escapeHTML(s.id)}">${escapeHTML(s.name)}</option>`).join('')}</select></label><label class="sales-search"><span>Buscar</span><input id="historySearch" type="search" placeholder="Venta, cliente, cédula, SKU…"></label><button type="button" class="button primary small" id="historyRefresh">Actualizar</button></div><div id="historySummary" class="sales-summary"></div><div id="historyList" class="sales-table-wrap"></div></section></div></main>`;
+  const load = async () => {
+    const from=document.querySelector('#historyDateFrom')?.value||''; const to=document.querySelector('#historyDateTo')?.value||''; const q=document.querySelector('#historySearch')?.value||''; const sellerId=document.querySelector('#historySeller')?.value||''; const list=document.querySelector('#historyList'); const summary=document.querySelector('#historySummary');
+    if(from&&to&&from>to){list.innerHTML='<div class="sales-empty">La fecha inicial no puede ser posterior a la fecha final.</div>';return;}
+    try {
+      const params=new URLSearchParams({from,to,q,sellerId}); const rows=await request(`/api/admin/historial-ventas?${params}`);
+      summary.innerHTML=`<article class="financial-metric sales"><span>VENTAS NOTIFICADAS</span><strong>${rows.length}</strong><small>${from||'Todo'} → ${to||'Todo'}</small></article><article class="financial-metric profit"><span>TOTAL VENDIDO</span><strong>${moneyCell(rows.reduce((sum,r)=>sum+Number(r.total||0),0))}</strong><small>Historial de ventas</small></article>`;
+      if (!rows.length) { list.innerHTML='<div class="sales-empty">No hay ventas notificadas que coincidan con los filtros.</div>'; return; }
+      const body=rows.map(r=>`<tr><td>${escapeHTML(shortDate(r.notifiedAt||r.createdAt))}</td><td><strong>#${escapeHTML(r.orderNumber||'—')}</strong></td><td>${escapeHTML(r.customer?.name||'Cliente')}<small>${escapeHTML(r.customer?.cedula||'')}</small></td><td>${escapeHTML(r.assignedSellerName||'Sin vendedor')}</td><td>${escapeHTML(r.status||'—')}</td><td><strong>${moneyCell(r.total)}</strong></td><td><button class="button pdf-order small" type="button" data-history-pdf="${escapeHTML(r.id)}">PDF</button>${canDelete ? ` <button class="button danger small" type="button" data-history-delete="${escapeHTML(r.id)}">Eliminar</button>` : ''}</td></tr>`).join('');
+      list.innerHTML='<table class="sales-table"><thead><tr><th>FECHA</th><th>VENTA</th><th>CLIENTE</th><th>VENDEDOR</th><th>ESTADO</th><th>TOTAL</th><th></th></tr></thead><tbody>'+body+'</tbody></table>';
+    } catch(e) { list.innerHTML=`<div class="sales-empty">${escapeHTML(e.message||'No se pudo cargar el historial.')}</div>`; }
+  };
+  document.querySelector('#historyRefresh')?.addEventListener('click',load); document.querySelector('#historyDateFrom')?.addEventListener('change',load); document.querySelector('#historyDateTo')?.addEventListener('change',load); document.querySelector('#historySeller')?.addEventListener('change',load); document.querySelector('#historySearch')?.addEventListener('input',()=>{clearTimeout(window.__historySearchTimer);window.__historySearchTimer=setTimeout(load,180);});
+  document.querySelector('#historyList')?.addEventListener('click',async event=>{ const pdf=event.target.closest('[data-history-pdf]'); if(pdf){const a=document.createElement('a');a.href=`/api/admin/historial-ventas/${encodeURIComponent(pdf.dataset.historyPdf)}/pdf?v=${Date.now()}`;a.target='_blank';a.rel='noopener';a.click();return;} const del=event.target.closest('[data-history-delete]'); if(del){const ok=await showYhorsConfirm('¿Eliminar esta venta del historial?','Al eliminarla, el pedido volverá a PEDIDOS y podrá editarse o eliminarse nuevamente.');if(!ok)return;del.disabled=true;try{await request(`/api/admin/historial-ventas/${del.dataset.historyDelete}`,{method:'DELETE'});await load();}catch(e){del.disabled=false;alert(e.message);}} });
+  await load();
+}
+
 async function renderAdminSales() {
   const session = await request('/api/admin/session').catch(() => ({ authenticated: false }));
   if (!session.authenticated) return renderLogin();
@@ -2106,7 +2132,7 @@ async function renderAdminSales() {
       <div class="section-heading sales-heading"><div><span class="eyebrow">Ventas</span><h2>Ventas Generales</h2></div><p>Consulta cuánto ha vendido cada vendedor y el total que queda a cargo del <strong>Jefe de Tienda</strong>.</p></div>
       <div class="sales-toolbar">
         <div class="sales-date-range"><label class="sales-date-filter"><span>Desde</span><input id="salesDateFrom" type="date" value="${monthStart}" aria-label="Fecha inicial"></label><label class="sales-date-filter"><span>Hasta</span><input id="salesDateTo" type="date" value="${today}" aria-label="Fecha final"></label></div>
-        <label class="sales-status-filter"><span>Estado</span><select id="salesStatusFilter"><option value="active" selected>Ventas activas</option><option value="all">Todos los estados</option><option value="Pendiente">Pendiente</option><option value="Confirmado">Confirmado</option><option value="Preparado">Preparado</option><option value="Enviado">Enviado</option><option value="Entregado">Entregado</option><option value="Cancelado">Cancelado</option></select></label>
+        <label class="sales-status-filter"><span>Estado</span><select id="salesStatusFilter"><option value="all" selected>Todas las ventas notificadas</option><option value="Pendiente">Pendiente</option><option value="Confirmado">Confirmado</option><option value="Preparado">Preparado</option><option value="Enviado">Enviado</option><option value="Entregado">Entregado</option><option value="Cancelado">Cancelado</option></select></label>
         <button type="button" class="button primary small" id="salesRefresh">Actualizar</button>
       </div>
       <div class="sales-summary" id="salesSummary"></div>
@@ -2117,7 +2143,7 @@ async function renderAdminSales() {
   const loadSales = async () => {
     const from = document.querySelector('#salesDateFrom')?.value || '';
     const to = document.querySelector('#salesDateTo')?.value || '';
-    const status = document.querySelector('#salesStatusFilter')?.value || 'active';
+    const status = document.querySelector('#salesStatusFilter')?.value || 'all';
     const body = document.querySelector('#salesTableBody');
     const foot = document.querySelector('#salesTableFoot');
     const summary = document.querySelector('#salesSummary');
@@ -2135,7 +2161,7 @@ async function renderAdminSales() {
       const result = await request(`/api/admin/ventas-generales?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&status=${encodeURIComponent(status)}`);
       const rows = Array.isArray(result.rows) ? result.rows : [];
       const totals = result.totals || {};
-      const activeLabel = status === 'active' ? 'Ventas activas · excluye Cancelado' : status === 'all' ? 'Todos los estados' : `Estado: ${status}`;
+      const activeLabel = status === 'all' ? 'Todas las ventas notificadas' : `Estado: ${status}`;
       if (summary) summary.innerHTML = `<div><span>PERÍODO</span><strong>${escapeHTML(from || 'Todo')} → ${escapeHTML(to || 'Todo')}</strong></div><div><span>ESTADO</span><strong>${escapeHTML(activeLabel)}</strong></div><div><span>PEDIDOS</span><strong>${Number(totals.orderCount || 0)}</strong></div><div><span>TOTAL VENDIDO</span><strong>${moneyCell(totals.total)}</strong></div>`;
       body.innerHTML = rows.length ? rows.map(row => `<tr class="${row.sellerId ? '' : 'sales-unassigned-row'}"><td><div class="sales-seller"><strong>${escapeHTML(row.sellerName || 'Sin vendedor')}</strong>${row.username ? `<small>@${escapeHTML(row.username)}${row.active === false ? ' · inactivo' : ''}</small>` : '<small>Pedido sin vendedor asignado</small>'}</div></td><td>${Number(row.orderCount || 0)}</td><td>${moneyCell(row.subtotal)}</td><td>${moneyCell(row.shipping)}</td><td><strong>${moneyCell(row.total)}</strong></td></tr>`).join('') : '<tr><td colspan="5" class="sales-empty">No hay ventas para el período y estado seleccionados.</td></tr>';
       if (foot) foot.innerHTML = `<tr><th>Jefe de Tienda</th><th>${Number(totals.orderCount || 0)}</th><th>${moneyCell(totals.subtotal)}</th><th>${moneyCell(totals.shipping)}</th><th>${moneyCell(totals.total)}</th></tr>`;
@@ -2718,6 +2744,13 @@ async function renderAdminOrders() {
         button.disabled=false;
         alert(e.message);
       }
+    }));
+
+    list.querySelectorAll('[data-order-notify-sale]').forEach(button=>button.addEventListener('click',async()=>{
+      const order=orders.find(o=>o.id===button.dataset.orderNotifySale); if(!order)return;
+      const ok=await showYhorsConfirm('¿Notificar esta venta?', `El pedido #${escapeHTML(order.orderNumber)} pasará a Historial de ventas y dejará de ser editable desde Pedidos.`); if(!ok)return;
+      button.disabled=true;
+      try { await request(`/api/admin/orders/${order.id}/notificar-venta`,{method:'POST'}); orders=orders.filter(o=>o.id!==order.id); drawOrders(); } catch(e){button.disabled=false; alert(e.message);} 
     }));
 
     list.querySelectorAll('[data-order-delete]').forEach(button=>button.addEventListener('click',async()=>{

@@ -26,6 +26,7 @@ const DATA_FILE = path.join(DATA_DIR, 'products.json');
 const STOREFRONT_FILE = path.join(DATA_DIR, 'storefront.json');
 const CLASSIFICATIONS_FILE = path.join(DATA_DIR, 'classifications.json');
 const ORDERS_FILE = path.join(DATA_DIR, 'orders.json');
+const SALES_FILE = path.join(DATA_DIR, 'sales.json');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const AUDIT_FILE = path.join(DATA_DIR, 'audit.json');
 const AUDIT_MAX_RECORDS = 50000;
@@ -685,7 +686,7 @@ function ensureStorage() {
   // Primera ejecución con disco vacío: copia los datos que viajan con el código.
   // Nunca sobrescribe un archivo que ya exista en el almacenamiento persistente.
   if (process.env.YHORS_STORAGE_DIR) {
-    const seedFiles = ['products.json', 'storefront.json', 'classifications.json', 'orders.json', 'users.json', 'security.json', 'expenses.json'];
+    const seedFiles = ['products.json', 'storefront.json', 'classifications.json', 'orders.json', 'sales.json', 'users.json', 'security.json', 'expenses.json'];
     for (const fileName of seedFiles) {
       const source = path.join(__dirname, 'data', fileName);
       const target = path.join(DATA_DIR, fileName);
@@ -702,11 +703,12 @@ function ensureStorage() {
     }
   }
 
-  for (const fileName of ['products.json', 'storefront.json', 'classifications.json', 'orders.json']) {
+  for (const fileName of ['products.json', 'storefront.json', 'classifications.json', 'orders.json', 'sales.json']) {
     const target = path.join(DATA_DIR, fileName);
     if (!fs.existsSync(target)) fs.writeFileSync(target, fileName === 'orders.json' ? '[]\n' : fileName === 'products.json' ? '[]\n' : fileName === 'storefront.json' ? '{\n  "heroProductIds": [],\n  "featuredProductIds": []\n}\n' : '{\n  "brands": {},\n  "productTypes": {}\n}\n', 'utf8');
   }
   if (!fs.existsSync(EXPENSES_FILE)) fs.writeFileSync(EXPENSES_FILE, '[]\n', 'utf8');
+  if (!fs.existsSync(SALES_FILE)) fs.writeFileSync(SALES_FILE, '[]\n', 'utf8');
 }
 ensureStorage();
 migrateAllOrderStorageToEncryption();
@@ -2298,6 +2300,23 @@ function reserveOrderStock(order) {
 
 function restoreOrderPurchaseStock(order) {
   return changeOrderStock(order, 1);
+}
+
+function readSales() {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(SALES_FILE, 'utf8'));
+    return Array.isArray(parsed) ? parsed.map(decryptOrder) : [];
+  } catch { return []; }
+}
+function writeSales(sales) {
+  maybeAutoBackup(); fs.mkdirSync(DATA_DIR, { recursive: true });
+  const temporaryFile = `${SALES_FILE}.tmp`;
+  fs.writeFileSync(temporaryFile, `${JSON.stringify(sales.map(encryptOrder), null, 2)}\n`, 'utf8');
+  fs.renameSync(temporaryFile, SALES_FILE);
+}
+function getSalesHistoryRecord(order, req) {
+  const now = new Date().toISOString();
+  return { id: crypto.randomUUID(), orderId: order.id, orderNumber: order.orderNumber, notifiedAt: now, notifiedBy: getSession(req)?.accountId || null, status: String(order.status || 'Enviado'), assignedSellerId: order.assignedSellerId || null, assignedSellerName: order.assignedSellerName || null, createdAt: order.createdAt, updatedAt: now, customer: order.customer || {}, delivery: order.delivery || {}, shippingCost: Number(order.shippingCost ?? order.delivery?.cost ?? 0) || 0, subtotal: Number(order.subtotal || 0) || 0, total: Number(order.total || 0) || 0, items: Array.isArray(order.items) ? order.items : [], internalNote: order.internalNote || '' };
 }
 
 function readExpenses() {
@@ -3897,7 +3916,7 @@ app.delete('/api/admin/multas/:id', requireAdmin, (req, res) => {
 });
 
 app.get('/api/admin/calculo-comision', requireAdmin, (req, res) => {
-  const orders = readOrders();
+  const sales = readSales();
   const users = readUsers();
   const expenses = readExpenses();
   const fines = readFines();
@@ -3927,19 +3946,14 @@ app.get('/api/admin/calculo-comision', requireAdmin, (req, res) => {
     orderCount: 0, sales: 0, paid: false, paidExpenseId: null, paidAmount: 0
   };
 
-  for (const order of orders) {
-    const date = localDate(order.createdAt);
-    const status = String(order.status || 'Pendiente');
+  for (const sale of sales) {
+    const date = localDate(sale.notifiedAt || sale.createdAt);
+    const status = String(sale.status || 'Enviado');
     if (!date || (from && date < from) || (to && date > to) || !qualifyingStatuses.has(status)) continue;
-    const total = Number(order.total || 0);
-    const seller = rows.get(String(order.assignedSellerId || ''));
-    if (seller) {
-      seller.orderCount += 1;
-      seller.sales += total;
-    }
-    // La base del Jefe de Tienda es la venta total de Enviado + Entregado.
-    managerRow.orderCount += 1;
-    managerRow.sales += total;
+    const total = Number(sale.total || 0);
+    const seller = rows.get(String(sale.assignedSellerId || ''));
+    if (seller) { seller.orderCount += 1; seller.sales += total; }
+    managerRow.orderCount += 1; managerRow.sales += total;
   }
 
   const paidFor = (userId) => expenses
@@ -4005,7 +4019,7 @@ app.post('/api/admin/calculo-comision/pagar', requireAdmin, (req, res) => {
     : users.find(item => String(item.id) === userId && isSellerRole(item.role) && item.active !== false);
   if (!user && !isManager) return res.status(404).json({ error: 'Usuario no encontrado.' });
 
-  const orders = readOrders();
+  const historySales = readSales();
   const fines = readFines();
   const qualifyingStatuses = new Set(['Enviado', 'Entregado']);
   const localDate = value => {
@@ -4014,10 +4028,10 @@ app.post('/api/admin/calculo-comision/pagar', requireAdmin, (req, res) => {
     return date.toLocaleDateString('en-CA', { timeZone: 'America/Guayaquil' });
   };
   let sales = 0;
-  for (const order of orders) {
-    const date = localDate(order.createdAt);
-    if (!date || date < from || date > to || !qualifyingStatuses.has(String(order.status || 'Pendiente'))) continue;
-    if (isManager || String(order.assignedSellerId || '') === String(user.id)) sales += Number(order.total || 0);
+  for (const sale of historySales) {
+    const date = localDate(sale.notifiedAt || sale.createdAt);
+    if (!date || date < from || date > to || !qualifyingStatuses.has(String(sale.status || 'Enviado'))) continue;
+    if (isManager || String(sale.assignedSellerId || '') === String(user.id)) sales += Number(sale.total || 0);
   }
   sales = Math.round(sales * 100) / 100;
   const grossAmount = Math.round(sales * (rate / 100) * 100) / 100;
@@ -4064,61 +4078,40 @@ app.post('/api/admin/calculo-comision/pagar', requireAdmin, (req, res) => {
   return res.status(201).json(expense);
 });
 
-app.get('/api/admin/ventas-generales', requireOrdersAccess, (req, res) => {
-  const orders = readOrders();
-  const users = readUsers();
-  const statuses = ['Pendiente', 'Confirmado', 'Preparado', 'Enviado', 'Entregado', 'Cancelado'];
-  const activeStatuses = new Set(['Pendiente', 'Confirmado', 'Preparado', 'Enviado', 'Entregado']);
-  const requestedStatus = String(req.query.status || 'active').trim();
-  const statusFilter = requestedStatus === 'all' || statuses.includes(requestedStatus) ? requestedStatus : 'active';
-  const from = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.from || '')) ? String(req.query.from) : '';
-  const to = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.to || '')) ? String(req.query.to) : '';
-  const localDate = value => {
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return '';
-    return date.toLocaleDateString('en-CA', { timeZone: 'America/Guayaquil' });
-  };
+app.get('/api/admin/historial-ventas', requireOrdersAccess, (req, res) => {
+  const session = getSession(req); let sales = readSales();
+  if (isSellerRole(session.role)) sales = sales.filter(s => String(s.assignedSellerId||'')===String(session.accountId||''));
+  const from=/^\d{4}-\d{2}-\d{2}$/.test(String(req.query.from||''))?String(req.query.from):'';
+  const to=/^\d{4}-\d{2}-\d{2}$/.test(String(req.query.to||''))?String(req.query.to):'';
+  const sellerId=String(req.query.sellerId||'').trim(); const q=String(req.query.q||'').trim().toLowerCase();
+  const localDate=v=>{const d=new Date(v);return Number.isNaN(d.getTime())?'':d.toLocaleDateString('en-CA',{timeZone:'America/Guayaquil'});};
+  sales=sales.filter(s=>{const date=localDate(s.notifiedAt||s.createdAt); if(!date||(from&&date<from)||(to&&date>to))return false; if(sellerId&&String(s.assignedSellerId||'')!==sellerId)return false; if(q){const hay=`${s.orderNumber||''} ${s.customer?.name||''} ${s.customer?.cedula||''} ${s.customer?.phone||''} ${s.customer?.email||''} ${s.assignedSellerName||''} ${(s.items||[]).map(i=>`${i.name||''} ${i.sku||''}`).join(' ')}`.toLowerCase();if(!hay.includes(q))return false;}return true;});
+  sales.sort((a,b)=>String(b.notifiedAt||b.createdAt||'').localeCompare(String(a.notifiedAt||a.createdAt||''))); return res.json(sales.map(decorateOrderAssignment));
+});
+app.post('/api/admin/orders/:id/notificar-venta', requireOrdersAccess, (req,res)=>{
+  const session=getSession(req), orders=readOrders(), index=orders.findIndex(o=>o.id===req.params.id); if(index<0)return res.status(404).json({error:'Pedido no encontrado.'}); const order=orders[index];
+  if(isSellerRole(session.role)&&order.assignedSellerId!==session.accountId)return res.status(403).json({error:'Este pedido no está asignado a tu usuario.'});
+  if(!['Enviado','Entregado'].includes(String(order.status||'')))return res.status(400).json({error:'Solo puedes notificar una venta cuando el pedido está Enviado o Entregado.'});
+  if(order.salesNotifiedAt||order.salesHistoryId)return res.status(409).json({error:'Esta venta ya fue notificada y está en Historial de ventas.'});
+  const sales=readSales(); if(sales.some(s=>String(s.orderId)===String(order.id)))return res.status(409).json({error:'Esta venta ya existe en Historial de ventas.'});
+  const sale=getSalesHistoryRecord(decorateOrderAssignment(order),req); sales.unshift(sale); try{writeSales(sales);}catch(e){return res.status(500).json({error:'No se pudo guardar la venta en Historial de ventas.'});}
+  order.salesNotifiedAt=sale.notifiedAt; order.salesHistoryId=sale.id; order.updatedAt=sale.notifiedAt; orders[index]=order; try{writeOrders(orders);}catch(e){writeSales(sales.filter(s=>s.id!==sale.id));return res.status(500).json({error:'No se pudo cerrar el pedido como venta.'});}
+  auditLog(req,'Venta notificada','Historial de ventas',{orderId:order.id,orderNumber:order.orderNumber,salesId:sale.id,status:order.status,total:order.total}); return res.status(201).json(decorateOrderAssignment(sale));
+});
+app.delete('/api/admin/historial-ventas/:id', requireAdmin, (req,res)=>{
+  const sales=readSales(), sale=sales.find(s=>s.id===req.params.id); if(!sale)return res.status(404).json({error:'Venta no encontrada en Historial de ventas.'}); const orders=readOrders(), index=orders.findIndex(o=>String(o.id)===String(sale.orderId));
+  if(index>=0){const order=orders[index];delete order.salesNotifiedAt;delete order.salesHistoryId;order.updatedAt=new Date().toISOString();orders[index]=order;writeOrders(orders);} writeSales(sales.filter(s=>s.id!==req.params.id)); auditLog(req,'Venta eliminada del historial','Historial de ventas',{salesId:sale.id,orderId:sale.orderId,orderNumber:sale.orderNumber,total:sale.total}); return res.status(204).end();
+});
+app.get('/api/admin/historial-ventas/:id/pdf', requireOrdersAccess, (req,res)=>{
+  const sale=readSales().find(s=>s.id===req.params.id); if(!sale)return res.status(404).json({error:'Venta no encontrada.'}); const session=getSession(req); if(isSellerRole(session.role)&&String(sale.assignedSellerId||'')!==String(session.accountId||''))return res.status(403).json({error:'Esta venta no está asignada a tu usuario.'}); const pdf=buildOrderPdf(decorateOrderAssignment(sale)); const safeName=String(sale.orderNumber||sale.id||'venta').replace(/[^a-zA-Z0-9_-]/g,'_'); res.setHeader('Content-Type','application/pdf');res.setHeader('Content-Disposition',`inline; filename="YHORS-VENTA-${safeName}.pdf"`);res.setHeader('Content-Length',pdf.length);res.setHeader('Cache-Control','no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');res.end(pdf);
+});
 
-  const sellers = users
-    .filter(user => isSellerRole(user.role))
-    .map(user => ({ id: user.id, name: user.name, username: user.username, active: user.active !== false }))
-    .sort((a, b) => a.name.localeCompare(b.name, 'es'));
-  const sellerMap = new Map(sellers.map(seller => [seller.id, seller]));
-  const rows = new Map(sellers.map(seller => [seller.id, { sellerId: seller.id, sellerName: seller.name, username: seller.username, active: seller.active, orderCount: 0, subtotal: 0, shipping: 0, total: 0 }]));
-  const unassigned = { sellerId: null, sellerName: 'Sin vendedor', username: '', active: true, orderCount: 0, subtotal: 0, shipping: 0, total: 0 };
-
-  const filteredOrders = orders.filter(order => {
-    const date = localDate(order.createdAt);
-    if (!date || (from && date < from) || (to && date > to)) return false;
-    const orderStatus = String(order.status || 'Pendiente');
-    if (statusFilter === 'active') return activeStatuses.has(orderStatus);
-    if (statusFilter !== 'all' && orderStatus !== statusFilter) return false;
-    return true;
-  });
-
-  for (const order of filteredOrders) {
-    const seller = sellerMap.get(order.assignedSellerId);
-    const row = seller ? rows.get(seller.id) : unassigned;
-    row.orderCount += 1;
-    row.subtotal += Number(order.subtotal || 0);
-    row.shipping += Number(order.shippingCost || order.delivery?.cost || 0);
-    row.total += Number(order.total || 0);
-  }
-
-  const round = value => Math.round(Number(value || 0) * 100) / 100;
-  const normalizedRows = [...rows.values()].map(row => ({ ...row, subtotal: round(row.subtotal), shipping: round(row.shipping), total: round(row.total) }));
-  if (unassigned.orderCount) normalizedRows.push({ ...unassigned, subtotal: round(unassigned.subtotal), shipping: round(unassigned.shipping), total: round(unassigned.total) });
-  const grandTotal = round(normalizedRows.reduce((sum, row) => sum + row.total, 0));
-  const grandSubtotal = round(normalizedRows.reduce((sum, row) => sum + row.subtotal, 0));
-  const grandShipping = round(normalizedRows.reduce((sum, row) => sum + row.shipping, 0));
-
-  return res.json({
-    rows: normalizedRows,
-    totals: { orderCount: filteredOrders.length, subtotal: grandSubtotal, shipping: grandShipping, total: grandTotal },
-    filters: { from, to, status: statusFilter },
-    statuses,
-    activeStatuses: [...activeStatuses]
-  });
+app.get('/api/admin/ventas-generales', requireOrdersAccess, (req,res)=>{
+  const session=getSession(req); let sales=readSales(); if(isSellerRole(session.role))sales=sales.filter(s=>String(s.assignedSellerId||'')===String(session.accountId||''));
+  const from=/^\d{4}-\d{2}-\d{2}$/.test(String(req.query.from||''))?String(req.query.from):''; const to=/^\d{4}-\d{2}-\d{2}$/.test(String(req.query.to||''))?String(req.query.to):''; const status=String(req.query.status||'all'); const localDate=v=>{const d=new Date(v);return Number.isNaN(d.getTime())?'':d.toLocaleDateString('en-CA',{timeZone:'America/Guayaquil'});};
+  sales=sales.filter(s=>{const date=localDate(s.notifiedAt||s.createdAt);return date&&(!from||date>=from)&&(!to||date<=to)&&(status==='all'||String(s.status||'')===status);});
+  const users=readUsers(), sellers=users.filter(u=>isSellerRole(u.role)).map(u=>({id:u.id,name:u.name,username:u.username,active:u.active!==false})); const rows=new Map(sellers.map(u=>[String(u.id),{sellerId:u.id,sellerName:u.name,username:u.username,active:u.active,orderCount:0,subtotal:0,shipping:0,total:0}])); const unassigned={sellerId:null,sellerName:'Sin vendedor',username:'',active:true,orderCount:0,subtotal:0,shipping:0,total:0};
+  for(const s of sales){const row=rows.get(String(s.assignedSellerId||''))||unassigned;row.orderCount++;row.subtotal+=Number(s.subtotal||0);row.shipping+=Number(s.shippingCost||s.delivery?.cost||0);row.total+=Number(s.total||0);} const round=v=>Math.round(Number(v||0)*100)/100; const normalized=[...rows.values()].map(r=>({...r,subtotal:round(r.subtotal),shipping:round(r.shipping),total:round(r.total)}));if(unassigned.orderCount)normalized.push({...unassigned,subtotal:round(unassigned.subtotal),shipping:round(unassigned.shipping),total:round(unassigned.total)}); return res.json({rows:normalized,totals:{orderCount:sales.length,subtotal:round(normalized.reduce((a,r)=>a+r.subtotal,0)),shipping:round(normalized.reduce((a,r)=>a+r.shipping,0)),total:round(normalized.reduce((a,r)=>a+r.total,0))},filters:{from,to,status},statuses:['Enviado','Entregado']});
 });
 
 app.get('/api/admin/orders/:id/pdf', requireOrdersAccess, (req, res) => {
@@ -4149,7 +4142,7 @@ app.get('/api/admin/orders/:id/pdf', requireOrdersAccess, (req, res) => {
 
 app.get('/api/admin/orders', requireOrdersAccess, (req, res) => {
   const session = getSession(req);
-  let orders = readOrders();
+  let orders = readOrders().filter(order => !order.salesNotifiedAt && !order.salesHistoryId);
 // Los vendedores ven sus pedidos asignados y también los pedidos que aún no tienen vendedor,
   // para que puedan detectar y atender compras realizadas por la web que quedaron sin asignar.
   if (isSellerRole(session.role)) {
@@ -4310,6 +4303,7 @@ app.put('/api/admin/orders/:id', requireOrdersAccess, (req, res) => {
   const index = orders.findIndex(order => order.id === req.params.id);
   if (index < 0) return res.status(404).json({ error: 'Pedido no encontrado.' });
   const currentOrder = orders[index];
+  if (currentOrder.salesNotifiedAt || currentOrder.salesHistoryId) return res.status(409).json({ error: 'Este pedido ya está en Historial de ventas. Primero elimina la venta desde Historial de ventas para volver a editarlo.' });
   if (isSellerRole(session.role) && currentOrder.assignedSellerId !== session.accountId) {
     return res.status(403).json({ error: 'Este pedido no está asignado a tu usuario.' });
   }
@@ -4409,6 +4403,7 @@ app.delete('/api/admin/orders/:id', requireStoreManagerOrAdmin, (req, res) => {
   const orders = readOrders();
   const order = orders.find(item => item.id === req.params.id);
   if (!order) return res.status(404).json({ error: 'Pedido no encontrado.' });
+  if (order.salesNotifiedAt || order.salesHistoryId) return res.status(409).json({ error: 'Este pedido está en Historial de ventas. Elimínalo primero desde Historial de ventas.' });
 
   let stockMovements = [];
   try {
