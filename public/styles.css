@@ -3701,3 +3701,20 @@ body.generate-modal-open{overflow:hidden}
 .series-config-actions-buttons{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .series-config-actions-buttons .button{min-width:150px}
 @media(max-width:700px){.series-config-hero{padding:18px}.series-config-hero-mark{display:none}.series-config-actions-top{top:6px;align-items:flex-start;flex-direction:column}.series-config-actions-buttons{width:100%}.series-config-actions-buttons .button{flex:1;min-width:0}}
+
+/* FASE 2.6.2 · Editor de pedidos con series/IMEI */
+.order-edit-identifiers-panel{margin-top:2px}
+.device-id-placeholder{font-size:.68rem;color:var(--muted,#777);padding:8px 4px;align-self:center}
+.order-edit-device-row .device-id-input{background:#fff}
+.order-edit-device-row .device-id-input[value="SN"]{font-weight:800;color:#8b6d34}
+
+/* Gestor de series · filtro de estado y presentación */
+.series-config-toolbar select{min-width:150px;border:1px solid var(--line,#ded8cc);background:#fff;border-radius:9px;padding:11px 13px;font:inherit}
+.series-config-toolbar select:focus{border-color:#b38a3b;outline:none;box-shadow:0 0 0 3px rgba(179,138,59,.12)}
+.series-config-hero{position:relative;overflow:hidden}
+.series-config-hero::after{content:"";position:absolute;width:180px;height:180px;border-radius:50%;right:-55px;top:-85px;background:rgba(184,138,59,.08);pointer-events:none}
+.series-config-hero-mark{position:relative;z-index:1}
+.series-config-row{padding:16px 14px;border:1px solid transparent;border-bottom-color:#ece7dd;border-radius:10px}
+.series-config-row:hover{background:#fcfaf6;border-color:#eee7da}
+.series-config-row>div strong{font-size:.96rem}
+@media(max-width:700px){.series-config-toolbar select{width:100%;min-width:0}.device-id-placeholder{display:none}}

@@ -1410,7 +1410,11 @@ async function renderAdminSeriesImeis() {
         <div class="series-config-save-state"><span class="series-config-dot"></span><span id="seriesConfigSaveState">Sin cambios pendientes</span></div>
         <div class="series-config-actions-buttons"><button type="button" class="button secondary" id="seriesConfigReset">Descartar cambios</button><button type="button" class="button primary" id="seriesConfigSave"${isAdmin ? '' : ' disabled'}>Guardar cambios</button></div>
       </div>
-      <div class="series-config-toolbar"><input id="seriesConfigSearch" type="search" placeholder="Buscar producto, SKU, marca o tipo…" autocomplete="off"><button type="button" class="button secondary small" id="seriesConfigClear">Limpiar</button></div>
+      <div class="series-config-toolbar">
+        <input id="seriesConfigSearch" type="search" placeholder="Buscar producto, SKU, marca o tipo…" autocomplete="off">
+        <select id="seriesConfigStatus" aria-label="Estado de configuración"><option value="">Todos</option><option value="active">Activo</option><option value="inactive">Desactivado</option></select>
+        <button type="button" class="button secondary small" id="seriesConfigClear">Limpiar</button>
+      </div>
       <div class="series-config-note">Los productos TEC existentes conservan la configuración actual. Si un producto está en <strong>NO SOLICITAR</strong>, Generar orden no pedirá serie/IMEI para ese producto.</div>
       <div id="seriesConfigList"></div>
       ${!isAdmin ? '<div class="message">Solo el Administrador puede modificar qué productos solicitan serie/IMEI.</div>' : ''}
@@ -1433,10 +1437,16 @@ async function renderAdminSeriesImeis() {
   const configList = document.querySelector('#seriesConfigList');
   const renderConfig = () => {
     const q = String(document.querySelector('#seriesConfigSearch')?.value || '').trim().toLocaleLowerCase('es-EC');
+    const filterStatus = document.querySelector('#seriesConfigStatus')?.value || '';
     const pendingChanges = configState.filter(item => Boolean(item.requiresDeviceIdentifier) !== Boolean(item.original)).length;
     const state = document.querySelector('#seriesConfigSaveState');
     if (state) state.textContent = pendingChanges ? `${pendingChanges} cambio${pendingChanges === 1 ? '' : 's'} pendiente${pendingChanges === 1 ? '' : 's'}` : 'Sin cambios pendientes';
-    const filtered = configState.filter(item => `${item.name} ${item.sku} ${item.productType}`.toLocaleLowerCase('es-EC').includes(q));
+    const filtered = configState.filter(item => {
+      const hay = `${item.name} ${item.sku} ${item.productType}`.toLocaleLowerCase('es-EC');
+      const matchesSearch = !q || hay.includes(q);
+      const matchesStatus = !filterStatus || (filterStatus === 'active' ? Boolean(item.requiresDeviceIdentifier) : !Boolean(item.requiresDeviceIdentifier));
+      return matchesSearch && matchesStatus;
+    });
     configList.innerHTML = filtered.length ? filtered.map(item => `<div class="series-config-row" data-series-config-search="${escapeHTML(`${item.name} ${item.sku} ${item.productType}`)}"><div><strong>${escapeHTML(item.name)}</strong><small>SKU: ${escapeHTML(item.sku || '—')} · ${escapeHTML(item.productType || 'Tecnología')} · Stock ${Number(item.stock || 0)}</small></div><label class="series-switch"><input type="checkbox" data-series-toggle="${escapeHTML(item.id)}" ${item.requiresDeviceIdentifier ? 'checked' : ''}${isAdmin ? '' : ' disabled'}><span></span><b>${item.requiresDeviceIdentifier ? 'SOLICITAR' : 'NO SOLICITAR'}</b></label></div>`).join('') : '<div class="series-empty">No encontramos productos TEC con esa búsqueda.</div>';
     configList.querySelectorAll('[data-series-toggle]').forEach(toggle => toggle.addEventListener('change', () => {
       const item = configState.find(entry => entry.id === toggle.dataset.seriesToggle); if (!item) return;
@@ -1448,7 +1458,8 @@ async function renderAdminSeriesImeis() {
   };
   renderConfig();
   document.querySelector('#seriesConfigSearch')?.addEventListener('input', renderConfig);
-  document.querySelector('#seriesConfigClear')?.addEventListener('click', () => { document.querySelector('#seriesConfigSearch').value=''; renderConfig(); });
+  document.querySelector('#seriesConfigStatus')?.addEventListener('change', renderConfig);
+  document.querySelector('#seriesConfigClear')?.addEventListener('click', () => { document.querySelector('#seriesConfigSearch').value=''; document.querySelector('#seriesConfigStatus').value=''; renderConfig(); });
   document.querySelector('#seriesConfigReset')?.addEventListener('click', () => { configState = config.map(item => ({ ...item, original: Boolean(item.requiresDeviceIdentifier) })); renderConfig(); });
   document.querySelector('#seriesConfigSave')?.addEventListener('click', async () => {
     if (!isAdmin) return;
@@ -2170,13 +2181,47 @@ async function renderAdminOrders() {
     quantity: Math.max(1, Number(item.quantity || 1)),
     rentalDays: Math.max(1, Number(item.rentalDays || 1)),
     unitPrice: Number(item.unitPrice || 0),
-    subtotal: Number(item.subtotal || 0)
+    subtotal: Number(item.subtotal || 0),
+    deviceIdentifiers: Array.isArray(item.deviceIdentifiers)
+      ? item.deviceIdentifiers.map(entry => ({
+          unit: Number(entry.unit || 1),
+          type: entry.type === 'imei' ? 'imei' : 'serial',
+          primary: String(entry.primary || ''),
+          secondary: entry.secondary ? String(entry.secondary) : null
+        }))
+      : []
   }));
   const getDraft = order => {
     if (!draftItems.has(order.id)) draftItems.set(order.id, cloneOrderItems(order.items));
     return draftItems.get(order.id);
   };
   const productById = id => orderProducts.find(p => String(p.id) === String(id));
+  const isEditorTechProduct = product => String(product?.category || '').toLowerCase() === 'tech';
+  const isEditorImeiProduct = product => {
+    const type = String(product?.productType || '').toLowerCase();
+    const name = String(product?.name || '').toLowerCase();
+    return type.includes('celular') || type.includes('smartphone') || type.includes('mobile') || /\biphone\b|\bandroid\b|\btelefono\b|\bteléfono\b/.test(name);
+  };
+  const ensureDraftIdentifiers = items => {
+    (items || []).forEach(item => {
+      const product = productById(item.productId) || item;
+      const needs = item.purchaseMode !== 'rental' && isEditorTechProduct(product) && product.requiresDeviceIdentifier !== false;
+      if (!needs) return;
+      const qty = Math.max(1, Number(item.quantity || 1));
+      const existing = Array.isArray(item.deviceIdentifiers) ? item.deviceIdentifiers : [];
+      const next = [];
+      for (let unit = 1; unit <= qty; unit += 1) {
+        const current = existing.find(entry => Number(entry.unit) === unit) || {};
+        if (isEditorImeiProduct(product)) {
+          if (current.primary || current.secondary) next.push({ unit, type:'imei', primary:String(current.primary || ''), secondary:current.secondary ? String(current.secondary) : null });
+        } else {
+          next.push({ unit, type:'serial', primary:String(current.primary || (unit === 1 ? 'SN' : `SN-${unit}`)), secondary:null });
+        }
+      }
+      item.deviceIdentifiers = next;
+    });
+    return items;
+  };
   const orderEditorMarkup = (order, items) => {
     const rows = items.length ? items.map((item, index) => {
       const product = productById(item.productId) || item;
@@ -2184,12 +2229,26 @@ async function renderAdminOrders() {
       const unit = Number(rental ? (product?.rentalPrice ?? item.unitPrice ?? 0) : (product?.salePrice ?? product?.price ?? item.unitPrice ?? 0));
       const days = Math.max(1, Number(item.rentalDays || 1));
       const total = unit * Number(item.quantity || 1) * (rental ? days : 1);
-      return `<div class="generate-product-row order-edit-product-row" data-order-draft-index="${index}">
+      const needsIdentifier = !rental && isEditorTechProduct(product) && product.requiresDeviceIdentifier !== false;
+      const imei = needsIdentifier && isEditorImeiProduct(product);
+      const identifiers = needsIdentifier ? (Array.isArray(item.deviceIdentifiers) ? item.deviceIdentifiers : []) : [];
+      const identifierRows = needsIdentifier ? Array.from({length:Number(item.quantity || 1)}, (_,unitIndex) => {
+        const unit = unitIndex + 1;
+        const current = identifiers.find(entry => Number(entry.unit) === unit) || {};
+        const primary = current.primary || (imei ? '' : (unit === 1 ? 'SN' : `SN-${unit}`));
+        return `<div class="device-id-row order-edit-device-row">
+          <span class="device-id-unit">Unidad ${unit}</span>
+          <input class="device-id-input" data-order-device-primary="${index}" data-unit="${unit}" value="${escapeHTML(primary)}" maxlength="${imei ? 16 : 50}" placeholder="${imei ? 'IMEI 1' : 'Número de serie'}" inputmode="${imei ? 'numeric' : 'text'}">
+          ${imei ? `<input class="device-id-input" data-order-device-secondary="${index}" data-unit="${unit}" value="${escapeHTML(current.secondary || '')}" maxlength="16" placeholder="IMEI 2 (opcional)" inputmode="numeric">` : '<span class="device-id-placeholder">Se puede reemplazar después</span>'}
+        </div>`;
+      }).join('') : '';
+      return `<div class="generate-product-row order-edit-product-row${needsIdentifier ? ' has-device-identifiers' : ''}" data-order-draft-index="${index}">
         <div class="generate-product-info"><img src="${escapeHTML(productImages(product || item)[0])}" data-fallback alt=""><div><strong>${escapeHTML(product?.name || item.name || 'Producto')}</strong><small>SKU: ${escapeHTML(product?.sku || item.sku || '—')} · ${rental ? `Alquiler · ${days} día${days===1?'':'s'}` : 'Compra'}</small></div></div>
         <div class="generate-qty"><button type="button" data-order-draft-qty="${index}" data-change="-1">−</button><strong>${escapeHTML(item.quantity)}</strong><button type="button" data-order-draft-qty="${index}" data-change="1">+</button>${rental ? `<select class="generate-rental-days" data-order-draft-days="${index}" aria-label="Días de alquiler">${Array.from({length:10},(_,i)=>i+1).map(day=>`<option value="${day}" ${day===days?'selected':''}>${day} día${day===1?'':'s'}</option>`).join('')}</select>` : ''}</div>
         <strong class="generate-unit-price">${money(unit)}${rental ? ' / día' : ''}</strong>
         <strong class="generate-line-total">${money(total)}</strong>
         <button type="button" class="order-edit-remove" data-order-draft-remove="${index}" aria-label="Quitar producto">Quitar</button>
+        ${needsIdentifier ? `<div class="device-identifiers-panel order-edit-identifiers-panel"><div class="device-identifiers-head"><div><strong>${imei ? 'IMEI del equipo' : 'Serie del equipo'}</strong><small>${imei ? 'Ingresa el IMEI 1 y, si aplica, el IMEI 2. Si aún no lo tienes, podrás completarlo luego.' : 'Se coloca SN como serie temporal. Puedes reemplazarla después.'}</small></div><span>${imei ? 'CONTROL IMEI' : 'CONTROL DE SERIE'}</span></div><div class="device-identifiers-list">${identifierRows}</div></div>` : ''}
       </div>`;
     }).join('') : `<div class="generate-empty-state"><span>+</span><strong>Aún no hay productos</strong><small>Agrega productos desde el catálogo.</small></div>`;
     return `<section class="generate-card generate-products-card order-edit-products-card"><div class="generate-card-head"><div><span class="generate-card-kicker">03 · Productos</span><h3>Detalle de la orden</h3></div><button type="button" class="button primary small" data-order-open-picker="${escapeHTML(order.id)}">+ Agregar productos</button></div><div class="generate-products-table-head"><span>Producto</span><span>Cant.</span><span>Precio</span><span>Total</span><span></span></div><div class="order-edit-lines">${rows}</div><div class="order-edit-products-note">Los cambios quedan pendientes hasta pulsar <strong>Guardar cambios</strong>.</div></section>`;
@@ -2323,7 +2382,9 @@ async function renderAdminOrders() {
       const order = orders.find(o => o.id === id);
       const editor = list.querySelector(`[data-order-items-editor="${id}"]`);
       if (!order || !editor) return;
-      editor.innerHTML = orderEditorMarkup(order, getDraft(order));
+      const draft = getDraft(order);
+      ensureDraftIdentifiers(draft);
+      editor.innerHTML = orderEditorMarkup(order, draft);
       editor.hidden = false;
       wireImageFallback(editor);
     };
@@ -2381,7 +2442,7 @@ async function renderAdminOrders() {
         const open=event.target.closest('[data-order-open-picker]');
         if(open){ openOrderProductPicker(open.dataset.orderOpenPicker); return; }
         const qty=event.target.closest('[data-order-draft-qty]');
-        if(qty){ const id=qty.closest('[data-order-items-editor]')?.dataset.orderItemsEditor; const order=orders.find(o=>o.id===id); if(!order)return; const items=getDraft(order); const i=Number(qty.dataset.orderDraftQty); if(!items[i])return; items[i].quantity=Math.max(1,Math.min(99,Number(items[i].quantity||1)+Number(qty.dataset.change||0))); syncOrderEditor(id); return; }
+        if(qty){ const id=qty.closest('[data-order-items-editor]')?.dataset.orderItemsEditor; const order=orders.find(o=>o.id===id); if(!order)return; const items=getDraft(order); const i=Number(qty.dataset.orderDraftQty); if(!items[i])return; items[i].quantity=Math.max(1,Math.min(99,Number(items[i].quantity||1)+Number(qty.dataset.change||0))); ensureDraftIdentifiers(items); syncOrderEditor(id); return; }
         const rem=event.target.closest('[data-order-draft-remove]');
         if(rem){ const id=rem.closest('[data-order-items-editor]')?.dataset.orderItemsEditor; const order=orders.find(o=>o.id===id); if(!order)return; const items=getDraft(order); const i=Number(rem.dataset.orderDraftRemove); if(items.length<=1){alert('Un pedido debe conservar al menos un producto.');return;} items.splice(i,1); syncOrderEditor(id); return; }
         // Los días de alquiler se manejan en `change`, no en `click`.
@@ -2391,6 +2452,31 @@ async function renderAdminOrders() {
 
       // Cambiar los días no debe reconstruir todo el editor: así el <select>
       // conserva su comportamiento nativo y el menú permanece abierto normalmente.
+      list.addEventListener('input', event => {
+        const primary = event.target.closest('[data-order-device-primary]');
+        const secondary = event.target.closest('[data-order-device-secondary]');
+        if (!primary && !secondary) return;
+        const input = primary || secondary;
+        const editor = input.closest('[data-order-items-editor]');
+        if (!editor) return;
+        const id = editor.dataset.orderItemsEditor;
+        const order = orders.find(o => o.id === id);
+        if (!order) return;
+        const items = getDraft(order);
+        const index = Number(input.dataset.orderDevicePrimary ?? input.dataset.orderDeviceSecondary);
+        const unit = Number(input.dataset.unit || 1);
+        const item = items[index];
+        if (!item) return;
+        const product = productById(item.productId) || item;
+        if (!Array.isArray(item.deviceIdentifiers)) item.deviceIdentifiers = [];
+        let entry = item.deviceIdentifiers.find(row => Number(row.unit) === unit);
+        if (!entry) {
+          entry = { unit, type: isEditorImeiProduct(product) ? 'imei' : 'serial', primary:'', secondary:null };
+          item.deviceIdentifiers.push(entry);
+        }
+        if (primary) entry.primary = input.value.trim();
+        if (secondary) entry.secondary = input.value.trim() || null;
+      });
       list.addEventListener('change', event => {
       const select = event.target.closest('[data-order-draft-days]');
       if (!select) return;
@@ -2583,10 +2669,11 @@ async function renderAdminOrders() {
         if (statusChanged && statusSelect) payload.status = nextStatus;
         if (editingOrders.has(id) && draftItems.has(id)) {
           const draft = draftItems.get(id) || [];
+          ensureDraftIdentifiers(draft);
           if (!draft.length) { button.disabled=false; alert('El pedido debe tener al menos un producto.'); return; }
           if (draft.some(item => !item.productId || !Number.isInteger(Number(item.quantity)) || Number(item.quantity)<1 || Number(item.quantity)>99)) { button.disabled=false; alert('Revisa las cantidades de los productos.'); return; }
           if (draft.some(item => item.purchaseMode==='rental' && (!Number.isInteger(Number(item.rentalDays)) || Number(item.rentalDays)<1 || Number(item.rentalDays)>10))) { button.disabled=false; alert('Los alquileres deben tener entre 1 y 10 días.'); return; }
-          payload.items = draft.map(item => ({ productId:item.productId, purchaseMode:item.purchaseMode, quantity:Number(item.quantity), rentalDays:item.purchaseMode==='rental'?Number(item.rentalDays||1):null }));
+          payload.items = draft.map(item => ({ productId:item.productId, purchaseMode:item.purchaseMode, quantity:Number(item.quantity), rentalDays:item.purchaseMode==='rental'?Number(item.rentalDays||1):null, deviceIdentifiers:Array.isArray(item.deviceIdentifiers) ? item.deviceIdentifiers : [] }));
         }
         const updated=await request(`/api/admin/orders/${id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
         orders=orders.map(o=>o.id===updated.id?updated:o);

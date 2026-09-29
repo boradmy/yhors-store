@@ -4192,7 +4192,24 @@ function buildEditedOrderItems(requestedItems, products) {
     const durationMultiplier = purchaseMode === 'rental' ? rentalDays : 1;
     let deviceIdentifiers = [];
     if (purchaseMode === 'purchase' && isTechProduct(product) && product.requiresDeviceIdentifier !== false) {
-      deviceIdentifiers = normalizeDeviceIdentifiers(requested?.deviceIdentifiers, product, quantity, { required: true });
+      // Para productos TEC que requieren identificación, una orden puede guardarse
+      // con un identificador temporal "SN" y luego reemplazarse desde la edición
+      // del pedido o desde SERIES/IMEIS.
+      let requestedIdentifiers = Array.isArray(requested?.deviceIdentifiers)
+        ? requested.deviceIdentifiers.map(entry => ({ ...entry }))
+        : [];
+      if (!isImeiProduct(product)) {
+        for (let unit = 1; unit <= quantity; unit += 1) {
+          if (!requestedIdentifiers[unit - 1]?.primary) {
+            requestedIdentifiers[unit - 1] = {
+              ...(requestedIdentifiers[unit - 1] || {}),
+              primary: unit === 1 ? 'SN' : `SN-${unit}`,
+              secondary: requestedIdentifiers[unit - 1]?.secondary || null
+            };
+          }
+        }
+      }
+      deviceIdentifiers = normalizeDeviceIdentifiers(requestedIdentifiers, product, quantity, { required: true });
     }
 
     items.push({
@@ -4224,7 +4241,9 @@ function buildEditedOrderItems(requestedItems, products) {
     }
   }
 
-  return [...merged.values()];
+  const result = [...merged.values()];
+  validateDeviceIdentifiersAcrossOrder(result);
+  return result;
 }
 
 function applyOrderItemStockDelta(currentOrder, nextItems) {
