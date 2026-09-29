@@ -3732,3 +3732,26 @@ body.generate-modal-open{overflow:hidden}
 .history-note-editor:focus{border-color:#b38a3b;box-shadow:0 0 0 3px rgba(179,138,59,.12)}
 .history-note-actions{display:flex;justify-content:flex-end;margin-top:7px}
 @media(max-width:800px){.history-note-details{min-width:180px}.history-actions{align-items:flex-start;flex-direction:column}.history-actions .button{width:100%}.history-note-editor{min-width:0}}
+
+/* FASE 2.7.4 · Alineación de acciones y nota interna en Historial de ventas */
+.sales-table th,
+.sales-table td{vertical-align:middle}
+.sales-table th:last-child{min-width:250px}
+.history-row-tools{display:flex;align-items:center;justify-content:flex-start;gap:10px;min-height:42px;flex-wrap:nowrap}
+.history-actions{display:flex;align-items:center;justify-content:flex-start;gap:6px;flex:0 0 auto;margin:0}
+.history-actions .button{white-space:nowrap}
+.history-note-details{margin:0;min-width:0;flex:0 1 auto}
+.history-note-details summary{white-space:nowrap}
+.history-note-content{position:relative;z-index:2;min-width:280px}
+@media(max-width:1050px){
+  .history-row-tools{flex-wrap:wrap;align-items:center}
+  .sales-table th:last-child{min-width:220px}
+}
+@media(max-width:800px){
+  .history-row-tools{display:flex;flex-direction:column;align-items:stretch;gap:7px}
+  .history-actions{flex-direction:row;align-items:center;width:100%}
+  .history-actions .button{width:auto}
+  .history-note-details{width:100%}
+  .history-note-details summary{justify-content:center;width:100%;box-sizing:border-box}
+  .history-note-content{min-width:0}
+}
