@@ -136,6 +136,12 @@ function auditOrderSnapshot(order) {
       purchaseMode: item.purchaseMode,
       quantity: Number(item.quantity || 0),
       rentalDays: item.rentalDays || null,
+      deviceIdentifiers: Array.isArray(item.deviceIdentifiers) ? item.deviceIdentifiers.map(entry => ({
+        unit: Number(entry.unit || 0),
+        type: entry.type || null,
+        primary: entry.primary || '',
+        secondary: entry.secondary || null
+      })) : [],
       unitPrice: Number(item.unitPrice || 0),
       subtotal: Number(item.subtotal || 0)
     }))
@@ -902,6 +908,8 @@ function buildOrderPdf(order) {
     const mode = item.purchaseMode === 'rental'
       ? `Alquiler - ${Math.max(1, Number(item.rentalDays || 1))} dia(s)`
       : 'Compra';
+    const identifierText = (item.deviceIdentifiers || []).map(entry => `${entry.type === 'imei' ? 'IMEI' : 'Serie'} ${entry.unit}: ${entry.primary}${entry.secondary ? ` / ${entry.secondary}` : ''}`).join(' · ');
+    const descriptionText = `${name}${mode !== 'Compra' ? ` (${mode})` : ''}${identifierText ? ` | ${identifierText}` : ''}`;
     return {
       index: index + 1,
       sku,
@@ -910,7 +918,7 @@ function buildOrderPdf(order) {
       price,
       lineTotal,
       mode,
-      descLines: wrap(`${name}${mode !== 'Compra' ? ` (${mode})` : ''}`, 44)
+      descLines: wrap(descriptionText, 44)
     };
   });
 
@@ -2352,7 +2360,68 @@ function nextOrderNumber(orders) {
   return `YH-${String(max + 1).padStart(4, '0')}`;
 }
 
-function validateOrder(input) {
+function isTechProduct(product = {}) {
+  return String(product.category || '').toLowerCase() === 'tech';
+}
+
+function isImeiProduct(product = {}) {
+  const type = String(product.productType || '').toLowerCase();
+  const name = String(product.name || '').toLowerCase();
+  return type.includes('celular') || type.includes('smartphone') || type.includes('mobile') || /\biphone\b|\bandroid\b|\btelefono\b|\bteléfono\b/.test(name);
+}
+
+function normalizeDeviceIdentifiers(requested, product, quantity, { required = false } = {}) {
+  if (!isTechProduct(product)) return [];
+  const source = Array.isArray(requested) ? requested : [];
+  const identifiers = [];
+  const imeiProduct = isImeiProduct(product);
+
+  for (let index = 0; index < quantity; index += 1) {
+    const raw = source[index] || {};
+    const primary = cleanText(raw.primary ?? raw.imei ?? raw.serial, 50);
+    const secondary = cleanText(raw.secondary ?? raw.imei2, 50);
+
+    if (required && !primary) {
+      throw new Error(`Registra ${imeiProduct ? `el IMEI 1` : `el número de serie`} de la unidad ${index + 1} de “${product.name}”.`);
+    }
+    if (primary) {
+      if (imeiProduct && !/^\d{14,16}$/.test(primary)) {
+        throw new Error(`El IMEI 1 de la unidad ${index + 1} de “${product.name}” debe contener entre 14 y 16 dígitos.`);
+      }
+      if (!imeiProduct && !/^[A-Za-z0-9._\-/ ]{3,50}$/.test(primary)) {
+        throw new Error(`El número de serie de la unidad ${index + 1} de “${product.name}” no tiene un formato válido.`);
+      }
+    }
+    if (secondary) {
+      if (!imeiProduct || !/^\d{14,16}$/.test(secondary)) {
+        throw new Error(`El IMEI 2 de la unidad ${index + 1} de “${product.name}” debe contener entre 14 y 16 dígitos.`);
+      }
+    }
+    if (primary || secondary) identifiers.push({ unit: index + 1, type: imeiProduct ? 'imei' : 'serial', primary, secondary: secondary || null });
+  }
+
+  if (source.length > quantity) throw new Error(`La identificación de “${product.name}” no puede superar la cantidad solicitada.`);
+  return identifiers;
+}
+
+function validateDeviceIdentifiersAcrossOrder(items) {
+  const seen = new Map();
+  for (const item of items) {
+    for (const entry of Array.isArray(item.deviceIdentifiers) ? item.deviceIdentifiers : []) {
+      for (const value of [entry.primary, entry.secondary]) {
+        const normalized = String(value || '').trim().toUpperCase();
+        if (!normalized) continue;
+        if (seen.has(normalized)) {
+          throw new Error(`La identificación “${value}” está repetida dentro de esta orden (${seen.get(normalized)}).`);
+        }
+        seen.set(normalized, item.name);
+      }
+    }
+  }
+}
+
+function validateOrder(input, options = {}) {
+  const requireDeviceIdentifiers = options.requireDeviceIdentifiers === true;
   const customer = input?.customer || {};
   const name = cleanText(customer.name, 100);
   const phone = cleanText(customer.phone, 40);
@@ -2408,6 +2477,15 @@ function validateOrder(input) {
     }
 
     const durationMultiplier = purchaseMode === 'rental' ? rentalDays : 1;
+    let deviceIdentifiers = [];
+    if (purchaseMode === 'purchase' && isTechProduct(product)) {
+      try {
+        deviceIdentifiers = normalizeDeviceIdentifiers(requested.deviceIdentifiers, product, quantity, { required: requireDeviceIdentifiers });
+      } catch (error) {
+        return { error: error.message || `No se pudo validar la identificación de “${product.name}”.` };
+      }
+    }
+
     items.push({
       productId: product.id,
       sku: product.sku || '',
@@ -2416,6 +2494,7 @@ function validateOrder(input) {
       purchaseMode,
       rentalDays,
       quantity,
+      deviceIdentifiers,
       unitPrice: Math.round(price * 100) / 100,
       purchaseCost: purchaseMode === 'purchase' ? Math.round(Math.max(0, Number(product.purchasePrice) || 0) * 100) / 100 : 0,
       subtotal: Math.round(price * quantity * durationMultiplier * 100) / 100
@@ -2432,6 +2511,8 @@ function validateOrder(input) {
       };
     }
   }
+
+  try { validateDeviceIdentifiersAcrossOrder(items); } catch (error) { return { error: error.message }; }
 
   const subtotal = Math.round(items.reduce((sum, item) => sum + item.subtotal, 0) * 100) / 100;
   const shippingCost = shippingCosts[deliveryMethod];
@@ -2581,7 +2662,8 @@ async function sendOrderConfirmationEmail(order) {
 
   const itemsHtml = (order.items || []).map(item => {
     const rentalText = item.purchaseMode === 'rental' ? ` · Alquiler · ${Number(item.rentalDays || 1)} día${Number(item.rentalDays || 1) === 1 ? '' : 's'} · $${Number(item.unitPrice || 0).toFixed(2)}/día` : '';
-    return `<tr><td style="padding:8px 0">${escapeEmailHtml(item.quantity)}× ${escapeEmailHtml(item.name)}<br><small>SKU: ${escapeEmailHtml(item.sku || '—')}${escapeEmailHtml(rentalText)}</small></td><td style="padding:8px 0;text-align:right">$${Number(item.subtotal || 0).toFixed(2)}</td></tr>`;
+    const identifiers = (item.deviceIdentifiers || []).map(entry => `${entry.type === 'imei' ? 'IMEI' : 'Serie'} ${entry.unit}: ${entry.primary}${entry.secondary ? ` / ${entry.secondary}` : ''}`).join(' · ');
+    return `<tr><td style="padding:8px 0">${escapeEmailHtml(item.quantity)}× ${escapeEmailHtml(item.name)}<br><small>SKU: ${escapeEmailHtml(item.sku || '—')}${escapeEmailHtml(rentalText)}${identifiers ? `<br>Identificación: ${escapeEmailHtml(identifiers)}` : ''}</small></td><td style="padding:8px 0;text-align:right">$${Number(item.subtotal || 0).toFixed(2)}</td></tr>`;
   }).join('');
   const mapsHtml = order.customer.mapsUrl ? `<p><strong>Ubicación:</strong> <a href="${escapeEmailHtml(order.customer.mapsUrl)}">Abrir en Google Maps</a></p>` : '';
   const html = `<div style="font-family:Arial,sans-serif;max-width:620px;margin:auto;color:#222">
@@ -3133,7 +3215,7 @@ app.post('/api/orders', async (req, res) => {
 
 app.post('/api/admin/generar-orden', requireOrdersAccess, async (req, res) => {
   const session = getSession(req);
-  const result = validateOrder(req.body || {});
+  const result = validateOrder(req.body || {}, { requireDeviceIdentifiers: true });
   if (result.error) return res.status(400).json(result);
 
   const hasSellerSelection = Object.prototype.hasOwnProperty.call(req.body || {}, 'assignedSellerId');
@@ -4097,6 +4179,11 @@ function buildEditedOrderItems(requestedItems, products) {
     }
 
     const durationMultiplier = purchaseMode === 'rental' ? rentalDays : 1;
+    let deviceIdentifiers = [];
+    if (purchaseMode === 'purchase' && isTechProduct(product)) {
+      deviceIdentifiers = normalizeDeviceIdentifiers(requested?.deviceIdentifiers, product, quantity, { required: false });
+    }
+
     items.push({
       productId: product.id,
       sku: product.sku || '',
@@ -4105,6 +4192,7 @@ function buildEditedOrderItems(requestedItems, products) {
       purchaseMode,
       rentalDays,
       quantity,
+      deviceIdentifiers,
       unitPrice: Math.round(price * 100) / 100,
       purchaseCost: purchaseMode === 'purchase' ? Math.round(Math.max(0, Number(product.purchasePrice) || 0) * 100) / 100 : 0,
       subtotal: Math.round(price * quantity * durationMultiplier * 100) / 100
