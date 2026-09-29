@@ -3687,3 +3687,17 @@ body.generate-modal-open{overflow:hidden}
   .series-registered-toolbar input[type="search"],.series-registered-toolbar .button{grid-column:1/-1;width:100%;box-sizing:border-box}
   .series-date-filter input,.series-registered-toolbar select{width:100%;box-sizing:border-box;min-width:0}
 }
+
+/* SERIES/IMEIS · Gestor de series · panel superior y acciones fijas */
+.series-config-panel{overflow:visible}
+.series-config-hero{display:flex;align-items:center;justify-content:space-between;gap:24px;padding:24px 24px 20px;border:1px solid var(--line,#ded8cc);border-radius:16px;background:linear-gradient(135deg,#fff 0%,#faf8f3 100%);box-shadow:0 8px 24px rgba(24,20,14,.05);margin-bottom:14px}
+.series-config-hero-copy{min-width:0}
+.series-config-hero-copy h2{margin:4px 0 7px;font-size:2rem;line-height:1.05}
+.series-config-hero-copy p{margin:0;max-width:720px;color:var(--muted,#777);font-size:.86rem;line-height:1.55}
+.series-config-hero-mark{width:58px;height:58px;flex:0 0 58px;border-radius:16px;background:#111;color:#fff;display:grid;place-items:center;font-weight:900;letter-spacing:.08em;font-size:.8rem;box-shadow:0 8px 18px rgba(0,0,0,.12)}
+.series-config-actions-top{position:sticky;top:10px;z-index:30;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 14px;margin:0 0 14px;border:1px solid var(--line,#ded8cc);border-radius:13px;background:rgba(255,255,255,.96);box-shadow:0 8px 22px rgba(24,20,14,.08);backdrop-filter:blur(8px)}
+.series-config-save-state{display:flex;align-items:center;gap:8px;color:var(--muted,#777);font-size:.76rem;font-weight:800;letter-spacing:.03em}
+.series-config-dot{width:8px;height:8px;border-radius:50%;background:#b88a3b;box-shadow:0 0 0 3px rgba(184,138,59,.12)}
+.series-config-actions-buttons{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.series-config-actions-buttons .button{min-width:150px}
+@media(max-width:700px){.series-config-hero{padding:18px}.series-config-hero-mark{display:none}.series-config-actions-top{top:6px;align-items:flex-start;flex-direction:column}.series-config-actions-buttons{width:100%}.series-config-actions-buttons .button{flex:1;min-width:0}}

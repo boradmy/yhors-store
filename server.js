@@ -2479,8 +2479,14 @@ function validateOrder(input, options = {}) {
     const durationMultiplier = purchaseMode === 'rental' ? rentalDays : 1;
     let deviceIdentifiers = [];
     if (purchaseMode === 'purchase' && isTechProduct(product)) {
+      // La configuración de SERIES/IMEIS es la autoridad: si ADMIN desactivó
+      // la identificación para este producto TEC, nunca se debe exigir desde
+      // Generar orden, aunque la orden se valide con requireDeviceIdentifiers.
+      const requiresIdentifier = product.requiresDeviceIdentifier !== false;
       try {
-        deviceIdentifiers = normalizeDeviceIdentifiers(requested.deviceIdentifiers, product, quantity, { required: requireDeviceIdentifiers });
+        deviceIdentifiers = normalizeDeviceIdentifiers(requested.deviceIdentifiers, product, quantity, {
+          required: requireDeviceIdentifiers && requiresIdentifier
+        });
       } catch (error) {
         return { error: error.message || `No se pudo validar la identificación de “${product.name}”.` };
       }
