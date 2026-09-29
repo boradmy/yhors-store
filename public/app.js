@@ -714,9 +714,37 @@ async function renderAdminVentas() {
     <section class="commercial-page">
       <div class="commercial-hero"><div><span class="eyebrow">Fase 2 · Comercial</span><h2>Registro de ventas</h2><p>Registra ventas directas o convierte pedidos existentes en ventas.</p></div><div class="commercial-hero-actions"><a class="button primary" href="${ADMIN_PATH}/ventas/nueva" data-smooth-route>Nueva venta →</a><span class="commercial-badge">VENTAS</span></div></div>
       <section class="commercial-card"><h3>Pedidos listos para registrar</h3><div class="commercial-doc-list">${available.length?available.map(o=>`<article class="commercial-document"><div><span class="eyebrow">${escapeHTML(o.orderNumber)}</span><h4>${escapeHTML(o.customer?.name||'Cliente')}</h4><small>${escapeHTML(o.status)} · ${new Date(o.createdAt).toLocaleDateString('es-EC')}</small></div><strong>${money(o.total)}</strong><button class="button primary small" data-register-sale="${escapeHTML(o.id)}">Registrar venta</button></article>`).join(''):'<div class="commercial-empty">No hay pedidos pendientes de registrar como venta.</div>'}</div></section>
-      <section class="commercial-card"><h3>Ventas registradas</h3><div class="commercial-doc-list">${sales.slice(0,50).map(s=>`<article class="commercial-document"><div><span class="eyebrow">${escapeHTML(s.number)}</span><h4>${escapeHTML(s.customer?.name||'Cliente')}</h4><small>Pedido ${escapeHTML(s.orderNumber||'—')} · ${new Date(s.createdAt).toLocaleDateString('es-EC')}</small></div><strong>${money(s.total)}</strong><span class="commercial-status">${escapeHTML(s.status)}</span></article>`).join('')||'<div class="commercial-empty">Aún no hay ventas registradas.</div>'}</div></section>
+      <section class="commercial-card"><h3>Ventas registradas</h3><div class="commercial-doc-list">${sales.slice(0,50).map(s=>`<article class="commercial-document"><div><span class="eyebrow">${escapeHTML(s.number)}</span><h4>${escapeHTML(s.customer?.name||'Cliente')}</h4><small>Pedido ${escapeHTML(s.orderNumber||'—')} · ${new Date(s.createdAt).toLocaleDateString('es-EC')}</small></div><strong>${money(s.total)}</strong><span class="commercial-status">${escapeHTML(s.status)}</span><button class="button secondary small" data-invoice="${escapeHTML(s.id)}">${s.invoiceNumber?'Ver factura':'Facturar'}</button><button class="button secondary small" data-pay="${escapeHTML(s.id)}">Pago</button></article>`).join('')||'<div class="commercial-empty">Aún no hay ventas registradas.</div>'}</div></section>
     </section></div></main>`;
   document.querySelectorAll('[data-register-sale]').forEach(btn=>btn.addEventListener('click',async()=>{try{const s=await request('/api/admin/ventas',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({orderId:btn.dataset.registerSale})});alert(`Venta ${s.number} registrada.`);await renderAdminVentas();}catch(e){alert(e.message);}}));
+  document.querySelectorAll('[data-invoice]').forEach(btn=>btn.addEventListener('click',async()=>{
+    try { const saleId=btn.dataset.invoice; const r=await request(`/api/admin/facturacion/${saleId}/factura`,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}); window.open(`/api/admin/facturacion/${saleId}/documento`,'_blank','noopener'); }
+    catch(e){ alert(e.message); }
+  }));
+  document.querySelectorAll('[data-pay]').forEach(btn=>btn.addEventListener('click',async()=>{
+    const amount=prompt('Valor del pago / abono:');
+    if(amount===null)return;
+    const method=prompt('Forma de pago (Efectivo, Transferencia, Tarjeta, etc.):','Transferencia')||'Transferencia';
+    try { const r=await request(`/api/admin/pagos/${btn.dataset.pay}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({amount:Number(amount),method})}); alert(`Pago ${r.payment.number} registrado. Saldo: ${money(r.balance)}`); await renderAdminVentas(); }
+    catch(e){ alert(e.message); }
+  }));
+
+}
+
+
+async function renderAdminFacturacion() {
+  const session=await request('/api/admin/session').catch(()=>({authenticated:false}));
+  if(!session.authenticated)return renderLogin();
+  const sales=await request('/api/admin/facturacion').catch(()=>[]);
+  app.innerHTML=`<main class="admin-shell"><div class="admin-wrap">
+    <div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Facturación y pagos</h1><p class="admin-subtitle">Emite documentos comerciales y controla pagos, abonos y saldos.</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>
+    ${adminSectionNav(session,'facturacion')}
+    <section class="commercial-page">
+      <div class="commercial-hero"><div><span class="eyebrow">Fase 3 · Finanzas</span><h2>Documentos y pagos</h2><p>Factura ventas registradas, consulta documentos y registra abonos.</p></div><div class="commercial-hero-actions"><span class="commercial-badge">FACTURACIÓN</span></div></div>
+      <section class="commercial-card"><h3>Ventas y estado de pago</h3><div class="commercial-doc-list">${sales.slice(0,100).map(s=>`<article class="commercial-document"><div><span class="eyebrow">${escapeHTML(s.number)}</span><h4>${escapeHTML(s.customer?.name||'Consumidor final')}</h4><small>${escapeHTML(s.invoiceNumber||'Sin factura')} · ${new Date(s.createdAt).toLocaleDateString('es-EC')}</small></div><div><strong>${money(s.total)}</strong><small style="display:block">Pagado ${money(s.paid)} · Saldo ${money(s.balance)}</small></div><span class="commercial-status">${escapeHTML(s.status)} · ${escapeHTML(s.status==='Pagada'?'PAGADA':s.status==='Abono'?'ABONO':'PENDIENTE')}</span><button class="button primary small" data-fact="${escapeHTML(s.id)}">${s.invoiceNumber?'Abrir documento':'Emitir factura'}</button><button class="button secondary small" data-factpay="${escapeHTML(s.id)}">Registrar pago</button></article>`).join('')||'<div class="commercial-empty">Aún no hay ventas.</div>'}</div></section>
+    </section></div></main>`;
+  document.querySelectorAll('[data-fact]').forEach(b=>b.addEventListener('click',async()=>{try{await request(`/api/admin/facturacion/${b.dataset.fact}/factura`,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});window.open(`/api/admin/facturacion/${b.dataset.fact}/documento`,'_blank','noopener');}catch(e){alert(e.message);}}));
+  document.querySelectorAll('[data-factpay]').forEach(b=>b.addEventListener('click',async()=>{const amount=prompt('Valor del pago / abono:');if(amount===null)return;const method=prompt('Forma de pago:','Transferencia')||'Transferencia';try{const r=await request(`/api/admin/pagos/${b.dataset.factpay}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({amount:Number(amount),method})});alert(`Pago ${r.payment.number} registrado. Saldo: ${money(r.balance)}`);renderAdminFacturacion();}catch(e){alert(e.message);}}));
 }
 
 function renderCurrentRoute() {
@@ -728,6 +756,7 @@ function renderCurrentRoute() {
   if (path === `${ADMIN_PATH}/multas` || path === `${ADMIN_PATH}/multas/`) return renderAdminFines();
   if (path === `${ADMIN_PATH}/cotizaciones` || path === `${ADMIN_PATH}/cotizaciones/`) return renderAdminCotizaciones();
   if (path === `${ADMIN_PATH}/ventas` || path === `${ADMIN_PATH}/ventas/`) return renderAdminVentas();
+  if (path === `${ADMIN_PATH}/facturacion` || path === `${ADMIN_PATH}/facturacion/`) return renderAdminFacturacion();
   if (path === `${ADMIN_PATH}/pedidos` || path === `${ADMIN_PATH}/pedidos/`) return renderAdminOrders();
   if (path === `${ADMIN_PATH}/ventas/nueva` || path === `${ADMIN_PATH}/ventas/nueva/`) return renderAdminNuevaVenta();
     if (path === `${ADMIN_PATH}/auditoria` || path === `${ADMIN_PATH}/auditoria/`) return renderAdminAudit();
@@ -1283,14 +1312,14 @@ function adminSectionNav(session = {}, active = '') {
   const link = (key, href, label) => `<a href="${href}" class="admin-section-link${active === key ? ' active' : ''}" data-smooth-route>${label}</a>`;
   if (limitedOperations) {
     return `<nav class="admin-section-nav admin-section-nav--compact" id="adminSectionNav" aria-label="Secciones operativas">
-      <details class="admin-nav-group"><summary>Operación</summary><div class="admin-nav-group-links">${link('buscar-productos', `${ADMIN_PATH}/buscar-productos`, 'BUSCAR PRODUCTOS')}${link('ventas-generales', `${ADMIN_PATH}/ventas-generales`, 'VENTAS GENERALES')}${link('cotizaciones', `${ADMIN_PATH}/cotizaciones`, 'COTIZACIONES')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('ventas', `${ADMIN_PATH}/ventas`, 'VENTAS')}</div></details>
+      <details class="admin-nav-group"><summary>Operación</summary><div class="admin-nav-group-links">${link('buscar-productos', `${ADMIN_PATH}/buscar-productos`, 'BUSCAR PRODUCTOS')}${link('ventas-generales', `${ADMIN_PATH}/ventas-generales`, 'VENTAS GENERALES')}${link('cotizaciones', `${ADMIN_PATH}/cotizaciones`, 'COTIZACIONES')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('ventas', `${ADMIN_PATH}/ventas`, 'VENTAS')}${link('facturacion', `${ADMIN_PATH}/facturacion`, 'FACTURACIÓN')}</div></details>
     </nav>`;
   }
   const group = (label, activeKeys, items, open = false) => `<details class="admin-nav-group${activeKeys.includes(active) ? ' has-active' : ''}"${open ? ' open' : ''}><summary><span>${label}</span>${activeKeys.includes(active) ? '<i aria-hidden="true"></i>' : ''}</summary><div class="admin-nav-group-links">${items}</div></details>`;
   return `<nav class="admin-section-nav" id="adminSectionNav" aria-label="Administración YHORS">
     ${group('Operación', ['web','inventario','buscar-productos','cotizaciones','pedidos','ventas'], `${link('web', ADMIN_PATH, 'PÁGINA WEB')}${link('buscar-productos', `${ADMIN_PATH}/buscar-productos`, 'BUSCAR PRODUCTOS')}${link('inventario', `${ADMIN_PATH}/inventario`, 'INVENTARIO')}${link('cotizaciones', `${ADMIN_PATH}/cotizaciones`, 'COTIZACIONES')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('ventas', `${ADMIN_PATH}/ventas`, 'VENTAS')}`)}
     ${group('Gestión', ['usuarios','auditoria'], `${link('usuarios', `${ADMIN_PATH}/usuarios`, 'USUARIOS')}${link('auditoria', `${ADMIN_PATH}/auditoria`, 'AUDITORÍA')}`)}
-    ${group('Finanzas', ['resumen-financiero','ventas-generales','multas','calculo-comision'], `${link('resumen-financiero', `${ADMIN_PATH}/resumen-financiero`, 'RESUMEN FINANCIERO')}${link('ventas-generales', `${ADMIN_PATH}/ventas-generales`, 'VENTAS GENERALES')}${link('multas', `${ADMIN_PATH}/multas`, 'MULTAS')}${link('calculo-comision', `${ADMIN_PATH}/calculo-comision`, 'CÁLCULO DE COMISIÓN')}`)}
+    ${group('Finanzas', ['resumen-financiero','ventas-generales','facturacion','multas','calculo-comision'], `${link('resumen-financiero', `${ADMIN_PATH}/resumen-financiero`, 'RESUMEN FINANCIERO')}${link('ventas-generales', `${ADMIN_PATH}/ventas-generales`, 'VENTAS GENERALES')}${link('facturacion', `${ADMIN_PATH}/facturacion`, 'FACTURACIÓN Y PAGOS')}${link('multas', `${ADMIN_PATH}/multas`, 'MULTAS')}${link('calculo-comision', `${ADMIN_PATH}/calculo-comision`, 'CÁLCULO DE COMISIÓN')}`)}
   </nav>`;
 }
 

@@ -28,6 +28,8 @@ const CLASSIFICATIONS_FILE = path.join(DATA_DIR, 'classifications.json');
 const ORDERS_FILE = path.join(DATA_DIR, 'orders.json');
 const QUOTES_FILE = path.join(DATA_DIR, 'quotes.json');
 const SALES_FILE = path.join(DATA_DIR, 'sales.json');
+const PAYMENTS_FILE = path.join(DATA_DIR, 'payments.json');
+const INVOICES_FILE = path.join(DATA_DIR, 'invoices.json');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const AUDIT_FILE = path.join(DATA_DIR, 'audit.json');
 const AUDIT_MAX_RECORDS = 50000;
@@ -2361,6 +2363,32 @@ function writeSales(sales) {
   fs.writeFileSync(temporaryFile, `${JSON.stringify(sales, null, 2)}\n`, 'utf8');
   fs.renameSync(temporaryFile, SALES_FILE);
 }
+function readPayments() {
+  try { const parsed = JSON.parse(fs.readFileSync(PAYMENTS_FILE, 'utf8')); return Array.isArray(parsed) ? parsed : []; }
+  catch { return []; }
+}
+function writePayments(items) {
+  maybeAutoBackup();
+  const temporaryFile = `${PAYMENTS_FILE}.tmp`;
+  fs.writeFileSync(temporaryFile, `${JSON.stringify(items, null, 2)}\n`, 'utf8');
+  fs.renameSync(temporaryFile, PAYMENTS_FILE);
+}
+function readInvoices() {
+  try { const parsed = JSON.parse(fs.readFileSync(INVOICES_FILE, 'utf8')); return Array.isArray(parsed) ? parsed : []; }
+  catch { return []; }
+}
+function writeInvoices(items) {
+  maybeAutoBackup();
+  const temporaryFile = `${INVOICES_FILE}.tmp`;
+  fs.writeFileSync(temporaryFile, `${JSON.stringify(items, null, 2)}\n`, 'utf8');
+  fs.renameSync(temporaryFile, INVOICES_FILE);
+}
+function paymentSummary(saleId, total) {
+  const payments = readPayments().filter(p => p.saleId === saleId);
+  const paid = Math.round(payments.reduce((sum,p)=>sum + Number(p.amount||0),0)*100)/100;
+  const balance = Math.max(0, Math.round((Number(total||0)-paid)*100)/100);
+  return { paid, balance, status: balance <= 0 ? 'Pagada' : paid > 0 ? 'Abono' : 'Pendiente', payments };
+}
 function nextDocumentNumber(items, prefix) {
   const max = items.reduce((highest, item) => {
     const match = String(item.number || '').match(new RegExp(`^${prefix}-(\\d+)`, 'i'));
@@ -3447,7 +3475,11 @@ app.post('/api/admin/ventas', requireOrdersAccess, (req, res) => {
     status: 'Registrada',
     createdAt: new Date().toISOString(),
     sellerId: order.assignedSellerId || session.accountId || null,
-    sellerName: order.assignedSellerName || session.name || session.username || ''
+    sellerName: order.assignedSellerName || session.name || session.username || '',
+    paymentMethod: cleanText(req.body?.paymentMethod, 40) || 'Pendiente',
+    paymentStatus: 'Pendiente',
+    paidAmount: 0,
+    balance: Number(order.total || 0)
   };
   sales.unshift(sale);
   writeSales(sales);
@@ -3495,7 +3527,11 @@ app.post('/api/admin/ventas/directa', requireOrdersAccess, async (req, res) => {
     sellerId,
     sellerName: session.name || session.username || '',
     internalNote,
-    deliveryMethod: result.order.deliveryMethod || 'office'
+    deliveryMethod: result.order.deliveryMethod || 'office',
+    paymentMethod: cleanText(req.body?.paymentMethod, 40) || 'Pendiente',
+    paymentStatus: 'Pendiente',
+    paidAmount: 0,
+    balance: Number(result.order.total || 0)
   };
   try {
     sales.unshift(sale);
@@ -3513,6 +3549,102 @@ app.post('/api/admin/ventas/directa', requireOrdersAccess, async (req, res) => {
     inventory: { synchronized: true, movements: auditStockMovementDiff(previousProducts, updatedProducts, 'Venta directa') }
   });
   return res.status(201).json(sale);
+});
+
+
+app.get('/api/admin/facturacion', requireOrdersAccess, (req, res) => {
+  const sales = readSales();
+  const invoices = readInvoices();
+  const enriched = sales.map(s => {
+    const invoice = invoices.find(i => i.saleId === s.id);
+    const summary = paymentSummary(s.id, s.total);
+    return { ...s, invoiceNumber: invoice?.number || null, ...summary };
+  });
+  return res.json(enriched);
+});
+
+app.post('/api/admin/facturacion/:saleId/factura', requireOrdersAccess, (req, res) => {
+  const sales = readSales();
+  const sale = sales.find(s => s.id === req.params.saleId);
+  if (!sale) return res.status(404).json({ error: 'Venta no encontrada.' });
+  const invoices = readInvoices();
+  const existing = invoices.find(i => i.saleId === sale.id);
+  if (existing) return res.json(existing);
+  const invoice = {
+    id: crypto.randomUUID(),
+    number: nextDocumentNumber(invoices, 'FAC'),
+    saleId: sale.id,
+    saleNumber: sale.number,
+    createdAt: new Date().toISOString(),
+    status: 'Emitida',
+    customer: sale.customer || {},
+    items: sale.items || [],
+    subtotal: Number(sale.subtotal || 0),
+    shipping: Number(sale.shipping || 0),
+    total: Number(sale.total || 0),
+    paymentMethod: sale.paymentMethod || 'Pendiente',
+    sellerName: sale.sellerName || ''
+  };
+  invoices.unshift(invoice);
+  writeInvoices(invoices);
+  auditLog(req, 'Factura emitida', 'Facturación', { invoiceId: invoice.id, number: invoice.number, saleId: sale.id, total: invoice.total });
+  return res.status(201).json(invoice);
+});
+
+app.get('/api/admin/facturacion/:saleId/documento', requireOrdersAccess, (req, res) => {
+  const sale = readSales().find(s => s.id === req.params.saleId);
+  if (!sale) return res.status(404).send('Venta no encontrada.');
+  const invoice = readInvoices().find(i => i.saleId === sale.id) || {
+    number: 'BORRADOR', status: 'Pendiente', createdAt: new Date().toISOString(),
+    customer: sale.customer || {}, items: sale.items || [], subtotal: sale.subtotal || 0, shipping: sale.shipping || 0, total: sale.total || 0,
+    paymentMethod: sale.paymentMethod || 'Pendiente', sellerName: sale.sellerName || ''
+  };
+  const esc = escapeEmailHtml;
+  const rows = (invoice.items || []).map(i => `<tr><td>${esc(i.name || '')}<br><small>${esc(i.sku || '')}</small></td><td>${Number(i.quantity||0)}</td><td>$${Number(i.unitPrice||i.price||0).toFixed(2)}</td><td>$${Number(i.total||0).toFixed(2)}</td></tr>`).join('');
+  const summary = paymentSummary(sale.id, invoice.total);
+  res.type('html').send(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>${esc(invoice.number)} · YHORS</title>
+  <style>
+  @page{size:A4;margin:14mm}body{font-family:Arial,sans-serif;color:#2f2a24;margin:0;background:#fff} .sheet{max-width:820px;margin:auto}
+  .head{border:1px solid #d7c59a;border-radius:18px;padding:24px;background:#faf6eb}.brand{font-size:28px;font-weight:800;letter-spacing:3px}.muted{color:#756d62}
+  .tag{display:inline-block;padding:6px 12px;border-radius:999px;background:#e9ddbb;font-size:12px;font-weight:700;letter-spacing:.5px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin:20px 0}.card{border:1px solid #e1dbcf;border-radius:14px;padding:16px}
+  table{width:100%;border-collapse:collapse;margin-top:18px}th{background:#f1ead8;text-align:left;font-size:12px}th,td{padding:10px;border-bottom:1px solid #eee}td:nth-child(n+2),th:nth-child(n+2){text-align:right}
+  .totals{margin-left:auto;max-width:310px;margin-top:18px}.line{display:flex;justify-content:space-between;padding:6px}.total{font-size:20px;font-weight:800;border-top:2px solid #d7c59a;padding-top:12px}.actions{margin:20px 0;text-align:right}.btn{border:0;border-radius:10px;padding:10px 16px;background:#2f2a24;color:#fff;font-weight:700;cursor:pointer}
+  @media print{.actions{display:none}.sheet{max-width:none}}
+  </style></head><body><main class="sheet"><div class="actions"><button class="btn" onclick="window.print()">Imprimir / Guardar PDF</button></div>
+  <section class="head"><div class="brand">YHORS</div><div class="muted">Documento comercial</div><p><span class="tag">${esc(invoice.status)}</span> &nbsp; <strong>${esc(invoice.number)}</strong></p></section>
+  <section class="grid"><div class="card"><strong>Cliente</strong><p>${esc(invoice.customer?.name||'Consumidor final')}<br>${esc(invoice.customer?.idNumber||invoice.customer?.ruc||'')}<br>${esc(invoice.customer?.email||'')}</p></div>
+  <div class="card"><strong>Venta</strong><p>${esc(sale.number)}<br>Vendedor: ${esc(invoice.sellerName||'—')}<br>Pago: ${esc(invoice.paymentMethod||'Pendiente')}</p></div></section>
+  <table><thead><tr><th>Producto</th><th>Cant.</th><th>Precio</th><th>Total</th></tr></thead><tbody>${rows}</tbody></table>
+  <div class="totals"><div class="line"><span>Subtotal</span><strong>$${Number(invoice.subtotal||0).toFixed(2)}</strong></div><div class="line"><span>Envío</span><strong>$${Number(invoice.shipping||0).toFixed(2)}</strong></div><div class="line total"><span>TOTAL</span><strong>$${Number(invoice.total||0).toFixed(2)}</strong></div><div class="line"><span>Pagado</span><strong>$${summary.paid.toFixed(2)}</strong></div><div class="line"><span>Saldo</span><strong>$${summary.balance.toFixed(2)}</strong></div></div>
+  <p class="muted" style="margin-top:35px">Generado por YHORS · ${new Date(invoice.createdAt).toLocaleString('es-EC')}</p></main></body></html>`);
+});
+
+app.get('/api/admin/pagos/:saleId', requireOrdersAccess, (req, res) => {
+  const sale = readSales().find(s => s.id === req.params.saleId);
+  if (!sale) return res.status(404).json({ error: 'Venta no encontrada.' });
+  return res.json(paymentSummary(sale.id, sale.total));
+});
+
+app.post('/api/admin/pagos/:saleId', requireOrdersAccess, (req, res) => {
+  const sales = readSales();
+  const sale = sales.find(s => s.id === req.params.saleId);
+  if (!sale) return res.status(404).json({ error: 'Venta no encontrada.' });
+  const amount = Math.round(Number(req.body?.amount || 0) * 100) / 100;
+  const method = cleanText(req.body?.method, 40) || 'Efectivo';
+  if (!Number.isFinite(amount) || amount <= 0) return res.status(400).json({ error: 'Ingresa un valor de pago válido.' });
+  const current = paymentSummary(sale.id, sale.total);
+  if (amount > current.balance + 0.01) return res.status(400).json({ error: `El saldo pendiente es $${current.balance.toFixed(2)}.` });
+  const payments = readPayments();
+  const payment = { id: crypto.randomUUID(), number: nextDocumentNumber(payments, 'PAG'), saleId: sale.id, saleNumber: sale.number, amount, method, note: cleanText(req.body?.note, 300), createdAt: new Date().toISOString() };
+  payments.unshift(payment);
+  writePayments(payments);
+  const after = paymentSummary(sale.id, sale.total);
+  const saleIndex = sales.findIndex(s => s.id === sale.id);
+  sales[saleIndex] = { ...sales[saleIndex], paidAmount: after.paid, balance: after.balance, paymentStatus: after.status, paymentMethod: method, updatedAt: new Date().toISOString() };
+  writeSales(sales);
+  auditLog(req, 'Pago registrado', 'Pagos', { paymentId: payment.id, paymentNumber: payment.number, saleId: sale.id, amount, method, balance: after.balance });
+  return res.status(201).json({ payment, ...after });
 });
 
 app.get('/api/admin/session', (req, res) => { const session = getSession(req); return res.json({ authenticated: Boolean(session), username: session?.user || null, role: session?.role || null }); });
