@@ -3320,11 +3320,30 @@ app.delete('/api/admin/ventas/:id', requireAdmin, (req, res) => {
     return res.status(400).json({ error: error.message || 'No se pudo devolver el stock de la venta.' });
   }
   orders.splice(index, 1);
+  let quoteRollback = null;
+  if (sale.quoteId) {
+    const quotes = readQuotes();
+    const quoteIndex = quotes.findIndex(item => String(item.id) === String(sale.quoteId));
+    if (quoteIndex >= 0) {
+      quoteRollback = { quotes, quoteIndex, previous: { ...quotes[quoteIndex] } };
+      quotes[quoteIndex] = { ...quotes[quoteIndex], status: 'Pendiente', convertedOrderId: null, convertedOrderNumber: null, updatedAt: new Date().toISOString() };
+      try { writeQuotes(quotes); } catch (error) {
+        try { if (stockMovements.length) changeOrderStock(sale, -1); } catch (_) {}
+        return res.status(500).json({ error: 'No se pudo liberar la cotización vinculada.' });
+      }
+    }
+  }
   try {
     writeOrders(orders);
   } catch (error) {
-    // Intentamos revertir el movimiento de inventario si la venta no pudo borrarse.
+    // Intentamos revertir el movimiento de inventario y la cotización si la venta no pudo borrarse.
     try { if (stockMovements.length) changeOrderStock(sale, -1); } catch (_) {}
+    if (quoteRollback) {
+      try {
+        quoteRollback.quotes[quoteRollback.quoteIndex] = quoteRollback.previous;
+        writeQuotes(quoteRollback.quotes);
+      } catch (_) {}
+    }
     return res.status(500).json({ error: 'No se pudo eliminar la venta.' });
   }
   auditLog(req, 'Venta directa eliminada', 'Ventas', {
@@ -3426,6 +3445,37 @@ app.put('/api/admin/series-imei/:saleId', requireStoreManagerOrAdmin, (req, res)
 
 app.post('/api/admin/ventas', requireOrdersAccess, async (req, res) => {
   const session = getSession(req);
+  const quoteId = cleanText(req.body?.quoteId, 120);
+  let quote = null;
+  let quotes = null;
+  let quoteIndex = -1;
+  if (quoteId) {
+    quotes = readQuotes();
+    quoteIndex = quotes.findIndex(item => String(item.id) === String(quoteId));
+    if (quoteIndex < 0) return res.status(404).json({ error: 'La cotización vinculada ya no existe.' });
+    quote = quotes[quoteIndex];
+    if (quote.status === 'Convertida') {
+      return res.status(409).json({
+        error: `Esta cotización ya fue utilizada para la venta ${quote.convertedOrderNumber ? '#' + quote.convertedOrderNumber : ''}. No puedes volver a facturarla.`,
+        quoteUsed: true,
+        convertedOrderId: quote.convertedOrderId || null,
+        convertedOrderNumber: quote.convertedOrderNumber || null
+      });
+    }
+    if (quote.status === 'Rechazada') {
+      return res.status(409).json({ error: 'Esta cotización está cancelada y no puede utilizarse para una nueva venta.', quoteCancelled: true });
+    }
+    const existingSale = readOrders().find(order => String(order.quoteId || '') === String(quote.id) && order.source === 'direct_sale' && order.status !== 'Cancelado');
+    if (existingSale) {
+      return res.status(409).json({
+        error: `Esta cotización ya tiene registrada la venta ${existingSale.orderNumber ? '#' + existingSale.orderNumber : ''}. No puedes volver a facturarla.`,
+        quoteUsed: true,
+        convertedOrderId: existingSale.id,
+        convertedOrderNumber: existingSale.orderNumber
+      });
+    }
+  }
+
   const result = validateOrder(req.body || {}, { requireDeviceIdentifiers: true });
   if (result.error) return res.status(400).json(result);
 
@@ -3450,7 +3500,8 @@ app.post('/api/admin/ventas', requireOrdersAccess, async (req, res) => {
     updatedAt: new Date().toISOString(),
     assignedSellerId,
     source: 'direct_sale',
-    saleOrigin: 'admin_direct',
+    saleOrigin: quote ? 'quote_conversion' : 'admin_direct',
+    quoteId: quote ? quote.id : null,
     internalNote: cleanText(req.body?.internalNote || req.body?.customer?.notes, 5000),
     ...result.order
   };
@@ -3465,6 +3516,25 @@ app.post('/api/admin/ventas', requireOrdersAccess, async (req, res) => {
       try { writeProducts(previousProducts); } catch (_) {}
       throw error;
     }
+    if (quote) {
+      quotes[quoteIndex] = {
+        ...quotes[quoteIndex],
+        status: 'Convertida',
+        convertedOrderId: sale.id,
+        convertedOrderNumber: sale.orderNumber,
+        updatedAt: new Date().toISOString()
+      };
+      try {
+        writeQuotes(quotes);
+      } catch (error) {
+        try {
+          orders.shift();
+          writeOrders(orders);
+          writeProducts(previousProducts);
+        } catch (_) {}
+        throw error;
+      }
+    }
   } catch (error) {
     console.error('[YHORS] No se pudo registrar la venta directa:', error.message);
     return res.status(500).json({ error: 'No se pudo registrar la venta. No se realizó el descuento de inventario.' });
@@ -3473,7 +3543,8 @@ app.post('/api/admin/ventas', requireOrdersAccess, async (req, res) => {
   auditLog(req, 'Venta directa creada', 'Ventas', {
     orderId: sale.id,
     orderNumber: sale.orderNumber,
-    source: 'direct_sale',
+    source: sale.saleOrigin,
+    quoteId: sale.quoteId || null,
     order: auditOrderSnapshot(sale),
     inventory: { synchronized: true, movements: auditStockMovementDiff(previousProducts, updatedProducts, 'Venta directa') }
   });
@@ -3490,10 +3561,20 @@ app.post('/api/admin/ventas', requireOrdersAccess, async (req, res) => {
 app.get('/api/admin/cotizaciones', requireOrdersAccess, (req, res) => {
   const session = getSession(req);
   let quotes = readQuotes();
+  const orders = readOrders();
   if (isSellerRole(session.role)) quotes = quotes.filter(q => !q.assignedSellerId || q.assignedSellerId === session.accountId);
   return res.json(quotes.map(quote => {
     const seller = quote.assignedSellerId ? readUsers().find(user => user.id === quote.assignedSellerId) : null;
-    return { ...quote, assignedSellerName: seller?.name || quote.assignedSellerName || null };
+    const linkedSale = orders.find(order => String(order.quoteId || '') === String(quote.id) && order.source === 'direct_sale');
+    const effectiveStatus = linkedSale && linkedSale.status !== 'Cancelado' ? 'Convertida' : (quote.status || 'Pendiente');
+    return {
+      ...quote,
+      status: effectiveStatus,
+      assignedSellerName: seller?.name || quote.assignedSellerName || null,
+      convertedOrderId: quote.convertedOrderId || linkedSale?.id || null,
+      convertedOrderNumber: quote.convertedOrderNumber || linkedSale?.orderNumber || null,
+      convertedSaleStatus: linkedSale?.status || null
+    };
   }));
 });
 

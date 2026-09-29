@@ -1014,25 +1014,40 @@ function classificationPanel(classifications) {
 
 function ordersPanel(orders = [], canDelete = true, quotes = []) {
   const statuses = ['Pendiente', 'Confirmado', 'Preparado', 'Enviado', 'Entregado', 'Cancelado'];
-  return `<section class="admin-panel orders-panel" id="ordersPanel">
-    <div class="section-heading"><div><span class="eyebrow">Ventas</span><h2>Pedidos recibidos <small class="orders-count">${orders.length}</small></h2></div><p>Los pedidos sin vendedor quedan separados para que puedas detectar lo que falta despachar.</p></div>
-    <div class="orders-toolbar">
-      <div class="orders-date-range">
-        <label class="order-date-filter"><input id="ordersDateFrom" type="date" aria-label="Fecha inicial"></label>
-        <label class="order-date-filter"><input id="ordersDateTo" type="date" aria-label="Fecha final"></label>
-        <button id="clearOrdersDate" type="button" class="button secondary small">Limpiar rango</button>
+  const quoteStatusLabel = quote => {
+    if (quote.status === 'Convertida') return quote.convertedOrderNumber ? `Facturada · #${quote.convertedOrderNumber}` : 'Facturada';
+    if (quote.status === 'Rechazada') return 'Cancelada';
+    return quote.status || 'Pendiente';
+  };
+  const quoteActions = quote => {
+    if (quote.status === 'Convertida') return `<small class="quote-converted-state">✓ ${escapeHTML(quoteStatusLabel(quote))}</small>`;
+    if (quote.status === 'Rechazada') return `<small class="quote-cancelled-state">✕ Cancelada</small>`;
+    return `<button type="button" class="button secondary small" data-edit-quote="${escapeHTML(quote.id)}">EDITAR</button><button type="button" class="button secondary small" data-use-quote="${escapeHTML(quote.id)}">USAR EN VENTA</button>`;
+  };
+  return `<details class="admin-panel orders-panel orders-collapsible" open>
+    <summary class="orders-collapsible-summary"><span><span class="eyebrow">Ventas</span><strong>Pedidos recibidos <small class="orders-count">${orders.length}</small></strong></span><span class="orders-collapsible-chevron">⌄</span></summary>
+    <div class="orders-collapsible-body">
+      <div class="section-heading"><div><span class="eyebrow">Ventas</span><h2>Pedidos recibidos <small class="orders-count">${orders.length}</small></h2></div><p>Los pedidos sin vendedor quedan separados para que puedas detectar lo que falta despachar.</p></div>
+      <div class="orders-toolbar">
+        <div class="orders-date-range">
+          <label class="order-date-filter"><input id="ordersDateFrom" type="date" aria-label="Fecha inicial"></label>
+          <label class="order-date-filter"><input id="ordersDateTo" type="date" aria-label="Fecha final"></label>
+          <button id="clearOrdersDate" type="button" class="button secondary small">Limpiar rango</button>
+        </div>
+        <select id="ordersStatusFilter"><option value="">Todos los estados</option>${statuses.map(s => `<option value="${escapeHTML(s)}">${escapeHTML(s)}</option>`).join('')}</select>
+        <input id="ordersSearch" type="search" placeholder="Buscar por pedido, cliente, cédula/RUC, teléfono o SKU…" autocomplete="off">
       </div>
-      <select id="ordersStatusFilter"><option value="">Todos los estados</option>${statuses.map(s => `<option value="${escapeHTML(s)}">${escapeHTML(s)}</option>`).join('')}</select>
-      <input id="ordersSearch" type="search" placeholder="Buscar por pedido, cliente, cédula/RUC, teléfono o SKU…" autocomplete="off">
+      <div id="adminOrdersList">${ordersListMarkup(orders, { canDelete, canAssign: false, sellers: [], role: '' })}</div>
     </div>
-    <div id="adminOrdersList">${ordersListMarkup(orders, { canDelete, canAssign: false, sellers: [], role: '' })}</div>
-  </section>
-  <section class="admin-panel orders-panel quotes-panel" id="quotesPanel">
-    <div class="section-heading"><div><span class="eyebrow">Cotizaciones</span><h2>Cotizaciones recibidas <small class="orders-count">${quotes.length}</small></h2></div><p>Las cotizaciones también llegan aquí. Puedes editarlas o pasarlas a una venta.</p><button type="button" class="button primary small" id="newQuoteFromOrders">+ Nueva cotización</button></div>
-    <div class="quote-history-list">${quotes.length ? quotes.map(q => `<article class="quote-history-item" data-quote-card="${escapeHTML(q.id)}"><div><strong>#${escapeHTML(q.quoteNumber)}</strong><span>${escapeHTML(q.customer?.name || 'Cliente')}</span><small>${escapeHTML(q.status || 'Pendiente')} · ${escapeHTML(new Date(q.createdAt).toLocaleDateString('es-EC'))}</small></div><div class="quote-history-actions"><strong>${money(q.total)}</strong>${q.status !== 'Convertida' ? `<button type="button" class="button secondary small" data-edit-quote="${escapeHTML(q.id)}">EDITAR</button><button type="button" class="button secondary small" data-use-quote="${escapeHTML(q.id)}">USAR EN VENTA</button>` : '<small>Convertida</small>'}</div></article>`).join('') : '<div class="generate-empty-state"><span>⌁</span><strong>Aún no hay cotizaciones</strong><small>Las cotizaciones creadas desde la web o aquí aparecerán en este apartado.</small></div>'}</div>
-  </section>`;
+  </details>
+  <details class="admin-panel orders-panel quotes-panel orders-collapsible" open>
+    <summary class="orders-collapsible-summary"><span><span class="eyebrow">Cotizaciones</span><strong>Cotizaciones recibidas <small class="orders-count">${quotes.length}</small></strong></span><span class="orders-collapsible-chevron">⌄</span></summary>
+    <div class="orders-collapsible-body">
+      <div class="section-heading"><div><span class="eyebrow">Cotizaciones</span><h2>Cotizaciones recibidas <small class="orders-count">${quotes.length}</small></h2></div><p>Las cotizaciones también llegan aquí. Puedes editarlas o pasarlas a una venta.</p><button type="button" class="button primary small" id="newQuoteFromOrders">+ Nueva cotización</button></div>
+      <div class="quote-history-list">${quotes.length ? quotes.map(q => `<article class="quote-history-item ${q.status === 'Convertida' ? 'quote-history-item--converted' : ''}" data-quote-card="${escapeHTML(q.id)}"><div><strong>#${escapeHTML(q.quoteNumber)}</strong><span>${escapeHTML(q.customer?.name || 'Cliente')}</span><small>${escapeHTML(quoteStatusLabel(q))} · ${escapeHTML(new Date(q.createdAt).toLocaleDateString('es-EC'))}</small></div><div class="quote-history-actions"><strong>${money(q.total)}</strong>${quoteActions(q)}</div></article>`).join('') : '<div class="generate-empty-state"><span>⌁</span><strong>Aún no hay cotizaciones</strong><small>Las cotizaciones creadas desde la web o aquí aparecerán en este apartado.</small></div>'}</div>
+    </div>
+  </details>`;
 }
-
 function showYhorsConfirm(title, message, options = {}) {
   const cancelText = options.cancelText || 'Cancelar';
   const confirmText = options.confirmText || 'Aceptar';
@@ -1281,7 +1296,6 @@ async function renderAdminDirectSales() {
         return { ...product, id: `${product.id}::${mode}`, productId: product.id, price: Number(mode === 'rental' ? product.rentalPrice : (product.salePrice ?? product.price)), purchaseMode: mode, rentalDays: mode === 'rental' ? Math.max(1, Number(item.rentalDays || 1)) : null, quantity: Math.max(1, Number(item.quantity || 1)), deviceIdentifiers: Array.isArray(item.deviceIdentifiers) ? item.deviceIdentifiers : [] };
       }).filter(Boolean);
       window.__yhorsQuoteDraft = quoteDraft;
-      localStorage.removeItem('yhorsQuoteToSale');
     }
   } catch (_) { localStorage.removeItem('yhorsQuoteToSale'); }
   let saving = false;
@@ -1395,7 +1409,7 @@ async function renderAdminDirectSales() {
       { cancelText: 'Cancelar', confirmText: 'Registrar venta' }
     );
     if (!confirmed) return;
-    saving = true; submit.disabled = true; submit.classList.add('is-loading'); submit.innerHTML = 'Registrando…'; try { const assignedSellerId = document.querySelector('#generateSeller')?.value || null; syncDeviceIdentifiersFromDom(lines); const identifierError = lines.find(line => { if (!requiresDeviceTracking(line) || line.purchaseMode === 'rental') return false; const entries = line.deviceIdentifiers || []; if (entries.length < Number(line.quantity || 1)) return true; return entries.some(entry => isImeiOrderProduct(line) ? !/^\d{14,16}$/.test(String(entry.primary || '')) : !/^[A-Za-z0-9._\-/ ]{3,50}$/.test(String(entry.primary || ''))); }); if (identifierError) { message.hidden = false; message.className = 'message error'; message.textContent = isImeiOrderProduct(identifierError) ? `Completa correctamente el IMEI 1 de cada unidad de “${identifierError.name}” (14–16 dígitos).` : `Completa el número de serie de cada unidad de “${identifierError.name}”.`; saving = false; submit.disabled = false; submit.classList.remove('is-loading'); submit.innerHTML = 'Registrar venta <span>→</span>'; return; } const payload = { customer: { ...customer, notes: document.querySelector('#generateNotes').value.trim() }, internalNote: document.querySelector('#generateNotes').value.trim(), deliveryMethod, assignedSellerId, items: lines.map(line => ({ productId: line.productId || line.id, quantity: Number(line.quantity), purchaseMode: line.purchaseMode || 'purchase', rentalDays: line.purchaseMode === 'rental' ? Math.max(1, Number(line.rentalDays || 1)) : null, deviceIdentifiers: Array.isArray(line.deviceIdentifiers) ? line.deviceIdentifiers : [] })) }; const result = await request('/api/admin/ventas', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) }); app.querySelector('.generate-order-page').innerHTML = `<div class="generate-success"><span class="success-mark">✓</span><span class="eyebrow">Venta registrada correctamente</span><h2>#${escapeHTML(result.orderNumber)}</h2><p>La venta quedó registrada en YHORS, se descontó el inventario y quedó marcada como entregada.</p><div class="generate-success-total">Total: <strong>${money(result.total)}</strong></div><div class="generate-success-actions"><button type="button" class="button primary" id="generateAnotherOrder">Nueva venta</button><a class="button secondary" href="${ADMIN_PATH}/ventas/historial" data-smooth-route>Ver ventas</a>${result.orderId ? `<button type="button" class="button secondary" data-generated-pdf="${escapeHTML(result.orderId)}">PDF de venta</button>` : ''}</div></div>`; document.querySelector('#generateAnotherOrder')?.addEventListener('click', () => renderAdminDirectSales()); document.querySelector('[data-generated-pdf]')?.addEventListener('click', event => { const a=document.createElement('a'); a.href=`/api/admin/ventas/${encodeURIComponent(event.currentTarget.dataset.generatedPdf)}/pdf?v=${Date.now()}`; a.target='_blank'; a.rel='noopener'; a.click(); }); } catch (error) { message.hidden = false; message.className = 'message error'; message.textContent = error.message || 'No se pudo generar la venta.'; submit.disabled = false; submit.classList.remove('is-loading'); submit.innerHTML = 'Registrar venta <span>→</span>'; saving = false; } });
+    saving = true; submit.disabled = true; submit.classList.add('is-loading'); submit.innerHTML = 'Registrando…'; try { const assignedSellerId = document.querySelector('#generateSeller')?.value || null; syncDeviceIdentifiersFromDom(lines); const identifierError = lines.find(line => { if (!requiresDeviceTracking(line) || line.purchaseMode === 'rental') return false; const entries = line.deviceIdentifiers || []; if (entries.length < Number(line.quantity || 1)) return true; return entries.some(entry => isImeiOrderProduct(line) ? !/^\d{14,16}$/.test(String(entry.primary || '')) : !/^[A-Za-z0-9._\-/ ]{3,50}$/.test(String(entry.primary || ''))); }); if (identifierError) { message.hidden = false; message.className = 'message error'; message.textContent = isImeiOrderProduct(identifierError) ? `Completa correctamente el IMEI 1 de cada unidad de “${identifierError.name}” (14–16 dígitos).` : `Completa el número de serie de cada unidad de “${identifierError.name}”.`; saving = false; submit.disabled = false; submit.classList.remove('is-loading'); submit.innerHTML = 'Registrar venta <span>→</span>'; return; } const quoteId = window.__yhorsQuoteDraft?.id ? String(window.__yhorsQuoteDraft.id) : null; const payload = { customer: { ...customer, notes: document.querySelector('#generateNotes').value.trim() }, internalNote: document.querySelector('#generateNotes').value.trim(), deliveryMethod, assignedSellerId, quoteId, items: lines.map(line => ({ productId: line.productId || line.id, quantity: Number(line.quantity), purchaseMode: line.purchaseMode || 'purchase', rentalDays: line.purchaseMode === 'rental' ? Math.max(1, Number(line.rentalDays || 1)) : null, deviceIdentifiers: Array.isArray(line.deviceIdentifiers) ? line.deviceIdentifiers : [] })) }; const result = await request('/api/admin/ventas', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) }); if (quoteId) { window.__yhorsQuoteDraft = null; localStorage.removeItem('yhorsQuoteToSale'); } app.querySelector('.generate-order-page').innerHTML = `<div class="generate-success"><span class="success-mark">✓</span><span class="eyebrow">Venta registrada correctamente</span><h2>#${escapeHTML(result.orderNumber)}</h2><p>La venta quedó registrada en YHORS, se descontó el inventario y quedó marcada como entregada.</p><div class="generate-success-total">Total: <strong>${money(result.total)}</strong></div><div class="generate-success-actions"><button type="button" class="button primary" id="generateAnotherOrder">Nueva venta</button><a class="button secondary" href="${ADMIN_PATH}/ventas/historial" data-smooth-route>Ver ventas</a>${result.orderId ? `<button type="button" class="button secondary" data-generated-pdf="${escapeHTML(result.orderId)}">PDF de venta</button>` : ''}</div></div>`; document.querySelector('#generateAnotherOrder')?.addEventListener('click', () => { window.__yhorsQuoteDraft = null; localStorage.removeItem('yhorsQuoteToSale'); renderAdminDirectSales(); }); document.querySelector('[data-generated-pdf]')?.addEventListener('click', event => { const a=document.createElement('a'); a.href=`/api/admin/ventas/${encodeURIComponent(event.currentTarget.dataset.generatedPdf)}/pdf?v=${Date.now()}`; a.target='_blank'; a.rel='noopener'; a.click(); }); } catch (error) { message.hidden = false; message.className = 'message error'; message.textContent = error.message || 'No se pudo generar la venta.'; submit.disabled = false; submit.classList.remove('is-loading'); submit.innerHTML = 'Registrar venta <span>→</span>'; saving = false; } });
   drawCustomer(); drawLines(); wireAccountMenu(); wireImageFallback(app);
 }
 
@@ -1567,11 +1581,21 @@ async function renderAdminQuotes() {
   sellerSearch?.addEventListener('input',drawSellers);sellerModal?.addEventListener('click',e=>{const b=e.target.closest('[data-quote-seller]');if(!b)return;sellerInput.value=b.dataset.quoteSeller;const selected=sellers.find(x=>x.id===b.dataset.quoteSeller);document.querySelector('#quoteSellerName').textContent=selected?.name||'Vendedor';document.querySelector('#quoteSellerUsername').textContent=`@${selected?.username||'usuario'}`;sellerModal.classList.remove('is-open');setTimeout(()=>sellerModal.hidden=true,180);});
     document.querySelector('#generateOrderSubmit')?.addEventListener('click',async()=>{if(saving)return;const message=document.querySelector('#generateMessage');message.hidden=true;if(!customer.name||!customer.phone||!customer.cedula||!customer.city){message.hidden=false;message.className='message error';message.textContent='Completa los datos del cliente.';openModal('customerModal');return;}if(!lines.length){message.hidden=false;message.className='message error';message.textContent='Agrega al menos un producto a la cotización.';openModal('productPickerModal');return;}const deliveryMethod=document.querySelector('input[name="generateDelivery"]:checked')?.value||'office';if(deliveryMethod!=='office'&&!customer.address){message.hidden=false;message.className='message error';message.textContent='Ingresa la dirección del cliente.';openModal('customerModal');return;}saving=true;const submit=document.querySelector('#generateOrderSubmit');submit.disabled=true;submit.classList.add('is-loading');submit.textContent=editingQuote?'Actualizando…':'Guardando…';const confirmed=await showYhorsConfirm(editingQuote?'¿Guardar cambios en la cotización?':'¿Guardar esta cotización? ',editingQuote?'Se actualizarán los datos del cliente, productos, vendedor, entrega y notas de la cotización.':'La cotización se registrará y no descontará inventario.',{cancelText:'Cancelar',confirmText:editingQuote?'Guardar cambios':'Guardar'});if(!confirmed){submit.disabled=false;submit.classList.remove('is-loading');submit.textContent=editingQuote?'Actualizar cotización →':'Guardar cotización →';saving=false;return;}try{const payload={customer:{...customer,notes:document.querySelector('#generateNotes').value.trim()},internalNote:document.querySelector('#generateNotes').value.trim(),deliveryMethod,assignedSellerId:sellerInput.value||null,items:lines.map(l=>({productId:l.productId||l.id,quantity:Number(l.quantity),purchaseMode:l.purchaseMode||'purchase',rentalDays:l.purchaseMode==='rental'?Math.max(1,Number(l.rentalDays||1)):null}))};const result=editingQuote?await request(`/api/admin/cotizaciones/${encodeURIComponent(quoteBeingEdited.id)}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}):await request('/api/admin/cotizaciones',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});navigateToRoute(`${ADMIN_PATH}/pedidos`);}catch(error){message.hidden=false;message.className='message error';message.textContent=error.message||'No se pudo guardar la cotización.';submit.disabled=false;submit.classList.remove('is-loading');submit.textContent=editingQuote?'Actualizar cotización →':'Guardar cotización →';saving=false;}});
   document.querySelectorAll('[data-edit-quote]').forEach(button => button.addEventListener('click', () => navigateToRoute(`${ADMIN_PATH}/cotizaciones?edit=${encodeURIComponent(button.dataset.editQuote)}`)));
-  document.querySelectorAll('[data-use-quote]').forEach(button => button.addEventListener('click', () => {
-    const quote = quotes.find(item => String(item.id) === String(button.dataset.useQuote));
-    if (!quote) return;
-    localStorage.setItem('yhorsQuoteToSale', JSON.stringify(quote));
-    navigateToRoute(`${ADMIN_PATH}/ventas`);
+  document.querySelectorAll('[data-use-quote]').forEach(button => button.addEventListener('click', async () => {
+    button.disabled = true;
+    try {
+      const latestQuotes = await request('/api/admin/cotizaciones');
+      const quote = latestQuotes.find(item => String(item.id) === String(button.dataset.useQuote));
+      if (!quote) throw new Error('La cotización ya no está disponible.');
+      if (quote.status === 'Convertida') { alert(quote.convertedOrderNumber ? `Esta cotización ya fue facturada en la venta #${quote.convertedOrderNumber}.` : 'Esta cotización ya fue facturada y no puede volver a utilizarse.'); return; }
+      if (quote.status === 'Rechazada') { alert('Esta cotización está cancelada y no puede utilizarse para una nueva venta.'); return; }
+      localStorage.setItem('yhorsQuoteToSale', JSON.stringify(quote));
+      navigateToRoute(`${ADMIN_PATH}/ventas`);
+    } catch (error) {
+      alert(error.message || 'No se pudo validar la cotización.');
+    } finally {
+      button.disabled = false;
+    }
   }));
   updateTotals();wireAccountMenu();wireImageFallback(app);
 }
@@ -2234,15 +2258,31 @@ async function renderAdminOrders() {
   const subtitle = session.role === 'store_manager' ? 'Jefe de tienda · pedidos, asignaciones y control operativo' : (session.role === 'vendedor' ? 'Pedidos asignados a tu usuario · consulta y gestión operativa' : 'Gestión de YHORS STORE');
   app.innerHTML = `<main class="admin-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">${title}</h1><p class="admin-subtitle">${subtitle}</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>${sectionNav}${ordersPanel(orders, canDelete, quotes)}</div></main>`;
   document.querySelector('#newQuoteFromOrders')?.addEventListener('click', () => navigateToRoute(`${ADMIN_PATH}/cotizaciones?new=1`));
-  document.querySelector('#quotesPanel')?.addEventListener('click', event => {
+  document.querySelector('#quotesPanel')?.addEventListener('click', async event => {
     const edit = event.target.closest('[data-edit-quote]');
     if (edit) { navigateToRoute(`${ADMIN_PATH}/cotizaciones?edit=${encodeURIComponent(edit.dataset.editQuote)}`); return; }
     const use = event.target.closest('[data-use-quote]');
-    if (use) {
-      const quote = quotes.find(item => String(item.id) === String(use.dataset.useQuote));
-      if (!quote) return;
+    if (!use) return;
+    use.disabled = true;
+    try {
+      const latestQuotes = await request('/api/admin/cotizaciones');
+      const quote = latestQuotes.find(item => String(item.id) === String(use.dataset.useQuote));
+      if (!quote) throw new Error('La cotización ya no está disponible.');
+      if (quote.status === 'Convertida') {
+        alert(quote.convertedOrderNumber ? `Esta cotización ya fue facturada en la venta #${quote.convertedOrderNumber}.` : 'Esta cotización ya fue facturada y no puede volver a utilizarse.');
+        await renderAdminOrders();
+        return;
+      }
+      if (quote.status === 'Rechazada') {
+        alert('Esta cotización está cancelada y no puede utilizarse para una nueva venta.');
+        await renderAdminOrders();
+        return;
+      }
       localStorage.setItem('yhorsQuoteToSale', JSON.stringify(quote));
       navigateToRoute(`${ADMIN_PATH}/ventas`);
+    } catch (error) {
+      alert(error.message || 'No se pudo validar la cotización.');
+      use.disabled = false;
     }
   });
 
