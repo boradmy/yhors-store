@@ -4098,6 +4098,18 @@ app.post('/api/admin/orders/:id/notificar-venta', requireOrdersAccess, (req,res)
   order.salesNotifiedAt=sale.notifiedAt; order.salesHistoryId=sale.id; order.updatedAt=sale.notifiedAt; orders[index]=order; try{writeOrders(orders);}catch(e){writeSales(sales.filter(s=>s.id!==sale.id));return res.status(500).json({error:'No se pudo cerrar el pedido como venta.'});}
   auditLog(req,'Venta notificada','Historial de ventas',{orderId:order.id,orderNumber:order.orderNumber,salesId:sale.id,status:order.status,total:order.total}); return res.status(201).json(decorateOrderAssignment(sale));
 });
+app.patch('/api/admin/historial-ventas/:id/nota', requireAdmin, (req,res)=>{
+  const sales=readSales(); const index=sales.findIndex(s=>s.id===req.params.id);
+  if(index<0)return res.status(404).json({error:'Venta no encontrada en Historial de ventas.'});
+  const note=cleanText(req.body?.internalNote,5000);
+  const sale=sales[index];
+  sale.internalNote=note; sale.updatedAt=new Date().toISOString();
+  try{ writeSales(sales); }catch(e){ return res.status(500).json({error:'No se pudo guardar la nota interna.'}); }
+  const orders=readOrders(); const orderIndex=orders.findIndex(o=>String(o.id)===String(sale.orderId));
+  if(orderIndex>=0){ orders[orderIndex].internalNote=note; orders[orderIndex].updatedAt=sale.updatedAt; try{ writeOrders(orders); }catch(e){} }
+  auditLog(req,'Nota interna de venta actualizada','Historial de ventas',{salesId:sale.id,orderId:sale.orderId,orderNumber:sale.orderNumber});
+  return res.json(decorateOrderAssignment(sale));
+});
 app.delete('/api/admin/historial-ventas/:id', requireAdmin, (req,res)=>{
   const sales=readSales(), sale=sales.find(s=>s.id===req.params.id); if(!sale)return res.status(404).json({error:'Venta no encontrada en Historial de ventas.'}); const orders=readOrders(), index=orders.findIndex(o=>String(o.id)===String(sale.orderId));
   if(index>=0){const order=orders[index];delete order.salesNotifiedAt;delete order.salesHistoryId;order.updatedAt=new Date().toISOString();orders[index]=order;writeOrders(orders);} writeSales(sales.filter(s=>s.id!==req.params.id)); auditLog(req,'Venta eliminada del historial','Historial de ventas',{salesId:sale.id,orderId:sale.orderId,orderNumber:sale.orderNumber,total:sale.total}); return res.status(204).end();

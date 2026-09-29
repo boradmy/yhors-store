@@ -3718,3 +3718,17 @@ body.generate-modal-open{overflow:hidden}
 .series-config-row:hover{background:#fcfaf6;border-color:#eee7da}
 .series-config-row>div strong{font-size:.96rem}
 @media(max-width:700px){.series-config-toolbar select{width:100%;min-width:0}.device-id-placeholder{display:none}}
+
+/* FASE 2.7.3 · Notas internas en Historial de ventas */
+.history-actions{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:7px}
+.history-note-details{margin-top:6px;min-width:230px}
+.history-note-details summary{cursor:pointer;list-style:none;display:inline-flex;align-items:center;gap:6px;padding:6px 9px;border:1px solid #ded8cc;border-radius:8px;background:#faf8f3;color:#6e5b38;font-size:.68rem;font-weight:800;letter-spacing:.03em}
+.history-note-details summary::-webkit-details-marker{display:none}
+.history-note-details summary::before{content:'▸';font-size:.65rem;transition:transform .15s ease}
+.history-note-details[open] summary::before{transform:rotate(90deg)}
+.history-note-content{margin-top:7px;padding:9px;border:1px solid #e5ded2;border-radius:9px;background:#fff;box-shadow:0 4px 12px rgba(25,20,12,.04)}
+.history-note-content p{margin:0;color:#4f4a43;font-size:.72rem;line-height:1.5;white-space:normal}
+.history-note-editor{display:block;width:100%;box-sizing:border-box;resize:vertical;border:1px solid #d8d0c1;border-radius:8px;padding:8px 9px;font:inherit;font-size:.72rem;line-height:1.45;min-height:72px;outline:none;background:#fff}
+.history-note-editor:focus{border-color:#b38a3b;box-shadow:0 0 0 3px rgba(179,138,59,.12)}
+.history-note-actions{display:flex;justify-content:flex-end;margin-top:7px}
+@media(max-width:800px){.history-note-details{min-width:180px}.history-actions{align-items:flex-start;flex-direction:column}.history-actions .button{width:100%}.history-note-editor{min-width:0}}
