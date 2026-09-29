@@ -612,10 +612,8 @@ async function renderCurrentRoute() {
   if (path === `${ADMIN_PATH}/pedidos` || path === `${ADMIN_PATH}/pedidos/`) return renderAdminOrders();
   if (path === `${ADMIN_PATH}/ventas` || path === `${ADMIN_PATH}/ventas/`) return renderAdminDirectSales();
   if (path === `${ADMIN_PATH}/ventas/historial` || path === `${ADMIN_PATH}/ventas/historial/`) return renderAdminSalesHistory();
-  if (path === `${ADMIN_PATH}/series-imei/configuraciones` || path === `${ADMIN_PATH}/series-imei/configuraciones/`) return renderAdminSeriesImeiConfig();
-  if (path === `${ADMIN_PATH}/series-imei/registrados` || path === `${ADMIN_PATH}/series-imei/registrados/`) return renderAdminSeriesImeiRegistered();
-  if (path === `${ADMIN_PATH}/series-imei` || path === `${ADMIN_PATH}/series-imei/`) { window.location.replace(`${ADMIN_PATH}/series-imei/registrados`); return; }
-  if (path === `${ADMIN_PATH}/cotizaciones` || path === `${ADMIN_PATH}/cotizaciones/`) return renderAdminQuotes();
+  if (path === `${ADMIN_PATH}/series-imei` || path === `${ADMIN_PATH}/series-imei/`) return renderAdminSeriesImei();
+  if (path === `${ADMIN_PATH}/cotizaciones` || path === `${ADMIN_PATH}/cotizaciones/`) { const qs = new URLSearchParams(window.location.search); if (qs.has('edit') || qs.has('new')) return renderAdminQuotes(); window.history.replaceState({}, '', `${ADMIN_PATH}/pedidos`); return renderAdminOrders(); }
   if (path === `${ADMIN_PATH}/generar-orden` || path === `${ADMIN_PATH}/generar-orden/`) { window.location.replace(`${ADMIN_PATH}/ventas`); return; }
     if (path === `${ADMIN_PATH}/auditoria` || path === `${ADMIN_PATH}/auditoria/`) return renderAdminAudit();
   if (path === `${ADMIN_PATH}/seguridad` || path === `${ADMIN_PATH}/seguridad/`) return renderAdminSecurity(true);
@@ -1014,7 +1012,7 @@ function classificationPanel(classifications) {
   </section>`;
 }
 
-function ordersPanel(orders = [], canDelete = true) {
+function ordersPanel(orders = [], canDelete = true, quotes = []) {
   const statuses = ['Pendiente', 'Confirmado', 'Preparado', 'Enviado', 'Entregado', 'Cancelado'];
   return `<section class="admin-panel orders-panel" id="ordersPanel">
     <div class="section-heading"><div><span class="eyebrow">Ventas</span><h2>Pedidos recibidos <small class="orders-count">${orders.length}</small></h2></div><p>Los pedidos sin vendedor quedan separados para que puedas detectar lo que falta despachar.</p></div>
@@ -1028,6 +1026,10 @@ function ordersPanel(orders = [], canDelete = true) {
       <input id="ordersSearch" type="search" placeholder="Buscar por pedido, cliente, cédula/RUC, teléfono o SKU…" autocomplete="off">
     </div>
     <div id="adminOrdersList">${ordersListMarkup(orders, { canDelete, canAssign: false, sellers: [], role: '' })}</div>
+  </section>
+  <section class="admin-panel orders-panel quotes-panel" id="quotesPanel">
+    <div class="section-heading"><div><span class="eyebrow">Cotizaciones</span><h2>Cotizaciones recibidas <small class="orders-count">${quotes.length}</small></h2></div><p>Las cotizaciones también llegan aquí. Puedes editarlas o pasarlas a una venta.</p><button type="button" class="button primary small" id="newQuoteFromOrders">+ Nueva cotización</button></div>
+    <div class="quote-history-list">${quotes.length ? quotes.map(q => `<article class="quote-history-item" data-quote-card="${escapeHTML(q.id)}"><div><strong>#${escapeHTML(q.quoteNumber)}</strong><span>${escapeHTML(q.customer?.name || 'Cliente')}</span><small>${escapeHTML(q.status || 'Pendiente')} · ${escapeHTML(new Date(q.createdAt).toLocaleDateString('es-EC'))}</small></div><div class="quote-history-actions"><strong>${money(q.total)}</strong>${q.status !== 'Convertida' ? `<button type="button" class="button secondary small" data-edit-quote="${escapeHTML(q.id)}">EDITAR</button><button type="button" class="button secondary small" data-use-quote="${escapeHTML(q.id)}">USAR EN VENTA</button>` : '<small>Convertida</small>'}</div></article>`).join('') : '<div class="generate-empty-state"><span>⌁</span><strong>Aún no hay cotizaciones</strong><small>Las cotizaciones creadas desde la web o aquí aparecerán en este apartado.</small></div>'}</div>
   </section>`;
 }
 
@@ -1167,18 +1169,15 @@ function ordersListMarkup(orders = [], options = {}) {
 function adminSectionNav(session = {}, active = '') {
   const role = String(session?.role || '').toLowerCase();
   const limitedOperations = role === 'vendedor' || role === 'orders' || role === 'store_manager';
-  const isAdmin = role === 'admin';
   const link = (key, href, label) => `<a href="${href}" class="admin-section-link${active === key ? ' active' : ''}" data-smooth-route>${label}</a>`;
-  const seriesRegistered = link('series-imei-registrados', `${ADMIN_PATH}/series-imei/registrados`, 'SERIES / IMEI REGISTRADOS');
-  const seriesConfig = isAdmin ? link('series-imei-configuraciones', `${ADMIN_PATH}/series-imei/configuraciones`, 'SERIES/IMEI CONFIGURACIONES') : '';
   if (limitedOperations) {
     return `<nav class="admin-section-nav admin-section-nav--compact" id="adminSectionNav" aria-label="Secciones operativas">
-      <details class="admin-nav-group"><summary>Operación</summary><div class="admin-nav-group-links">${link('buscar-productos', `${ADMIN_PATH}/buscar-productos`, 'BUSCAR PRODUCTOS')}${link('cotizaciones', `${ADMIN_PATH}/cotizaciones`, 'COTIZACIONES')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('ventas', `${ADMIN_PATH}/ventas`, 'VENTAS')}${link('historial-ventas', `${ADMIN_PATH}/ventas/historial`, 'HISTORIAL DE VENTAS')}${seriesRegistered}</div></details>
+      <details class="admin-nav-group"><summary>Operación</summary><div class="admin-nav-group-links">${link('buscar-productos', `${ADMIN_PATH}/buscar-productos`, 'BUSCAR PRODUCTOS')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS / COTIZACIONES')}${link('ventas', `${ADMIN_PATH}/ventas`, 'VENTAS')}${link('historial-ventas', `${ADMIN_PATH}/ventas/historial`, 'HISTORIAL DE VENTAS')}${link('series-imei', `${ADMIN_PATH}/series-imei`, 'SERIES / IMEI')}</div></details>
     </nav>`;
   }
   const group = (label, activeKeys, items, open = false) => `<details class="admin-nav-group${activeKeys.includes(active) ? ' has-active' : ''}"${open ? ' open' : ''}><summary><span>${label}</span>${activeKeys.includes(active) ? '<i aria-hidden="true"></i>' : ''}</summary><div class="admin-nav-group-links">${items}</div></details>`;
   return `<nav class="admin-section-nav" id="adminSectionNav" aria-label="Administración YHORS">
-    ${group('Operación', ['web','inventario','buscar-productos','cotizaciones','pedidos','ventas','historial-ventas','series-imei-registrados','series-imei-configuraciones'], `${link('web', ADMIN_PATH, 'PÁGINA WEB')}${link('buscar-productos', `${ADMIN_PATH}/buscar-productos`, 'BUSCAR PRODUCTOS')}${link('inventario', `${ADMIN_PATH}/inventario`, 'INVENTARIO')}${link('cotizaciones', `${ADMIN_PATH}/cotizaciones`, 'COTIZACIONES')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('ventas', `${ADMIN_PATH}/ventas`, 'VENTAS')}${link('historial-ventas', `${ADMIN_PATH}/ventas/historial`, 'HISTORIAL DE VENTAS')}${seriesRegistered}${seriesConfig}`)}
+    ${group('Operación', ['web','inventario','buscar-productos','cotizaciones','pedidos','ventas'], `${link('web', ADMIN_PATH, 'PÁGINA WEB')}${link('buscar-productos', `${ADMIN_PATH}/buscar-productos`, 'BUSCAR PRODUCTOS')}${link('inventario', `${ADMIN_PATH}/inventario`, 'INVENTARIO')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS / COTIZACIONES')}${link('ventas', `${ADMIN_PATH}/ventas`, 'VENTAS')}${link('historial-ventas', `${ADMIN_PATH}/ventas/historial`, 'HISTORIAL DE VENTAS')}${link('series-imei', `${ADMIN_PATH}/series-imei`, 'SERIES / IMEI')}`)}
     ${group('Gestión', ['usuarios','auditoria'], `${link('usuarios', `${ADMIN_PATH}/usuarios`, 'USUARIOS')}${link('auditoria', `${ADMIN_PATH}/auditoria`, 'AUDITORÍA')}`)}
     ${group('Finanzas', ['resumen-financiero','ventas-generales','multas','calculo-comision'], `${link('resumen-financiero', `${ADMIN_PATH}/resumen-financiero`, 'RESUMEN FINANCIERO')}${link('ventas-generales', `${ADMIN_PATH}/ventas-generales`, 'VENTAS GENERALES')}${link('multas', `${ADMIN_PATH}/multas`, 'MULTAS')}${link('calculo-comision', `${ADMIN_PATH}/calculo-comision`, 'CÁLCULO DE COMISIÓN')}`)}
   </nav>`;
@@ -1302,7 +1301,6 @@ async function renderAdminDirectSales() {
         <section class="generate-card totals-card"><div class="generate-card-kicker">Resumen</div><div class="generate-total-line"><span>Subtotal</span><strong id="generateSubtotal">$0,00</strong></div><div class="generate-total-line"><span>Envío</span><strong id="generateShipping">$0,00</strong></div><div class="generate-grand-total"><span>Total</span><strong id="generateTotal">$0,00</strong></div><div id="generateMessage" class="message" hidden></div><button type="button" class="button generate-submit" id="generateOrderSubmit">Registrar venta <span>→</span></button></section>
       </section>
     </section>
-    <section class="generate-card quote-history-card sales-history-card"><div class="generate-card-head"><div><span class="generate-card-kicker">Historial</span><h3>Ventas directas recientes</h3></div><a class="button secondary small" href="${ADMIN_PATH}/ventas/historial" data-smooth-route>Historial completo →</a></div><div class="quote-history-list">${recentSales.length ? recentSales.slice(0,12).map(sale => `<article class="quote-history-item"><div><strong>#${escapeHTML(sale.orderNumber)}</strong><span>${escapeHTML(sale.customer?.name || 'Cliente')}</span><small>${escapeHTML(sale.assignedSellerName || 'Sin vendedor')} · ${escapeHTML(new Date(sale.createdAt).toLocaleDateString('es-EC'))}</small></div><div class="quote-history-actions"><strong>${money(sale.total)}</strong><button type="button" class="button secondary small" data-sale-pdf="${escapeHTML(sale.id)}">PDF</button></div></article>`).join('') : '<div class="generate-empty-state"><span>✓</span><strong>Aún no hay ventas directas</strong><small>Las ventas registradas desde este módulo aparecerán aquí.</small></div>'}</div></section>
     <div class="generate-modal" id="customerModal" hidden><div class="generate-modal-backdrop" data-close-generate-modal="customerModal"></div><div class="generate-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="customerModalTitle"><div class="generate-modal-head"><div><span class="eyebrow">Datos del cliente</span><h2 id="customerModalTitle">Registrar cliente</h2></div><button type="button" class="generate-modal-close" data-close-generate-modal="customerModal">×</button></div><form id="generateCustomerForm"><div class="form-grid"><div class="field full"><label for="genCustomerName">Nombre completo</label><input id="genCustomerName" required maxlength="100" placeholder="Nombre del cliente"></div><div class="field"><label for="genCustomerCedula">Cédula / RUC</label><input id="genCustomerCedula" required inputmode="numeric" maxlength="13" placeholder="0102030405"></div><div class="field"><label for="genCustomerPhone">Celular</label><input id="genCustomerPhone" required maxlength="40" placeholder="099 999 9999"></div><div class="field"><label for="genCustomerEmail">Correo</label><input id="genCustomerEmail" type="email" maxlength="120" placeholder="cliente@correo.com"></div><div class="field"><label for="genCustomerCity">Ciudad</label><input id="genCustomerCity" required maxlength="80" placeholder="Quito"></div><div class="field full"><label for="genCustomerAddress">Dirección</label><input id="genCustomerAddress" maxlength="240" placeholder="Dirección de entrega"></div><div class="field full"><label for="genCustomerMaps">Google Maps (opcional)</label><input id="genCustomerMaps" type="url" maxlength="500" placeholder="https://maps.google.com/..."></div></div><div class="generate-modal-actions"><button type="button" class="button secondary" data-close-generate-modal="customerModal">Cancelar</button><button type="submit" class="button primary">Guardar cliente</button></div></form></div></div></div>
     <div class="generate-modal" id="productPickerModal" hidden><div class="generate-modal-backdrop" data-close-generate-modal="productPickerModal"></div><div class="generate-modal-dialog generate-product-picker" role="dialog" aria-modal="true" aria-labelledby="productPickerTitle"><div class="generate-modal-head"><div><span class="eyebrow">Catálogo YHORS</span><h2 id="productPickerTitle">Agregar productos</h2></div><button type="button" class="generate-modal-close" data-close-generate-modal="productPickerModal">×</button></div><div class="generate-picker-toolbar"><input id="generateProductSearch" type="search" placeholder="Buscar por nombre, SKU, marca…"><select id="generateProductCategory"><option value="">Todas las categorías</option><option value="elegant">Elegante</option><option value="sports">Deportes</option><option value="tech">Tech</option><option value="cosplay">Cosplay</option><option value="pets">Mascotas</option><option value="details">Details</option><option value="collectibles">Coleccionables</option></select></div><div class="generate-picker-list" id="generatePickerList"></div><div class="generate-modal-actions"><span class="generate-picker-hint">Puedes agregar varios productos y cantidades antes de cerrar.</span><button type="button" class="button primary" data-close-generate-modal="productPickerModal">Listo</button></div></div></div></div>
     <div class="generate-modal fine-person-modal" id="generateSellerPickerModal" hidden><div class="generate-modal-backdrop" data-close-generate-seller></div><div class="generate-modal-dialog fine-person-picker-dialog" role="dialog" aria-modal="true" aria-labelledby="generateSellerPickerTitle"><div class="generate-modal-head"><div><span class="eyebrow">Nueva venta · Responsable</span><h2 id="generateSellerPickerTitle">Seleccionar vendedor</h2><p class="fine-person-picker-subtitle">Busca al vendedor que quedará responsable de esta venta.</p></div><button type="button" class="generate-modal-close" data-close-generate-seller aria-label="Cerrar">×</button></div><div class="fine-person-picker-toolbar"><input id="generateSellerSearch" type="search" placeholder="Buscar por nombre o usuario…" autocomplete="off"></div><div class="fine-person-picker-count" id="generateSellerPickerCount"></div><div class="fine-person-picker-list" id="generateSellerPickerList"></div></div></div></div>
@@ -1397,7 +1395,7 @@ async function renderAdminDirectSales() {
       { cancelText: 'Cancelar', confirmText: 'Registrar venta' }
     );
     if (!confirmed) return;
-    saving = true; submit.disabled = true; submit.classList.add('is-loading'); submit.innerHTML = 'Registrando…'; try { const assignedSellerId = document.querySelector('#generateSeller')?.value || null; syncDeviceIdentifiersFromDom(lines); const identifierError = lines.find(line => { if (!requiresDeviceTracking(line) || line.purchaseMode === 'rental') return false; const entries = line.deviceIdentifiers || []; if (entries.length < Number(line.quantity || 1)) return true; return entries.some(entry => isImeiOrderProduct(line) ? !/^\d{14,16}$/.test(String(entry.primary || '')) : !/^[A-Za-z0-9._\-/ ]{3,50}$/.test(String(entry.primary || ''))); }); if (identifierError) { message.hidden = false; message.className = 'message error'; message.textContent = isImeiOrderProduct(identifierError) ? `Completa correctamente el IMEI 1 de cada unidad de “${identifierError.name}” (14–16 dígitos).` : `Completa el número de serie de cada unidad de “${identifierError.name}”.`; saving = false; submit.disabled = false; submit.classList.remove('is-loading'); submit.innerHTML = 'Registrar venta <span>→</span>'; return; } const payload = { customer: { ...customer, notes: document.querySelector('#generateNotes').value.trim() }, internalNote: document.querySelector('#generateNotes').value.trim(), deliveryMethod, assignedSellerId, items: lines.map(line => ({ productId: line.productId || line.id, quantity: Number(line.quantity), purchaseMode: line.purchaseMode || 'purchase', rentalDays: line.purchaseMode === 'rental' ? Math.max(1, Number(line.rentalDays || 1)) : null, deviceIdentifiers: Array.isArray(line.deviceIdentifiers) ? line.deviceIdentifiers : [] })) }; const result = await request('/api/admin/ventas', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) }); app.querySelector('.generate-order-page').innerHTML = `<div class="generate-success"><span class="success-mark">✓</span><span class="eyebrow">Venta registrada correctamente</span><h2>#${escapeHTML(result.orderNumber)}</h2><p>La venta quedó registrada en YHORS, se descontó el inventario y quedó marcada como entregada.</p><div class="generate-success-total">Total: <strong>${money(result.total)}</strong></div><div class="generate-success-actions"><button type="button" class="button primary" id="generateAnotherOrder">Nueva venta</button><a class="button secondary" href="${ADMIN_PATH}/ventas" data-smooth-route>Ver ventas</a>${result.orderId ? `<button type="button" class="button secondary" data-generated-pdf="${escapeHTML(result.orderId)}">PDF de venta</button>` : ''}</div></div>`; document.querySelector('#generateAnotherOrder')?.addEventListener('click', () => renderAdminDirectSales()); document.querySelector('[data-generated-pdf]')?.addEventListener('click', event => { const a=document.createElement('a'); a.href=`/api/admin/ventas/${encodeURIComponent(event.currentTarget.dataset.generatedPdf)}/pdf?v=${Date.now()}`; a.target='_blank'; a.rel='noopener'; a.click(); }); } catch (error) { message.hidden = false; message.className = 'message error'; message.textContent = error.message || 'No se pudo generar la venta.'; submit.disabled = false; submit.classList.remove('is-loading'); submit.innerHTML = 'Registrar venta <span>→</span>'; saving = false; } });
+    saving = true; submit.disabled = true; submit.classList.add('is-loading'); submit.innerHTML = 'Registrando…'; try { const assignedSellerId = document.querySelector('#generateSeller')?.value || null; syncDeviceIdentifiersFromDom(lines); const identifierError = lines.find(line => { if (!requiresDeviceTracking(line) || line.purchaseMode === 'rental') return false; const entries = line.deviceIdentifiers || []; if (entries.length < Number(line.quantity || 1)) return true; return entries.some(entry => isImeiOrderProduct(line) ? !/^\d{14,16}$/.test(String(entry.primary || '')) : !/^[A-Za-z0-9._\-/ ]{3,50}$/.test(String(entry.primary || ''))); }); if (identifierError) { message.hidden = false; message.className = 'message error'; message.textContent = isImeiOrderProduct(identifierError) ? `Completa correctamente el IMEI 1 de cada unidad de “${identifierError.name}” (14–16 dígitos).` : `Completa el número de serie de cada unidad de “${identifierError.name}”.`; saving = false; submit.disabled = false; submit.classList.remove('is-loading'); submit.innerHTML = 'Registrar venta <span>→</span>'; return; } const payload = { customer: { ...customer, notes: document.querySelector('#generateNotes').value.trim() }, internalNote: document.querySelector('#generateNotes').value.trim(), deliveryMethod, assignedSellerId, items: lines.map(line => ({ productId: line.productId || line.id, quantity: Number(line.quantity), purchaseMode: line.purchaseMode || 'purchase', rentalDays: line.purchaseMode === 'rental' ? Math.max(1, Number(line.rentalDays || 1)) : null, deviceIdentifiers: Array.isArray(line.deviceIdentifiers) ? line.deviceIdentifiers : [] })) }; const result = await request('/api/admin/ventas', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) }); app.querySelector('.generate-order-page').innerHTML = `<div class="generate-success"><span class="success-mark">✓</span><span class="eyebrow">Venta registrada correctamente</span><h2>#${escapeHTML(result.orderNumber)}</h2><p>La venta quedó registrada en YHORS, se descontó el inventario y quedó marcada como entregada.</p><div class="generate-success-total">Total: <strong>${money(result.total)}</strong></div><div class="generate-success-actions"><button type="button" class="button primary" id="generateAnotherOrder">Nueva venta</button><a class="button secondary" href="${ADMIN_PATH}/ventas/historial" data-smooth-route>Ver ventas</a>${result.orderId ? `<button type="button" class="button secondary" data-generated-pdf="${escapeHTML(result.orderId)}">PDF de venta</button>` : ''}</div></div>`; document.querySelector('#generateAnotherOrder')?.addEventListener('click', () => renderAdminDirectSales()); document.querySelector('[data-generated-pdf]')?.addEventListener('click', event => { const a=document.createElement('a'); a.href=`/api/admin/ventas/${encodeURIComponent(event.currentTarget.dataset.generatedPdf)}/pdf?v=${Date.now()}`; a.target='_blank'; a.rel='noopener'; a.click(); }); } catch (error) { message.hidden = false; message.className = 'message error'; message.textContent = error.message || 'No se pudo generar la venta.'; submit.disabled = false; submit.classList.remove('is-loading'); submit.innerHTML = 'Registrar venta <span>→</span>'; saving = false; } });
   drawCustomer(); drawLines(); wireAccountMenu(); wireImageFallback(app);
 }
 
@@ -1458,173 +1456,52 @@ async function renderAdminSalesHistory() {
   await load();
 }
 
-
-async function renderAdminSeriesImeiConfig() {
-  const session = await request('/api/admin/session').catch(() => ({ authenticated:false }));
-  if (!session.authenticated) return renderLogin();
-  const role = String(session.role || '').toLowerCase();
-  if (role !== 'admin') return renderAdminSeriesImeiRegistered();
-
-  const products = await request('/api/admin/order-products').catch(() => []);
-  const productConfig = products.filter(p => String(p.category || '').toLowerCase() === 'tech');
-
-  app.innerHTML = `<main class="admin-shell series-imei-shell"><div class="admin-wrap">
-    <div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">SERIES/IMEI CONFIGURACIONES</h1><p class="admin-subtitle">Define qué productos Tech deben solicitar serie o IMEI al momento de vender.</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>
-    ${adminSectionNav(session, 'series-imei-configuraciones')}
-    <section class="admin-panel">
-      <div class="section-heading"><div><span class="eyebrow">Solo administración</span><h2>Solicitar / no solicitar serie o IMEI</h2></div><p>Los cambios quedan pendientes hasta que presiones <strong>Guardar cambios</strong>.</p></div>
-      <div class="series-config-toolbar">
-        <label class="sales-history-search"><span>Buscar producto</span><input id="seriesConfigSearch" type="search" placeholder="Nombre, SKU o tipo de producto…" autocomplete="off"></label>
-        <span class="series-config-count" id="seriesConfigCount"></span>
-      </div>
-      <div id="seriesConfigMessage" class="message" hidden></div>
-      <div class="series-config-grid" id="seriesConfigList"></div>
-      <div class="series-config-footer"><button type="button" class="button secondary" id="seriesConfigReset">Descartar cambios</button><button type="button" class="button primary" id="seriesConfigSave">Guardar cambios</button></div>
-    </section>
-  </div></main>`;
-  wireAccountMenu();
-
-  const original = new Map(productConfig.map(p => [String(p.id), p.deviceTracking !== 'none']));
-  const pending = new Map(original);
-  const render = () => {
-    const q = document.querySelector('#seriesConfigSearch')?.value.trim().toLowerCase() || '';
-    const filtered = productConfig.filter(p => {
-      const hay = `${p.name || ''} ${p.sku || ''} ${p.productType || ''}`.toLowerCase();
-      return !q || hay.includes(q);
-    });
-    const list = document.querySelector('#seriesConfigList');
-    document.querySelector('#seriesConfigCount').textContent = `${filtered.length} de ${productConfig.length} productos`;
-    list.innerHTML = filtered.map(product => {
-      const enabled = pending.get(String(product.id));
-      return `<article class="series-config-card"><div><strong>${escapeHTML(product.name)}</strong><small>SKU: ${escapeHTML(product.sku || '—')} · ${escapeHTML(product.productType || 'Tech')}</small></div>
-        <label class="series-toggle"><input type="checkbox" data-device-pending="${escapeHTML(product.id)}" ${enabled ? 'checked' : ''}><span></span><b>${enabled ? 'Solicitar' : 'No solicitar'}</b></label></article>`;
-    }).join('') || '<div class="generate-empty-state"><strong>No se encontraron productos.</strong><small>Prueba con otro nombre o SKU.</small></div>';
-    document.querySelectorAll('[data-device-pending]').forEach(input => input.addEventListener('change', () => {
-      pending.set(String(input.dataset.devicePending), input.checked);
-      input.nextElementSibling?.nextElementSibling && (input.nextElementSibling.nextElementSibling.textContent = input.checked ? 'Solicitar' : 'No solicitar');
-    }));
-  };
-  render();
-  document.querySelector('#seriesConfigSearch')?.addEventListener('input', render);
-
-  document.querySelector('#seriesConfigReset')?.addEventListener('click', async () => {
-    if (!await showYhorsConfirm('¿Descartar cambios?', 'Se restaurará la configuración que tenía guardada antes de esta edición.', {cancelText:'Cancelar', confirmText:'Descartar'})) return;
-    original.forEach((value, key) => pending.set(key, value));
-    render();
-  });
-
-  document.querySelector('#seriesConfigSave')?.addEventListener('click', async () => {
-    const changes = productConfig.filter(p => original.get(String(p.id)) !== pending.get(String(p.id)));
-    if (!changes.length) { alert('No hay cambios pendientes para guardar.'); return; }
-    if (!await showYhorsConfirm('¿Guardar cambios?', `Se actualizarán ${changes.length} producto${changes.length === 1 ? '' : 's'} y esta configuración se aplicará a las próximas ventas.`, {cancelText:'Cancelar', confirmText:'Guardar cambios'})) return;
-    const saveBtn = document.querySelector('#seriesConfigSave');
-    saveBtn.disabled = true;
-    try {
-      for (const product of changes) {
-        await request(`/api/admin/products/${encodeURIComponent(product.id)}/device-tracking`, {
-          method:'PUT', headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({enabled: pending.get(String(product.id))})
-        });
-      }
-      changes.forEach(product => original.set(String(product.id), pending.get(String(product.id))));
-      alert('Configuración guardada correctamente.');
-      render();
-    } catch (error) {
-      alert(error.message || 'No se pudo guardar la configuración.');
-      // Reload from server to avoid leaving a partially saved state in the UI.
-      window.location.reload();
-    } finally {
-      saveBtn.disabled = false;
-    }
-  });
-}
-
-async function renderAdminSeriesImeiRegistered() {
+async function renderAdminSeriesImei() {
   const session = await request('/api/admin/session').catch(() => ({ authenticated:false }));
   if (!session.authenticated) return renderLogin();
   const role = String(session.role || '').toLowerCase();
   if (!['admin','store_manager','vendedor','orders'].includes(role)) return renderAdmin();
-
-  const sales = await request('/api/admin/series-imei').catch(() => []);
-  const sellers = [...new Set(sales.map(r => r.sellerName).filter(Boolean))].sort((a,b) => a.localeCompare(b,'es'));
-  const products = [...new Set(sales.map(r => r.productName).filter(Boolean))].sort((a,b) => a.localeCompare(b,'es'));
   const canEdit = role === 'admin' || role === 'store_manager';
-
+  const products = await request('/api/admin/order-products').catch(() => []);
+  const sales = await request('/api/admin/series-imei').catch(() => []);
+  const productConfig = products.filter(p => String(p.category || '').toLowerCase() === 'tech');
   app.innerHTML = `<main class="admin-shell series-imei-shell"><div class="admin-wrap">
-    <div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Series / IMEI registrados</h1><p class="admin-subtitle">Consulta, filtra y corrige los identificadores registrados en las ventas.</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>
-    ${adminSectionNav(session, 'series-imei-registrados')}
+    <div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Series / IMEI</h1><p class="admin-subtitle">Configura qué productos Tech solicitan identificación y corrige los identificadores de las ventas.</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>
+    ${adminSectionNav(session, 'series-imei')}
     <section class="admin-panel">
-      <div class="section-heading"><div><span class="eyebrow">Registros</span><h2>Series / IMEI registrados</h2></div><p>Usa fechas, búsqueda y filtros para encontrar rápidamente el registro que necesitas.</p></div>
-      <div class="series-records-toolbar">
-        <label class="sales-history-search"><span>Buscar</span><input id="seriesSearch" type="search" placeholder="Producto, SKU, serie, IMEI, venta, cliente…" autocomplete="off"></label>
-        <label class="sales-date-filter"><span>Desde</span><input id="seriesDateFrom" type="date"></label>
-        <label class="sales-date-filter"><span>Hasta</span><input id="seriesDateTo" type="date"></label>
-        <label><span>Tipo</span><select id="seriesTypeFilter"><option value="">Todos</option><option value="serial">Serie</option><option value="imei">IMEI</option></select></label>
-        <label><span>Vendedor</span><select id="seriesSellerFilter"><option value="">Todos</option>${sellers.map(v=>`<option value="${escapeHTML(v)}">${escapeHTML(v)}</option>`).join('')}</select></label>
-        <label><span>Producto</span><select id="seriesProductFilter"><option value="">Todos</option>${products.map(v=>`<option value="${escapeHTML(v)}">${escapeHTML(v)}</option>`).join('')}</select></label>
-        <button type="button" class="button secondary small" id="seriesFiltersClear">Limpiar filtros</button>
-      </div>
-      <div id="seriesRecordsMessage" class="message" hidden></div>
-      <div class="series-records-summary" id="seriesRecordsSummary"></div>
-      <div class="sales-history-list" id="seriesList"><div class="sales-loading">Cargando registros…</div></div>
+      <div class="section-heading"><div><span class="eyebrow">Control de equipos</span><h2>Solicitar serie / IMEI</h2></div><p>Activa la identificación solo en los productos Tech que realmente la necesitan.</p></div>
+      <div class="series-config-grid">${productConfig.map(product => `<article class="series-config-card"><div><strong>${escapeHTML(product.name)}</strong><small>SKU: ${escapeHTML(product.sku || '—')} · ${escapeHTML(product.productType || 'Tech')}</small></div><label class="series-toggle"><input type="checkbox" data-device-toggle="${escapeHTML(product.id)}" ${product.deviceTracking !== 'none' ? 'checked' : ''} ${!canEdit ? 'disabled' : ''}><span></span><b>${product.deviceTracking !== 'none' ? 'Solicitar' : 'No solicitar'}</b></label></article>`).join('') || '<div class="generate-empty-state"><strong>No hay productos Tech.</strong></div>'}</div>
+    </section>
+    <section class="admin-panel">
+      <div class="section-heading"><div><span class="eyebrow">Registros</span><h2>Series / IMEI registrados</h2></div><p>ADMIN y JEFE DE TIENDA pueden modificar identificadores.</p></div>
+      <div class="sales-history-list" id="seriesList">${sales.length ? sales.map(row => `<article class="sales-history-card series-record" data-series-row="${escapeHTML(row.saleId)}" data-item-index="${row.itemIndex}" data-unit="${row.unit}">
+        <div class="sales-history-main"><div><span class="eyebrow">${row.type === 'imei' ? 'IMEI' : 'SERIE'} · #${escapeHTML(row.orderNumber)}</span><h3>${escapeHTML(row.productName)}</h3><small>Unidad ${row.unit} · ${escapeHTML(row.customerName || 'Cliente')} · ${escapeHTML(row.sellerName || 'Sin vendedor')}</small></div>
+        <div class="series-values"><input data-series-primary value="${escapeHTML(row.primary)}" ${canEdit?'':'disabled'}><input data-series-secondary value="${escapeHTML(row.secondary || '')}" placeholder="${row.type === 'imei' ? 'IMEI 2 (opcional)' : '—'}" ${canEdit && row.type==='imei'?'':'disabled'}></div></div>
+        ${canEdit ? `<div class="sales-history-actions"><button type="button" class="button secondary small" data-save-series>Guardar</button></div>` : ''}</article>`).join('') : '<div class="generate-empty-state"><strong>No hay series / IMEI registrados.</strong><small>Cuando una venta tenga identificación aparecerá aquí.</small></div>'}</div>
     </section>
   </div></main>`;
   wireAccountMenu();
 
-  let allRows = sales;
-  const renderRows = () => {
-    const q = document.querySelector('#seriesSearch')?.value.trim().toLowerCase() || '';
-    const from = document.querySelector('#seriesDateFrom')?.value || '';
-    const to = document.querySelector('#seriesDateTo')?.value || '';
-    const type = document.querySelector('#seriesTypeFilter')?.value || '';
-    const seller = document.querySelector('#seriesSellerFilter')?.value || '';
-    const product = document.querySelector('#seriesProductFilter')?.value || '';
-    const msg = document.querySelector('#seriesRecordsMessage');
-    if (from && to && from > to) {
-      msg.hidden=false; msg.className='message error'; msg.textContent='La fecha inicial no puede ser posterior a la fecha final.';
-      document.querySelector('#seriesList').innerHTML=''; return;
-    }
-    msg.hidden=true;
-    const rows = allRows.filter(row => {
-      const d = String(row.createdAt || '').slice(0,10);
-      const hay = `${row.orderNumber||''} ${row.customerName||''} ${row.sellerName||''} ${row.productName||''} ${row.sku||''} ${row.primary||''} ${row.secondary||''}`.toLowerCase();
-      return (!q || hay.includes(q)) && (!from || d >= from) && (!to || d <= to) && (!type || row.type === type) && (!seller || row.sellerName === seller) && (!product || row.productName === product);
-    });
-    document.querySelector('#seriesRecordsSummary').textContent = `${rows.length} registro${rows.length===1?'':'s'} encontrado${rows.length===1?'':'s'}`;
-    document.querySelector('#seriesList').innerHTML = rows.length ? rows.map(row => `<article class="sales-history-card series-record" data-series-row="${escapeHTML(row.saleId)}" data-item-index="${row.itemIndex}" data-unit="${row.unit}">
-      <div class="sales-history-main"><div><span class="eyebrow">${row.type === 'imei' ? 'IMEI' : 'SERIE'} · #${escapeHTML(row.orderNumber)}</span><h3>${escapeHTML(row.productName)}</h3><small>${escapeHTML(new Date(row.createdAt).toLocaleString('es-EC'))} · Unidad ${row.unit} · ${escapeHTML(row.customerName || 'Cliente')} · ${escapeHTML(row.sellerName || 'Sin vendedor')} · SKU ${escapeHTML(row.sku || '—')}</small></div>
-      <div class="series-values"><input data-series-primary value="${escapeHTML(row.primary)}" ${canEdit?'':'disabled'}><input data-series-secondary value="${escapeHTML(row.secondary || '')}" placeholder="${row.type === 'imei' ? 'IMEI 2 (opcional)' : '—'}" ${canEdit && row.type==='imei'?'':'disabled'}></div></div>
-      ${canEdit ? `<div class="sales-history-actions"><button type="button" class="button secondary small" data-save-series>Guardar</button></div>` : ''}</article>`).join('') : '<div class="generate-empty-state"><strong>No hay registros que coincidan.</strong><small>Prueba con otras fechas, filtros o términos de búsqueda.</small></div>';
-  };
-  renderRows();
-
-  ['seriesSearch','seriesDateFrom','seriesDateTo','seriesTypeFilter','seriesSellerFilter','seriesProductFilter'].forEach(id => {
-    document.querySelector('#'+id)?.addEventListener(id==='seriesSearch'?'input':'change', () => {
-      if (id==='seriesSearch') { clearTimeout(window.__yhorsSeriesSearchTimer); window.__yhorsSeriesSearchTimer=setTimeout(renderRows,200); }
-      else renderRows();
-    });
-  });
-  document.querySelector('#seriesFiltersClear')?.addEventListener('click', () => {
-    ['seriesSearch','seriesDateFrom','seriesDateTo'].forEach(id => { const el=document.querySelector('#'+id); if(el) el.value=''; });
-    ['seriesTypeFilter','seriesSellerFilter','seriesProductFilter'].forEach(id => { const el=document.querySelector('#'+id); if(el) el.value=''; });
-    renderRows();
-  });
-
+  document.querySelectorAll('[data-device-toggle]').forEach(input => input.addEventListener('change', async () => {
+    const id=input.dataset.deviceToggle;
+    const previous=!input.checked;
+    input.disabled=true;
+    try {
+      const result=await request(`/api/admin/products/${encodeURIComponent(id)}/device-tracking`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:input.checked})});
+      input.checked=result.deviceTracking!=='none';
+      input.nextElementSibling?.nextElementSibling && (input.nextElementSibling.nextElementSibling.textContent=input.checked?'Solicitar':'No solicitar');
+    } catch(error){ input.checked=previous; alert(error.message||'No se pudo actualizar la configuración.'); }
+    finally { input.disabled=false; }
+  }));
   document.querySelector('#seriesList')?.addEventListener('click', async event => {
     const btn=event.target.closest('[data-save-series]');
     if(!btn)return;
     const row=btn.closest('[data-series-row]');
     const primary=row.querySelector('[data-series-primary]')?.value.trim()||'';
     const secondary=row.querySelector('[data-series-secondary]')?.value.trim()||'';
-    if(!await showYhorsConfirm('¿Guardar cambios?', 'Se modificará la serie / IMEI de esta venta. Verifica los datos antes de continuar.', {cancelText:'Cancelar', confirmText:'Guardar'})) return;
     btn.disabled=true;
-    try {
-      await request(`/api/admin/series-imei/${encodeURIComponent(row.dataset.seriesRow)}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({itemIndex:Number(row.dataset.itemIndex),unit:Number(row.dataset.unit),primary,secondary})});
-      btn.textContent='Guardado ✓';
-      setTimeout(()=>{btn.disabled=false;btn.textContent='Guardar';},900);
-      const updated = allRows.find(r => String(r.saleId)===String(row.dataset.seriesRow) && Number(r.itemIndex)===Number(row.dataset.itemIndex) && Number(r.unit)===Number(row.dataset.unit));
-      if(updated){ updated.primary=primary; updated.secondary=secondary; }
-    } catch(error){ alert(error.message||'No se pudo guardar.'); btn.disabled=false; }
+    try { await request(`/api/admin/series-imei/${encodeURIComponent(row.dataset.seriesRow)}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({itemIndex:Number(row.dataset.itemIndex),unit:Number(row.dataset.unit),primary,secondary})}); btn.textContent='Guardado ✓'; setTimeout(()=>{btn.disabled=false;btn.textContent='Guardar';},900); }
+    catch(error){ alert(error.message||'No se pudo guardar.'); btn.disabled=false; }
   });
 }
 
@@ -1636,26 +1513,38 @@ async function renderAdminQuotes() {
   const products = await request('/api/admin/order-products').catch(() => []);
   const sellers = await request('/api/admin/order-sellers').catch(() => []);
   const quotes = await request('/api/admin/cotizaciones').catch(() => []);
-  let customer = {};
-  let lines = [];
+  const editQuoteId = new URLSearchParams(window.location.search).get('edit');
+  const quoteBeingEdited = editQuoteId ? quotes.find(q => String(q.id) === String(editQuoteId)) : null;
+  let customer = quoteBeingEdited ? { ...(quoteBeingEdited.customer || {}), deliveryMethod: quoteBeingEdited.delivery?.method || 'office' } : {};
+  let lines = quoteBeingEdited ? (quoteBeingEdited.items || []).map(item => { const product = products.find(p => String(p.id) === String(item.productId)); if (!product) return null; const mode = item.purchaseMode === 'rental' ? 'rental' : 'purchase'; return { ...product, id: `${product.id}::${mode}`, productId: product.id, price: Number(mode === 'rental' ? product.rentalPrice : (product.salePrice ?? product.price)), purchaseMode: mode, rentalDays: mode === 'rental' ? Math.max(1, Number(item.rentalDays || 1)) : null, quantity: Math.max(1, Number(item.quantity || 1)) }; }).filter(Boolean) : [];
   let saving = false;
+  let editingQuote = Boolean(quoteBeingEdited);
+  if (editQuoteId && !quoteBeingEdited) { window.history.replaceState({}, '', `${ADMIN_PATH}/pedidos`); return renderAdminOrders(); }
   app.innerHTML = `<main class="admin-shell generate-order-shell"><div class="admin-wrap">
-    <div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Cotizaciones</h1><p class="admin-subtitle">Prepara propuestas comerciales sin descontar inventario.</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>
-    ${generateOrderNav(session, 'cotizaciones')}
+    <div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Pedidos / Cotizaciones</h1><p class="admin-subtitle">Prepara, consulta y edita propuestas comerciales sin descontar inventario.</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>
+    ${generateOrderNav(session, 'pedidos')}
     <section class="generate-order-page">
-      <div class="generate-order-header"><div><span class="eyebrow">Nueva cotización</span><h2>Propuesta comercial</h2><p>Selecciona productos, cliente y vendedor. La cotización no afecta el inventario.</p></div><div class="generate-doc-badge"><span>DOCUMENTO</span><strong>COTIZACIÓN</strong><small>YHORS · ${new Date().toLocaleDateString('es-EC')}</small></div></div>
+      <div class="generate-order-header"><div><span class="eyebrow">${editingQuote ? `Editar cotización #${escapeHTML(quoteBeingEdited.quoteNumber)}` : 'Nueva cotización'}</span><h2>${editingQuote ? 'Editar propuesta comercial' : 'Propuesta comercial'}</h2><p>Selecciona productos, cliente y vendedor. La cotización no afecta el inventario.</p></div><div class="generate-doc-badge"><span>DOCUMENTO</span><strong>COTIZACIÓN</strong><small>YHORS · ${new Date().toLocaleDateString('es-EC')}</small></div></div>
       <div class="generate-top-grid">
         <section class="generate-card customer-card"><div class="generate-card-head"><div><span class="generate-card-kicker">01 · Cliente</span><h3>Información del cliente</h3></div><button type="button" class="button secondary small" id="openCustomerModal">Agregar cliente →</button></div><div id="customerSummary">${customerSummaryMarkup(customer)}</div></section>
-        <section class="generate-card seller-card"><div class="generate-card-kicker">02 · Responsable</div><h3>Vendedor</h3><p>Define quién queda responsable de la propuesta.</p><div class="fine-person-field generate-seller-field"><span>Vendedor asignado</span><button type="button" class="fine-person-picker-trigger" id="quoteSellerPickerOpen"><span class="fine-person-picker-avatar" id="quoteSellerAvatar">?</span><span class="fine-person-picker-copy"><strong id="quoteSellerName">Sin asignar</strong><small id="quoteSellerUsername">Puedes buscar y seleccionar un vendedor</small></span><span class="fine-person-picker-chevron">⌄</span></button><input type="hidden" id="quoteSeller" value="${sellers.some(s => s.id === session.accountId) ? escapeHTML(session.accountId) : ''}"></div></section>
+        <section class="generate-card seller-card"><div class="generate-card-kicker">02 · Responsable</div><h3>Vendedor</h3><p>Define quién queda responsable de la propuesta.</p><div class="fine-person-field generate-seller-field"><span>Vendedor asignado</span><button type="button" class="fine-person-picker-trigger" id="quoteSellerPickerOpen"><span class="fine-person-picker-avatar" id="quoteSellerAvatar">?</span><span class="fine-person-picker-copy"><strong id="quoteSellerName">Sin asignar</strong><small id="quoteSellerUsername">Puedes buscar y seleccionar un vendedor</small></span><span class="fine-person-picker-chevron">⌄</span></button><input type="hidden" id="quoteSeller" value="${escapeHTML(quoteBeingEdited?.assignedSellerId || (sellers.some(s => s.id === session.accountId) ? session.accountId : ''))}"></div></section>
       </div>
       <section class="generate-card generate-products-card"><div class="generate-card-head"><div><span class="generate-card-kicker">03 · Productos</span><h3>Detalle de la cotización</h3></div><button type="button" class="button primary small" id="openProductPicker">+ Agregar productos</button></div><div class="generate-products-table-head"><span>Producto</span><span>Cant.</span><span>Precio</span><span>Total</span><span></span></div><div id="generateOrderLines">${generateOrderProductRows(lines)}</div></section>
-      <section class="generate-bottom-grid"><section class="generate-card delivery-card"><div class="generate-card-kicker">04 · Condiciones</div><h3>Entrega y nota</h3><div class="generate-delivery-options"><label><input type="radio" name="generateDelivery" value="office" checked><span><strong>Retiro en oficina</strong><small>Sin costo</small></span></label><label><input type="radio" name="generateDelivery" value="local"><span><strong>Envío YHORS</strong><small>$3,00</small></span></label><label><input type="radio" name="generateDelivery" value="courier"><span><strong>Courier</strong><small>$5,00</small></span></label></div><label class="generate-field"><span>Nota de la cotización</span><textarea id="generateNotes" rows="4" maxlength="500" placeholder="Vigencia, forma de pago, observaciones o referencia"></textarea></label></section><section class="generate-card totals-card"><div class="generate-card-kicker">Resumen</div><div class="generate-total-line"><span>Subtotal</span><strong id="generateSubtotal">$0,00</strong></div><div class="generate-total-line"><span>Envío</span><strong id="generateShipping">$0,00</strong></div><div class="generate-grand-total"><span>Total</span><strong id="generateTotal">$0,00</strong></div><div id="generateMessage" class="message" hidden></div><button type="button" class="button generate-submit" id="generateOrderSubmit">Guardar cotización <span>→</span></button></section></section>
+      <section class="generate-bottom-grid"><section class="generate-card delivery-card"><div class="generate-card-kicker">04 · Condiciones</div><h3>Entrega y nota</h3><div class="generate-delivery-options"><label><input type="radio" name="generateDelivery" value="office" checked><span><strong>Retiro en oficina</strong><small>Sin costo</small></span></label><label><input type="radio" name="generateDelivery" value="local"><span><strong>Envío YHORS</strong><small>$3,00</small></span></label><label><input type="radio" name="generateDelivery" value="courier"><span><strong>Courier</strong><small>$5,00</small></span></label></div><label class="generate-field"><span>Nota de la cotización</span><textarea id="generateNotes" rows="4" maxlength="500" placeholder="Vigencia, forma de pago, observaciones o referencia"></textarea></label></section><section class="generate-card totals-card"><div class="generate-card-kicker">Resumen</div><div class="generate-total-line"><span>Subtotal</span><strong id="generateSubtotal">$0,00</strong></div><div class="generate-total-line"><span>Envío</span><strong id="generateShipping">$0,00</strong></div><div class="generate-grand-total"><span>Total</span><strong id="generateTotal">$0,00</strong></div><div id="generateMessage" class="message" hidden></div><button type="button" class="button generate-submit" id="generateOrderSubmit">${editingQuote ? 'Actualizar cotización' : 'Guardar cotización'} <span>→</span></button></section></section>
     </section>
-    <section class="generate-card quote-history-card"><div class="generate-card-head"><div><span class="generate-card-kicker">Historial</span><h3>Últimas cotizaciones</h3></div><span class="generate-field-note">${quotes.length} registrada${quotes.length===1?'':'s'}</span></div><div class="quote-history-list">${quotes.length ? quotes.slice(0,12).map(q => `<article class="quote-history-item"><div><strong>#${escapeHTML(q.quoteNumber)}</strong><span>${escapeHTML(q.customer?.name || 'Cliente')}</span><small>${escapeHTML(q.status || 'Pendiente')} · ${escapeHTML(new Date(q.createdAt).toLocaleDateString('es-EC'))}</small></div><div class="quote-history-actions"><strong>${money(q.total)}</strong>${q.status !== 'Convertida' ? `<button type="button" class="button secondary small" data-use-quote="${escapeHTML(q.id)}">Usar en venta</button>` : '<small>Convertida</small>'}</div></article>`).join('') : '<div class="generate-empty-state"><span>⌁</span><strong>Aún no hay cotizaciones</strong><small>Las propuestas que guardes aparecerán aquí.</small></div>'}</div></section>
     <div class="generate-modal" id="customerModal" hidden><div class="generate-modal-backdrop" data-close-generate-modal="customerModal"></div><div class="generate-modal-dialog" role="dialog" aria-modal="true"><div class="generate-modal-head"><div><span class="eyebrow">Datos del cliente</span><h2>Registrar cliente</h2></div><button type="button" class="generate-modal-close" data-close-generate-modal="customerModal">×</button></div><form id="generateCustomerForm"><div class="form-grid"><div class="field full"><label for="genCustomerName">Nombre completo</label><input id="genCustomerName" required maxlength="100"></div><div class="field"><label for="genCustomerCedula">Cédula / RUC</label><input id="genCustomerCedula" required inputmode="numeric" maxlength="13"></div><div class="field"><label for="genCustomerPhone">Celular</label><input id="genCustomerPhone" required maxlength="40"></div><div class="field"><label for="genCustomerEmail">Correo</label><input id="genCustomerEmail" type="email" maxlength="120"></div><div class="field"><label for="genCustomerCity">Ciudad</label><input id="genCustomerCity" required maxlength="80"></div><div class="field full"><label for="genCustomerAddress">Dirección</label><input id="genCustomerAddress" maxlength="240"></div><div class="field full"><label for="genCustomerMaps">Google Maps (opcional)</label><input id="genCustomerMaps" type="url" maxlength="500"></div></div><div class="generate-modal-actions"><button type="button" class="button secondary" data-close-generate-modal="customerModal">Cancelar</button><button type="submit" class="button primary">Guardar cliente</button></div></form></div></div></div>
     <div class="generate-modal" id="productPickerModal" hidden><div class="generate-modal-backdrop" data-close-generate-modal="productPickerModal"></div><div class="generate-modal-dialog generate-product-picker" role="dialog" aria-modal="true"><div class="generate-modal-head"><div><span class="eyebrow">Catálogo YHORS</span><h2>Agregar productos</h2></div><button type="button" class="generate-modal-close" data-close-generate-modal="productPickerModal">×</button></div><div class="generate-picker-toolbar"><input id="generateProductSearch" type="search" placeholder="Buscar por nombre, SKU, marca…"><select id="generateProductCategory"><option value="">Todas las categorías</option><option value="elegant">Elegante</option><option value="sports">Deportes</option><option value="tech">Tech</option><option value="cosplay">Cosplay</option><option value="pets">Mascotas</option><option value="details">Details</option><option value="collectibles">Coleccionables</option></select></div><div class="generate-picker-list" id="generatePickerList"></div><div class="generate-modal-actions"><span class="generate-picker-hint">Puedes agregar varios productos antes de cerrar.</span><button type="button" class="button primary" data-close-generate-modal="productPickerModal">Listo</button></div></div></div></div>
     <div class="generate-modal fine-person-modal" id="quoteSellerPickerModal" hidden><div class="generate-modal-backdrop" data-close-quote-seller></div><div class="generate-modal-dialog fine-person-picker-dialog" role="dialog" aria-modal="true"><div class="generate-modal-head"><div><span class="eyebrow">Cotización · Responsable</span><h2>Seleccionar vendedor</h2></div><button type="button" class="generate-modal-close" data-close-quote-seller>×</button></div><div class="fine-person-picker-toolbar"><input id="quoteSellerSearch" type="search" placeholder="Buscar por nombre o usuario…"></div><div class="fine-person-picker-count" id="quoteSellerCount"></div><div class="fine-person-picker-list" id="quoteSellerList"></div></div></div></div>
   </div></main>`;
+  if (editingQuote) {
+    const delivery = quoteBeingEdited.delivery?.method || 'office';
+    const radio = document.querySelector(`input[name="generateDelivery"][value="${delivery}"]`);
+    if (radio) radio.checked = true;
+    const notes = document.querySelector('#generateNotes');
+    if (notes) notes.value = quoteBeingEdited.internalNote || quoteBeingEdited.customer?.notes || '';
+    const assigned = sellers.find(s => String(s.id) === String(quoteBeingEdited.assignedSellerId));
+    if (assigned) { document.querySelector('#quoteSellerName').textContent = assigned.name || assigned.username || 'Vendedor'; document.querySelector('#quoteSellerUsername').textContent = `@${assigned.username || 'usuario'}`; document.querySelector('#quoteSellerAvatar').textContent = (assigned.name || assigned.username || 'V').split(/\s+/).slice(0,2).map(v=>v[0]).join('').toUpperCase(); }
+  }
   const openModal=id=>{const m=document.getElementById(id);if(!m)return;m.hidden=false;requestAnimationFrame(()=>m.classList.add('is-open'));document.body.classList.add('generate-modal-open');};
   const closeModal=id=>{const m=document.getElementById(id);if(!m)return;m.classList.remove('is-open');setTimeout(()=>{m.hidden=true;if(!document.querySelector('.generate-modal.is-open'))document.body.classList.remove('generate-modal-open');},180);};
   document.querySelectorAll('[data-close-generate-modal]').forEach(el=>el.addEventListener('click',()=>closeModal(el.dataset.closeGenerateModal)));
@@ -1664,7 +1553,7 @@ async function renderAdminQuotes() {
   const updateTotals=()=>{const subtotal=lines.reduce((sum,l)=>sum+Number(l.price||0)*Number(l.quantity||0)*(l.purchaseMode==='rental'?Math.max(1,Number(l.rentalDays||1)):1),0);const delivery=document.querySelector('input[name="generateDelivery"]:checked')?.value||'office';const shipping=delivery==='local'?3:delivery==='courier'?5:0;document.querySelector('#generateSubtotal').textContent=money(subtotal);document.querySelector('#generateShipping').textContent=money(shipping);document.querySelector('#generateTotal').textContent=money(subtotal+shipping);customer.deliveryMethod=delivery;drawCustomer();};
   const addProduct=(product,mode='purchase')=>{const rental=mode==='rental';if(rental&&(product.rentalPrice===null||product.rentalPrice===undefined||product.rentalPrice===''))return;const id=`${product.id}::${mode}`;const existing=lines.find(l=>l.id===id);if(existing)existing.quantity=Math.min(99,Number(existing.quantity||0)+1);else lines.push({...product,id,productId:product.id,price:Number(rental?product.rentalPrice:(product.salePrice??product.price)),purchaseMode:mode,rentalDays:rental?1:null,quantity:1});drawLines();};
   const drawPicker=()=>{const query=(document.querySelector('#generateProductSearch')?.value||'').trim().toLowerCase();const category=document.querySelector('#generateProductCategory')?.value||'';const filtered=products.filter(product=>{const hay=`${product.name||''} ${product.sku||''} ${product.brand||''} ${product.productType||''}`.toLowerCase();return(!query||hay.includes(query))&&(!category||product.category===category);});const list=document.querySelector('#generatePickerList');list.innerHTML=filtered.length?filtered.map(product=>{const stock=Number(product.stock||0);const rental=product.category==='cosplay'&&product.rentalPrice!==null&&product.rentalPrice!==undefined&&product.rentalPrice!=='';return `<article class="generate-picker-product"><img src="${escapeHTML(productImages(product)[0])}" data-fallback alt=""><div class="generate-picker-info"><strong>${escapeHTML(product.name)}</strong><small>SKU: ${escapeHTML(product.sku||'—')} · ${escapeHTML(categories[product.category]||product.category||'Producto')}</small><b>${money(product.salePrice??product.price??0)} · Stock ${stock}</b></div><div class="generate-picker-actions"><button type="button" class="button primary small" data-add-generate="${escapeHTML(product.id)}" data-mode="purchase">Agregar</button>${rental?`<button type="button" class="button secondary small" data-add-generate="${escapeHTML(product.id)}" data-mode="rental">Alquiler</button>`:''}</div></article>`;}).join(''):'<div class="generate-empty-state"><span>⌕</span><strong>No encontramos productos</strong><small>Prueba con otro nombre, SKU o categoría.</small></div>';wireImageFallback(list);list.querySelectorAll('[data-add-generate]').forEach(b=>b.addEventListener('click',()=>{const product=products.find(item=>item.id===b.dataset.addGenerate);if(product)addProduct(product,b.dataset.mode);}));};
-  document.querySelector('#openCustomerModal')?.addEventListener('click',()=>{const f=document.querySelector('#generateCustomerForm');f.reset();openModal('customerModal');});
+  document.querySelector('#openCustomerModal')?.addEventListener('click',()=>{const f=document.querySelector('#generateCustomerForm');f.reset();if (editingQuote) { document.querySelector('#genCustomerName').value=customer.name||''; document.querySelector('#genCustomerCedula').value=customer.cedula||''; document.querySelector('#genCustomerPhone').value=customer.phone||''; document.querySelector('#genCustomerEmail').value=customer.email||''; document.querySelector('#genCustomerCity').value=customer.city||''; document.querySelector('#genCustomerAddress').value=customer.address||''; document.querySelector('#genCustomerMaps').value=customer.mapsUrl||''; }openModal('customerModal');});
   document.querySelector('#openProductPicker')?.addEventListener('click',()=>{openModal('productPickerModal');drawPicker();});
   document.querySelector('#generateProductSearch')?.addEventListener('input',drawPicker);document.querySelector('#generateProductCategory')?.addEventListener('change',drawPicker);
   document.querySelector('#generateCustomerForm')?.addEventListener('submit',e=>{e.preventDefault();const cedula=document.querySelector('#genCustomerCedula').value.replace(/\D/g,'');if(!/^\d{10,13}$/.test(cedula)){alert('La cédula/RUC debe tener entre 10 y 13 dígitos.');return;}customer={name:document.querySelector('#genCustomerName').value.trim(),cedula,phone:document.querySelector('#genCustomerPhone').value.trim(),email:document.querySelector('#genCustomerEmail').value.trim(),city:document.querySelector('#genCustomerCity').value.trim(),address:document.querySelector('#genCustomerAddress').value.trim(),mapsUrl:document.querySelector('#genCustomerMaps').value.trim(),deliveryMethod:document.querySelector('input[name="generateDelivery"]:checked')?.value||'office'};drawCustomer();closeModal('customerModal');});
@@ -1676,7 +1565,8 @@ async function renderAdminQuotes() {
   document.querySelector('#quoteSellerPickerOpen')?.addEventListener('click',()=>{sellerModal.hidden=false;requestAnimationFrame(()=>sellerModal.classList.add('is-open'));drawSellers();});
   sellerModal?.querySelectorAll('[data-close-quote-seller]').forEach(el=>el.addEventListener('click',()=>{sellerModal.classList.remove('is-open');setTimeout(()=>sellerModal.hidden=true,180);}));
   sellerSearch?.addEventListener('input',drawSellers);sellerModal?.addEventListener('click',e=>{const b=e.target.closest('[data-quote-seller]');if(!b)return;sellerInput.value=b.dataset.quoteSeller;const selected=sellers.find(x=>x.id===b.dataset.quoteSeller);document.querySelector('#quoteSellerName').textContent=selected?.name||'Vendedor';document.querySelector('#quoteSellerUsername').textContent=`@${selected?.username||'usuario'}`;sellerModal.classList.remove('is-open');setTimeout(()=>sellerModal.hidden=true,180);});
-  document.querySelector('#generateOrderSubmit')?.addEventListener('click',async()=>{if(saving)return;const message=document.querySelector('#generateMessage');message.hidden=true;if(!customer.name||!customer.phone||!customer.cedula||!customer.city){message.hidden=false;message.className='message error';message.textContent='Completa los datos del cliente.';openModal('customerModal');return;}if(!lines.length){message.hidden=false;message.className='message error';message.textContent='Agrega al menos un producto a la cotización.';openModal('productPickerModal');return;}const deliveryMethod=document.querySelector('input[name="generateDelivery"]:checked')?.value||'office';if(deliveryMethod!=='office'&&!customer.address){message.hidden=false;message.className='message error';message.textContent='Ingresa la dirección del cliente.';openModal('customerModal');return;}saving=true;const submit=document.querySelector('#generateOrderSubmit');submit.disabled=true;submit.classList.add('is-loading');submit.textContent='Guardando…';try{const result=await request('/api/admin/cotizaciones',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({customer:{...customer,notes:document.querySelector('#generateNotes').value.trim()},internalNote:document.querySelector('#generateNotes').value.trim(),deliveryMethod,assignedSellerId:sellerInput.value||null,items:lines.map(l=>({productId:l.productId||l.id,quantity:Number(l.quantity),purchaseMode:l.purchaseMode||'purchase',rentalDays:l.purchaseMode==='rental'?Math.max(1,Number(l.rentalDays||1)):null}))})});app.querySelector('.generate-order-page').innerHTML=`<div class="generate-success"><span class="success-mark">✓</span><span class="eyebrow">Cotización guardada correctamente</span><h2>#${escapeHTML(result.quoteNumber)}</h2><p>La propuesta quedó guardada y no se descontó inventario.</p><div class="generate-success-total">Total: <strong>${money(result.total)}</strong></div><div class="generate-success-actions"><button type="button" class="button primary" id="newQuote">Nueva cotización</button><a class="button secondary" href="${ADMIN_PATH}/cotizaciones" data-smooth-route>Ver cotizaciones</a></div></div>`;document.querySelector('#newQuote')?.addEventListener('click',()=>renderAdminQuotes());}catch(error){message.hidden=false;message.className='message error';message.textContent=error.message||'No se pudo guardar la cotización.';submit.disabled=false;submit.classList.remove('is-loading');submit.textContent='Guardar cotización →';saving=false;}});
+    document.querySelector('#generateOrderSubmit')?.addEventListener('click',async()=>{if(saving)return;const message=document.querySelector('#generateMessage');message.hidden=true;if(!customer.name||!customer.phone||!customer.cedula||!customer.city){message.hidden=false;message.className='message error';message.textContent='Completa los datos del cliente.';openModal('customerModal');return;}if(!lines.length){message.hidden=false;message.className='message error';message.textContent='Agrega al menos un producto a la cotización.';openModal('productPickerModal');return;}const deliveryMethod=document.querySelector('input[name="generateDelivery"]:checked')?.value||'office';if(deliveryMethod!=='office'&&!customer.address){message.hidden=false;message.className='message error';message.textContent='Ingresa la dirección del cliente.';openModal('customerModal');return;}saving=true;const submit=document.querySelector('#generateOrderSubmit');submit.disabled=true;submit.classList.add('is-loading');submit.textContent=editingQuote?'Actualizando…':'Guardando…';const confirmed=await showYhorsConfirm(editingQuote?'¿Guardar cambios en la cotización?':'¿Guardar esta cotización? ',editingQuote?'Se actualizarán los datos del cliente, productos, vendedor, entrega y notas de la cotización.':'La cotización se registrará y no descontará inventario.',{cancelText:'Cancelar',confirmText:editingQuote?'Guardar cambios':'Guardar'});if(!confirmed){submit.disabled=false;submit.classList.remove('is-loading');submit.textContent=editingQuote?'Actualizar cotización →':'Guardar cotización →';saving=false;return;}try{const payload={customer:{...customer,notes:document.querySelector('#generateNotes').value.trim()},internalNote:document.querySelector('#generateNotes').value.trim(),deliveryMethod,assignedSellerId:sellerInput.value||null,items:lines.map(l=>({productId:l.productId||l.id,quantity:Number(l.quantity),purchaseMode:l.purchaseMode||'purchase',rentalDays:l.purchaseMode==='rental'?Math.max(1,Number(l.rentalDays||1)):null}))};const result=editingQuote?await request(`/api/admin/cotizaciones/${encodeURIComponent(quoteBeingEdited.id)}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}):await request('/api/admin/cotizaciones',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});navigateToRoute(`${ADMIN_PATH}/pedidos`);}catch(error){message.hidden=false;message.className='message error';message.textContent=error.message||'No se pudo guardar la cotización.';submit.disabled=false;submit.classList.remove('is-loading');submit.textContent=editingQuote?'Actualizar cotización →':'Guardar cotización →';saving=false;}});
+  document.querySelectorAll('[data-edit-quote]').forEach(button => button.addEventListener('click', () => navigateToRoute(`${ADMIN_PATH}/cotizaciones?edit=${encodeURIComponent(button.dataset.editQuote)}`)));
   document.querySelectorAll('[data-use-quote]').forEach(button => button.addEventListener('click', () => {
     const quote = quotes.find(item => String(item.id) === String(button.dataset.useQuote));
     if (!quote) return;
@@ -2332,6 +2222,7 @@ async function renderAdminOrders() {
   const session = await request('/api/admin/session').catch(() => ({ authenticated: false }));
   if (!session.authenticated) return renderLogin();
   let orders = await request('/api/admin/orders').catch(() => []);
+  let quotes = await request('/api/admin/cotizaciones').catch(() => []);
   let orderProducts = await request('/api/admin/order-products').catch(() => []);
   const canAssign = session.role === 'store_manager' || session.role === 'admin';
   const canDelete = session.role === 'store_manager' || session.role === 'admin';
@@ -2339,9 +2230,21 @@ async function renderAdminOrders() {
   if (canAssign) sellers = await request('/api/admin/order-sellers').catch(() => []);
 
   const sectionNav = adminSectionNav(session, 'pedidos');
-  const title = session.role === 'vendedor' ? 'Mis pedidos asignados' : 'Gestión de pedidos';
+  const title = session.role === 'vendedor' ? 'Mis pedidos / cotizaciones' : 'Pedidos / Cotizaciones';
   const subtitle = session.role === 'store_manager' ? 'Jefe de tienda · pedidos, asignaciones y control operativo' : (session.role === 'vendedor' ? 'Pedidos asignados a tu usuario · consulta y gestión operativa' : 'Gestión de YHORS STORE');
-  app.innerHTML = `<main class="admin-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">${title}</h1><p class="admin-subtitle">${subtitle}</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>${sectionNav}${ordersPanel(orders, canDelete)}</div></main>`;
+  app.innerHTML = `<main class="admin-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">${title}</h1><p class="admin-subtitle">${subtitle}</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>${sectionNav}${ordersPanel(orders, canDelete, quotes)}</div></main>`;
+  document.querySelector('#newQuoteFromOrders')?.addEventListener('click', () => navigateToRoute(`${ADMIN_PATH}/cotizaciones?new=1`));
+  document.querySelector('#quotesPanel')?.addEventListener('click', event => {
+    const edit = event.target.closest('[data-edit-quote]');
+    if (edit) { navigateToRoute(`${ADMIN_PATH}/cotizaciones?edit=${encodeURIComponent(edit.dataset.editQuote)}`); return; }
+    const use = event.target.closest('[data-use-quote]');
+    if (use) {
+      const quote = quotes.find(item => String(item.id) === String(use.dataset.useQuote));
+      if (!quote) return;
+      localStorage.setItem('yhorsQuoteToSale', JSON.stringify(quote));
+      navigateToRoute(`${ADMIN_PATH}/ventas`);
+    }
+  });
 
   const editingOrders = new Set();
   const productEditorsOpen = new Set();

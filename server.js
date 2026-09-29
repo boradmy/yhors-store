@@ -3366,31 +3366,13 @@ app.get('/api/admin/series-imei', requireOrdersAccess, (req, res) => {
       });
     });
   });
-  let visibleRows = rows;
   if (isSellerRole(session.role)) {
-    visibleRows = visibleRows.filter(row => {
+    return res.json(rows.filter(row => {
       const sale = orders.find(item => item.id === row.saleId);
       return !sale?.assignedSellerId || sale.assignedSellerId === session.accountId;
-    });
+    }));
   }
-  const q = cleanText(req.query?.q, 120).toLowerCase();
-  const from = cleanText(req.query?.from, 20);
-  const to = cleanText(req.query?.to, 20);
-  const type = cleanText(req.query?.type, 20).toLowerCase();
-  const seller = cleanText(req.query?.seller, 160).toLowerCase();
-  const product = cleanText(req.query?.product, 200).toLowerCase();
-  if (from && to && from > to) return res.status(400).json({ error: 'La fecha inicial no puede ser posterior a la fecha final.' });
-  visibleRows = visibleRows.filter(row => {
-    const date = String(row.createdAt || '').slice(0, 10);
-    const haystack = `${row.orderNumber || ''} ${row.customerName || ''} ${row.sellerName || ''} ${row.productName || ''} ${row.sku || ''} ${row.primary || ''} ${row.secondary || ''}`.toLowerCase();
-    return (!q || haystack.includes(q))
-      && (!from || date >= from)
-      && (!to || date <= to)
-      && (!type || row.type === type)
-      && (!seller || String(row.sellerName || '').toLowerCase() === seller)
-      && (!product || String(row.productName || '').toLowerCase() === product);
-  });
-  return res.json(visibleRows);
+  return res.json(rows);
 });
 
 app.put('/api/admin/series-imei/:saleId', requireStoreManagerOrAdmin, (req, res) => {
@@ -3550,11 +3532,25 @@ app.put('/api/admin/cotizaciones/:id', requireOrdersAccess, (req, res) => {
   if (index < 0) return res.status(404).json({ error: 'Cotización no encontrada.' });
   const session = getSession(req);
   const quote = quotes[index];
+  if (quote.status === 'Convertida') return res.status(400).json({ error: 'No puedes editar una cotización que ya fue convertida en venta.' });
   if (isSellerRole(session.role) && quote.assignedSellerId && quote.assignedSellerId !== session.accountId) return res.status(403).json({ error: 'Esta cotización no está asignada a tu usuario.' });
   const status = cleanText(req.body?.status, 30);
   if (status && !['Pendiente','Aceptada','Rechazada','Convertida'].includes(status)) return res.status(400).json({ error: 'Estado de cotización no válido.' });
-  quotes[index] = { ...quote, ...(status ? { status } : {}), updatedAt: new Date().toISOString() };
+  let patch = { ...(status ? { status } : {}), updatedAt: new Date().toISOString() };
+  if (req.body?.customer || req.body?.items || req.body?.deliveryMethod || Object.prototype.hasOwnProperty.call(req.body || {}, 'assignedSellerId')) {
+    const result = validateOrder(req.body || {}, { requireDeviceIdentifiers: false });
+    if (result.error) return res.status(400).json(result);
+    const requestedSellerId = req.body?.assignedSellerId ? String(req.body.assignedSellerId) : null;
+    let assignedSellerId = requestedSellerId;
+    if (assignedSellerId) {
+      const seller = readUsers().find(user => user.id === assignedSellerId && user.active !== false && isSellerRole(user.role));
+      if (!seller) return res.status(400).json({ error: 'El vendedor seleccionado no es válido o no está activo.' });
+    } else if (isSellerRole(session.role)) assignedSellerId = session.accountId || null;
+    patch = { ...patch, assignedSellerId, source: quote.source || 'quote', internalNote: cleanText(req.body?.internalNote || req.body?.customer?.notes, 5000), ...result.order };
+  }
+  quotes[index] = { ...quote, ...patch };
   writeQuotes(quotes);
+  auditLog(req, 'Cotización actualizada', 'Cotizaciones', { quoteId: quote.id, quoteNumber: quote.quoteNumber, total: quotes[index].total });
   return res.json(quotes[index]);
 });
 
