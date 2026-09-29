@@ -3765,3 +3765,13 @@ body.generate-modal-open{overflow:hidden}
   .orders-collapsible-body #adminOrdersList,
   .orders-collapsible-body .quote-history-list{margin-left:16px;margin-right:16px}
 }
+
+
+/* FASE 2.5 · Pedidos WEB y Cotizaciones como un solo módulo con pestañas */
+.orders-module-switch{margin-bottom:20px}
+.orders-module-panel{margin-top:0}
+.orders-module-panel[hidden]{display:none!important}
+.orders-module-panel .section-heading{margin-bottom:0}
+.orders-module-panel .orders-toolbar{margin:18px 0 20px}
+.quote-history-item[hidden]{display:none!important}
+@media(max-width:620px){.orders-module-switch{width:100%;box-sizing:border-box}.orders-module-switch .users-module-tab{flex:1;min-width:0}}

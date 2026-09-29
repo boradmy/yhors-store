@@ -1014,39 +1014,31 @@ function classificationPanel(classifications) {
 
 function ordersPanel(orders = [], canDelete = true, quotes = []) {
   const statuses = ['Pendiente', 'Confirmado', 'Preparado', 'Enviado', 'Entregado', 'Cancelado'];
-  const quoteStatusLabel = quote => {
-    if (quote.status === 'Convertida') return quote.convertedOrderNumber ? `Facturada · #${quote.convertedOrderNumber}` : 'Facturada';
-    if (quote.status === 'Rechazada') return 'Cancelada';
-    return quote.status || 'Pendiente';
-  };
-  const quoteActions = quote => {
-    if (quote.status === 'Convertida') return `<small class="quote-converted-state">✓ ${escapeHTML(quoteStatusLabel(quote))}</small>`;
-    if (quote.status === 'Rechazada') return `<small class="quote-cancelled-state">✕ Cancelada</small>`;
-    return `<button type="button" class="button secondary small" data-edit-quote="${escapeHTML(quote.id)}">EDITAR</button><button type="button" class="button secondary small" data-use-quote="${escapeHTML(quote.id)}">USAR EN VENTA</button>`;
-  };
-  return `<details class="admin-panel orders-panel orders-collapsible" open>
-    <summary class="orders-collapsible-summary"><span><span class="eyebrow">Ventas</span><strong>Pedidos recibidos <small class="orders-count">${orders.length}</small></strong></span><span class="orders-collapsible-chevron">⌄</span></summary>
-    <div class="orders-collapsible-body">
-      <div class="section-heading"><div><span class="eyebrow">Ventas</span><h2>Pedidos recibidos <small class="orders-count">${orders.length}</small></h2></div><p>Los pedidos sin vendedor quedan separados para que puedas detectar lo que falta despachar.</p></div>
-      <div class="orders-toolbar">
-        <div class="orders-date-range">
-          <label class="order-date-filter"><input id="ordersDateFrom" type="date" aria-label="Fecha inicial"></label>
-          <label class="order-date-filter"><input id="ordersDateTo" type="date" aria-label="Fecha final"></label>
-          <button id="clearOrdersDate" type="button" class="button secondary small">Limpiar rango</button>
-        </div>
-        <select id="ordersStatusFilter"><option value="">Todos los estados</option>${statuses.map(s => `<option value="${escapeHTML(s)}">${escapeHTML(s)}</option>`).join('')}</select>
-        <input id="ordersSearch" type="search" placeholder="Buscar por pedido, cliente, cédula/RUC, teléfono o SKU…" autocomplete="off">
-      </div>
-      <div id="adminOrdersList">${ordersListMarkup(orders, { canDelete, canAssign: false, sellers: [], role: '' })}</div>
+  const quoteStatuses = ['Pendiente', 'Aceptada', 'Rechazada', 'Convertida'];
+  const quoteStatusLabel = quote => quote.status === 'Convertida' ? (quote.convertedOrderNumber ? `Facturada · #${quote.convertedOrderNumber}` : 'Facturada') : quote.status === 'Rechazada' ? 'Cancelada' : (quote.status || 'Pendiente');
+  const quoteActions = quote => `<button type="button" class="button secondary small" data-edit-quote="${escapeHTML(quote.id)}">EDITAR</button><button type="button" class="button secondary small" data-use-quote="${escapeHTML(quote.id)}">USAR EN VENTA</button><button type="button" class="button danger small" data-delete-quote="${escapeHTML(quote.id)}">ELIMINAR</button>`;
+  return `<div class="users-module-switch orders-module-switch" role="tablist" aria-label="Pedidos WEB y cotizaciones">
+    <button type="button" class="users-module-tab is-active" data-orders-module="web" role="tab" aria-selected="true">PEDIDOS WEB</button>
+    <button type="button" class="users-module-tab" data-orders-module="quotes" role="tab" aria-selected="false">COTIZACIONES</button>
+  </div>
+  <section class="admin-panel orders-panel orders-module-panel" id="webOrdersPanel" data-orders-module-panel="web">
+    <div class="section-heading"><div><span class="eyebrow">Ventas</span><h2>Pedidos WEB recibidos <small class="orders-count" id="ordersModuleCount">${orders.length}</small></h2></div><p>Solicitudes que llegan desde la página WEB. Puedes consultar, asignar y gestionar cada Pedido WEB.</p></div>
+    <div class="orders-toolbar">
+      <div class="orders-date-range"><label class="order-date-filter"><span>Desde</span><input id="ordersDateFrom" type="date" aria-label="Fecha inicial"></label><label class="order-date-filter"><span>Hasta</span><input id="ordersDateTo" type="date" aria-label="Fecha final"></label><button id="clearOrdersDate" type="button" class="button secondary small">Limpiar rango</button></div>
+      <select id="ordersStatusFilter"><option value="">Todos los estados</option>${statuses.map(s => `<option value="${escapeHTML(s)}">${escapeHTML(s)}</option>`).join('')}</select>
+      <input id="ordersSearch" type="search" placeholder="Buscar por Pedido WEB, cliente, cédula/RUC, teléfono o SKU…" autocomplete="off">
     </div>
-  </details>
-  <details class="admin-panel orders-panel quotes-panel orders-collapsible" open>
-    <summary class="orders-collapsible-summary"><span><span class="eyebrow">Cotizaciones</span><strong>Cotizaciones recibidas <small class="orders-count">${quotes.length}</small></strong></span><span class="orders-collapsible-chevron">⌄</span></summary>
-    <div class="orders-collapsible-body">
-      <div class="section-heading"><div><span class="eyebrow">Cotizaciones</span><h2>Cotizaciones recibidas <small class="orders-count">${quotes.length}</small></h2></div><p>Las cotizaciones también llegan aquí. Puedes editarlas o pasarlas a una venta.</p><button type="button" class="button primary small" id="newQuoteFromOrders">+ Nueva cotización</button></div>
-      <div class="quote-history-list">${quotes.length ? quotes.map(q => `<article class="quote-history-item ${q.status === 'Convertida' ? 'quote-history-item--converted' : ''}" data-quote-card="${escapeHTML(q.id)}"><div><strong>#${escapeHTML(q.quoteNumber)}</strong><span>${escapeHTML(q.customer?.name || 'Cliente')}</span><small>${escapeHTML(quoteStatusLabel(q))} · ${escapeHTML(new Date(q.createdAt).toLocaleDateString('es-EC'))}</small></div><div class="quote-history-actions"><strong>${money(q.total)}</strong>${quoteActions(q)}</div></article>`).join('') : '<div class="generate-empty-state"><span>⌁</span><strong>Aún no hay cotizaciones</strong><small>Las cotizaciones creadas desde la web o aquí aparecerán en este apartado.</small></div>'}</div>
+    <div id="adminOrdersList">${ordersListMarkup(orders, { canDelete, canAssign: false, sellers: [], role: '' })}</div>
+  </section>
+  <section class="admin-panel orders-panel orders-module-panel" id="quotesPanel" data-orders-module-panel="quotes" hidden>
+    <div class="section-heading"><div><span class="eyebrow">Cotizaciones</span><h2>Cotizaciones recibidas <small class="orders-count" id="quotesModuleCount">${quotes.length}</small></h2></div><p>Administra, busca, edita o pasa a venta las cotizaciones. Aquí también puedes eliminar las que ya no necesites.</p><button type="button" class="button primary small" id="newQuoteFromOrders">+ Nueva cotización</button></div>
+    <div class="orders-toolbar">
+      <div class="orders-date-range"><label class="order-date-filter"><span>Desde</span><input id="quotesDateFrom" type="date" aria-label="Fecha inicial de cotizaciones"></label><label class="order-date-filter"><span>Hasta</span><input id="quotesDateTo" type="date" aria-label="Fecha final de cotizaciones"></label><button id="clearQuotesDate" type="button" class="button secondary small">Limpiar rango</button></div>
+      <select id="quotesStatusFilter"><option value="">Todos los estados</option>${quoteStatuses.map(s => `<option value="${escapeHTML(s)}">${s === 'Convertida' ? 'Facturada' : s === 'Rechazada' ? 'Cancelada' : s}</option>`).join('')}</select>
+      <input id="quotesSearch" type="search" placeholder="Buscar por cotización, cliente, cédula/RUC, teléfono, SKU…" autocomplete="off">
     </div>
-  </details>`;
+    <div class="quote-history-list" id="adminQuotesList">${quotes.length ? quotes.map(q => `<article class="quote-history-item ${q.status === 'Convertida' ? 'quote-history-item--converted' : ''}" data-quote-card="${escapeHTML(q.id)}"><div><strong>#${escapeHTML(q.quoteNumber)}</strong><span>${escapeHTML(q.customer?.name || 'Cliente')}</span><small>${escapeHTML(quoteStatusLabel(q))} · ${escapeHTML(new Date(q.createdAt).toLocaleDateString('es-EC'))}</small></div><div class="quote-history-actions"><strong>${money(q.total)}</strong>${quoteActions(q)}</div></article>`).join('') : '<div class="generate-empty-state"><span>⌁</span><strong>Aún no hay cotizaciones</strong><small>Las cotizaciones creadas desde la web o aquí aparecerán en este apartado.</small></div>'}</div>
+  </section>`;
 }
 function showYhorsConfirm(title, message, options = {}) {
   const cancelText = options.cancelText || 'Cancelar';
@@ -1137,7 +1129,7 @@ function ordersListMarkup(orders = [], options = {}) {
       ${order.customer?.notes ? `<div class="order-notes"><span>Nota</span><p>${escapeHTML(order.customer.notes)}</p></div>` : ''}
       <div class="admin-order-internal-note">
         <label for="internalNote-${escapeHTML(order.id)}">Nota interna</label>
-        <textarea id="internalNote-${escapeHTML(order.id)}" data-order-note="${escapeHTML(order.id)}" rows="3" maxlength="5000" placeholder="Escribe aquí cualquier comentario interno sobre este pedido…" disabled>${escapeHTML(order.internalNote || '')}</textarea>
+        <textarea id="internalNote-${escapeHTML(order.id)}" data-order-note="${escapeHTML(order.id)}" rows="3" maxlength="5000" placeholder="Escribe aquí cualquier comentario interno sobre este Pedido WEB…" disabled>${escapeHTML(order.internalNote || '')}</textarea>
       </div>
       <div class="order-assignment">
         <div class="order-assignment-head"><span class="order-label">Asignado a</span><small>${isSellerRole(currentRole) ? 'Vendedor asignado a este pedido' : 'Vendedor responsable'}</small></div>
@@ -1166,18 +1158,18 @@ function ordersListMarkup(orders = [], options = {}) {
       <div class="admin-order-footer">
         <button class="button pdf-order small" type="button" data-order-pdf="${escapeHTML(order.id)}" title="Generar PDF de esta orden">PDF ORDEN</button>
         <button class="button success small" type="button" data-order-note-save="${escapeHTML(order.id)}" disabled>Guardar cambios</button>
-        <button class="button edit-note small" type="button" data-order-note-edit="${escapeHTML(order.id)}">Editar pedido</button>
+        <button class="button edit-note small" type="button" data-order-note-edit="${escapeHTML(order.id)}">Editar Pedido WEB</button>
         <button class="button order-edit-cancel small" type="button" data-order-edit-cancel="${escapeHTML(order.id)}" hidden>Cancelar</button>
-        ${canDelete ? `<button class="button danger small" type="button" data-order-delete="${escapeHTML(order.id)}">Eliminar pedido</button>` : ''}
+        ${canDelete ? `<button class="button danger small" type="button" data-order-delete="${escapeHTML(order.id)}">Eliminar Pedido WEB</button>` : ''}
       </div>
     </div>
   </article>`;
   const unassigned = orders.filter(order => !order.assignedSellerId);
   const assigned = orders.filter(order => Boolean(order.assignedSellerId));
   const renderSection = (title, description, items, extraClass = '') => items.length
-    ? `<section class="orders-group ${extraClass}"><div class="orders-group-head"><div><span class="eyebrow">${escapeHTML(title)}</span><h3>${items.length} pedido${items.length === 1 ? '' : 's'}</h3></div><p>${escapeHTML(description)}</p></div>${items.map(renderOrder).join('')}</section>`
+    ? `<section class="orders-group ${extraClass}"><div class="orders-group-head"><div><span class="eyebrow">${escapeHTML(title)}</span><h3>${items.length} Pedido WEB${items.length === 1 ? '' : 's'}</h3></div><p>${escapeHTML(description)}</p></div>${items.map(renderOrder).join('')}</section>`
     : '';
-  return `${renderSection('Sin vendedor · por despachar', 'Pedidos que todavía no tienen un vendedor responsable. Revísalos y asígnalos antes de despacharlos.', unassigned, 'orders-group-unassigned')}${renderSection('Pedidos asignados', 'Pedidos que ya tienen un vendedor responsable.', assigned, 'orders-group-assigned')}`;
+  return `${renderSection('Sin vendedor · por despachar', 'Pedidos WEB que todavía no tienen un vendedor responsable. Revísalos y asígnalos antes de despacharlos.', unassigned, 'orders-group-unassigned')}${renderSection('Pedidos WEB asignados', 'Pedidos WEB que ya tienen un vendedor responsable.', assigned, 'orders-group-assigned')}`;
 }
 
 
@@ -2254,37 +2246,72 @@ async function renderAdminOrders() {
   if (canAssign) sellers = await request('/api/admin/order-sellers').catch(() => []);
 
   const sectionNav = adminSectionNav(session, 'pedidos');
-  const title = session.role === 'vendedor' ? 'Mis pedidos / cotizaciones' : 'Pedidos / Cotizaciones';
-  const subtitle = session.role === 'store_manager' ? 'Jefe de tienda · pedidos, asignaciones y control operativo' : (session.role === 'vendedor' ? 'Pedidos asignados a tu usuario · consulta y gestión operativa' : 'Gestión de YHORS STORE');
+  const title = session.role === 'vendedor' ? 'Mis Pedidos WEB / Cotizaciones' : 'Pedidos / Cotizaciones';
+  const subtitle = session.role === 'store_manager' ? 'Jefe de tienda · Pedidos WEB, asignaciones y control operativo' : (session.role === 'vendedor' ? 'Pedidos WEB asignados a tu usuario · consulta y gestión operativa' : 'Gestión de YHORS STORE');
   app.innerHTML = `<main class="admin-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">${title}</h1><p class="admin-subtitle">${subtitle}</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>${sectionNav}${ordersPanel(orders, canDelete, quotes)}</div></main>`;
+  const setOrdersModule = module => {
+    document.querySelectorAll('[data-orders-module]').forEach(button => {
+      const active = button.dataset.ordersModule === module;
+      button.classList.toggle('is-active', active);
+      button.setAttribute('aria-selected', active ? 'true' : 'false');
+    });
+    document.querySelectorAll('[data-orders-module-panel]').forEach(panel => { panel.hidden = panel.dataset.ordersModulePanel !== module; });
+  };
+  document.querySelectorAll('[data-orders-module]').forEach(button => button.addEventListener('click', () => setOrdersModule(button.dataset.ordersModule)));
   document.querySelector('#newQuoteFromOrders')?.addEventListener('click', () => navigateToRoute(`${ADMIN_PATH}/cotizaciones?new=1`));
-  document.querySelector('#quotesPanel')?.addEventListener('click', async event => {
-    const edit = event.target.closest('[data-edit-quote]');
-    if (edit) { navigateToRoute(`${ADMIN_PATH}/cotizaciones?edit=${encodeURIComponent(edit.dataset.editQuote)}`); return; }
-    const use = event.target.closest('[data-use-quote]');
-    if (!use) return;
-    use.disabled = true;
-    try {
-      const latestQuotes = await request('/api/admin/cotizaciones');
-      const quote = latestQuotes.find(item => String(item.id) === String(use.dataset.useQuote));
-      if (!quote) throw new Error('La cotización ya no está disponible.');
-      if (quote.status === 'Convertida') {
-        alert(quote.convertedOrderNumber ? `Esta cotización ya fue facturada en la venta #${quote.convertedOrderNumber}.` : 'Esta cotización ya fue facturada y no puede volver a utilizarse.');
-        await renderAdminOrders();
-        return;
-      }
-      if (quote.status === 'Rechazada') {
-        alert('Esta cotización está cancelada y no puede utilizarse para una nueva venta.');
-        await renderAdminOrders();
-        return;
-      }
-      localStorage.setItem('yhorsQuoteToSale', JSON.stringify(quote));
-      navigateToRoute(`${ADMIN_PATH}/ventas`);
-    } catch (error) {
-      alert(error.message || 'No se pudo validar la cotización.');
-      use.disabled = false;
-    }
-  });
+
+  const showQuoteBlocked = async (quote, action) => {
+    const sale = quote.convertedOrderNumber ? ` en la venta #${escapeHTML(quote.convertedOrderNumber)}` : '';
+    await showYhorsConfirm('Cotización ya utilizada', `Esta cotización ya fue utilizada${sale}. <strong>No se puede ${action} ni volver a facturarla</strong> mientras la venta vinculada exista. Si se elimina la venta de prueba, la cotización volverá a quedar disponible.`, { cancelText: 'Cerrar', confirmText: 'Entendido' });
+  };
+  const quoteLabel = quote => quote.status === 'Convertida' ? (quote.convertedOrderNumber ? `Facturada · #${quote.convertedOrderNumber}` : 'Facturada') : quote.status === 'Rechazada' ? 'Cancelada' : (quote.status || 'Pendiente');
+  const drawQuotes = () => {
+    const list = document.querySelector('#adminQuotesList'); if (!list) return;
+    const query = (document.querySelector('#quotesSearch')?.value || '').trim().toLowerCase();
+    const status = document.querySelector('#quotesStatusFilter')?.value || '';
+    const from = document.querySelector('#quotesDateFrom')?.value || '';
+    const to = document.querySelector('#quotesDateTo')?.value || '';
+    const localDate = value => { const d = new Date(value); return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-CA', { timeZone: 'America/Guayaquil' }); };
+    const filtered = quotes.filter(q => {
+      const date = localDate(q.createdAt);
+      const hay = `${q.quoteNumber} ${q.customer?.name || ''} ${q.customer?.cedula || ''} ${q.customer?.phone || ''} ${q.customer?.email || ''} ${(q.items || []).map(i => `${i.sku || ''} ${i.name || ''}`).join(' ')}`.toLowerCase();
+      return (!query || hay.includes(query)) && (!status || q.status === status) && (!from || date >= from) && (!to || date <= to);
+    });
+    const count = document.querySelector('#quotesModuleCount'); if (count) count.textContent = String(filtered.length);
+    list.innerHTML = filtered.length ? filtered.map(q => `<article class="quote-history-item ${q.status === 'Convertida' ? 'quote-history-item--converted' : ''}"><div><strong>#${escapeHTML(q.quoteNumber)}</strong><span>${escapeHTML(q.customer?.name || 'Cliente')}</span><small>${escapeHTML(quoteLabel(q))} · ${escapeHTML(new Date(q.createdAt).toLocaleDateString('es-EC'))}</small></div><div class="quote-history-actions"><strong>${money(q.total)}</strong><button type="button" class="button secondary small" data-edit-quote="${escapeHTML(q.id)}">EDITAR</button><button type="button" class="button secondary small" data-use-quote="${escapeHTML(q.id)}">USAR EN VENTA</button><button type="button" class="button danger small" data-delete-quote="${escapeHTML(q.id)}">ELIMINAR</button></div></article>`).join('') : '<div class="generate-empty-state"><span>⌁</span><strong>No hay cotizaciones con estos filtros</strong><small>Prueba otro término, estado o rango de fechas.</small></div>';
+    list.querySelectorAll('[data-edit-quote]').forEach(button => button.addEventListener('click', async () => {
+      const quote = quotes.find(item => String(item.id) === String(button.dataset.editQuote)); if (!quote) return;
+      if (quote.status === 'Convertida') { await showQuoteBlocked(quote, 'editar'); return; }
+      if (quote.status === 'Rechazada') { await showYhorsConfirm('Cotización cancelada', 'Esta cotización está cancelada y no puede volver a editarse.', { cancelText: 'Cerrar', confirmText: 'Entendido' }); return; }
+      navigateToRoute(`${ADMIN_PATH}/cotizaciones?edit=${encodeURIComponent(quote.id)}`);
+    }));
+    list.querySelectorAll('[data-use-quote]').forEach(button => button.addEventListener('click', async () => {
+      button.disabled = true;
+      try {
+        const latestQuotes = await request('/api/admin/cotizaciones');
+        const quote = latestQuotes.find(item => String(item.id) === String(button.dataset.useQuote));
+        if (!quote) throw new Error('La cotización ya no está disponible.');
+        if (quote.status === 'Convertida') { await showQuoteBlocked(quote, 'usar'); await renderAdminOrders(); return; }
+        if (quote.status === 'Rechazada') { await showYhorsConfirm('Cotización cancelada', 'Esta cotización está cancelada y no puede utilizarse para una nueva venta.', { cancelText: 'Cerrar', confirmText: 'Entendido' }); return; }
+        localStorage.setItem('yhorsQuoteToSale', JSON.stringify(quote));
+        navigateToRoute(`${ADMIN_PATH}/ventas`);
+      } catch (error) { await showYhorsConfirm('No se pudo usar la cotización', escapeHTML(error.message || 'No se pudo validar la cotización.'), { cancelText: 'Cerrar', confirmText: 'Entendido' }); button.disabled = false; }
+    }));
+    list.querySelectorAll('[data-delete-quote]').forEach(button => button.addEventListener('click', async () => {
+      const quote = quotes.find(item => String(item.id) === String(button.dataset.deleteQuote)); if (!quote) return;
+      if (quote.status === 'Convertida') { await showQuoteBlocked(quote, 'eliminar'); return; }
+      const ok = await showYhorsConfirm('Eliminar cotización', `¿Deseas eliminar la cotización <strong>#${escapeHTML(quote.quoteNumber)}</strong>? Esta acción no se puede deshacer.`, { cancelText: 'Cancelar', confirmText: 'Eliminar' });
+      if (!ok) return;
+      button.disabled = true;
+      try { await request(`/api/admin/cotizaciones/${encodeURIComponent(quote.id)}`, { method: 'DELETE' }); quotes = quotes.filter(item => String(item.id) !== String(quote.id)); drawQuotes(); }
+      catch (error) { button.disabled = false; await showYhorsConfirm('No se pudo eliminar', escapeHTML(error.message || 'No se pudo eliminar la cotización.'), { cancelText: 'Cerrar', confirmText: 'Entendido' }); }
+    }));
+  };
+  document.querySelector('#quotesSearch')?.addEventListener('input', drawQuotes);
+  document.querySelector('#quotesStatusFilter')?.addEventListener('change', drawQuotes);
+  document.querySelector('#quotesDateFrom')?.addEventListener('change', drawQuotes);
+  document.querySelector('#quotesDateTo')?.addEventListener('change', drawQuotes);
+  document.querySelector('#clearQuotesDate')?.addEventListener('click', () => { const from=document.querySelector('#quotesDateFrom'); const to=document.querySelector('#quotesDateTo'); if(from) from.value=''; if(to) to.value=''; drawQuotes(); });
 
   const editingOrders = new Set();
   const productEditorsOpen = new Set();
@@ -2319,7 +2346,7 @@ async function renderAdminOrders() {
         <button type="button" class="order-edit-remove" data-order-draft-remove="${index}" aria-label="Quitar producto">Quitar</button>
       </div>`;
     }).join('') : `<div class="generate-empty-state"><span>+</span><strong>Aún no hay productos</strong><small>Agrega productos desde el catálogo.</small></div>`;
-    return `<section class="generate-card generate-products-card order-edit-products-card"><div class="generate-card-head"><div><span class="generate-card-kicker">03 · Productos</span><h3>Detalle de la orden</h3></div><button type="button" class="button primary small" data-order-open-picker="${escapeHTML(order.id)}">+ Agregar productos</button></div><div class="generate-products-table-head"><span>Producto</span><span>Cant.</span><span>Precio</span><span>Total</span><span></span></div><div class="order-edit-lines">${rows}</div><div class="order-edit-products-note">Los cambios quedan pendientes hasta pulsar <strong>Guardar cambios</strong>.</div></section>`;
+    return `<section class="generate-card generate-products-card order-edit-products-card"><div class="generate-card-head"><div><span class="generate-card-kicker">03 · Productos</span><h3>Detalle del Pedido WEB</h3></div><button type="button" class="button primary small" data-order-open-picker="${escapeHTML(order.id)}">+ Agregar productos</button></div><div class="generate-products-table-head"><span>Producto</span><span>Cant.</span><span>Precio</span><span>Total</span><span></span></div><div class="order-edit-lines">${rows}</div><div class="order-edit-products-note">Los cambios quedan pendientes hasta pulsar <strong>Guardar cambios</strong>.</div></section>`;
   };
   const drawOrders = () => {
     const list=document.querySelector('#adminOrdersList'); if(!list) return;
@@ -2443,7 +2470,7 @@ async function renderAdminOrders() {
       list.querySelectorAll('[data-order-assignment-picker]').forEach(button => updateOrderAssignmentDisplay(button.dataset.orderAssignmentPicker));
     }
 
-    // Los campos del pedido permanecen bloqueados hasta pulsar "Editar pedido".
+    // Los campos del pedido permanecen bloqueados hasta pulsar "Editar Pedido WEB".
     // Los cambios de estado se guardan junto con nota y asignación.
     list.querySelectorAll('[data-order-toggle]').forEach(button=>button.addEventListener('click',()=>{ const details=document.querySelector(`#orderDetails-${button.dataset.orderToggle}`); if(!details) return; const opening=details.hidden; details.hidden=!opening; button.setAttribute('aria-expanded',String(opening)); button.closest('.admin-order')?.classList.toggle('is-open',opening); }));
     const syncOrderEditor = id => {
@@ -2576,7 +2603,7 @@ async function renderAdminOrders() {
     }));
 
     // Cancelar edición descarta TODO el borrador local y devuelve el pedido
-    // exactamente al estado que tenía antes de pulsar "Editar pedido".
+    // exactamente al estado que tenía antes de pulsar "Editar Pedido WEB".
     list.querySelectorAll('[data-order-edit-cancel]').forEach(button => button.addEventListener('click', () => {
       const id = button.dataset.orderEditCancel;
       const order = orders.find(o => o.id === id);
@@ -2599,7 +2626,7 @@ async function renderAdminOrders() {
       draftItems.delete(id);
       productEditorsOpen.delete(id);
       if (productsButton) { productsButton.disabled = true; productsButton.hidden = false; }
-      if (editButton) { editButton.disabled = false; editButton.textContent = 'Editar pedido'; }
+      if (editButton) { editButton.disabled = false; editButton.textContent = 'Editar Pedido WEB'; }
       button.hidden = true;
       if (saveButton) { delete saveButton.dataset.editing; saveButton.disabled = true; saveButton.textContent = 'Guardar cambios'; }
     }));
@@ -2665,7 +2692,7 @@ async function renderAdminOrders() {
 
       const confirmed = await showYhorsConfirm(
         '¿Seguro que quieres guardar este cambio?',
-        `Se revisará ${detailParts.join(' y ')} del pedido #${escapeHTML(order.orderNumber)}.`
+        `Se revisará ${detailParts.join(' y ')} del Pedido WEB #${escapeHTML(order.orderNumber)}.`
       );
       if (!confirmed) return;
 
@@ -2687,7 +2714,7 @@ async function renderAdminOrders() {
         if (assignmentPicker) { assignmentPicker.disabled = true; updateOrderAssignmentDisplay(id); }
         if (editButton) {
           editButton.disabled = false;
-          editButton.textContent = 'Editar pedido';
+          editButton.textContent = 'Editar Pedido WEB';
         }
         const cancelButton = list.querySelector(`[data-order-edit-cancel="${id}"]`);
         if (cancelButton) cancelButton.hidden = true;
@@ -2742,7 +2769,7 @@ async function renderAdminOrders() {
         if (assignmentPicker) { assignmentPicker.disabled = true; updateOrderAssignmentDisplay(id); }
         if (editButton) {
           editButton.disabled = false;
-          editButton.textContent = 'Editar pedido';
+          editButton.textContent = 'Editar Pedido WEB';
         }
         const cancelButton = list.querySelector(`[data-order-edit-cancel="${id}"]`);
         if (cancelButton) cancelButton.hidden = true;
@@ -2762,7 +2789,7 @@ async function renderAdminOrders() {
 
     list.querySelectorAll('[data-order-delete]').forEach(button=>button.addEventListener('click',async()=>{
       const order=orders.find(o=>o.id===button.dataset.orderDelete); if(!order) return;
-      if(!confirm(`¿Eliminar el pedido #${order.orderNumber}? Esta acción no se puede deshacer.`)) return;
+      if(!confirm(`¿Eliminar el Pedido WEB #${order.orderNumber}? Esta acción no se puede deshacer.`)) return;
       try { await request(`/api/admin/orders/${order.id}`,{method:'DELETE'}); orders=orders.filter(o=>o.id!==order.id); drawOrders(); } catch(e){alert(e.message);}
     }));
   };

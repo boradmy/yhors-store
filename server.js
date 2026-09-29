@@ -3454,14 +3454,9 @@ app.post('/api/admin/ventas', requireOrdersAccess, async (req, res) => {
     quoteIndex = quotes.findIndex(item => String(item.id) === String(quoteId));
     if (quoteIndex < 0) return res.status(404).json({ error: 'La cotización vinculada ya no existe.' });
     quote = quotes[quoteIndex];
-    if (quote.status === 'Convertida') {
-      return res.status(409).json({
-        error: `Esta cotización ya fue utilizada para la venta ${quote.convertedOrderNumber ? '#' + quote.convertedOrderNumber : ''}. No puedes volver a facturarla.`,
-        quoteUsed: true,
-        convertedOrderId: quote.convertedOrderId || null,
-        convertedOrderNumber: quote.convertedOrderNumber || null
-      });
-    }
+    const activeQuoteSale = readOrders().find(order => String(order.quoteId || '') === String(quote.id) && order.source === 'direct_sale' && order.status !== 'Cancelado');
+    if (activeQuoteSale) return res.status(409).json({ error: `Esta cotización ya fue utilizada para la venta #${activeQuoteSale.orderNumber}. No puedes volver a facturarla.`, quoteUsed: true, convertedOrderId: activeQuoteSale.id, convertedOrderNumber: activeQuoteSale.orderNumber });
+    if (quote.status === 'Convertida') { quote = { ...quote, status: 'Pendiente', convertedOrderId: null, convertedOrderNumber: null, updatedAt: new Date().toISOString() }; quotes[quoteIndex] = quote; writeQuotes(quotes); }
     if (quote.status === 'Rechazada') {
       return res.status(409).json({ error: 'Esta cotización está cancelada y no puede utilizarse para una nueva venta.', quoteCancelled: true });
     }
@@ -3566,14 +3561,15 @@ app.get('/api/admin/cotizaciones', requireOrdersAccess, (req, res) => {
   return res.json(quotes.map(quote => {
     const seller = quote.assignedSellerId ? readUsers().find(user => user.id === quote.assignedSellerId) : null;
     const linkedSale = orders.find(order => String(order.quoteId || '') === String(quote.id) && order.source === 'direct_sale');
-    const effectiveStatus = linkedSale && linkedSale.status !== 'Cancelado' ? 'Convertida' : (quote.status || 'Pendiente');
+    const activeLinkedSale = linkedSale && linkedSale.status !== 'Cancelado' ? linkedSale : null;
+    const effectiveStatus = activeLinkedSale ? 'Convertida' : (quote.status === 'Convertida' ? 'Pendiente' : (quote.status || 'Pendiente'));
     return {
       ...quote,
       status: effectiveStatus,
       assignedSellerName: seller?.name || quote.assignedSellerName || null,
-      convertedOrderId: quote.convertedOrderId || linkedSale?.id || null,
-      convertedOrderNumber: quote.convertedOrderNumber || linkedSale?.orderNumber || null,
-      convertedSaleStatus: linkedSale?.status || null
+      convertedOrderId: activeLinkedSale?.id || null,
+      convertedOrderNumber: activeLinkedSale?.orderNumber || null,
+      convertedSaleStatus: activeLinkedSale?.status || null
     };
   }));
 });
@@ -3612,8 +3608,10 @@ app.put('/api/admin/cotizaciones/:id', requireOrdersAccess, (req, res) => {
   const index = quotes.findIndex(q => q.id === req.params.id);
   if (index < 0) return res.status(404).json({ error: 'Cotización no encontrada.' });
   const session = getSession(req);
-  const quote = quotes[index];
-  if (quote.status === 'Convertida') return res.status(400).json({ error: 'No puedes editar una cotización que ya fue convertida en venta.' });
+  let quote = quotes[index];
+  const linkedSale = readOrders().find(order => String(order.quoteId || '') === String(quote.id) && order.source === 'direct_sale' && order.status !== 'Cancelado');
+  if (quote.status === 'Convertida' && !linkedSale) { quote = { ...quote, status: 'Pendiente', convertedOrderId: null, convertedOrderNumber: null, updatedAt: new Date().toISOString() }; quotes[index] = quote; writeQuotes(quotes); }
+  if (linkedSale) return res.status(400).json({ error: `Esta cotización ya fue utilizada en la venta #${linkedSale.orderNumber}. No puedes editarla mientras la venta vinculada exista.`, quoteUsed: true, convertedOrderNumber: linkedSale.orderNumber });
   if (isSellerRole(session.role) && quote.assignedSellerId && quote.assignedSellerId !== session.accountId) return res.status(403).json({ error: 'Esta cotización no está asignada a tu usuario.' });
   const status = cleanText(req.body?.status, 30);
   if (status && !['Pendiente','Aceptada','Rechazada','Convertida'].includes(status)) return res.status(400).json({ error: 'Estado de cotización no válido.' });
@@ -3635,11 +3633,29 @@ app.put('/api/admin/cotizaciones/:id', requireOrdersAccess, (req, res) => {
   return res.json(quotes[index]);
 });
 
+app.delete('/api/admin/cotizaciones/:id', requireOrdersAccess, (req, res) => {
+  const session = getSession(req);
+  if (!isAdmin(session.role) && !isStoreManager(session.role) && !isSellerRole(session.role)) return res.status(403).json({ error: 'Solo el vendedor, Jefe de tienda o administrador puede eliminar cotizaciones.' });
+  const quotes = readQuotes();
+  const index = quotes.findIndex(q => String(q.id) === String(req.params.id));
+  if (index < 0) return res.status(404).json({ error: 'Cotización no encontrada.' });
+  const quote = quotes[index];
+  if (isSellerRole(session.role) && quote.assignedSellerId && quote.assignedSellerId !== session.accountId) return res.status(403).json({ error: 'Esta cotización no está asignada a tu usuario.' });
+  const linkedSale = readOrders().find(order => String(order.quoteId || '') === String(quote.id) && order.source === 'direct_sale' && order.status !== 'Cancelado');
+  if (linkedSale) return res.status(409).json({ error: `Esta cotización ya fue utilizada en la venta #${linkedSale.orderNumber}. Elimina primero la venta vinculada para poder eliminar la cotización.`, quoteUsed: true, convertedOrderNumber: linkedSale.orderNumber });
+  quotes.splice(index, 1); writeQuotes(quotes);
+  auditLog(req, 'Cotización eliminada', 'Cotizaciones', { quoteId: quote.id, quoteNumber: quote.quoteNumber, reason: 'Eliminación solicitada desde gestión de cotizaciones' });
+  return res.status(204).end();
+});
+
 app.post('/api/admin/cotizaciones/:id/convertir', requireOrdersAccess, async (req, res) => {
   const quotes = readQuotes();
-  const quote = quotes.find(q => q.id === req.params.id);
-  if (!quote) return res.status(404).json({ error: 'Cotización no encontrada.' });
-  if (quote.status === 'Convertida') return res.status(400).json({ error: 'Esta cotización ya fue convertida en venta.' });
+  const quoteIndexForConvert = quotes.findIndex(q => q.id === req.params.id);
+  if (quoteIndexForConvert < 0) return res.status(404).json({ error: 'Cotización no encontrada.' });
+  let quote = quotes[quoteIndexForConvert];
+  const linkedSaleForConvert = readOrders().find(order => String(order.quoteId || '') === String(quote.id) && order.source === 'direct_sale' && order.status !== 'Cancelado');
+  if (quote.status === 'Convertida' && !linkedSaleForConvert) { quote = { ...quote, status: 'Pendiente', convertedOrderId: null, convertedOrderNumber: null, updatedAt: new Date().toISOString() }; quotes[quoteIndexForConvert] = quote; writeQuotes(quotes); }
+  if (linkedSaleForConvert) return res.status(409).json({ error: `Esta cotización ya fue convertida en la venta #${linkedSaleForConvert.orderNumber}.`, quoteUsed: true, convertedOrderNumber: linkedSaleForConvert.orderNumber });
   const body = req.body || {};
   const payload = {
     customer: quote.customer,
