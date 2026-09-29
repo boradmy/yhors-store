@@ -2390,6 +2390,10 @@ function isTechProduct(product = {}) {
   return String(product.category || '').toLowerCase() === 'tech';
 }
 
+function requiresDeviceTracking(product = {}) {
+  return isTechProduct(product) && String(product.deviceTracking || 'required').toLowerCase() !== 'none';
+}
+
 function isImeiProduct(product = {}) {
   const type = String(product.productType || '').toLowerCase();
   const name = String(product.name || '').toLowerCase();
@@ -2397,7 +2401,7 @@ function isImeiProduct(product = {}) {
 }
 
 function normalizeDeviceIdentifiers(requested, product, quantity, { required = false } = {}) {
-  if (!isTechProduct(product)) return [];
+  if (!requiresDeviceTracking(product)) return [];
   const source = Array.isArray(requested) ? requested : [];
   const identifiers = [];
   const imeiProduct = isImeiProduct(product);
@@ -2428,6 +2432,26 @@ function normalizeDeviceIdentifiers(requested, product, quantity, { required = f
 
   if (source.length > quantity) throw new Error(`La identificación de “${product.name}” no puede superar la cantidad solicitada.`);
   return identifiers;
+}
+
+function validateDeviceIdentifiersAgainstExistingSales(items = []) {
+  const existing = new Set();
+  for (const sale of readOrders()) {
+    for (const item of (sale.items || [])) {
+      for (const entry of (item.deviceIdentifiers || [])) {
+        [entry.primary, entry.secondary].filter(Boolean).forEach(value => existing.add(String(value).trim().toLowerCase()));
+      }
+    }
+  }
+  for (const item of items) {
+    for (const entry of (item.deviceIdentifiers || [])) {
+      for (const value of [entry.primary, entry.secondary].filter(Boolean)) {
+        if (existing.has(String(value).trim().toLowerCase())) {
+          throw new Error(`El identificador “${value}” ya está registrado en otra venta.`);
+        }
+      }
+    }
+  }
 }
 
 function validateDeviceIdentifiersAcrossOrder(items) {
@@ -2504,7 +2528,7 @@ function validateOrder(input, options = {}) {
 
     const durationMultiplier = purchaseMode === 'rental' ? rentalDays : 1;
     let deviceIdentifiers = [];
-    if (purchaseMode === 'purchase' && isTechProduct(product)) {
+    if (purchaseMode === 'purchase' && requiresDeviceTracking(product)) {
       try {
         deviceIdentifiers = normalizeDeviceIdentifiers(requested.deviceIdentifiers, product, quantity, { required: requireDeviceIdentifiers });
       } catch (error) {
@@ -2538,7 +2562,10 @@ function validateOrder(input, options = {}) {
     }
   }
 
-  try { validateDeviceIdentifiersAcrossOrder(items); } catch (error) { return { error: error.message }; }
+  try {
+    validateDeviceIdentifiersAcrossOrder(items);
+    validateDeviceIdentifiersAgainstExistingSales(items);
+  } catch (error) { return { error: error.message }; }
 
   const subtotal = Math.round(items.reduce((sum, item) => sum + item.subtotal, 0) * 100) / 100;
   const shippingCost = shippingCosts[deliveryMethod];
@@ -2726,7 +2753,7 @@ async function sendOrderConfirmationEmail(order) {
         token: appsScriptToken,
         to: email,
         bcc: process.env.GOOGLE_NOTIFY_TO || '',
-        subject: `YHORS STORE · Pedido #${order.orderNumber} recibido`,
+        subject: `YHORS STORE · ${order.emailSubjectPrefix === 'Venta' ? 'Venta' : 'Pedido'} #${order.orderNumber} ${order.emailSubjectPrefix === 'Venta' ? 'registrada' : 'recibido'}`,
         html,
         text,
         name: process.env.GOOGLE_FROM_NAME || 'YHORS STORE'
@@ -2838,7 +2865,12 @@ function normalizeProduct(product) {
     salePrice: Number.isFinite(Number(product.salePrice ?? product.price)) && Number(product.salePrice ?? product.price) >= 0 ? Math.round(Number(product.salePrice ?? product.price) * 100) / 100 : 0,
     price: Number.isFinite(Number(product.salePrice ?? product.price)) && Number(product.salePrice ?? product.price) >= 0 ? Math.round(Number(product.salePrice ?? product.price) * 100) / 100 : 0,
     stock: Number.isInteger(stock) && stock >= 0 ? stock : 0,
-    published: product.published !== false
+    published: product.published !== false,
+    // Los productos Tech requieren identificación por defecto para conservar
+    // el comportamiento existente. El administrador puede cambiarlo a "none".
+    deviceTracking: String(product.category || '').toLowerCase() === 'tech'
+      ? (product.deviceTracking === 'none' ? 'none' : 'required')
+      : 'none'
   };
 }
 
@@ -3246,6 +3278,152 @@ app.get('/api/admin/ventas', requireOrdersAccess, (req, res) => {
   return res.json(sales.map(decorateOrderAssignment));
 });
 
+
+// Historial separado de ventas directas. Mantiene las mismas reglas de visibilidad
+// que el registro: vendedores solo ven sus ventas; administración ve todas.
+app.get('/api/admin/ventas/historial', requireOrdersAccess, (req, res) => {
+  const session = getSession(req);
+  let sales = readOrders().filter(order => order.source === 'direct_sale');
+  if (isSellerRole(session.role)) {
+    sales = sales.filter(order => !order.assignedSellerId || order.assignedSellerId === session.accountId);
+  }
+  const q = String(req.query.q || '').trim().toLowerCase();
+  const from = String(req.query.from || '').trim();
+  const to = String(req.query.to || '').trim();
+  const localDate = value => {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? '' : date.toLocaleDateString('en-CA', { timeZone: 'America/Guayaquil' });
+  };
+  sales = sales.filter(sale => {
+    const date = localDate(sale.createdAt);
+    const hay = JSON.stringify({
+      orderNumber: sale.orderNumber,
+      customer: sale.customer?.name,
+      cedula: sale.customer?.cedula,
+      seller: sale.assignedSellerName,
+      total: sale.total
+    }).toLowerCase();
+    return (!q || hay.includes(q)) && (!from || date >= from) && (!to || date <= to);
+  });
+  res.json(sales.map(decorateOrderAssignment));
+});
+
+app.delete('/api/admin/ventas/:id', requireAdmin, (req, res) => {
+  const orders = readOrders();
+  const index = orders.findIndex(item => item.id === req.params.id && item.source === 'direct_sale');
+  if (index < 0) return res.status(404).json({ error: 'Venta directa no encontrada.' });
+  const sale = orders[index];
+  let stockMovements = [];
+  try {
+    stockMovements = restoreOrderPurchaseStock(sale);
+  } catch (error) {
+    return res.status(400).json({ error: error.message || 'No se pudo devolver el stock de la venta.' });
+  }
+  orders.splice(index, 1);
+  try {
+    writeOrders(orders);
+  } catch (error) {
+    // Intentamos revertir el movimiento de inventario si la venta no pudo borrarse.
+    try { if (stockMovements.length) changeOrderStock(sale, -1); } catch (_) {}
+    return res.status(500).json({ error: 'No se pudo eliminar la venta.' });
+  }
+  auditLog(req, 'Venta directa eliminada', 'Ventas', {
+    orderId: sale.id,
+    orderNumber: sale.orderNumber,
+    inventory: { synchronized: true, movements: stockMovements },
+    reason: 'Eliminación administrativa de venta de prueba'
+  });
+  return res.status(204).end();
+});
+
+// Consulta y edición centralizada de series / IMEI.
+// Solo ADMIN y JEFE DE TIENDA pueden modificar identificadores.
+app.get('/api/admin/series-imei', requireOrdersAccess, (req, res) => {
+  const session = getSession(req);
+  const orders = readOrders().filter(order => order.source === 'direct_sale');
+  const users = readUsers();
+  const userMap = new Map(users.map(user => [String(user.id), user]));
+  const rows = [];
+  orders.forEach(sale => {
+    (sale.items || []).forEach((item, itemIndex) => {
+      if (!Array.isArray(item.deviceIdentifiers) || !item.deviceIdentifiers.length) return;
+      item.deviceIdentifiers.forEach(entry => {
+        rows.push({
+          saleId: sale.id,
+          orderNumber: sale.orderNumber,
+          createdAt: sale.createdAt,
+          customerName: sale.customer?.name || '',
+          sellerName: userMap.get(String(sale.assignedSellerId || ''))?.name || sale.assignedSellerName || 'Sin vendedor',
+          itemIndex,
+          unit: Number(entry.unit || 1),
+          type: entry.type === 'imei' ? 'imei' : 'serial',
+          primary: entry.primary || '',
+          secondary: entry.secondary || '',
+          productId: item.productId,
+          productName: item.name,
+          sku: item.sku || ''
+        });
+      });
+    });
+  });
+  if (isSellerRole(session.role)) {
+    return res.json(rows.filter(row => {
+      const sale = orders.find(item => item.id === row.saleId);
+      return !sale?.assignedSellerId || sale.assignedSellerId === session.accountId;
+    }));
+  }
+  return res.json(rows);
+});
+
+app.put('/api/admin/series-imei/:saleId', requireStoreManagerOrAdmin, (req, res) => {
+  const saleId = String(req.params.saleId || '');
+  const itemIndex = Number.parseInt(req.body?.itemIndex, 10);
+  const unit = Number.parseInt(req.body?.unit, 10);
+  const primary = cleanText(req.body?.primary, 50);
+  const secondary = cleanText(req.body?.secondary, 50);
+  const orders = readOrders();
+  const saleIndex = orders.findIndex(order => order.id === saleId && order.source === 'direct_sale');
+  if (saleIndex < 0) return res.status(404).json({ error: 'Venta no encontrada.' });
+  const sale = orders[saleIndex];
+  const item = sale.items?.[itemIndex];
+  const entryIndex = Array.isArray(item?.deviceIdentifiers)
+    ? item.deviceIdentifiers.findIndex(entry => Number(entry.unit) === unit)
+    : -1;
+  if (entryIndex < 0) return res.status(404).json({ error: 'Serie / IMEI no encontrado.' });
+  const product = readProducts().map(normalizeProduct).find(p => String(p.id) === String(item.productId));
+  if (!product || !requiresDeviceTracking(product)) return res.status(400).json({ error: 'Este producto no tiene habilitado el control de serie / IMEI.' });
+  const imei = item.deviceIdentifiers[entryIndex].type === 'imei' || isImeiProduct(product);
+  if (!primary) return res.status(400).json({ error: `Ingresa ${imei ? 'el IMEI 1' : 'el número de serie'}.` });
+  if (imei && !/^\d{14,16}$/.test(primary)) return res.status(400).json({ error: 'El IMEI 1 debe contener entre 14 y 16 dígitos.' });
+  if (!imei && !/^[A-Za-z0-9._\-/ ]{3,50}$/.test(primary)) return res.status(400).json({ error: 'El número de serie no tiene un formato válido.' });
+  if (secondary && (!imei || !/^\d{14,16}$/.test(secondary))) return res.status(400).json({ error: 'El IMEI 2 debe contener entre 14 y 16 dígitos.' });
+  const normalizedPrimary = primary.toLowerCase();
+  const normalizedSecondary = secondary.toLowerCase();
+  for (const other of orders) {
+    for (const otherItem of (other.items || [])) {
+      for (const otherEntry of (otherItem.deviceIdentifiers || [])) {
+        if (other.id === sale.id && otherItem === item && otherEntry === item.deviceIdentifiers[entryIndex]) continue;
+        if (normalizedPrimary && [otherEntry.primary, otherEntry.secondary].filter(Boolean).some(v => String(v).toLowerCase() === normalizedPrimary)) {
+          return res.status(409).json({ error: 'Ese identificador ya está utilizado en otra venta.' });
+        }
+        if (normalizedSecondary && [otherEntry.primary, otherEntry.secondary].filter(Boolean).some(v => String(v).toLowerCase() === normalizedSecondary)) {
+          return res.status(409).json({ error: 'Ese identificador ya está utilizado en otra venta.' });
+        }
+      }
+    }
+  }
+  const previous = { ...item.deviceIdentifiers[entryIndex] };
+  item.deviceIdentifiers[entryIndex] = { ...previous, primary, secondary: secondary || null, type: imei ? 'imei' : 'serial' };
+  sale.updatedAt = new Date().toISOString();
+  orders[saleIndex] = sale;
+  writeOrders(orders);
+  auditLog(req, 'Serie / IMEI actualizado', 'Series / IMEI', {
+    orderId: sale.id, orderNumber: sale.orderNumber, productId: item.productId,
+    itemIndex, unit, before: previous, after: item.deviceIdentifiers[entryIndex]
+  });
+  return res.json({ ok: true, entry: item.deviceIdentifiers[entryIndex] });
+});
+
 app.post('/api/admin/ventas', requireOrdersAccess, async (req, res) => {
   const session = getSession(req);
   const result = validateOrder(req.body || {}, { requireDeviceIdentifiers: true });
@@ -3299,7 +3477,14 @@ app.post('/api/admin/ventas', requireOrdersAccess, async (req, res) => {
     order: auditOrderSnapshot(sale),
     inventory: { synchronized: true, movements: auditStockMovementDiff(previousProducts, updatedProducts, 'Venta directa') }
   });
-  return res.status(201).json({ orderId: sale.id, orderNumber: sale.orderNumber, status: sale.status, total: sale.total });
+  let email = { sent: false, reason: 'not-attempted' };
+  try {
+    email = await sendOrderConfirmationEmail({ ...sale, emailSubjectPrefix: 'Venta' });
+  } catch (emailError) {
+    email = { sent: false, reason: 'send-failed', error: emailError.message };
+    console.error('[YHORS] No se pudo enviar el correo de la venta directa:', emailError.message);
+  }
+  return res.status(201).json({ orderId: sale.id, orderNumber: sale.orderNumber, status: sale.status, total: sale.total, email });
 });
 
 app.get('/api/admin/cotizaciones', requireOrdersAccess, (req, res) => {
@@ -4290,6 +4475,22 @@ app.get('/api/admin/ventas-generales', requireOrdersAccess, (req, res) => {
   });
 });
 
+app.get('/api/admin/ventas/:id/pdf', requireOrdersAccess, (req, res) => {
+  const sale = readOrders().find(item => item.id === req.params.id && item.source === 'direct_sale');
+  if (!sale) return res.status(404).json({ error: 'Venta no encontrada.' });
+  const session = getSession(req);
+  if (isSellerRole(session.role) && sale.assignedSellerId && sale.assignedSellerId !== session.accountId) {
+    return res.status(403).json({ error: 'Esta venta no está asignada a tu usuario.' });
+  }
+  const pdf = buildOrderPdf(decorateOrderAssignment(sale));
+  const safeName = String(sale.orderNumber || sale.id || 'venta').replace(/[^a-zA-Z0-9_-]/g, '_');
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `inline; filename="YHORS-${safeName}.pdf"`);
+  res.setHeader('Content-Length', pdf.length);
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+  res.end(pdf);
+});
+
 app.get('/api/admin/orders/:id/pdf', requireOrdersAccess, (req, res) => {
   const order = readOrders().find(item => item.id === req.params.id);
   if (!order) return res.status(404).json({ error: 'Pedido no encontrado.' });
@@ -4360,7 +4561,7 @@ function buildEditedOrderItems(requestedItems, products) {
 
     const durationMultiplier = purchaseMode === 'rental' ? rentalDays : 1;
     let deviceIdentifiers = [];
-    if (purchaseMode === 'purchase' && isTechProduct(product)) {
+    if (purchaseMode === 'purchase' && requiresDeviceTracking(product)) {
       deviceIdentifiers = normalizeDeviceIdentifiers(requested?.deviceIdentifiers, product, quantity, { required: false });
     }
 
@@ -4844,6 +5045,23 @@ app.post('/api/admin/products', requireAdmin, (req, res) => {
   writeProducts(products);
   auditLog(req, 'Producto creado', 'Inventario', { productId: product.id, sku: product.sku, name: product.name, after: auditValue(product) });
   return res.status(201).json(product);
+});
+
+app.put('/api/admin/products/:id/device-tracking', requireAdmin, (req, res) => {
+  const products = readProducts();
+  const index = products.findIndex(product => product.id === req.params.id);
+  if (index < 0) return res.status(404).json({ error: 'Producto no encontrado.' });
+  const current = normalizeProduct(products[index]);
+  if (!isTechProduct(current)) return res.status(400).json({ error: 'Solo los productos de categoría Tech pueden usar este control.' });
+  const enabled = req.body?.enabled === true;
+  const updated = normalizeProduct({ ...current, deviceTracking: enabled ? 'required' : 'none', updatedAt: new Date().toISOString() });
+  products[index] = updated;
+  writeProducts(products);
+  auditLog(req, enabled ? 'Control de serie / IMEI activado' : 'Control de serie / IMEI desactivado', 'Series / IMEI', {
+    productId: current.id, sku: current.sku, name: current.name,
+    before: current.deviceTracking, after: updated.deviceTracking
+  });
+  return res.json(updated);
 });
 
 app.put('/api/admin/products/:id', requireAdmin, (req, res) => {

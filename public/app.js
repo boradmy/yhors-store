@@ -611,6 +611,8 @@ async function renderCurrentRoute() {
   if (path === `${ADMIN_PATH}/multas` || path === `${ADMIN_PATH}/multas/`) return renderAdminFines();
   if (path === `${ADMIN_PATH}/pedidos` || path === `${ADMIN_PATH}/pedidos/`) return renderAdminOrders();
   if (path === `${ADMIN_PATH}/ventas` || path === `${ADMIN_PATH}/ventas/`) return renderAdminDirectSales();
+  if (path === `${ADMIN_PATH}/ventas/historial` || path === `${ADMIN_PATH}/ventas/historial/`) return renderAdminSalesHistory();
+  if (path === `${ADMIN_PATH}/series-imei` || path === `${ADMIN_PATH}/series-imei/`) return renderAdminSeriesImei();
   if (path === `${ADMIN_PATH}/cotizaciones` || path === `${ADMIN_PATH}/cotizaciones/`) return renderAdminQuotes();
   if (path === `${ADMIN_PATH}/generar-orden` || path === `${ADMIN_PATH}/generar-orden/`) { window.location.replace(`${ADMIN_PATH}/ventas`); return; }
     if (path === `${ADMIN_PATH}/auditoria` || path === `${ADMIN_PATH}/auditoria/`) return renderAdminAudit();
@@ -1166,12 +1168,12 @@ function adminSectionNav(session = {}, active = '') {
   const link = (key, href, label) => `<a href="${href}" class="admin-section-link${active === key ? ' active' : ''}" data-smooth-route>${label}</a>`;
   if (limitedOperations) {
     return `<nav class="admin-section-nav admin-section-nav--compact" id="adminSectionNav" aria-label="Secciones operativas">
-      <details class="admin-nav-group"><summary>Operación</summary><div class="admin-nav-group-links">${link('buscar-productos', `${ADMIN_PATH}/buscar-productos`, 'BUSCAR PRODUCTOS')}${link('cotizaciones', `${ADMIN_PATH}/cotizaciones`, 'COTIZACIONES')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('ventas', `${ADMIN_PATH}/ventas`, 'VENTAS')}</div></details>
+      <details class="admin-nav-group"><summary>Operación</summary><div class="admin-nav-group-links">${link('buscar-productos', `${ADMIN_PATH}/buscar-productos`, 'BUSCAR PRODUCTOS')}${link('cotizaciones', `${ADMIN_PATH}/cotizaciones`, 'COTIZACIONES')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('ventas', `${ADMIN_PATH}/ventas`, 'VENTAS')}${link('historial-ventas', `${ADMIN_PATH}/ventas/historial`, 'HISTORIAL DE VENTAS')}${link('series-imei', `${ADMIN_PATH}/series-imei`, 'SERIES / IMEI')}</div></details>
     </nav>`;
   }
   const group = (label, activeKeys, items, open = false) => `<details class="admin-nav-group${activeKeys.includes(active) ? ' has-active' : ''}"${open ? ' open' : ''}><summary><span>${label}</span>${activeKeys.includes(active) ? '<i aria-hidden="true"></i>' : ''}</summary><div class="admin-nav-group-links">${items}</div></details>`;
   return `<nav class="admin-section-nav" id="adminSectionNav" aria-label="Administración YHORS">
-    ${group('Operación', ['web','inventario','buscar-productos','cotizaciones','pedidos','ventas'], `${link('web', ADMIN_PATH, 'PÁGINA WEB')}${link('buscar-productos', `${ADMIN_PATH}/buscar-productos`, 'BUSCAR PRODUCTOS')}${link('inventario', `${ADMIN_PATH}/inventario`, 'INVENTARIO')}${link('cotizaciones', `${ADMIN_PATH}/cotizaciones`, 'COTIZACIONES')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('ventas', `${ADMIN_PATH}/ventas`, 'VENTAS')}`)}
+    ${group('Operación', ['web','inventario','buscar-productos','cotizaciones','pedidos','ventas'], `${link('web', ADMIN_PATH, 'PÁGINA WEB')}${link('buscar-productos', `${ADMIN_PATH}/buscar-productos`, 'BUSCAR PRODUCTOS')}${link('inventario', `${ADMIN_PATH}/inventario`, 'INVENTARIO')}${link('cotizaciones', `${ADMIN_PATH}/cotizaciones`, 'COTIZACIONES')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('ventas', `${ADMIN_PATH}/ventas`, 'VENTAS')}${link('historial-ventas', `${ADMIN_PATH}/ventas/historial`, 'HISTORIAL DE VENTAS')}${link('series-imei', `${ADMIN_PATH}/series-imei`, 'SERIES / IMEI')}`)}
     ${group('Gestión', ['usuarios','auditoria'], `${link('usuarios', `${ADMIN_PATH}/usuarios`, 'USUARIOS')}${link('auditoria', `${ADMIN_PATH}/auditoria`, 'AUDITORÍA')}`)}
     ${group('Finanzas', ['resumen-financiero','ventas-generales','multas','calculo-comision'], `${link('resumen-financiero', `${ADMIN_PATH}/resumen-financiero`, 'RESUMEN FINANCIERO')}${link('ventas-generales', `${ADMIN_PATH}/ventas-generales`, 'VENTAS GENERALES')}${link('multas', `${ADMIN_PATH}/multas`, 'MULTAS')}${link('calculo-comision', `${ADMIN_PATH}/calculo-comision`, 'CÁLCULO DE COMISIÓN')}`)}
   </nav>`;
@@ -1197,13 +1199,16 @@ function customerSummaryMarkup(customer = {}) {
 function isTechOrderProduct(product = {}) {
   return String(product.category || '').toLowerCase() === 'tech';
 }
+function requiresDeviceTracking(product = {}) {
+  return isTechOrderProduct(product) && String(product.deviceTracking || 'required').toLowerCase() !== 'none';
+}
 function isImeiOrderProduct(product = {}) {
   const type = String(product.productType || '').toLowerCase();
   const name = String(product.name || '').toLowerCase();
   return type.includes('celular') || type.includes('smartphone') || type.includes('mobile') || /\biphone\b|\bandroid\b|\btelefono\b|\bteléfono\b/.test(name);
 }
 function deviceIdentifierRowsMarkup(line) {
-  if (!isTechOrderProduct(line) || line.purchaseMode === 'rental') return '';
+  if (!requiresDeviceTracking(line) || line.purchaseMode === 'rental') return '';
   const quantity = Math.max(1, Math.min(99, Number(line.quantity || 1)));
   const imei = isImeiOrderProduct(line);
   const values = Array.isArray(line.deviceIdentifiers) ? line.deviceIdentifiers : [];
@@ -1292,7 +1297,7 @@ async function renderAdminDirectSales() {
         <section class="generate-card totals-card"><div class="generate-card-kicker">Resumen</div><div class="generate-total-line"><span>Subtotal</span><strong id="generateSubtotal">$0,00</strong></div><div class="generate-total-line"><span>Envío</span><strong id="generateShipping">$0,00</strong></div><div class="generate-grand-total"><span>Total</span><strong id="generateTotal">$0,00</strong></div><div id="generateMessage" class="message" hidden></div><button type="button" class="button generate-submit" id="generateOrderSubmit">Registrar venta <span>→</span></button></section>
       </section>
     </section>
-    <section class="generate-card quote-history-card sales-history-card"><div class="generate-card-head"><div><span class="generate-card-kicker">Historial</span><h3>Ventas directas recientes</h3></div><a class="button secondary small" href="${ADMIN_PATH}/ventas-generales" data-smooth-route>Ventas generales →</a></div><div class="quote-history-list">${recentSales.length ? recentSales.slice(0,12).map(sale => `<article class="quote-history-item"><div><strong>#${escapeHTML(sale.orderNumber)}</strong><span>${escapeHTML(sale.customer?.name || 'Cliente')}</span><small>${escapeHTML(sale.assignedSellerName || 'Sin vendedor')} · ${escapeHTML(new Date(sale.createdAt).toLocaleDateString('es-EC'))}</small></div><div class="quote-history-actions"><strong>${money(sale.total)}</strong><button type="button" class="button secondary small" data-sale-pdf="${escapeHTML(sale.id)}">PDF</button></div></article>`).join('') : '<div class="generate-empty-state"><span>✓</span><strong>Aún no hay ventas directas</strong><small>Las ventas registradas desde este módulo aparecerán aquí.</small></div>'}</div></section>
+    <section class="generate-card quote-history-card sales-history-card"><div class="generate-card-head"><div><span class="generate-card-kicker">Historial</span><h3>Ventas directas recientes</h3></div><a class="button secondary small" href="${ADMIN_PATH}/ventas/historial" data-smooth-route>Historial completo →</a></div><div class="quote-history-list">${recentSales.length ? recentSales.slice(0,12).map(sale => `<article class="quote-history-item"><div><strong>#${escapeHTML(sale.orderNumber)}</strong><span>${escapeHTML(sale.customer?.name || 'Cliente')}</span><small>${escapeHTML(sale.assignedSellerName || 'Sin vendedor')} · ${escapeHTML(new Date(sale.createdAt).toLocaleDateString('es-EC'))}</small></div><div class="quote-history-actions"><strong>${money(sale.total)}</strong><button type="button" class="button secondary small" data-sale-pdf="${escapeHTML(sale.id)}">PDF</button></div></article>`).join('') : '<div class="generate-empty-state"><span>✓</span><strong>Aún no hay ventas directas</strong><small>Las ventas registradas desde este módulo aparecerán aquí.</small></div>'}</div></section>
     <div class="generate-modal" id="customerModal" hidden><div class="generate-modal-backdrop" data-close-generate-modal="customerModal"></div><div class="generate-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="customerModalTitle"><div class="generate-modal-head"><div><span class="eyebrow">Datos del cliente</span><h2 id="customerModalTitle">Registrar cliente</h2></div><button type="button" class="generate-modal-close" data-close-generate-modal="customerModal">×</button></div><form id="generateCustomerForm"><div class="form-grid"><div class="field full"><label for="genCustomerName">Nombre completo</label><input id="genCustomerName" required maxlength="100" placeholder="Nombre del cliente"></div><div class="field"><label for="genCustomerCedula">Cédula / RUC</label><input id="genCustomerCedula" required inputmode="numeric" maxlength="13" placeholder="0102030405"></div><div class="field"><label for="genCustomerPhone">Celular</label><input id="genCustomerPhone" required maxlength="40" placeholder="099 999 9999"></div><div class="field"><label for="genCustomerEmail">Correo</label><input id="genCustomerEmail" type="email" maxlength="120" placeholder="cliente@correo.com"></div><div class="field"><label for="genCustomerCity">Ciudad</label><input id="genCustomerCity" required maxlength="80" placeholder="Quito"></div><div class="field full"><label for="genCustomerAddress">Dirección</label><input id="genCustomerAddress" maxlength="240" placeholder="Dirección de entrega"></div><div class="field full"><label for="genCustomerMaps">Google Maps (opcional)</label><input id="genCustomerMaps" type="url" maxlength="500" placeholder="https://maps.google.com/..."></div></div><div class="generate-modal-actions"><button type="button" class="button secondary" data-close-generate-modal="customerModal">Cancelar</button><button type="submit" class="button primary">Guardar cliente</button></div></form></div></div></div>
     <div class="generate-modal" id="productPickerModal" hidden><div class="generate-modal-backdrop" data-close-generate-modal="productPickerModal"></div><div class="generate-modal-dialog generate-product-picker" role="dialog" aria-modal="true" aria-labelledby="productPickerTitle"><div class="generate-modal-head"><div><span class="eyebrow">Catálogo YHORS</span><h2 id="productPickerTitle">Agregar productos</h2></div><button type="button" class="generate-modal-close" data-close-generate-modal="productPickerModal">×</button></div><div class="generate-picker-toolbar"><input id="generateProductSearch" type="search" placeholder="Buscar por nombre, SKU, marca…"><select id="generateProductCategory"><option value="">Todas las categorías</option><option value="elegant">Elegante</option><option value="sports">Deportes</option><option value="tech">Tech</option><option value="cosplay">Cosplay</option><option value="pets">Mascotas</option><option value="details">Details</option><option value="collectibles">Coleccionables</option></select></div><div class="generate-picker-list" id="generatePickerList"></div><div class="generate-modal-actions"><span class="generate-picker-hint">Puedes agregar varios productos y cantidades antes de cerrar.</span><button type="button" class="button primary" data-close-generate-modal="productPickerModal">Listo</button></div></div></div></div>
     <div class="generate-modal fine-person-modal" id="generateSellerPickerModal" hidden><div class="generate-modal-backdrop" data-close-generate-seller></div><div class="generate-modal-dialog fine-person-picker-dialog" role="dialog" aria-modal="true" aria-labelledby="generateSellerPickerTitle"><div class="generate-modal-head"><div><span class="eyebrow">Nueva venta · Responsable</span><h2 id="generateSellerPickerTitle">Seleccionar vendedor</h2><p class="fine-person-picker-subtitle">Busca al vendedor que quedará responsable de esta venta.</p></div><button type="button" class="generate-modal-close" data-close-generate-seller aria-label="Cerrar">×</button></div><div class="fine-person-picker-toolbar"><input id="generateSellerSearch" type="search" placeholder="Buscar por nombre o usuario…" autocomplete="off"></div><div class="fine-person-picker-count" id="generateSellerPickerCount"></div><div class="fine-person-picker-list" id="generateSellerPickerList"></div></div></div></div>
@@ -1387,11 +1392,115 @@ async function renderAdminDirectSales() {
       { cancelText: 'Cancelar', confirmText: 'Registrar venta' }
     );
     if (!confirmed) return;
-    saving = true; submit.disabled = true; submit.classList.add('is-loading'); submit.innerHTML = 'Registrando…'; try { const assignedSellerId = document.querySelector('#generateSeller')?.value || null; syncDeviceIdentifiersFromDom(lines); const identifierError = lines.find(line => { if (!isTechOrderProduct(line) || line.purchaseMode === 'rental') return false; const entries = line.deviceIdentifiers || []; if (entries.length < Number(line.quantity || 1)) return true; return entries.some(entry => isImeiOrderProduct(line) ? !/^\d{14,16}$/.test(String(entry.primary || '')) : !/^[A-Za-z0-9._\-/ ]{3,50}$/.test(String(entry.primary || ''))); }); if (identifierError) { message.hidden = false; message.className = 'message error'; message.textContent = isImeiOrderProduct(identifierError) ? `Completa correctamente el IMEI 1 de cada unidad de “${identifierError.name}” (14–16 dígitos).` : `Completa el número de serie de cada unidad de “${identifierError.name}”.`; saving = false; submit.disabled = false; submit.classList.remove('is-loading'); submit.innerHTML = 'Registrar venta <span>→</span>'; return; } const payload = { customer: { ...customer, notes: document.querySelector('#generateNotes').value.trim() }, internalNote: document.querySelector('#generateNotes').value.trim(), deliveryMethod, assignedSellerId, items: lines.map(line => ({ productId: line.productId || line.id, quantity: Number(line.quantity), purchaseMode: line.purchaseMode || 'purchase', rentalDays: line.purchaseMode === 'rental' ? Math.max(1, Number(line.rentalDays || 1)) : null, deviceIdentifiers: Array.isArray(line.deviceIdentifiers) ? line.deviceIdentifiers : [] })) }; const result = await request('/api/admin/ventas', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) }); app.querySelector('.generate-order-page').innerHTML = `<div class="generate-success"><span class="success-mark">✓</span><span class="eyebrow">Venta registrada correctamente</span><h2>#${escapeHTML(result.orderNumber)}</h2><p>La venta quedó registrada en YHORS, se descontó el inventario y quedó marcada como entregada.</p><div class="generate-success-total">Total: <strong>${money(result.total)}</strong></div><div class="generate-success-actions"><button type="button" class="button primary" id="generateAnotherOrder">Nueva venta</button><a class="button secondary" href="${ADMIN_PATH}/ventas" data-smooth-route>Ver ventas</a>${result.orderId ? `<button type="button" class="button secondary" data-generated-pdf="${escapeHTML(result.orderId)}">PDF de venta</button>` : ''}</div></div>`; document.querySelector('#generateAnotherOrder')?.addEventListener('click', () => renderAdminDirectSales()); document.querySelector('[data-generated-pdf]')?.addEventListener('click', event => { const a=document.createElement('a'); a.href=`/api/admin/orders/${encodeURIComponent(event.currentTarget.dataset.generatedPdf)}/pdf?v=${Date.now()}`; a.target='_blank'; a.rel='noopener'; a.click(); }); } catch (error) { message.hidden = false; message.className = 'message error'; message.textContent = error.message || 'No se pudo generar la venta.'; submit.disabled = false; submit.classList.remove('is-loading'); submit.innerHTML = 'Registrar venta <span>→</span>'; saving = false; } });
+    saving = true; submit.disabled = true; submit.classList.add('is-loading'); submit.innerHTML = 'Registrando…'; try { const assignedSellerId = document.querySelector('#generateSeller')?.value || null; syncDeviceIdentifiersFromDom(lines); const identifierError = lines.find(line => { if (!requiresDeviceTracking(line) || line.purchaseMode === 'rental') return false; const entries = line.deviceIdentifiers || []; if (entries.length < Number(line.quantity || 1)) return true; return entries.some(entry => isImeiOrderProduct(line) ? !/^\d{14,16}$/.test(String(entry.primary || '')) : !/^[A-Za-z0-9._\-/ ]{3,50}$/.test(String(entry.primary || ''))); }); if (identifierError) { message.hidden = false; message.className = 'message error'; message.textContent = isImeiOrderProduct(identifierError) ? `Completa correctamente el IMEI 1 de cada unidad de “${identifierError.name}” (14–16 dígitos).` : `Completa el número de serie de cada unidad de “${identifierError.name}”.`; saving = false; submit.disabled = false; submit.classList.remove('is-loading'); submit.innerHTML = 'Registrar venta <span>→</span>'; return; } const payload = { customer: { ...customer, notes: document.querySelector('#generateNotes').value.trim() }, internalNote: document.querySelector('#generateNotes').value.trim(), deliveryMethod, assignedSellerId, items: lines.map(line => ({ productId: line.productId || line.id, quantity: Number(line.quantity), purchaseMode: line.purchaseMode || 'purchase', rentalDays: line.purchaseMode === 'rental' ? Math.max(1, Number(line.rentalDays || 1)) : null, deviceIdentifiers: Array.isArray(line.deviceIdentifiers) ? line.deviceIdentifiers : [] })) }; const result = await request('/api/admin/ventas', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) }); app.querySelector('.generate-order-page').innerHTML = `<div class="generate-success"><span class="success-mark">✓</span><span class="eyebrow">Venta registrada correctamente</span><h2>#${escapeHTML(result.orderNumber)}</h2><p>La venta quedó registrada en YHORS, se descontó el inventario y quedó marcada como entregada.</p><div class="generate-success-total">Total: <strong>${money(result.total)}</strong></div><div class="generate-success-actions"><button type="button" class="button primary" id="generateAnotherOrder">Nueva venta</button><a class="button secondary" href="${ADMIN_PATH}/ventas" data-smooth-route>Ver ventas</a>${result.orderId ? `<button type="button" class="button secondary" data-generated-pdf="${escapeHTML(result.orderId)}">PDF de venta</button>` : ''}</div></div>`; document.querySelector('#generateAnotherOrder')?.addEventListener('click', () => renderAdminDirectSales()); document.querySelector('[data-generated-pdf]')?.addEventListener('click', event => { const a=document.createElement('a'); a.href=`/api/admin/ventas/${encodeURIComponent(event.currentTarget.dataset.generatedPdf)}/pdf?v=${Date.now()}`; a.target='_blank'; a.rel='noopener'; a.click(); }); } catch (error) { message.hidden = false; message.className = 'message error'; message.textContent = error.message || 'No se pudo generar la venta.'; submit.disabled = false; submit.classList.remove('is-loading'); submit.innerHTML = 'Registrar venta <span>→</span>'; saving = false; } });
   drawCustomer(); drawLines(); wireAccountMenu(); wireImageFallback(app);
 }
 
 
+
+
+async function renderAdminSalesHistory() {
+  const session = await request('/api/admin/session').catch(() => ({ authenticated: false }));
+  if (!session.authenticated) return renderLogin();
+  if (!['admin','store_manager','vendedor','orders'].includes(String(session.role || '').toLowerCase())) return renderAdmin();
+
+  app.innerHTML = `<main class="admin-shell sales-history-shell"><div class="admin-wrap">
+    <div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Historial de ventas</h1><p class="admin-subtitle">Consulta separada de todas las ventas directas registradas en YHORS.</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>
+    ${adminSectionNav(session, 'historial-ventas')}
+    <section class="admin-panel">
+      <div class="section-heading"><div><span class="eyebrow">Ventas</span><h2>Historial de ventas</h2></div><p>Los vendedores ven únicamente sus ventas. Administración puede consultar todas.</p></div>
+      <div class="sales-toolbar">
+        <label class="sales-date-filter"><span>Desde</span><input id="historyDateFrom" type="date"></label>
+        <label class="sales-date-filter"><span>Hasta</span><input id="historyDateTo" type="date"></label>
+        <label class="sales-history-search"><span>Buscar</span><input id="historySearch" type="search" placeholder="Venta, cliente, cédula o vendedor"></label>
+        <button type="button" class="button primary small" id="historyRefresh">Actualizar</button>
+      </div>
+      <div id="historyMessage" class="message" hidden></div>
+      <div class="sales-history-list" id="salesHistoryList"><div class="sales-loading">Cargando historial…</div></div>
+    </section>
+  </div></main>`;
+  wireAccountMenu();
+
+  const load = async () => {
+    const q = document.querySelector('#historySearch')?.value.trim() || '';
+    const from = document.querySelector('#historyDateFrom')?.value || '';
+    const to = document.querySelector('#historyDateTo')?.value || '';
+    const list = document.querySelector('#salesHistoryList');
+    const msg = document.querySelector('#historyMessage');
+    if (from && to && from > to) { list.innerHTML = ''; msg.hidden = false; msg.className='message error'; msg.textContent='La fecha inicial no puede ser posterior a la fecha final.'; return; }
+    msg.hidden = true; list.innerHTML = '<div class="sales-loading">Actualizando historial…</div>';
+    try {
+      const sales = await request(`/api/admin/ventas/historial?q=${encodeURIComponent(q)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
+      list.innerHTML = sales.length ? sales.map(sale => `<article class="sales-history-card">
+        <div class="sales-history-main"><div><span class="eyebrow">Venta</span><h3>#${escapeHTML(sale.orderNumber || sale.id)}</h3><strong>${escapeHTML(sale.customer?.name || 'Cliente')}</strong><small>${escapeHTML(sale.customer?.cedula || '—')} · ${escapeHTML(sale.assignedSellerName || 'Sin vendedor')} · ${escapeHTML(new Date(sale.createdAt).toLocaleString('es-EC'))}</small></div>
+        <div class="sales-history-total"><span>Total</span><strong>${money(sale.total)}</strong><small>${escapeHTML(sale.status || 'Entregado')}</small></div></div>
+        <div class="sales-history-actions"><button type="button" class="button secondary small" data-sale-pdf="${escapeHTML(sale.id)}">PDF</button>${String(session.role).toLowerCase()==='admin' ? `<button type="button" class="button danger small" data-delete-sale="${escapeHTML(sale.id)}">Eliminar</button>` : ''}</div>
+      </article>`).join('') : '<div class="generate-empty-state"><span>✓</span><strong>No hay ventas que coincidan</strong><small>Prueba con otro período o término de búsqueda.</small></div>';
+    } catch (error) { list.innerHTML=''; msg.hidden=false; msg.className='message error'; msg.textContent=error.message || 'No se pudo cargar el historial.'; }
+  };
+  document.querySelector('#historyRefresh')?.addEventListener('click', load);
+  document.querySelector('#historySearch')?.addEventListener('input', () => { clearTimeout(window.__yhorsHistoryTimer); window.__yhorsHistoryTimer=setTimeout(load,250); });
+  document.querySelector('#historyDateFrom')?.addEventListener('change', load);
+  document.querySelector('#historyDateTo')?.addEventListener('change', load);
+  document.querySelector('#salesHistoryList')?.addEventListener('click', async event => {
+    const btn = event.target.closest('[data-delete-sale]');
+    if (!btn) return;
+    if (!await showYhorsConfirm('¿Eliminar esta venta?', 'Esta acción es solo para limpiar ventas de prueba y devolverá las cantidades al inventario.', {cancelText:'Cancelar', confirmText:'Eliminar venta'})) return;
+    btn.disabled=true;
+    try { await request(`/api/admin/ventas/${encodeURIComponent(btn.dataset.deleteSale)}`, {method:'DELETE'}); await load(); }
+    catch(error){ alert(error.message || 'No se pudo eliminar la venta.'); btn.disabled=false; }
+  });
+  await load();
+}
+
+async function renderAdminSeriesImei() {
+  const session = await request('/api/admin/session').catch(() => ({ authenticated:false }));
+  if (!session.authenticated) return renderLogin();
+  const role = String(session.role || '').toLowerCase();
+  if (!['admin','store_manager','vendedor','orders'].includes(role)) return renderAdmin();
+  const canEdit = role === 'admin' || role === 'store_manager';
+  const products = await request('/api/admin/order-products').catch(() => []);
+  const sales = await request('/api/admin/series-imei').catch(() => []);
+  const productConfig = products.filter(p => String(p.category || '').toLowerCase() === 'tech');
+  app.innerHTML = `<main class="admin-shell series-imei-shell"><div class="admin-wrap">
+    <div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Series / IMEI</h1><p class="admin-subtitle">Configura qué productos Tech solicitan identificación y corrige los identificadores de las ventas.</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>
+    ${adminSectionNav(session, 'series-imei')}
+    <section class="admin-panel">
+      <div class="section-heading"><div><span class="eyebrow">Control de equipos</span><h2>Solicitar serie / IMEI</h2></div><p>Activa la identificación solo en los productos Tech que realmente la necesitan.</p></div>
+      <div class="series-config-grid">${productConfig.map(product => `<article class="series-config-card"><div><strong>${escapeHTML(product.name)}</strong><small>SKU: ${escapeHTML(product.sku || '—')} · ${escapeHTML(product.productType || 'Tech')}</small></div><label class="series-toggle"><input type="checkbox" data-device-toggle="${escapeHTML(product.id)}" ${product.deviceTracking !== 'none' ? 'checked' : ''} ${!canEdit ? 'disabled' : ''}><span></span><b>${product.deviceTracking !== 'none' ? 'Solicitar' : 'No solicitar'}</b></label></article>`).join('') || '<div class="generate-empty-state"><strong>No hay productos Tech.</strong></div>'}</div>
+    </section>
+    <section class="admin-panel">
+      <div class="section-heading"><div><span class="eyebrow">Registros</span><h2>Series / IMEI registrados</h2></div><p>ADMIN y JEFE DE TIENDA pueden modificar identificadores.</p></div>
+      <div class="sales-history-list" id="seriesList">${sales.length ? sales.map(row => `<article class="sales-history-card series-record" data-series-row="${escapeHTML(row.saleId)}" data-item-index="${row.itemIndex}" data-unit="${row.unit}">
+        <div class="sales-history-main"><div><span class="eyebrow">${row.type === 'imei' ? 'IMEI' : 'SERIE'} · #${escapeHTML(row.orderNumber)}</span><h3>${escapeHTML(row.productName)}</h3><small>Unidad ${row.unit} · ${escapeHTML(row.customerName || 'Cliente')} · ${escapeHTML(row.sellerName || 'Sin vendedor')}</small></div>
+        <div class="series-values"><input data-series-primary value="${escapeHTML(row.primary)}" ${canEdit?'':'disabled'}><input data-series-secondary value="${escapeHTML(row.secondary || '')}" placeholder="${row.type === 'imei' ? 'IMEI 2 (opcional)' : '—'}" ${canEdit && row.type==='imei'?'':'disabled'}></div></div>
+        ${canEdit ? `<div class="sales-history-actions"><button type="button" class="button secondary small" data-save-series>Guardar</button></div>` : ''}</article>`).join('') : '<div class="generate-empty-state"><strong>No hay series / IMEI registrados.</strong><small>Cuando una venta tenga identificación aparecerá aquí.</small></div>'}</div>
+    </section>
+  </div></main>`;
+  wireAccountMenu();
+
+  document.querySelectorAll('[data-device-toggle]').forEach(input => input.addEventListener('change', async () => {
+    const id=input.dataset.deviceToggle;
+    const previous=!input.checked;
+    input.disabled=true;
+    try {
+      const result=await request(`/api/admin/products/${encodeURIComponent(id)}/device-tracking`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:input.checked})});
+      input.checked=result.deviceTracking!=='none';
+      input.nextElementSibling?.nextElementSibling && (input.nextElementSibling.nextElementSibling.textContent=input.checked?'Solicitar':'No solicitar');
+    } catch(error){ input.checked=previous; alert(error.message||'No se pudo actualizar la configuración.'); }
+    finally { input.disabled=false; }
+  }));
+  document.querySelector('#seriesList')?.addEventListener('click', async event => {
+    const btn=event.target.closest('[data-save-series]');
+    if(!btn)return;
+    const row=btn.closest('[data-series-row]');
+    const primary=row.querySelector('[data-series-primary]')?.value.trim()||'';
+    const secondary=row.querySelector('[data-series-secondary]')?.value.trim()||'';
+    btn.disabled=true;
+    try { await request(`/api/admin/series-imei/${encodeURIComponent(row.dataset.seriesRow)}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({itemIndex:Number(row.dataset.itemIndex),unit:Number(row.dataset.unit),primary,secondary})}); btn.textContent='Guardado ✓'; setTimeout(()=>{btn.disabled=false;btn.textContent='Guardar';},900); }
+    catch(error){ alert(error.message||'No se pudo guardar.'); btn.disabled=false; }
+  });
+}
 
 async function renderAdminQuotes() {
   const session = await request('/api/admin/session').catch(() => ({ authenticated: false }));
@@ -4297,6 +4406,25 @@ document.addEventListener('orders:stock-synced', async () => {
     if (typeof renderInventory === 'function') renderInventory();
     if (typeof drawInventory === 'function') drawInventory();
   } catch (_) {}
+});
+
+/* YHORS — PDF de una venta directa */
+document.addEventListener('click', (event) => {
+  const button = event.target.closest('[data-sale-pdf]');
+  if (!button) return;
+  const id = button.getAttribute('data-sale-pdf');
+  if (!id) return;
+  const originalText = button.textContent;
+  button.disabled = true;
+  button.textContent = 'GENERANDO…';
+  const pdfLink = document.createElement('a');
+  pdfLink.href = `/api/admin/ventas/${encodeURIComponent(id)}/pdf?v=${Date.now()}`;
+  pdfLink.target = '_blank';
+  pdfLink.rel = 'noopener noreferrer';
+  document.body.appendChild(pdfLink);
+  pdfLink.click();
+  pdfLink.remove();
+  setTimeout(() => { button.disabled=false; button.textContent=originalText; }, 800);
 });
 
 /* YHORS — PDF de una orden específica */
