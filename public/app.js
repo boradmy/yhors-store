@@ -619,6 +619,7 @@ if (path === `${ADMIN_PATH}/usuarios` || path === `${ADMIN_PATH}/usuarios/`) {
   }
   if (path === `${ADMIN_PATH}/inventario` || path === `${ADMIN_PATH}/inventario/`) return renderAdminInventory();
   if (path === `${ADMIN_PATH}/buscar-productos` || path === `${ADMIN_PATH}/buscar-productos/`) return renderAdminCatalogSearch();
+  if (path === `${ADMIN_PATH}/series-imeis` || path === `${ADMIN_PATH}/series-imeis/`) return renderAdminSeriesImeis();
   if (path === '/yhors/flyer' || path === '/yhors/flyer/') { window.location.replace(`${ADMIN_PATH}/buscar-productos`); return; }
   if (path === '/mi-cuenta' || path === '/mi-cuenta/') return renderMyAccount();
   if (path === '/pedido' || path === '/pedido/') return checkoutPage();
@@ -1164,13 +1165,13 @@ function adminSectionNav(session = {}, active = '') {
   const link = (key, href, label) => `<a href="${href}" class="admin-section-link${active === key ? ' active' : ''}" data-smooth-route>${label}</a>`;
   if (limitedOperations) {
     return `<nav class="admin-section-nav admin-section-nav--compact" id="adminSectionNav" aria-label="Secciones operativas">
-      <details class="admin-nav-group"><summary>Operación</summary><div class="admin-nav-group-links">${link('buscar-productos', `${ADMIN_PATH}/buscar-productos`, 'BUSCAR PRODUCTOS')}${link('ventas-generales', `${ADMIN_PATH}/ventas-generales`, 'VENTAS GENERALES')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('generar-orden', `${ADMIN_PATH}/generar-orden`, 'GENERAR ORDEN')}</div></details>
+      <details class="admin-nav-group"><summary>Operación</summary><div class="admin-nav-group-links">${link('buscar-productos', `${ADMIN_PATH}/buscar-productos`, 'BUSCAR PRODUCTOS')}${link('ventas-generales', `${ADMIN_PATH}/ventas-generales`, 'VENTAS GENERALES')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('generar-orden', `${ADMIN_PATH}/generar-orden`, 'GENERAR ORDEN')}${link('series-imeis', `${ADMIN_PATH}/series-imeis`, 'SERIES/IMEIS')}</div></details>
     </nav>`;
   }
   const group = (label, activeKeys, items, open = false) => `<details class="admin-nav-group${activeKeys.includes(active) ? ' has-active' : ''}"${open ? ' open' : ''}><summary><span>${label}</span>${activeKeys.includes(active) ? '<i aria-hidden="true"></i>' : ''}</summary><div class="admin-nav-group-links">${items}</div></details>`;
   return `<nav class="admin-section-nav" id="adminSectionNav" aria-label="Administración YHORS">
     ${group('Operación', ['web','inventario','buscar-productos','pedidos','generar-orden'], `${link('web', ADMIN_PATH, 'PÁGINA WEB')}${link('buscar-productos', `${ADMIN_PATH}/buscar-productos`, 'BUSCAR PRODUCTOS')}${link('inventario', `${ADMIN_PATH}/inventario`, 'INVENTARIO')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('generar-orden', `${ADMIN_PATH}/generar-orden`, 'GENERAR ORDEN')}`)}
-    ${group('Gestión', ['usuarios','auditoria'], `${link('usuarios', `${ADMIN_PATH}/usuarios`, 'USUARIOS')}${link('auditoria', `${ADMIN_PATH}/auditoria`, 'AUDITORÍA')}`)}
+    ${group('Gestión', ['usuarios','series-imeis','auditoria'], `${link('usuarios', `${ADMIN_PATH}/usuarios`, 'USUARIOS')}${link('series-imeis', `${ADMIN_PATH}/series-imeis`, 'SERIES/IMEIS')}${link('auditoria', `${ADMIN_PATH}/auditoria`, 'AUDITORÍA')}`)}
     ${group('Finanzas', ['resumen-financiero','ventas-generales','multas','calculo-comision'], `${link('resumen-financiero', `${ADMIN_PATH}/resumen-financiero`, 'RESUMEN FINANCIERO')}${link('ventas-generales', `${ADMIN_PATH}/ventas-generales`, 'VENTAS GENERALES')}${link('multas', `${ADMIN_PATH}/multas`, 'MULTAS')}${link('calculo-comision', `${ADMIN_PATH}/calculo-comision`, 'CÁLCULO DE COMISIÓN')}`)}
   </nav>`;
 }
@@ -1201,7 +1202,7 @@ function isImeiOrderProduct(product = {}) {
   return type.includes('celular') || type.includes('smartphone') || type.includes('mobile') || /\biphone\b|\bandroid\b|\btelefono\b|\bteléfono\b/.test(name);
 }
 function deviceIdentifierRowsMarkup(line) {
-  if (!isTechOrderProduct(line) || line.purchaseMode === 'rental') return '';
+  if (!isTechOrderProduct(line) || line.purchaseMode === 'rental' || line.requiresDeviceIdentifier === false) return '';
   const quantity = Math.max(1, Math.min(99, Number(line.quantity || 1)));
   const imei = isImeiOrderProduct(line);
   const values = Array.isArray(line.deviceIdentifiers) ? line.deviceIdentifiers : [];
@@ -1369,10 +1370,125 @@ async function renderAdminGenerateOrder() {
       { cancelText: 'Cancelar', confirmText: 'Generar orden' }
     );
     if (!confirmed) return;
-    saving = true; submit.disabled = true; submit.classList.add('is-loading'); submit.innerHTML = 'Generando…'; try { const assignedSellerId = document.querySelector('#generateSeller')?.value || null; syncDeviceIdentifiersFromDom(lines); const identifierError = lines.find(line => { if (!isTechOrderProduct(line) || line.purchaseMode === 'rental') return false; const entries = line.deviceIdentifiers || []; if (entries.length < Number(line.quantity || 1)) return true; return entries.some(entry => isImeiOrderProduct(line) ? !/^\d{14,16}$/.test(String(entry.primary || '')) : !/^[A-Za-z0-9._\-/ ]{3,50}$/.test(String(entry.primary || ''))); }); if (identifierError) { message.hidden = false; message.className = 'message error'; message.textContent = isImeiOrderProduct(identifierError) ? `Completa correctamente el IMEI 1 de cada unidad de “${identifierError.name}” (14–16 dígitos).` : `Completa el número de serie de cada unidad de “${identifierError.name}”.`; saving = false; submit.disabled = false; submit.classList.remove('is-loading'); submit.innerHTML = 'Generar orden <span>→</span>'; return; } const payload = { customer: { ...customer, notes: document.querySelector('#generateNotes').value.trim() }, deliveryMethod, assignedSellerId, items: lines.map(line => ({ productId: line.productId || line.id, quantity: Number(line.quantity), purchaseMode: line.purchaseMode || 'purchase', rentalDays: line.purchaseMode === 'rental' ? Math.max(1, Number(line.rentalDays || 1)) : null, deviceIdentifiers: Array.isArray(line.deviceIdentifiers) ? line.deviceIdentifiers : [] })) }; const result = await request('/api/admin/generar-orden', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) }); app.querySelector('.generate-order-page').innerHTML = `<div class="generate-success"><span class="success-mark">✓</span><span class="eyebrow">Orden generada correctamente</span><h2>#${escapeHTML(result.orderNumber)}</h2><p>La orden quedó registrada en YHORS y el inventario se actualizó.</p><div class="generate-success-total">Total: <strong>${money(result.total)}</strong></div><div class="generate-success-actions"><button type="button" class="button primary" id="generateAnotherOrder">Nueva orden</button><a class="button secondary" href="${ADMIN_PATH}/pedidos" data-smooth-route>Ver pedidos</a>${result.orderId ? `<button type="button" class="button secondary" data-generated-pdf="${escapeHTML(result.orderId)}">PDF de orden</button>` : ''}</div></div>`; document.querySelector('#generateAnotherOrder')?.addEventListener('click', () => renderAdminGenerateOrder()); document.querySelector('[data-generated-pdf]')?.addEventListener('click', event => { const a=document.createElement('a'); a.href=`/api/admin/orders/${encodeURIComponent(event.currentTarget.dataset.generatedPdf)}/pdf?v=${Date.now()}`; a.target='_blank'; a.rel='noopener'; a.click(); }); } catch (error) { message.hidden = false; message.className = 'message error'; message.textContent = error.message || 'No se pudo generar la orden.'; submit.disabled = false; submit.classList.remove('is-loading'); submit.innerHTML = 'Generar orden <span>→</span>'; saving = false; } });
+    saving = true; submit.disabled = true; submit.classList.add('is-loading'); submit.innerHTML = 'Generando…'; try { const assignedSellerId = document.querySelector('#generateSeller')?.value || null; syncDeviceIdentifiersFromDom(lines); const identifierError = lines.find(line => { if (!isTechOrderProduct(line) || line.purchaseMode === 'rental' || line.requiresDeviceIdentifier === false) return false; const entries = line.deviceIdentifiers || []; if (entries.length < Number(line.quantity || 1)) return true; return entries.some(entry => isImeiOrderProduct(line) ? !/^\d{14,16}$/.test(String(entry.primary || '')) : !/^[A-Za-z0-9._\-/ ]{3,50}$/.test(String(entry.primary || ''))); }); if (identifierError) { message.hidden = false; message.className = 'message error'; message.textContent = isImeiOrderProduct(identifierError) ? `Completa correctamente el IMEI 1 de cada unidad de “${identifierError.name}” (14–16 dígitos).` : `Completa el número de serie de cada unidad de “${identifierError.name}”.`; saving = false; submit.disabled = false; submit.classList.remove('is-loading'); submit.innerHTML = 'Generar orden <span>→</span>'; return; } const payload = { customer: { ...customer, notes: document.querySelector('#generateNotes').value.trim() }, deliveryMethod, assignedSellerId, items: lines.map(line => ({ productId: line.productId || line.id, quantity: Number(line.quantity), purchaseMode: line.purchaseMode || 'purchase', rentalDays: line.purchaseMode === 'rental' ? Math.max(1, Number(line.rentalDays || 1)) : null, deviceIdentifiers: Array.isArray(line.deviceIdentifiers) ? line.deviceIdentifiers : [] })) }; const result = await request('/api/admin/generar-orden', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) }); app.querySelector('.generate-order-page').innerHTML = `<div class="generate-success"><span class="success-mark">✓</span><span class="eyebrow">Orden generada correctamente</span><h2>#${escapeHTML(result.orderNumber)}</h2><p>La orden quedó registrada en YHORS y el inventario se actualizó.</p><div class="generate-success-total">Total: <strong>${money(result.total)}</strong></div><div class="generate-success-actions"><button type="button" class="button primary" id="generateAnotherOrder">Nueva orden</button><a class="button secondary" href="${ADMIN_PATH}/pedidos" data-smooth-route>Ver pedidos</a>${result.orderId ? `<button type="button" class="button secondary" data-generated-pdf="${escapeHTML(result.orderId)}">PDF de orden</button>` : ''}</div></div>`; document.querySelector('#generateAnotherOrder')?.addEventListener('click', () => renderAdminGenerateOrder()); document.querySelector('[data-generated-pdf]')?.addEventListener('click', event => { const a=document.createElement('a'); a.href=`/api/admin/orders/${encodeURIComponent(event.currentTarget.dataset.generatedPdf)}/pdf?v=${Date.now()}`; a.target='_blank'; a.rel='noopener'; a.click(); }); } catch (error) { message.hidden = false; message.className = 'message error'; message.textContent = error.message || 'No se pudo generar la orden.'; submit.disabled = false; submit.classList.remove('is-loading'); submit.innerHTML = 'Generar orden <span>→</span>'; saving = false; } });
   drawCustomer(); drawLines(); wireAccountMenu(); wireImageFallback(app);
 }
 
+
+
+async function renderAdminSeriesImeis() {
+  const session = await request('/api/admin/session').catch(() => ({ authenticated: false }));
+  if (!session.authenticated) return renderLogin();
+  if (!['admin','store_manager','vendedor','orders'].includes(String(session.role || '').toLowerCase())) return renderAdminOrders();
+
+  const isAdmin = String(session.role || '').toLowerCase() === 'admin';
+  const isManager = isAdmin || String(session.role || '').toLowerCase() === 'store_manager';
+  let config = [];
+  let registered = [];
+  try {
+    config = await request('/api/admin/series-imeis/config');
+    registered = (await request('/api/admin/series-imeis/registered')).rows || [];
+  } catch (error) {
+    app.innerHTML = `<main class="admin-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Series/IMEIS</h1></div></div><div class="message error">${escapeHTML(error.message || 'No se pudo cargar Series/IMEIS.')}</div></div></main>`;
+    return;
+  }
+
+  const nav = adminSectionNav(session, 'series-imeis');
+  app.innerHTML = `<main class="admin-shell series-imeis-shell"><div class="admin-wrap">
+    <div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">SERIES/IMEIS</h1><p class="admin-subtitle">Control de identificación de productos TEC y gestión de series e IMEIs registrados.</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>
+    ${nav}
+    <div class="users-module-switch" role="tablist" aria-label="Series e IMEIs">
+      <button type="button" class="users-module-tab is-active" data-series-tab="gestor">GESTOR DE SERIES</button>
+      <button type="button" class="users-module-tab" data-series-tab="registrados">SERIES / IMEIS REGISTRADOS</button>
+    </div>
+    <section class="admin-panel series-tab-panel" data-series-panel="gestor">
+      <div class="section-heading"><div><span class="eyebrow">Configuración</span><h2>Gestor de series</h2></div><p>Activa o desactiva la solicitud de serie/IMEI por producto TEC. Solo Administración puede guardar cambios.</p></div>
+      <div class="series-config-toolbar"><input id="seriesConfigSearch" type="search" placeholder="Buscar producto, SKU, marca o tipo…" autocomplete="off"><button type="button" class="button secondary small" id="seriesConfigClear">Limpiar</button></div>
+      <div class="series-config-note">Los productos TEC existentes empiezan con la solicitud habilitada para conservar el comportamiento anterior. Los servicios pueden desactivarse desde aquí.</div>
+      <div id="seriesConfigList"></div>
+      <div class="form-actions"><button type="button" class="button secondary" id="seriesConfigReset">Descartar cambios</button><button type="button" class="button primary" id="seriesConfigSave"${isAdmin ? '' : ' disabled'}>Guardar cambios</button></div>
+      ${!isAdmin ? '<div class="message">Solo el Administrador puede modificar qué productos solicitan serie/IMEI.</div>' : ''}
+    </section>
+    <section class="admin-panel series-tab-panel" data-series-panel="registrados" hidden>
+      <div class="section-heading"><div><span class="eyebrow">Historial</span><h2>Series / IMEIS registrados <small id="seriesRegisteredCount"></small></h2></div><p>Consulta, agrega y modifica identificadores registrados en los pedidos.</p></div>
+      <div class="orders-toolbar series-registered-toolbar">
+        <label class="series-date-filter"><span>DESDE</span><input id="seriesFrom" type="date"></label>
+        <label class="series-date-filter"><span>HASTA</span><input id="seriesTo" type="date"></label>
+        <select id="seriesType"><option value="">Serie e IMEI</option><option value="serial">Series</option><option value="imei">IMEIS</option></select>
+        <select id="seriesStatus"><option value="">Todos los estados</option><option>Pendiente</option><option>Confirmado</option><option>Preparado</option><option>Enviado</option><option>Entregado</option><option>Cancelado</option></select>
+        <input id="seriesSearch" type="search" placeholder="Buscar por pedido, cliente, producto, SKU, serie o IMEI…" autocomplete="off">
+        <button type="button" class="button secondary small" id="seriesClearFilters">Limpiar filtros</button>
+      </div>
+      <div id="seriesRegisteredList"></div>
+    </section>
+  </div></main>`;
+
+  let configState = config.map(item => ({ ...item, original: Boolean(item.requiresDeviceIdentifier) }));
+  const configList = document.querySelector('#seriesConfigList');
+  const renderConfig = () => {
+    const q = String(document.querySelector('#seriesConfigSearch')?.value || '').trim().toLocaleLowerCase('es-EC');
+    const filtered = configState.filter(item => `${item.name} ${item.sku} ${item.productType}`.toLocaleLowerCase('es-EC').includes(q));
+    configList.innerHTML = filtered.length ? filtered.map(item => `<div class="series-config-row" data-series-config-search="${escapeHTML(`${item.name} ${item.sku} ${item.productType}`)}"><div><strong>${escapeHTML(item.name)}</strong><small>SKU: ${escapeHTML(item.sku || '—')} · ${escapeHTML(item.productType || 'Tecnología')} · Stock ${Number(item.stock || 0)}</small></div><label class="series-switch"><input type="checkbox" data-series-toggle="${escapeHTML(item.id)}" ${item.requiresDeviceIdentifier ? 'checked' : ''}${isAdmin ? '' : ' disabled'}><span></span><b>${item.requiresDeviceIdentifier ? 'SOLICITAR' : 'NO SOLICITAR'}</b></label></div>`).join('') : '<div class="series-empty">No encontramos productos TEC con esa búsqueda.</div>';
+    configList.querySelectorAll('[data-series-toggle]').forEach(toggle => toggle.addEventListener('change', () => {
+      const item = configState.find(entry => entry.id === toggle.dataset.seriesToggle); if (!item) return;
+      item.requiresDeviceIdentifier = toggle.checked;
+      const label = toggle.closest('.series-switch')?.querySelector('b'); if (label) label.textContent = toggle.checked ? 'SOLICITAR' : 'NO SOLICITAR';
+    }));
+  };
+  renderConfig();
+  document.querySelector('#seriesConfigSearch')?.addEventListener('input', renderConfig);
+  document.querySelector('#seriesConfigClear')?.addEventListener('click', () => { document.querySelector('#seriesConfigSearch').value=''; renderConfig(); });
+  document.querySelector('#seriesConfigReset')?.addEventListener('click', () => { configState = config.map(item => ({ ...item, original: Boolean(item.requiresDeviceIdentifier) })); renderConfig(); });
+  document.querySelector('#seriesConfigSave')?.addEventListener('click', async () => {
+    if (!isAdmin) return;
+    const changes = configState.filter(item => Boolean(item.requiresDeviceIdentifier) !== Boolean(item.original)).map(item => ({ id: item.id, requiresDeviceIdentifier: Boolean(item.requiresDeviceIdentifier) }));
+    if (!changes.length) { alert('No hay cambios para guardar.'); return; }
+    const confirmed = await showYhorsConfirm('¿Guardar configuración de series/IMEIS?', `Se actualizarán ${changes.length} producto(s). Esta configuración se aplicará a las próximas órdenes.`, { cancelText:'Cancelar', confirmText:'Guardar cambios' });
+    if (!confirmed) return;
+    try { config = await request('/api/admin/series-imeis/config', { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ changes }) }); configState = config.map(item => ({ ...item, original: Boolean(item.requiresDeviceIdentifier) })); renderConfig(); } catch (error) { alert(error.message); }
+  });
+
+  let registeredState = registered;
+  const registeredList = document.querySelector('#seriesRegisteredList');
+  const renderRegistered = () => {
+    const q = String(document.querySelector('#seriesSearch')?.value || '').trim().toLocaleLowerCase('es-EC');
+    const from = document.querySelector('#seriesFrom')?.value || '';
+    const to = document.querySelector('#seriesTo')?.value || '';
+    const type = document.querySelector('#seriesType')?.value || '';
+    const status = document.querySelector('#seriesStatus')?.value || '';
+    const rows = registeredState.filter(row => {
+      const hay = `${row.orderNumber} ${row.customerName} ${row.productName} ${row.sku} ${row.primary} ${row.secondary || ''} ${row.sellerName}`.toLocaleLowerCase('es-EC');
+      if (q && !hay.includes(q)) return false;
+      const day = row.createdAt ? new Intl.DateTimeFormat('en-CA', { timeZone:'America/Guayaquil' }).format(new Date(row.createdAt)) : '';
+      if (from && day < from) return false; if (to && day > to) return false;
+      if (type && row.type !== type) return false; if (status && row.status !== status) return false;
+      return true;
+    });
+    const count = document.querySelector('#seriesRegisteredCount'); if (count) count.textContent = `${rows.length}`;
+    registeredList.innerHTML = rows.length ? `<div class="series-registered-table-wrap"><table class="series-registered-table"><thead><tr><th>FECHA</th><th>PEDIDO</th><th>PRODUCTO</th><th>IDENTIFICACIÓN</th><th>CLIENTE</th><th>ESTADO</th><th>ACCIÓN</th></tr></thead><tbody>${rows.map(row => `<tr><td>${escapeHTML(row.createdAt ? new Intl.DateTimeFormat('es-EC',{timeZone:'America/Guayaquil',day:'2-digit',month:'2-digit',year:'numeric'}).format(new Date(row.createdAt)) : '—')}</td><td><strong>${escapeHTML(row.orderNumber)}</strong><small>${escapeHTML(row.sellerName || 'Sin vendedor')}</small></td><td><strong>${escapeHTML(row.productName)}</strong><small>${escapeHTML(row.sku || '—')} · Unidad ${row.unit}</small></td><td><span class="series-type-badge">${row.type === 'imei' ? 'IMEI' : 'SERIE'}</span>${row.pending ? '<strong class="series-pending">PENDIENTE</strong>' : `<strong>${escapeHTML(row.primary)}</strong>${row.secondary ? `<small>IMEI 2: ${escapeHTML(row.secondary)}</small>` : ''}`}</td><td>${escapeHTML(row.customerName || '—')}</td><td>${escapeHTML(row.status || '—')}</td><td>${isManager ? `<button type="button" class="button secondary small" data-edit-series="${escapeHTML(`${row.orderId}|${row.itemIndex}|${row.unit}`)}">${row.pending ? 'AGREGAR' : 'EDITAR'}</button>` : '—'}</td></tr>`).join('')}</tbody></table></div>` : '<div class="series-empty"><strong>No hay series/IMEIS que coincidan.</strong><small>Prueba otro período o término de búsqueda.</small></div>';
+    registeredList.querySelectorAll('[data-edit-series]').forEach(button => button.addEventListener('click', () => {
+      const [orderId,itemIndex,unit] = button.dataset.editSeries.split('|'); const row = rows.find(item => item.orderId === orderId && String(item.itemIndex) === itemIndex && String(item.unit) === unit); if (row) openSeriesEdit(row);
+    }));
+  };
+  const openSeriesEdit = async row => {
+    const existing = document.querySelector('#seriesEditModal'); if (existing) existing.remove();
+    const imei = row.type === 'imei';
+    const modal = document.createElement('div'); modal.id='seriesEditModal'; modal.className='yhors-confirm-backdrop';
+    modal.innerHTML = `<div class="yhors-confirm-dialog series-edit-dialog" role="dialog" aria-modal="true"><div class="yhors-confirm-icon">${imei ? 'I' : 'S'}</div><h2>Editar ${imei ? 'IMEI' : 'serie'}</h2><p><strong>${escapeHTML(row.productName)}</strong><br>${escapeHTML(row.orderNumber)} · Unidad ${row.unit}</p><label class="series-edit-field">${imei ? 'IMEI 1' : 'Número de serie'}<input id="seriesEditPrimary" value="${escapeHTML(row.primary)}" maxlength="${imei ? 16 : 50}"></label>${imei ? `<label class="series-edit-field">IMEI 2 <span>(opcional)</span><input id="seriesEditSecondary" value="${escapeHTML(row.secondary || '')}" maxlength="16"></label>` : ''}<div class="yhors-confirm-actions"><button type="button" class="button secondary" data-series-cancel>Cancelar</button><button type="button" class="button primary" data-series-save>Guardar</button></div></div>`;
+    document.body.appendChild(modal);
+    modal.querySelector('[data-series-cancel]').onclick=()=>modal.remove();
+    modal.querySelector('[data-series-save]').onclick=async()=>{
+      const primary=modal.querySelector('#seriesEditPrimary').value.trim(); const secondary=modal.querySelector('#seriesEditSecondary')?.value.trim() || '';
+      const ok=await showYhorsConfirm('¿Guardar cambios?', `Se actualizará la identificación de ${escapeHTML(row.productName)} en ${escapeHTML(row.orderNumber)}.`, {cancelText:'Cancelar',confirmText:'Guardar'}); if(!ok)return;
+      try { await request('/api/admin/series-imeis/registered',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({orderId:row.orderId,itemIndex:row.itemIndex,unit:row.unit,primary,secondary})}); modal.remove(); registeredState=(await request('/api/admin/series-imeis/registered')).rows||[]; renderRegistered(); } catch(error){ alert(error.message); }
+    };
+  };
+  ['seriesSearch','seriesFrom','seriesTo','seriesType','seriesStatus'].forEach(id=>document.querySelector(`#${id}`)?.addEventListener(id.includes('Search')?'input':'change',renderRegistered));
+  document.querySelector('#seriesClearFilters')?.addEventListener('click',()=>{['seriesSearch','seriesFrom','seriesTo'].forEach(id=>document.querySelector(`#${id}`).value=''); document.querySelector('#seriesType').value=''; document.querySelector('#seriesStatus').value=''; renderRegistered();});
+  document.querySelectorAll('[data-series-tab]').forEach(tab=>tab.addEventListener('click',()=>{ document.querySelectorAll('[data-series-tab]').forEach(item=>item.classList.toggle('is-active',item===tab)); document.querySelectorAll('[data-series-panel]').forEach(panel=>panel.hidden=panel.dataset.seriesPanel!==tab.dataset.seriesTab); }));
+  wireAccountMenu();
+  renderRegistered();
+}
 
 
 async function renderAdminFines() {

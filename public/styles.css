@@ -3645,3 +3645,45 @@ body.generate-modal-open{overflow:hidden}
 @media(max-width:900px){.device-identifiers-list{grid-template-columns:1fr}.device-id-row{grid-template-columns:60px minmax(0,1fr) minmax(0,1fr)}.generate-product-row.has-device-identifiers{grid-template-areas:"info info info info" "qty price total remove" "devices devices devices devices";}}
 
 .order-device-id{color:#9a7738;font-weight:700;letter-spacing:.02em}
+
+/* V15.6 · SERIES/IMEIS */
+.series-imeis-shell .users-module-switch{margin-top:4px}
+.series-tab-panel{margin-top:0}
+.series-config-toolbar{display:flex;gap:10px;align-items:center;margin:16px 0 12px;flex-wrap:wrap}
+.series-config-toolbar input{flex:1;min-width:260px;border:1px solid var(--line,#ded8cc);background:#fff;border-radius:9px;padding:11px 13px;font:inherit}
+.series-config-note{padding:12px 14px;border:1px solid var(--line,#ded8cc);border-radius:10px;background:#faf8f3;color:var(--muted,#777);font-size:.82rem;margin-bottom:12px}
+.series-config-row{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:15px 0;border-bottom:1px solid #ece7dd}
+.series-config-row>div{min-width:0;display:grid;gap:4px}
+.series-config-row strong{font-size:.94rem}
+.series-config-row small{color:var(--muted,#777);font-size:.76rem}
+.series-switch{display:flex;align-items:center;gap:9px;flex:0 0 auto;cursor:pointer}
+.series-switch input{position:absolute;opacity:0;pointer-events:none}
+.series-switch span{width:42px;height:24px;border-radius:999px;background:#d7d2c9;position:relative;transition:.18s ease;box-shadow:inset 0 0 0 1px rgba(0,0,0,.06)}
+.series-switch span::after{content:"";position:absolute;width:18px;height:18px;left:3px;top:3px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.18);transition:.18s ease}
+.series-switch input:checked+span{background:#111}
+.series-switch input:checked+span::after{transform:translateX(18px)}
+.series-switch b{font-size:.68rem;letter-spacing:.07em;min-width:72px}
+.series-empty{padding:42px 20px;text-align:center;color:var(--muted,#777);display:grid;gap:7px}
+.series-registered-toolbar{align-items:flex-end}
+.series-date-filter{display:grid;gap:5px;font-size:.66rem;font-weight:800;letter-spacing:.08em;color:var(--muted,#777)}
+.series-date-filter input{min-width:145px}
+.series-registered-table-wrap{overflow:auto;border:1px solid var(--line,#ded8cc);border-radius:12px}
+.series-registered-table{width:100%;border-collapse:collapse;min-width:900px;background:#fff}
+.series-registered-table th,.series-registered-table td{padding:12px 13px;border-bottom:1px solid #ece7dd;text-align:left;vertical-align:middle}
+.series-registered-table th{font-size:.67rem;letter-spacing:.08em;color:var(--muted,#777);background:#faf8f3}
+.series-registered-table td{font-size:.82rem}
+.series-registered-table td>strong,.series-registered-table td>small{display:block}
+.series-registered-table td small{margin-top:3px;color:var(--muted,#777);font-size:.7rem}
+.series-type-badge{display:inline-flex;margin-right:7px;padding:4px 7px;border-radius:999px;background:#f1eee7;font-size:.62rem;font-weight:850;letter-spacing:.06em}
+.series-pending{color:#a66f1e!important;font-size:.72rem!important;letter-spacing:.05em}
+.series-edit-dialog{max-width:520px;text-align:left}
+.series-edit-field{display:grid;gap:6px;margin:12px 0;font-size:.72rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase}
+.series-edit-field span{font-weight:500;text-transform:none;letter-spacing:0;color:var(--muted,#777)}
+.series-edit-field input{width:100%;box-sizing:border-box;border:1px solid var(--line,#ded8cc);background:#fff;border-radius:9px;padding:11px 12px;font:inherit;text-transform:none;letter-spacing:normal}
+@media(max-width:700px){
+  .series-config-row{align-items:flex-start;flex-direction:column}
+  .series-switch{width:100%;justify-content:flex-start}
+  .series-registered-toolbar{display:grid;grid-template-columns:1fr 1fr}
+  .series-registered-toolbar input[type="search"],.series-registered-toolbar .button{grid-column:1/-1;width:100%;box-sizing:border-box}
+  .series-date-filter input,.series-registered-toolbar select{width:100%;box-sizing:border-box;min-width:0}
+}

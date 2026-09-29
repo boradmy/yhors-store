@@ -2812,6 +2812,11 @@ function normalizeProduct(product) {
     salePrice: Number.isFinite(Number(product.salePrice ?? product.price)) && Number(product.salePrice ?? product.price) >= 0 ? Math.round(Number(product.salePrice ?? product.price) * 100) / 100 : 0,
     price: Number.isFinite(Number(product.salePrice ?? product.price)) && Number(product.salePrice ?? product.price) >= 0 ? Math.round(Number(product.salePrice ?? product.price) * 100) / 100 : 0,
     stock: Number.isInteger(stock) && stock >= 0 ? stock : 0,
+    // Para productos TEC existentes conservamos el comportamiento anterior: solicitar identificación.
+    // El Gestor de Series/IMEIS puede desactivarlo individualmente.
+    requiresDeviceIdentifier: isTechProduct(product)
+      ? (product.requiresDeviceIdentifier === undefined ? true : product.requiresDeviceIdentifier === true)
+      : false,
     published: product.published !== false
   };
 }
@@ -4180,8 +4185,8 @@ function buildEditedOrderItems(requestedItems, products) {
 
     const durationMultiplier = purchaseMode === 'rental' ? rentalDays : 1;
     let deviceIdentifiers = [];
-    if (purchaseMode === 'purchase' && isTechProduct(product)) {
-      deviceIdentifiers = normalizeDeviceIdentifiers(requested?.deviceIdentifiers, product, quantity, { required: false });
+    if (purchaseMode === 'purchase' && isTechProduct(product) && product.requiresDeviceIdentifier !== false) {
+      deviceIdentifiers = normalizeDeviceIdentifiers(requested?.deviceIdentifiers, product, quantity, { required: true });
     }
 
     items.push({
@@ -4571,6 +4576,166 @@ app.get('/api/admin/catalog-products', requireOrdersAccess, (_, res) => {
 // Catálogo operativo: solo para construir órdenes. No expone el área administrativa
 // de inventario ni habilita acciones de edición.
 app.get('/api/admin/order-products', requireOrdersAccess, (_, res) => res.json(readProducts().map(normalizeProduct)));
+
+
+// SERIES / IMEIS · configuración y gestión operativa.
+// La configuración de qué productos TEC requieren identificación solo la modifica ADMIN.
+app.get('/api/admin/series-imeis/config', requireOrdersAccess, (_, res) => {
+  const products = readProducts().map(normalizeProduct).filter(product => isTechProduct(product));
+  return res.json(products.map(product => ({
+    id: product.id,
+    name: product.name,
+    sku: product.sku || '',
+    productType: product.productType || '',
+    category: product.category,
+    requiresDeviceIdentifier: product.requiresDeviceIdentifier !== false,
+    stock: Number(product.stock || 0)
+  })));
+});
+
+app.put('/api/admin/series-imeis/config', requireAdmin, (req, res) => {
+  const changes = Array.isArray(req.body?.changes) ? req.body.changes : [];
+  if (changes.length > 500) return res.status(400).json({ error: 'Demasiados cambios en una sola operación.' });
+  const products = readProducts();
+  const allowed = new Set(changes.map(item => String(item?.id || '')));
+  let changed = 0;
+  const updated = products.map(product => {
+    if (!allowed.has(String(product.id)) || !isTechProduct(product)) return product;
+    const change = changes.find(item => String(item?.id || '') === String(product.id));
+    if (!change || typeof change.requiresDeviceIdentifier !== 'boolean') return product;
+    const next = { ...product, requiresDeviceIdentifier: change.requiresDeviceIdentifier, updatedAt: new Date().toISOString() };
+    if (next.requiresDeviceIdentifier !== (product.requiresDeviceIdentifier !== false)) changed += 1;
+    return next;
+  });
+  if (changed) writeProducts(updated);
+  auditLog(req, 'Configuración de series/IMEIS actualizada', 'Series/IMEIS', { changed, changes: changes.slice(0, 500).map(item => ({ id: item.id, requiresDeviceIdentifier: item.requiresDeviceIdentifier })) });
+  return res.json(updated.map(normalizeProduct).filter(product => isTechProduct(product)).map(product => ({
+    id: product.id, name: product.name, sku: product.sku || '', productType: product.productType || '', category: product.category,
+    requiresDeviceIdentifier: product.requiresDeviceIdentifier !== false, stock: Number(product.stock || 0)
+  })));
+});
+
+function collectRegisteredIdentifiers() {
+  const orders = readOrders();
+  const products = new Map(readProducts().map(product => [String(product.id), normalizeProduct(product)]));
+  const rows = [];
+  for (const order of orders) {
+    for (const item of (Array.isArray(order.items) ? order.items : [])) {
+      const product = products.get(String(item.productId));
+      const identifiers = Array.isArray(item.deviceIdentifiers) ? item.deviceIdentifiers : [];
+      const itemIndex = order.items.indexOf(item);
+      const requiresIdentifier = product ? product.requiresDeviceIdentifier !== false : true;
+      const byUnit = new Map(identifiers.map(entry => [Number(entry.unit || 1), entry]));
+      const quantity = Math.max(0, Number(item.quantity || 0));
+      for (let unit = 1; unit <= quantity; unit += 1) {
+        const entry = byUnit.get(unit);
+        const primary = cleanText(entry?.primary, 50);
+        const secondary = cleanText(entry?.secondary, 50);
+        if (!entry && !requiresIdentifier) continue;
+        rows.push({
+          orderId: order.id,
+          orderNumber: order.orderNumber || order.id,
+          createdAt: order.createdAt || null,
+          status: order.status || 'Pendiente',
+          sellerId: order.assignedSellerId || null,
+          sellerName: order.assignedSellerName || '',
+          customerName: order.customer?.name || '',
+          productId: item.productId,
+          productName: item.name || product?.name || '',
+          sku: item.sku || product?.sku || '',
+          itemIndex,
+          unit,
+          type: entry?.type === 'imei' || isImeiProduct(product || {}) ? 'imei' : 'serial',
+          primary,
+          secondary: secondary || null,
+          productRequiresIdentifier: requiresIdentifier,
+          pending: !primary && !secondary
+        });
+      }
+    }
+  }
+  return rows.sort((a,b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+}
+
+app.get('/api/admin/series-imeis/registered', requireOrdersAccess, (req, res) => {
+  const rows = collectRegisteredIdentifiers();
+  const query = cleanText(req.query?.q, 120).toLocaleLowerCase('es-EC');
+  const from = cleanText(req.query?.from, 10);
+  const to = cleanText(req.query?.to, 10);
+  const type = cleanText(req.query?.type, 20).toLowerCase();
+  const status = cleanText(req.query?.status, 40).toLocaleLowerCase('es-EC');
+  const seller = cleanText(req.query?.seller, 120).toLocaleLowerCase('es-EC');
+  const filtered = rows.filter(row => {
+    const hay = `${row.orderNumber} ${row.customerName} ${row.productName} ${row.sku} ${row.primary} ${row.secondary || ''} ${row.sellerName}`.toLocaleLowerCase('es-EC');
+    if (query && !hay.includes(query)) return false;
+    const date = row.createdAt ? new Date(row.createdAt) : null;
+    const day = date && !Number.isNaN(date.getTime()) ? new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Guayaquil' }).format(date) : '';
+    if (from && day < from) return false;
+    if (to && day > to) return false;
+    if (type && type !== row.type) return false;
+    if (status && status !== String(row.status).toLocaleLowerCase('es-EC')) return false;
+    if (seller && !String(row.sellerName).toLocaleLowerCase('es-EC').includes(seller)) return false;
+    return true;
+  });
+  return res.json({ rows: filtered, total: filtered.length });
+});
+
+app.put('/api/admin/series-imeis/registered', requireStoreManagerOrAdmin, (req, res) => {
+  const orderId = String(req.body?.orderId || '');
+  const itemIndex = Number.parseInt(req.body?.itemIndex, 10);
+  const unit = Number.parseInt(req.body?.unit, 10);
+  if (!orderId || !Number.isInteger(itemIndex) || itemIndex < 0 || !Number.isInteger(unit) || unit < 1) {
+    return res.status(400).json({ error: 'Registro de serie/IMEI no válido.' });
+  }
+  const orders = readOrders();
+  const orderIndex = orders.findIndex(order => String(order.id) === orderId);
+  if (orderIndex < 0) return res.status(404).json({ error: 'Pedido no encontrado.' });
+  const order = orders[orderIndex];
+  const item = Array.isArray(order.items) ? order.items[itemIndex] : null;
+  if (!item) return res.status(404).json({ error: 'Producto del pedido no encontrado.' });
+  if (String(item.purchaseMode || 'purchase') === 'rental') return res.status(400).json({ error: 'Los alquileres no usan series/IMEI.' });
+  const product = readProducts().map(normalizeProduct).find(product => String(product.id) === String(item.productId));
+  if (!product || !isTechProduct(product)) return res.status(400).json({ error: 'Este producto no pertenece a Tecnología.' });
+  if (unit > Number(item.quantity || 0)) return res.status(400).json({ error: 'La unidad seleccionada supera la cantidad del pedido.' });
+  const type = isImeiProduct(product) ? 'imei' : 'serial';
+  const primary = cleanText(req.body?.primary, 50);
+  const secondary = cleanText(req.body?.secondary, 50);
+  if (!primary) return res.status(400).json({ error: `Ingresa ${type === 'imei' ? 'el IMEI 1' : 'el número de serie'}.` });
+  if (type === 'imei' && !/^\d{14,16}$/.test(primary)) return res.status(400).json({ error: 'El IMEI 1 debe contener entre 14 y 16 dígitos.' });
+  if (type === 'serial' && !/^[A-Za-z0-9._\-/ ]{3,50}$/.test(primary)) return res.status(400).json({ error: 'El número de serie no tiene un formato válido.' });
+  if (secondary && (type !== 'imei' || !/^\d{14,16}$/.test(secondary))) return res.status(400).json({ error: 'El IMEI 2 debe contener entre 14 y 16 dígitos.' });
+
+  const normalizedNew = [primary, secondary].filter(Boolean).map(value => value.toUpperCase());
+  for (const otherOrder of orders) {
+    for (const otherItem of (otherOrder.items || [])) {
+      const sameLine = String(otherOrder.id) === orderId && otherItem === item;
+      for (const entry of (otherItem.deviceIdentifiers || [])) {
+        for (const value of [entry.primary, entry.secondary]) {
+          if (!value) continue;
+          if (sameLine && Number(entry.unit) === unit) continue;
+          if (normalizedNew.includes(String(value).trim().toUpperCase())) {
+            return res.status(409).json({ error: `La identificación “${value}” ya está registrada en otra unidad o pedido.` });
+          }
+        }
+      }
+    }
+  }
+
+  const previous = Array.isArray(item.deviceIdentifiers) ? item.deviceIdentifiers : [];
+  const next = previous.filter(entry => Number(entry.unit) !== unit);
+  next.push({ unit, type, primary, secondary: secondary || null });
+  next.sort((a,b) => Number(a.unit) - Number(b.unit));
+  item.deviceIdentifiers = next;
+  order.updatedAt = new Date().toISOString();
+  orders[orderIndex] = order;
+  writeOrders(orders);
+  auditLog(req, 'Serie/IMEI modificado', 'Series/IMEIS', {
+    orderId: order.id, orderNumber: order.orderNumber, productId: item.productId, productName: item.name, unit,
+    before: previous.find(entry => Number(entry.unit) === unit) || null,
+    after: { unit, type, primary, secondary: secondary || null }
+  });
+  return res.json({ ok: true, row: collectRegisteredIdentifiers().find(row => String(row.orderId) === orderId && row.itemIndex === itemIndex && Number(row.unit) === unit) || null });
+});
 
 app.put('/api/admin/inventory/:id', requireAdmin, (req, res) => {
   const products = readProducts();
