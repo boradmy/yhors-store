@@ -32,7 +32,27 @@ function productSlug(product) {
 function productHref(product) { return `/producto/${encodeURIComponent(productSlug(product))}`; }
 
 async function request(url, options = {}) {
-  const response = await fetch(url, { credentials: 'same-origin', ...options, headers: { ...(options.headers || {}) } });
+  // Las peticiones de la SPA no deben dejar la pantalla en blanco si Render
+  // tarda en despertar o una API queda colgada. Cada petición obtiene un
+  // límite razonable, salvo que el llamador entregue su propio signal.
+  const controller = options.signal ? null : new AbortController();
+  const timeoutMs = Math.max(3000, Number(options.timeoutMs || 12000));
+  const timer = controller ? window.setTimeout(() => controller.abort(), timeoutMs) : null;
+  const fetchOptions = { credentials: 'same-origin', ...options, headers: { ...(options.headers || {}) } };
+  delete fetchOptions.timeoutMs;
+  if (controller) fetchOptions.signal = controller.signal;
+  let response;
+  try {
+    response = await fetch(url, fetchOptions);
+  } catch (fetchError) {
+    const error = new Error(fetchError?.name === 'AbortError'
+      ? 'YHORS está tardando demasiado en responder. Recarga la página e inténtalo nuevamente.'
+      : 'No se pudo conectar con YHORS. Verifica la conexión y vuelve a intentarlo.');
+    error.code = fetchError?.name === 'AbortError' ? 'REQUEST_TIMEOUT' : 'REQUEST_NETWORK_ERROR';
+    throw error;
+  } finally {
+    if (timer) window.clearTimeout(timer);
+  }
   const json = response.status === 204 ? null : await response.json().catch(() => ({}));
   if (!response.ok) {
     const error = new Error(json.error || (response.status === 401 ? 'Tu sesión administrativa expiró. Inicia sesión nuevamente.' : 'No se pudo completar la operación.'));
@@ -4263,8 +4283,8 @@ async function renderMyAccount() {
   document.querySelectorAll('[data-delete-passkey]').forEach(btn => btn.addEventListener('click', async () => { if (!confirm('¿Revocar esta Passkey?')) return; try { await request(`/api/me/passkeys/${encodeURIComponent(btn.dataset.deletePasskey)}`, { method: 'DELETE' }); await renderMyAccount(); } catch (e) { alert(e.message); } }));
 }
 
-function renderLogin() {
-  app.innerHTML = `<main class="login-page"><section class="login-card"><a class="brand" href="/">YHORS</a><span class="eyebrow">Panel privado</span><h1>Acceso a YHORS</h1><p>Ingresa con tu cuenta autorizada.</p><form id="loginForm" class="form-grid"><div class="field full"><label for="username">Usuario</label><input id="username" name="username" autocomplete="username webauthn" required></div><div class="field full"><label for="password">Contraseña</label><input id="password" name="password" type="password" autocomplete="current-password" required></div><div class="login-attempts" id="loginAttempts" aria-live="polite"></div><div class="form-actions"><button class="button" id="loginSubmit" type="submit">Iniciar sesión</button><button class="button secondary" id="passkeyLogin" type="button">🔐 Iniciar con Passkey</button><span class="message" id="loginMessage"></span></div></form></section></main>`;
+function renderLogin(errorMessage = '') {
+  app.innerHTML = `<main class="login-page"><section class="login-card"><a class="brand" href="/">YHORS</a><span class="eyebrow">Panel privado</span><h1>Acceso a YHORS</h1><p>Ingresa con tu cuenta autorizada.</p>${errorMessage ? `<div class="message error login-system-message">${escapeHTML(errorMessage)}</div>` : ''}<form id="loginForm" class="form-grid"><div class="field full"><label for="username">Usuario</label><input id="username" name="username" autocomplete="username webauthn" required></div><div class="field full"><label for="password">Contraseña</label><input id="password" name="password" type="password" autocomplete="current-password" required></div><div class="login-attempts" id="loginAttempts" aria-live="polite"></div><div class="form-actions"><button class="button" id="loginSubmit" type="submit">Iniciar sesión</button><button class="button secondary" id="passkeyLogin" type="button">🔐 Iniciar con Passkey</button><span class="message" id="loginMessage"></span></div></form></section></main>`;
   let loginLockTimer = null;
   const attemptsBox = document.querySelector('#loginAttempts');
   const submitButton = document.querySelector('#loginSubmit');
@@ -4341,8 +4361,16 @@ document.addEventListener('click', event => {
   });
 });
 
-window.addEventListener('popstate', () => renderCurrentRoute());
-renderCurrentRoute();
+window.addEventListener('popstate', () => {
+  Promise.resolve(renderCurrentRoute()).catch(error => {
+    console.error('[YHORS] Error de renderizado:', error);
+    renderLogin(error?.message || 'No se pudo cargar el panel de YHORS.');
+  });
+});
+Promise.resolve(renderCurrentRoute()).catch(error => {
+  console.error('[YHORS] Error de arranque:', error);
+  renderLogin(error?.message || 'No se pudo cargar el panel de YHORS.');
+});
 
 document.addEventListener('change', e => { const file=e.target.closest('input[type=file][id^=\"imageFile\"]'); if(!file)return; const num=file.id==='imageFile'?1:Number(file.id.replace('imageFile','')); const preview=document.querySelector(`#productImagePreview${num}`); if(preview&&file.files?.[0]){const r=new FileReader();r.onload=()=>preview.src=r.result;r.readAsDataURL(file.files[0]);}});
 document.addEventListener('input', e => { const input=e.target.closest('input[type=url][id^=\"image\"]'); if(!input)return; const num=input.id==='image'?1:Number(input.id.replace('image','')); const preview=document.querySelector(`#productImagePreview${num}`); if(preview&&input.value.trim())preview.src=input.value.trim();});

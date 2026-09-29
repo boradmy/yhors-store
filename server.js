@@ -607,16 +607,23 @@ function writeUsers(users) {
   fs.writeFileSync(USERS_FILE, `${JSON.stringify(users, null, 2)}\n`, 'utf8');
 }
 
-function ensureUserSeed(users, username, name, password, role) {
+function isBcryptHash(value) {
+  return /^\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53}$/.test(String(value || '').trim());
+}
+
+function ensureUserSeed(users, username, name, password, role, passwordHash = '') {
   const normalized = normalizeUsername(username);
-  if (!normalized || !password || !USER_ROLES.has(role)) return users;
+  if (!normalized || !USER_ROLES.has(role)) return users;
   const existing = users.find(user => user.username === normalized);
   if (existing) return users;
+  const suppliedHash = String(passwordHash || '').trim();
+  const suppliedPassword = String(password || '');
+  if (!suppliedHash && !suppliedPassword) return users;
   users.push({
     id: crypto.randomUUID(),
     name: normalizeUserName(name) || normalized,
     username: normalized,
-    passwordHash: bcrypt.hashSync(String(password), 12),
+    passwordHash: isBcryptHash(suppliedHash) ? suppliedHash : bcrypt.hashSync(suppliedPassword, 12),
     role,
     active: true,
     system: true,
@@ -629,8 +636,34 @@ function ensureUserSeed(users, username, name, password, role) {
 function ensureUsers() {
   let users = readUsers();
   const before = JSON.stringify(users);
-  users = users.map(user => ({ ...user, role: normalizeRole(user.role) }));
-  users = ensureUserSeed(users, ADMIN_USER, 'Administrador principal', ADMIN_PASSWORD, 'admin');
+  users = users.map(user => ({ ...user, role: normalizeRole(user.role), username: normalizeUsername(user.username) }));
+
+  // Si Render ya tiene un disco persistente creado por una versión anterior,
+  // recuperamos las cuentas de sistema que vienen con el proyecto sin tocar
+  // contraseñas ni cuentas creadas manualmente. Esto evita que un despliegue
+  // nuevo deje fuera al administrador original solo porque users.json ya existía.
+  try {
+    const bundledUsersFile = path.join(__dirname, 'data', 'users.json');
+    if (process.env.YHORS_STORAGE_DIR && fs.existsSync(bundledUsersFile)) {
+      const bundledUsers = JSON.parse(fs.readFileSync(bundledUsersFile, 'utf8'));
+      if (Array.isArray(bundledUsers)) {
+        for (const bundled of bundledUsers) {
+          if (!bundled?.system || !bundled?.username || !bundled?.passwordHash) continue;
+          const normalized = normalizeUsername(bundled.username);
+          if (!users.some(user => user.id === bundled.id || user.username === normalized)) {
+            users.push({ ...bundled, username: normalized, role: normalizeRole(bundled.role) });
+          }
+        }
+      }
+    }
+  } catch (_) {
+    // Si el seed de usuarios no puede leerse, conservamos el almacenamiento existente.
+  }
+
+  // La cuenta configurada en Render/local solo se crea si no existe todavía.
+  // Las cuentas existentes (incluida la administración creada en versiones
+  // anteriores) se conservan para no cortar el acceso durante un despliegue.
+  users = ensureUserSeed(users, ADMIN_USER, 'Administrador principal', ADMIN_PASSWORD, 'admin', ADMIN_PASSWORD_HASH);
 
   // Migración: elimina la antigua cuenta del sistema "ventas" / "Ventas / Pedidos".
   // Ya no se vuelve a crear desde variables de entorno.
@@ -681,13 +714,13 @@ function validateNewUser(input, users, currentId = '') {
 
 function ensureStorage() {
   fs.mkdirSync(DATA_DIR, { recursive: true });
-  ensureUsers();
   fs.mkdirSync(UPLOADS_DIR, { recursive: true });
   fs.mkdirSync(BACKUPS_DIR, { recursive: true });
-  ensureSecurityFile();
 
-  // Primera ejecución con disco vacío: copia los datos que viajan con el código.
-  // Nunca sobrescribe un archivo que ya exista en el almacenamiento persistente.
+  // Primera ejecución con disco vacío: copia primero los datos que viajan con
+  // el código y solo después ejecuta las migraciones/semillas. Antes ocurría
+  // al revés y el disco persistente podía recibir una cuenta administrativa
+  // distinta de la cuenta incluida en data/users.json.
   if (process.env.YHORS_STORAGE_DIR) {
     const seedFiles = ['products.json', 'storefront.json', 'classifications.json', 'orders.json', 'users.json', 'security.json', 'expenses.json'];
     for (const fileName of seedFiles) {
@@ -711,6 +744,8 @@ function ensureStorage() {
     if (!fs.existsSync(target)) fs.writeFileSync(target, fileName === 'orders.json' ? '[]\n' : fileName === 'products.json' ? '[]\n' : fileName === 'storefront.json' ? '{\n  "heroProductIds": [],\n  "featuredProductIds": []\n}\n' : '{\n  "brands": {},\n  "productTypes": {}\n}\n', 'utf8');
   }
   if (!fs.existsSync(EXPENSES_FILE)) fs.writeFileSync(EXPENSES_FILE, '[]\n', 'utf8');
+  ensureSecurityFile();
+  ensureUsers();
 }
 ensureStorage();
 migrateAllOrderStorageToEncryption();
