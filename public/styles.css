@@ -3645,3 +3645,30 @@ body.generate-modal-open{overflow:hidden}
 @media(max-width:900px){.device-identifiers-list{grid-template-columns:1fr}.device-id-row{grid-template-columns:60px minmax(0,1fr) minmax(0,1fr)}.generate-product-row.has-device-identifiers{grid-template-areas:"info info info info" "qty price total remove" "devices devices devices devices";}}
 
 .order-device-id{color:#9a7738;font-weight:700;letter-spacing:.02em}
+
+
+/* YHORS FASE 2 · Cotizaciones y Ventas */
+.commercial-page{display:grid;gap:22px;padding:24px 0 60px}
+.commercial-hero{display:flex;justify-content:space-between;align-items:center;gap:24px;padding:28px;border:1px solid rgba(167,126,49,.2);border-radius:22px;background:linear-gradient(135deg,#fffdf8,#f7efdd);box-shadow:0 14px 35px rgba(55,40,15,.06)}
+.commercial-hero h2{margin:5px 0 7px;font-size:30px}.commercial-hero p{margin:0;color:#6f675b}
+.commercial-badge{padding:10px 14px;border-radius:999px;background:#b38a45;color:#fff;font-size:11px;letter-spacing:.12em;font-weight:800}
+.commercial-card{background:#fff;border:1px solid #e9e1d2;border-radius:20px;padding:22px;box-shadow:0 10px 28px rgba(55,40,15,.05)}
+.commercial-customer-grid{display:grid;grid-template-columns:2fr 1fr 1fr 1.4fr;gap:12px;margin-bottom:20px}
+.commercial-customer-grid label,.commercial-notes{display:grid;gap:6px}.commercial-customer-grid span,.commercial-notes span{font-size:11px;font-weight:800;letter-spacing:.08em;color:#8a7b63;text-transform:uppercase}
+.commercial-customer-grid input,.commercial-notes textarea,.commercial-picker input{width:100%;box-sizing:border-box;border:1px solid #ded5c5;border-radius:12px;padding:11px 13px;background:#fffdf9;outline:none}
+.commercial-picker{position:relative;margin:10px 0}.commercial-product-results{display:flex;flex-wrap:wrap;gap:8px;margin-top:9px}
+.commercial-product-option{border:1px solid #e8dfcf;background:#fffdf8;border-radius:12px;padding:9px 12px;text-align:left;cursor:pointer;display:grid;gap:2px}
+.commercial-product-option:hover{border-color:#b38a45;transform:translateY(-1px)}
+.commercial-product-option span{font-weight:700}.commercial-product-option small{color:#877b69}
+.commercial-table-head,.commercial-line{display:grid;grid-template-columns:minmax(240px,1fr) 80px 110px 110px 42px;gap:12px;align-items:center}
+.commercial-table-head{padding:8px 12px;color:#8a7b63;font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
+.commercial-line{padding:12px;border-top:1px solid #eee7db}.commercial-line div{display:grid;gap:3px}.commercial-line small{color:#8b8171}.commercial-line input{width:70px;padding:8px;border:1px solid #ddd3c3;border-radius:9px}
+.commercial-products-head{display:flex;justify-content:space-between;align-items:end;margin-bottom:10px}.commercial-products-head h3,.commercial-card>h3{margin:0 0 5px}.commercial-products-head p{margin:0;color:#827868}.commercial-products-head>strong{font-size:24px;color:#9a7335}
+.commercial-notes{margin-top:18px}.commercial-notes textarea{min-height:82px;resize:vertical}.commercial-actions{display:flex;justify-content:flex-end;margin-top:16px}
+.commercial-document{display:grid;grid-template-columns:minmax(0,1fr) auto auto auto;gap:16px;align-items:center;padding:15px 0;border-top:1px solid #eee7db}.commercial-document:first-child{border-top:0}.commercial-document h4{margin:2px 0 3px}.commercial-document small{color:#887d6b}.commercial-status{padding:7px 10px;border-radius:999px;background:#f5eddf;color:#8f6b2d;font-size:11px;font-weight:800}.commercial-empty{padding:22px;text-align:center;color:#8c8170;background:#faf7f1;border-radius:14px}
+@media(max-width:900px){.commercial-customer-grid{grid-template-columns:1fr 1fr}.commercial-document{grid-template-columns:1fr auto}.commercial-document .button{grid-column:2}.commercial-table-head,.commercial-line{grid-template-columns:minmax(150px,1fr) 60px 90px 90px 38px}}
+@media(max-width:620px){.commercial-hero{padding:20px;display:block}.commercial-badge{display:inline-block;margin-top:15px}.commercial-customer-grid{grid-template-columns:1fr}.commercial-table-head{display:none}.commercial-line{grid-template-columns:1fr 58px 82px 82px 32px}.commercial-card{padding:15px}.commercial-document{grid-template-columns:1fr}.commercial-document .button{grid-column:auto}}
+
+/* FASE 2 · Venta directa */
+.commercial-hero-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:flex-end}
+@media (max-width:720px){.commercial-hero-actions{justify-content:flex-start}.commercial-hero-actions .commercial-badge{order:-1}}

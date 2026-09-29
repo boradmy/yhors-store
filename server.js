@@ -26,6 +26,8 @@ const DATA_FILE = path.join(DATA_DIR, 'products.json');
 const STOREFRONT_FILE = path.join(DATA_DIR, 'storefront.json');
 const CLASSIFICATIONS_FILE = path.join(DATA_DIR, 'classifications.json');
 const ORDERS_FILE = path.join(DATA_DIR, 'orders.json');
+const QUOTES_FILE = path.join(DATA_DIR, 'quotes.json');
+const SALES_FILE = path.join(DATA_DIR, 'sales.json');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const AUDIT_FILE = path.join(DATA_DIR, 'audit.json');
 const AUDIT_MAX_RECORDS = 50000;
@@ -2334,6 +2336,63 @@ function writeFines(fines) {
   fs.renameSync(temporaryFile, FINES_FILE);
 }
 
+
+function readQuotes() {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(QUOTES_FILE, 'utf8'));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch { return []; }
+}
+function writeQuotes(quotes) {
+  maybeAutoBackup();
+  const temporaryFile = `${QUOTES_FILE}.tmp`;
+  fs.writeFileSync(temporaryFile, `${JSON.stringify(quotes, null, 2)}\n`, 'utf8');
+  fs.renameSync(temporaryFile, QUOTES_FILE);
+}
+function readSales() {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(SALES_FILE, 'utf8'));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch { return []; }
+}
+function writeSales(sales) {
+  maybeAutoBackup();
+  const temporaryFile = `${SALES_FILE}.tmp`;
+  fs.writeFileSync(temporaryFile, `${JSON.stringify(sales, null, 2)}\n`, 'utf8');
+  fs.renameSync(temporaryFile, SALES_FILE);
+}
+function nextDocumentNumber(items, prefix) {
+  const max = items.reduce((highest, item) => {
+    const match = String(item.number || '').match(new RegExp(`^${prefix}-(\\d+)`, 'i'));
+    return match ? Math.max(highest, Number(match[1])) : highest;
+  }, 0);
+  return `${prefix}-${String(max + 1).padStart(4, '0')}`;
+}
+function normalizeCommercialItems(items = []) {
+  return (Array.isArray(items) ? items : []).map(item => ({
+    productId: String(item.productId || ''),
+    sku: cleanText(item.sku, 80),
+    name: cleanText(item.name, 180),
+    quantity: Math.max(1, Math.min(999, Number(item.quantity || 1))),
+    unitPrice: Math.max(0, Number(item.unitPrice || item.price || 0)),
+    total: Math.max(0, Number(item.total || ((Number(item.quantity || 1)) * Number(item.unitPrice || item.price || 0))))
+  })).filter(item => item.productId && item.name);
+}
+function validateQuoteInput(input = {}) {
+  const customer = input.customer || {};
+  const name = cleanText(customer.name, 100);
+  const phone = cleanText(customer.phone, 40);
+  const cedula = cleanText(customer.cedula, 13).replace(/\D/g, '');
+  const email = cleanText(customer.email, 120);
+  const items = normalizeCommercialItems(input.items);
+  if (!name) return { error: 'Ingresa el nombre del cliente.' };
+  if (!items.length) return { error: 'Agrega al menos un producto a la cotización.' };
+  if (cedula && !/^\d{10,13}$/.test(cedula)) return { error: 'La cédula/RUC no es válida.' };
+  const subtotal = items.reduce((sum, item) => sum + item.total, 0);
+  const notes = cleanText(input.notes, 500);
+  return { customer: { name, phone, cedula, email }, items, subtotal, total: subtotal, notes };
+}
+
 function readOrders() {
   const raw = fs.readFileSync(ORDERS_FILE, 'utf8');
   const parsed = JSON.parse(raw);
@@ -3258,6 +3317,202 @@ app.post('/api/admin/generar-orden', requireOrdersAccess, async (req, res) => {
   });
   try { await sendOrderConfirmationEmail(order); } catch (emailError) { console.error('[YHORS] No se pudo enviar la confirmación por correo:', emailError.message); }
   return res.status(201).json({ orderId: order.id, orderNumber: order.orderNumber, status: order.status, total: order.total, assignedSellerId });
+});
+
+
+app.get('/api/admin/cotizaciones', requireOrdersAccess, (req, res) => {
+  return res.json(readQuotes());
+});
+
+app.post('/api/admin/cotizaciones', requireOrdersAccess, (req, res) => {
+  const result = validateQuoteInput(req.body || {});
+  if (result.error) return res.status(400).json(result);
+  const session = getSession(req);
+  const quotes = readQuotes();
+  const quote = {
+    id: crypto.randomUUID(),
+    number: nextDocumentNumber(quotes, 'COT'),
+    status: 'Vigente',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    sellerId: session.accountId || null,
+    sellerName: session.name || session.username || '',
+    ...result
+  };
+  quotes.unshift(quote);
+  writeQuotes(quotes);
+  auditLog(req, 'Cotización creada', 'Cotizaciones', { quoteId: quote.id, number: quote.number, total: quote.total });
+  return res.status(201).json(quote);
+});
+
+app.patch('/api/admin/cotizaciones/:id', requireOrdersAccess, (req, res) => {
+  const quotes = readQuotes();
+  const quote = quotes.find(item => item.id === req.params.id);
+  if (!quote) return res.status(404).json({ error: 'Cotización no encontrada.' });
+  const allowed = ['Vigente', 'Aceptada', 'Vencida', 'Cancelada'];
+  const status = cleanText(req.body?.status, 30);
+  if (!allowed.includes(status)) return res.status(400).json({ error: 'Estado de cotización no válido.' });
+  quote.status = status;
+  quote.updatedAt = new Date().toISOString();
+  writeQuotes(quotes);
+  auditLog(req, 'Estado de cotización actualizado', 'Cotizaciones', { quoteId: quote.id, number: quote.number, status });
+  return res.json(quote);
+});
+
+app.post('/api/admin/cotizaciones/:id/convertir-pedido', requireOrdersAccess, (req, res) => {
+  const quotes = readQuotes();
+  const quote = quotes.find(item => item.id === req.params.id);
+  if (!quote) return res.status(404).json({ error: 'Cotización no encontrada.' });
+  if (quote.status === 'Cancelada') return res.status(400).json({ error: 'No puedes convertir una cotización cancelada.' });
+  const products = readProducts().map(normalizeProduct);
+  const purchaseDemand = new Map();
+  let items;
+  try {
+    items = quote.items.map(item => {
+      const product = products.find(p => String(p.id) === String(item.productId));
+      if (!product) throw new Error(`El producto “${item.name}” ya no está disponible.`);
+      const quantity = Number(item.quantity || 1);
+      purchaseDemand.set(String(product.id), (purchaseDemand.get(String(product.id)) || 0) + quantity);
+      return { ...product, productId: product.id, quantity, price: Number(item.unitPrice || product.salePrice || 0), purchaseMode: 'purchase', deviceIdentifiers: [] };
+    });
+  } catch (error) {
+    return res.status(400).json({ error: error.message });
+  }
+  const previousProducts = products.map(product => ({ ...product }));
+  let updatedProducts;
+  try {
+    updatedProducts = applyPurchaseStock(previousProducts, purchaseDemand);
+  } catch (error) {
+    return res.status(400).json({ error: error.message });
+  }
+  const orders = readOrders();
+  const order = {
+    id: crypto.randomUUID(),
+    orderNumber: nextOrderNumber(orders),
+    status: 'Pendiente',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    assignedSellerId: quote.sellerId || null,
+    source: 'quotation',
+    quotationId: quote.id,
+    customer: quote.customer,
+    deliveryMethod: 'office',
+    items,
+    subtotal: quote.total,
+    shipping: 0,
+    total: quote.total,
+    notes: quote.notes || ''
+  };
+  try {
+    writeProducts(updatedProducts);
+    orders.unshift(order);
+    writeOrders(orders);
+    quote.status = 'Aceptada';
+    quote.convertedOrderId = order.id;
+    quote.updatedAt = new Date().toISOString();
+    writeQuotes(quotes);
+  } catch (error) {
+    try { writeProducts(previousProducts); } catch (_) {}
+    return res.status(500).json({ error: 'No se pudo convertir la cotización en pedido.' });
+  }
+  auditLog(req, 'Cotización convertida en pedido', 'Cotizaciones', { quoteId: quote.id, number: quote.number, orderId: order.id, orderNumber: order.orderNumber });
+  return res.status(201).json({ orderId: order.id, orderNumber: order.orderNumber, quoteNumber: quote.number });
+});
+
+app.get('/api/admin/ventas', requireOrdersAccess, (req, res) => {
+  return res.json(readSales());
+});
+
+app.post('/api/admin/ventas', requireOrdersAccess, (req, res) => {
+  const orderId = cleanText(req.body?.orderId, 100);
+  if (!orderId) return res.status(400).json({ error: 'Selecciona un pedido.' });
+  const orders = readOrders();
+  const order = orders.find(item => item.id === orderId);
+  if (!order) return res.status(404).json({ error: 'Pedido no encontrado.' });
+  if (String(order.status).toLowerCase() === 'cancelado') return res.status(400).json({ error: 'No puedes registrar como venta un pedido cancelado.' });
+  const sales = readSales();
+  const existing = sales.find(item => item.orderId === order.id);
+  if (existing) return res.status(409).json({ error: `Este pedido ya está registrado como venta ${existing.number}.`, sale: existing });
+  const session = getSession(req);
+  const sale = {
+    id: crypto.randomUUID(),
+    number: nextDocumentNumber(sales, 'VTA'),
+    orderId: order.id,
+    orderNumber: order.orderNumber,
+    customer: order.customer || {},
+    items: order.items || [],
+    subtotal: Number(order.subtotal || 0),
+    shipping: Number(order.shipping || 0),
+    total: Number(order.total || 0),
+    status: 'Registrada',
+    createdAt: new Date().toISOString(),
+    sellerId: order.assignedSellerId || session.accountId || null,
+    sellerName: order.assignedSellerName || session.name || session.username || ''
+  };
+  sales.unshift(sale);
+  writeSales(sales);
+  auditLog(req, 'Venta registrada', 'Ventas', { saleId: sale.id, number: sale.number, orderId: order.id, orderNumber: order.orderNumber, total: sale.total });
+  return res.status(201).json(sale);
+});
+
+app.post('/api/admin/ventas/directa', requireOrdersAccess, async (req, res) => {
+  const session = getSession(req);
+  const result = validateOrder(req.body || {}, { requireDeviceIdentifiers: true });
+  if (result.error) return res.status(400).json(result);
+  const hasSellerSelection = Object.prototype.hasOwnProperty.call(req.body || {}, 'assignedSellerId');
+  const requestedSellerId = hasSellerSelection && req.body.assignedSellerId !== null && req.body.assignedSellerId !== '' ? String(req.body.assignedSellerId) : null;
+  let sellerId = null;
+  if (requestedSellerId) {
+    const seller = readUsers().find(user => user.id === requestedSellerId && user.active !== false && isSellerRole(user.role));
+    if (!seller) return res.status(400).json({ error: 'El vendedor seleccionado no es válido o no está activo.' });
+    sellerId = seller.id;
+  } else if (isSellerRole(session.role) && !hasSellerSelection) {
+    sellerId = session.accountId || null;
+  }
+  const internalNote = cleanText(req.body?.internalNote, 500);
+  const previousProducts = result.stockProducts.map(product => ({ ...product }));
+  let updatedProducts;
+  try {
+    updatedProducts = applyPurchaseStock(previousProducts, result.purchaseDemand);
+    writeProducts(updatedProducts);
+  } catch (error) {
+    return res.status(400).json({ error: error.message || 'No se pudo actualizar el inventario.' });
+  }
+  const sales = readSales();
+  const sale = {
+    id: crypto.randomUUID(),
+    number: nextDocumentNumber(sales, 'VTA'),
+    orderId: null,
+    orderNumber: null,
+    source: 'direct',
+    customer: result.order.customer || {},
+    items: result.order.items || [],
+    subtotal: Number(result.order.subtotal || 0),
+    shipping: Number(result.order.shipping || 0),
+    total: Number(result.order.total || 0),
+    status: 'Registrada',
+    createdAt: new Date().toISOString(),
+    sellerId,
+    sellerName: session.name || session.username || '',
+    internalNote,
+    deliveryMethod: result.order.deliveryMethod || 'office'
+  };
+  try {
+    sales.unshift(sale);
+    writeSales(sales);
+  } catch (error) {
+    try { writeProducts(previousProducts); } catch (_) {}
+    return res.status(500).json({ error: 'No se pudo registrar la venta. El inventario fue restaurado.' });
+  }
+  auditLog(req, 'Venta directa registrada', 'Ventas', {
+    saleId: sale.id,
+    number: sale.number,
+    total: sale.total,
+    sellerId,
+    internalNote,
+    inventory: { synchronized: true, movements: auditStockMovementDiff(previousProducts, updatedProducts, 'Venta directa') }
+  });
+  return res.status(201).json(sale);
 });
 
 app.get('/api/admin/session', (req, res) => { const session = getSession(req); return res.json({ authenticated: Boolean(session), username: session?.user || null, role: session?.role || null }); });
