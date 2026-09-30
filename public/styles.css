@@ -4184,3 +4184,87 @@ body.login-loading-active{overflow:hidden}
   .admin-brand-divider{display:none}
   .admin-brand-word{font-size:.9rem}
 }
+
+/* YHORS 15.8.8 · Mi cuenta + login privado: alineación final */
+.account-page-top{
+  align-items:center;
+  gap:24px;
+  overflow:visible;
+}
+.account-page-heading{
+  min-width:0;
+  flex:1 1 auto;
+}
+.account-page-actions{
+  flex:0 0 auto;
+  margin-left:auto;
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:10px;
+  min-width:0;
+}
+.account-page-actions .account-menu-wrap{
+  flex:0 0 auto;
+}
+.account-page-actions .account-menu-trigger{
+  min-width:218px;
+}
+.account-back-button{
+  min-height:44px;
+  padding:0 15px;
+  border:1px solid #d8d0c2;
+  border-radius:10px;
+  background:#fff;
+  color:var(--ink);
+  font:inherit;
+  font-size:.76rem;
+  font-weight:800;
+  white-space:nowrap;
+  cursor:pointer;
+  transition:.18s ease;
+}
+.account-back-button:hover{
+  border-color:var(--gold);
+  background:#faf7f0;
+  transform:translateY(-1px);
+}
+.account-back-button:active{transform:translateY(0)}
+
+/* El menú de cuenta nunca debe salir del lienzo ni recortar el avatar. */
+.account-page-actions .account-menu{
+  right:0;
+  max-width:min(280px,calc(100vw - 24px));
+}
+
+.login-brand{
+  cursor:pointer;
+  width:max-content;
+  max-width:100%;
+}
+.login-brand:hover{opacity:1}
+.login-brand .admin-brand-mark{transition:transform .18s ease,box-shadow .18s ease}
+.login-brand:hover .admin-brand-mark{transform:translateY(-1px) scale(1.02)}
+.login-private-label{
+  margin:4px 0 18px 2px;
+  color:var(--gold);
+  font-size:.67rem;
+  line-height:1;
+  font-weight:900;
+  letter-spacing:.18em;
+  text-transform:uppercase;
+}
+
+@media(max-width:800px){
+  .account-page-top{align-items:flex-start}
+  .account-page-actions{gap:8px}
+  .account-page-actions .account-menu-trigger{min-width:52px;width:52px}
+  .account-back-button{min-height:42px;padding:0 12px}
+}
+@media(max-width:560px){
+  .account-page-top{gap:10px}
+  .account-page-actions{align-items:flex-start}
+  .account-page-actions .account-menu-trigger{width:52px;min-width:52px}
+  .account-back-button{font-size:.7rem;padding:0 10px}
+  .login-private-label{margin-bottom:16px}
+}
