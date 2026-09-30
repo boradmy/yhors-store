@@ -1457,7 +1457,7 @@ async function renderAdminGenerateOrder() {
     if (count) count.textContent = `${rows.length} cliente${rows.length === 1 ? '' : 's'}${q ? ' encontrados' : ''}`;
     const list = document.querySelector('#generateCustomerPickerList');
     if (!list) return;
-    list.innerHTML = rows.length ? rows.map(c => `<div class="generate-customer-option${String(c.id) === String(customerId) ? ' is-selected' : ''}"><button type="button" class="generate-customer-option-main" data-select-generate-customer="${escapeHTML(c.id)}"><span class="generate-customer-option-avatar">${escapeHTML((c.name || 'C').trim().slice(0,1).toUpperCase())}</span><span class="generate-customer-option-copy"><strong>${escapeHTML(c.name || 'Sin nombre')}</strong><small>${escapeHTML(c.cedula || 'Sin cédula')} · ${escapeHTML(c.phone || 'Sin teléfono')}</small></span><span class="generate-customer-option-check">${String(c.id) === String(customerId) ? '✓' : '›'}</span></button><button type="button" class="generate-customer-option-edit" data-edit-generate-customer="${escapeHTML(c.id)}">Editar</button></div>`).join('') : '<div class="generate-customer-empty"><span>⌕</span><strong>No encontramos ese cliente</strong><small>Prueba con otro dato o registra un cliente nuevo.</small></div>';
+    list.innerHTML = rows.length ? rows.map(c => `<button type="button" class="generate-customer-option${String(c.id) === String(customerId) ? ' is-selected' : ''}" data-select-generate-customer="${escapeHTML(c.id)}"><span class="generate-customer-option-avatar">${escapeHTML((c.name || 'C').trim().slice(0,1).toUpperCase())}</span><span class="generate-customer-option-copy"><strong>${escapeHTML(c.name || 'Sin nombre')}</strong><small>${escapeHTML(c.cedula || 'Sin cédula')} · ${escapeHTML(c.phone || 'Sin teléfono')}</small></span><span class="generate-customer-option-check">${String(c.id) === String(customerId) ? '✓' : '›'}</span></button>`).join('') : '<div class="generate-customer-empty"><span>⌕</span><strong>No encontramos ese cliente</strong><small>Prueba con otro dato o registra un cliente nuevo.</small></div>';
   };
   const openCustomerPicker = async () => {
     document.querySelector('#customerPickerView')?.removeAttribute('hidden');
@@ -1507,14 +1507,6 @@ async function renderAdminGenerateOrder() {
     openGenerateCustomerEdit(customer);
   });
   document.querySelector('#generateCustomerPickerList')?.addEventListener('click', event => {
-    const editButton = event.target.closest('[data-edit-generate-customer]');
-    if (editButton) {
-      event.preventDefault();
-      event.stopPropagation();
-      const selected = customers.find(c => String(c.id) === String(editButton.dataset.editGenerateCustomer));
-      openGenerateCustomerEdit(selected);
-      return;
-    }
     const button = event.target.closest('[data-select-generate-customer]');
     if (!button) return;
     const selected = customers.find(c => String(c.id) === String(button.dataset.selectGenerateCustomer));
