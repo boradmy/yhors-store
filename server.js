@@ -4925,22 +4925,36 @@ app.put('/api/admin/series-imeis/registered', requireStoreManagerOrAdmin, (req, 
 
 app.get('/api/admin/clientes', requireOrdersAccess, (req, res) => {
   const session = getSession(req);
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
   let customers = readCustomers();
-  // Fallback inteligente: clientes históricos aunque todavía no exista customers.json.
+  // Fallback inteligente: reconstruye el fichero desde pedidos y ventas históricos.
+  // Esto evita que un expediente desaparezca del directorio si customers.json quedó vacío
+  // después de una migración, despliegue o restauración.
   const allOrders = readOrders();
+  const allSales = readSales();
   let seededCustomers = false;
-  for (const order of allOrders) {
-    const source = order.customer || {};
+  const seedFromRecord = (record) => {
+    const source = record?.customer || {};
     const identity = customerIdentity(source);
-    if (!identity || identity === 'name:') continue;
+    if (!identity || identity === 'name:') return;
     if (!customers.some(customer => customer.identity === identity)) {
-      customers.push({ id: crypto.randomUUID(), identity, name: source.name || '', phone: source.phone || '', cedula: source.cedula || '', email: source.email || '', city: source.city || '', address: source.address || '', mapsUrl: source.mapsUrl || '', notes: source.notes || '', createdAt: order.createdAt || new Date().toISOString(), updatedAt: order.updatedAt || order.createdAt || new Date().toISOString() });
+      customers.push({
+        id: crypto.randomUUID(), identity, name: source.name || '', phone: source.phone || '',
+        cedula: source.cedula || '', email: source.email || '', city: source.city || '',
+        address: source.address || '', mapsUrl: source.mapsUrl || '', notes: source.notes || '',
+        createdAt: record.createdAt || new Date().toISOString(),
+        updatedAt: record.updatedAt || record.createdAt || new Date().toISOString()
+      });
       seededCustomers = true;
     }
-  }
+  };
+  allOrders.forEach(seedFromRecord);
+  allSales.forEach(seedFromRecord);
   if (seededCustomers) { try { writeCustomers(customers); } catch {} }
   const q = cleanText(req.query?.q, 120).toLocaleLowerCase('es-EC');
-  const sales = readSales();
+  const sales = allSales;
   const rows = customers.map(customer => {
     const tx = customerTransactions(customer, allOrders, sales);
     const activeOrders = tx.filter(item => item.type === 'pedido' && item.status !== 'Cancelado').length;

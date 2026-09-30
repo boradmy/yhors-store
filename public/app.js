@@ -1420,13 +1420,21 @@ async function renderAdminGenerateOrder() {
     if (!list) return;
     list.innerHTML = rows.length ? rows.map(c => `<button type="button" class="generate-customer-option${String(c.id) === String(customerId) ? ' is-selected' : ''}" data-select-generate-customer="${escapeHTML(c.id)}"><span class="generate-customer-option-avatar">${escapeHTML((c.name || 'C').trim().slice(0,1).toUpperCase())}</span><span class="generate-customer-option-copy"><strong>${escapeHTML(c.name || 'Sin nombre')}</strong><small>${escapeHTML(c.cedula || 'Sin cédula')} · ${escapeHTML(c.phone || 'Sin teléfono')}</small></span><span class="generate-customer-option-check">${String(c.id) === String(customerId) ? '✓' : '›'}</span></button>`).join('') : '<div class="generate-customer-empty"><span>⌕</span><strong>No encontramos ese cliente</strong><small>Prueba con otro dato o registra un cliente nuevo.</small></div>';
   };
-  const openCustomerPicker = () => {
+  const refreshGenerateCustomers = async () => {
+    try {
+      const latest = await request(`/api/admin/clientes?ts=${Date.now()}`);
+      if (Array.isArray(latest)) customers = latest;
+    } catch {}
+    renderGenerateCustomerPicker();
+  };
+  const openCustomerPicker = async () => {
     document.querySelector('#customerPickerView')?.removeAttribute('hidden');
     document.querySelector('#generateCustomerForm')?.setAttribute('hidden','');
     document.querySelector('#generateCustomerMessage')?.setAttribute('hidden','');
     const input = document.querySelector('#generateCustomerSearch');
-    if (input) { input.value = ''; renderGenerateCustomerPicker(); }
+    if (input) input.value = '';
     openModal('customerModal');
+    await refreshGenerateCustomers();
     requestAnimationFrame(() => input?.focus());
   };
   document.querySelector('#generateCustomerSearch')?.addEventListener('input', renderGenerateCustomerPicker);
@@ -1483,10 +1491,11 @@ async function renderAdminGenerateOrder() {
       drawCustomer();
       closeModal('customerModal');
     } catch (error) {
-      if (error?.customer) {
-        customerId = error.customer.id;
-        customer = { ...error.data.customer, deliveryMethod: document.querySelector('input[name="generateDelivery"]:checked')?.value || 'office' };
-        customers = [error.customer, ...customers.filter(item => String(item.id) !== String(error.customer.id))];
+      const existingCustomer = error?.data?.customer || error?.customer;
+      if (existingCustomer) {
+        customerId = existingCustomer.id;
+        customer = { ...existingCustomer, deliveryMethod: document.querySelector('input[name="generateDelivery"]:checked')?.value || 'office' };
+        customers = [existingCustomer, ...customers.filter(item => String(item.id) !== String(existingCustomer.id))];
         drawCustomer();
         closeModal('customerModal');
       } else {
@@ -4127,7 +4136,16 @@ async function renderAdminClientes() {
     document.querySelector('#cancelCustomerEdit')?.addEventListener('click',()=>showCustomer(c.id));
     document.querySelector('#customerEditForm')?.addEventListener('submit',async e=>{e.preventDefault();const msg=document.querySelector('#customerEditMessage');try{const saved=await request(`/api/admin/clientes/${encodeURIComponent(c.id)}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.fromEntries(new FormData(e.currentTarget)))});customers=customers.map(x=>x.id===saved.id?{...x,...saved}:x);renderList();await showCustomer(saved.id);msg.className='message success';msg.textContent='Ficha actualizada.';}catch(err){msg.className='message error';msg.textContent=err.message;}});
   };
-  const load = async()=>{customers=await request('/api/admin/clientes');renderList(); if(customers[0]) await showCustomer(customers[0].id);};
+  const load = async()=>{
+    try {
+      customers=await request(`/api/admin/clientes?ts=${Date.now()}`);
+    } catch (error) {
+      customers=[];
+      console.error('[YHORS] No se pudo cargar el fichero de clientes:', error);
+    }
+    renderList();
+    if(customers[0]) await showCustomer(customers[0].id);
+  };
   document.querySelector('#customerSearch')?.addEventListener('input',renderList);
   // Alta manual, separada para no sobrecargar el flujo de consulta.
   document.querySelector('#newCustomer')?.addEventListener('click',()=>{detail.innerHTML=`<div class="customer-detail-head"><div><span class="eyebrow">FICHA DEL CLIENTE</span><h2>Nuevo cliente</h2></div></div><form id="newCustomerForm" class="form-grid customer-edit-form"><div class="field"><label>Nombre</label><input name="name" required></div><div class="field"><label>Cédula / RUC</label><input name="cedula" required></div><div class="field"><label>Teléfono</label><input name="phone"></div><div class="field"><label>Correo</label><input name="email" type="email"></div><div class="field"><label>Ciudad</label><input name="city"></div><div class="field full"><label>Dirección</label><input name="address"></div><div class="field full"><label>Notas internas</label><textarea name="notes" rows="4"></textarea></div><div class="form-actions full"><button class="button primary" type="submit">Crear cliente</button><span class="message" id="newCustomerMessage"></span></div></form>`;document.querySelector('#newCustomerForm')?.addEventListener('submit',async e=>{e.preventDefault();try{const created=await request('/api/admin/clientes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.fromEntries(new FormData(e.currentTarget)))});customers.unshift(created);renderList();await showCustomer(created.id);}catch(err){document.querySelector('#newCustomerMessage').className='message error';document.querySelector('#newCustomerMessage').textContent=err.message;}});});
