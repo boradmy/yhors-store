@@ -3290,7 +3290,7 @@ app.post('/api/admin/generar-orden', requireOrdersAccess, async (req, res) => {
   return res.status(201).json({ orderId: order.id, orderNumber: order.orderNumber, status: order.status, total: order.total, assignedSellerId });
 });
 
-app.get('/api/admin/session', (req, res) => { const session = getSession(req); return res.json({ authenticated: Boolean(session), username: session?.user || null, role: session?.role || null }); });
+app.get('/api/admin/session', (req, res) => { const session = getSession(req); const account = session ? readUsers().find(user => user.id === session.accountId || user.username === session.user) : null; return res.json({ authenticated: Boolean(session), username: session?.user || null, name: account?.name || null, role: session?.role || null, accountId: session?.accountId || null }); });
 app.get('/api/admin/security', requireAdmin, (_, res) => res.json({
   dataEncryption: 'AES-256-GCM',
   ordersEncryptedAtRest: true,

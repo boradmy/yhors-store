@@ -1172,14 +1172,12 @@ function adminSectionNav(session = {}, active = '') {
   const link = (key, href, label) => `<a href="${href}" class="admin-section-link${active === key ? ' active' : ''}" data-smooth-route>${label}</a>`;
   if (limitedOperations) {
     return `<div class="admin-navigation-stack admin-navigation-stack--limited"><nav class="admin-section-nav admin-section-nav--limited" id="adminSectionNav" aria-label="Navegación YHORS">
-      ${link('inteligente', `${ADMIN_PATH}/inteligente`, '🧠 YHORS INTELIGENTE')}
       <details class="admin-nav-group admin-nav-group--operation"${['buscar-productos','ventas-generales','pedidos','generar-orden','historial-ventas','series-imeis'].includes(active) ? ' open' : ''}><summary>OPERACIÓN <span aria-hidden="true">⌄</span></summary><div class="admin-nav-group-links admin-nav-group-links--limited">${link('buscar-productos', `${ADMIN_PATH}/buscar-productos`, 'BUSCAR PRODUCTOS')}${link('ventas-generales', `${ADMIN_PATH}/ventas-generales`, 'VENTAS GENERALES')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('generar-orden', `${ADMIN_PATH}/generar-orden`, 'GENERAR ORDEN')}${link('historial-ventas', `${ADMIN_PATH}/historial-ventas`, 'HISTORIAL DE VENTAS')}${role === 'vendedor' || role === 'orders' ? '' : link('series-imeis', `${ADMIN_PATH}/series-imeis`, 'SERIES / IMEIS')}</div></details>
     </nav></div>`;
   }
   const group = (label, activeKeys, items, open = false) => `<details class="admin-nav-group${activeKeys.includes(active) ? ' has-active' : ''}"${open ? ' open' : ''}><summary><span>${label}</span>${activeKeys.includes(active) ? '<i aria-hidden="true"></i>' : ''}</summary><div class="admin-nav-group-links">${items}</div></details>`;
   return `<div class="admin-navigation-stack">
     <nav class="admin-section-nav" id="adminSectionNav" aria-label="Administración YHORS">
-      ${link('inteligente', `${ADMIN_PATH}/inteligente`, '🧠 YHORS INTELIGENTE')}
       ${group('Operación', ['web','inventario','buscar-productos','pedidos','generar-orden','historial-ventas'], `${link('web', `${ADMIN_PATH}/web`, '🌐 PÁGINA WEB')}${link('buscar-productos', `${ADMIN_PATH}/buscar-productos`, 'BUSCAR PRODUCTOS')}${link('inventario', `${ADMIN_PATH}/inventario`, 'INVENTARIO')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('generar-orden', `${ADMIN_PATH}/generar-orden`, 'GENERAR ORDEN')}${link('historial-ventas', `${ADMIN_PATH}/historial-ventas`, 'HISTORIAL DE VENTAS')}`)}
       ${group('Gestión', ['usuarios','series-imeis','auditoria'], `${link('usuarios', `${ADMIN_PATH}/usuarios`, 'USUARIOS')}${link('series-imeis', `${ADMIN_PATH}/series-imeis`, 'SERIES/IMEIS')}${link('auditoria', `${ADMIN_PATH}/auditoria`, 'AUDITORÍA')}`)}
       ${group('Finanzas', ['resumen-financiero','ventas-generales','multas','calculo-comision'], `${link('resumen-financiero', `${ADMIN_PATH}/resumen-financiero`, 'RESUMEN FINANCIERO')}${link('ventas-generales', `${ADMIN_PATH}/ventas-generales`, 'VENTAS GENERALES')}${link('multas', `${ADMIN_PATH}/multas`, 'MULTAS')}${link('calculo-comision', `${ADMIN_PATH}/calculo-comision`, 'CÁLCULO DE COMISIÓN')}`)}
@@ -1273,7 +1271,7 @@ async function renderAdminGenerateOrder() {
   let saving = false;
 
   app.innerHTML = `<main class="admin-shell generate-order-shell"><div class="admin-wrap">
-    <div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Generar orden</h1><p class="admin-subtitle">Facturación interna · crea una orden desde YHORS Administración</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>
+    <div class="admin-top"><div><a class="brand admin-brand" href="${ADMIN_PATH}/inteligente" data-smooth-route><span>YHORS</span><small>Panel Administrativo</small></a><h1 class="admin-title">Generar orden</h1><p class="admin-subtitle">Facturación interna · crea una orden desde YHORS Administración</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>
     ${generateOrderNav(session)}
     <section class="generate-order-page">
       <div class="generate-order-header"><div><span class="eyebrow">Nueva orden</span><h2>Orden de venta</h2><p>Registra al cliente, selecciona sus productos y asigna el vendedor responsable.</p></div><div class="generate-doc-badge"><span>DOCUMENTO</span><strong>ORDEN DE PEDIDO</strong><small>YHORS · ${new Date().toLocaleDateString('es-EC')}</small></div></div>
@@ -1401,13 +1399,13 @@ async function renderAdminSeriesImeis() {
     if (isAdmin) config = await request('/api/admin/series-imeis/config');
     registered = (await request('/api/admin/series-imeis/registered')).rows || [];
   } catch (error) {
-    app.innerHTML = `<main class="admin-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Series/IMEIS</h1></div></div><div class="message error">${escapeHTML(error.message || 'No se pudo cargar Series/IMEIS.')}</div></div></main>`;
+    app.innerHTML = `<main class="admin-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand admin-brand" href="${ADMIN_PATH}/inteligente" data-smooth-route><span>YHORS</span><small>Panel Administrativo</small></a><h1 class="admin-title">Series/IMEIS</h1></div></div><div class="message error">${escapeHTML(error.message || 'No se pudo cargar Series/IMEIS.')}</div></div></main>`;
     return;
   }
 
   const nav = adminSectionNav(session, 'series-imeis');
   app.innerHTML = `<main class="admin-shell series-imeis-shell"><div class="admin-wrap">
-    <div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">SERIES/IMEIS</h1><p class="admin-subtitle">Control de identificación de productos TEC y gestión de series e IMEIs registrados.</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>
+    <div class="admin-top"><div><a class="brand admin-brand" href="${ADMIN_PATH}/inteligente" data-smooth-route><span>YHORS</span><small>Panel Administrativo</small></a><h1 class="admin-title">SERIES/IMEIS</h1><p class="admin-subtitle">Control de identificación de productos TEC y gestión de series e IMEIs registrados.</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>
     ${nav}
     <div class="users-module-switch" role="tablist" aria-label="Series e IMEIs">
       ${isAdmin ? '<button type="button" class="users-module-tab is-active" data-series-tab="gestor">GESTOR DE SERIES</button>' : ''}
@@ -1536,7 +1534,7 @@ async function renderAdminFines() {
   const nav = adminSectionNav(session, 'multas');
 
   app.innerHTML = `<main class="admin-shell fines-shell"><div class="admin-wrap">
-    <div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Multas</h1><p class="admin-subtitle">Descuentos que se aplican directamente a la comisión del vendedor o Jefe de Tienda.</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>
+    <div class="admin-top"><div><a class="brand admin-brand" href="${ADMIN_PATH}/inteligente" data-smooth-route><span>YHORS</span><small>Panel Administrativo</small></a><h1 class="admin-title">Multas</h1><p class="admin-subtitle">Descuentos que se aplican directamente a la comisión del vendedor o Jefe de Tienda.</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>
     ${nav}
     <section class="admin-panel fines-panel">
       <div class="section-heading"><div><span class="eyebrow" id="fineFormEyebrow">Finanzas · Control</span><h2 id="fineFormTitle">Registrar multa</h2></div><p id="fineFormHelp">La multa se descuenta automáticamente de la comisión del período en el que esté registrada.</p></div>
@@ -1849,7 +1847,7 @@ async function renderAdminCommission() {
   const monthStart = `${today.slice(0, 7)}-01`;
   const nav = adminSectionNav(session, 'calculo-comision');
 
-  app.innerHTML = `<main class="admin-shell commission-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Cálculo de comisión</h1><p class="admin-subtitle">Comisiones para vendedores y Jefe de Tienda · acceso exclusivo de Administración</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>${nav}
+  app.innerHTML = `<main class="admin-shell commission-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand admin-brand" href="${ADMIN_PATH}/inteligente" data-smooth-route><span>YHORS</span><small>Panel Administrativo</small></a><h1 class="admin-title">Cálculo de comisión</h1><p class="admin-subtitle">Comisiones para vendedores y Jefe de Tienda · acceso exclusivo de Administración</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>${nav}
     <section class="admin-panel commission-panel">
       <div class="section-heading commission-heading"><div><span class="eyebrow">Comisiones</span><h2>Pago de comisiones</h2></div><p>Solo se toman ventas con estado <strong>Enviado</strong> y <strong>Entregado</strong>. El porcentaje se puede definir individualmente antes de pagar.</p></div>
       <div class="commission-toolbar">
@@ -1970,7 +1968,7 @@ async function renderAdminFinancial() {
   const monthStart = `${today.slice(0, 7)}-01`;
   const nav = adminSectionNav(session, 'resumen-financiero');
 
-  app.innerHTML = `<main class="admin-shell financial-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Resumen Financiero</h1><p class="admin-subtitle">Ventas, costos, gastos y ganancias de YHORS · acceso exclusivo de Administración</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>${nav}
+  app.innerHTML = `<main class="admin-shell financial-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand admin-brand" href="${ADMIN_PATH}/inteligente" data-smooth-route><span>YHORS</span><small>Panel Administrativo</small></a><h1 class="admin-title">Resumen Financiero</h1><p class="admin-subtitle">Ventas, costos, gastos y ganancias de YHORS · acceso exclusivo de Administración</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>${nav}
     <section class="admin-panel financial-panel">
       <div class="section-heading financial-heading"><div><span class="eyebrow">Finanzas</span><h2>Resumen del período</h2></div><p>Calcula el resultado del período usando las ventas activas, el precio de compra registrado en cada producto y los gastos del negocio.</p></div>
       <div class="financial-toolbar">
@@ -2111,7 +2109,7 @@ async function renderAdminSalesHistory() {
   const sellers = await request('/api/admin/order-sellers').catch(() => []);
   const today = new Date().toLocaleDateString('en-CA');
   const sectionNav = adminSectionNav(session, 'historial-ventas');
-  app.innerHTML = `<main class="admin-shell sales-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Historial de ventas</h1><p class="admin-subtitle">Ventas notificadas desde pedidos Enviados o Entregados · solo lectura después de notificarlas.</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>${sectionNav}<section class="admin-panel sales-panel"><div class="section-heading sales-heading"><div><span class="eyebrow">Ventas</span><h2>Historial de ventas</h2></div><p>Vendedores y Jefes pueden consultar el PDF. Solo Administración puede eliminar una venta del historial.</p></div><div class="sales-toolbar"><div class="sales-date-range"><label class="sales-date-filter"><span>Desde</span><input id="historyDateFrom" type="date" value="${today}"></label><label class="sales-date-filter"><span>Hasta</span><input id="historyDateTo" type="date" value="${today}"></label></div><label class="sales-status-filter"><span>Vendedor</span><select id="historySeller"><option value="">Todos los vendedores</option>${sellers.map(s=>`<option value="${escapeHTML(s.id)}">${escapeHTML(s.name)}</option>`).join('')}</select></label><label class="sales-search"><span>Buscar</span><input id="historySearch" type="search" placeholder="Venta, cliente, cédula, SKU…"></label><button type="button" class="button primary small" id="historyRefresh">Actualizar</button></div><div id="historySummary" class="sales-summary"></div><div id="historyList" class="sales-table-wrap"></div></section></div></main>`;
+  app.innerHTML = `<main class="admin-shell sales-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand admin-brand" href="${ADMIN_PATH}/inteligente" data-smooth-route><span>YHORS</span><small>Panel Administrativo</small></a><h1 class="admin-title">Historial de ventas</h1><p class="admin-subtitle">Ventas notificadas desde pedidos Enviados o Entregados · solo lectura después de notificarlas.</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>${sectionNav}<section class="admin-panel sales-panel"><div class="section-heading sales-heading"><div><span class="eyebrow">Ventas</span><h2>Historial de ventas</h2></div><p>Vendedores y Jefes pueden consultar el PDF. Solo Administración puede eliminar una venta del historial.</p></div><div class="sales-toolbar"><div class="sales-date-range"><label class="sales-date-filter"><span>Desde</span><input id="historyDateFrom" type="date" value="${today}"></label><label class="sales-date-filter"><span>Hasta</span><input id="historyDateTo" type="date" value="${today}"></label></div><label class="sales-status-filter"><span>Vendedor</span><select id="historySeller"><option value="">Todos los vendedores</option>${sellers.map(s=>`<option value="${escapeHTML(s.id)}">${escapeHTML(s.name)}</option>`).join('')}</select></label><label class="sales-search"><span>Buscar</span><input id="historySearch" type="search" placeholder="Venta, cliente, cédula, SKU…"></label><button type="button" class="button primary small" id="historyRefresh">Actualizar</button></div><div id="historySummary" class="sales-summary"></div><div id="historyList" class="sales-table-wrap"></div></section></div></main>`;
   const load = async () => {
     const from=document.querySelector('#historyDateFrom')?.value||''; const to=document.querySelector('#historyDateTo')?.value||''; const q=document.querySelector('#historySearch')?.value||''; const sellerId=document.querySelector('#historySeller')?.value||''; const list=document.querySelector('#historyList'); const summary=document.querySelector('#historySummary');
     if(from&&to&&from>to){list.innerHTML='<div class="sales-empty">La fecha inicial no puede ser posterior a la fecha final.</div>';return;}
@@ -2145,7 +2143,7 @@ async function renderAdminSales() {
   const moneyCell = value => money(Number(value || 0));
   const nav = adminSectionNav(session, 'ventas-generales');
 
-  app.innerHTML = `<main class="admin-shell sales-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Ventas Generales</h1><p class="admin-subtitle">Resumen de ventas por vendedor · visible para todos los usuarios operativos</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>${nav}
+  app.innerHTML = `<main class="admin-shell sales-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand admin-brand" href="${ADMIN_PATH}/inteligente" data-smooth-route><span>YHORS</span><small>Panel Administrativo</small></a><h1 class="admin-title">Ventas Generales</h1><p class="admin-subtitle">Resumen de ventas por vendedor · visible para todos los usuarios operativos</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>${nav}
     <section class="admin-panel sales-panel">
       <div class="section-heading sales-heading"><div><span class="eyebrow">Ventas</span><h2>Ventas Generales</h2></div><p>Consulta cuánto ha vendido cada vendedor y el total que queda a cargo del <strong>Jefe de Tienda</strong>.</p></div>
       <div class="sales-toolbar">
@@ -2212,7 +2210,7 @@ async function renderAdminOrders() {
   const sectionNav = adminSectionNav(session, 'pedidos');
   const title = session.role === 'vendedor' ? 'Mis pedidos asignados' : 'Gestión de pedidos';
   const subtitle = session.role === 'store_manager' ? 'Jefe de tienda · pedidos, asignaciones y control operativo' : (session.role === 'vendedor' ? 'Pedidos asignados a tu usuario · consulta y gestión operativa' : 'Gestión de YHORS STORE');
-  app.innerHTML = `<main class="admin-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">${title}</h1><p class="admin-subtitle">${subtitle}</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>${sectionNav}${ordersPanel(orders, canDelete)}</div></main>`;
+  app.innerHTML = `<main class="admin-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand admin-brand" href="${ADMIN_PATH}/inteligente" data-smooth-route><span>YHORS</span><small>Panel Administrativo</small></a><h1 class="admin-title">${title}</h1><p class="admin-subtitle">${subtitle}</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>${sectionNav}${ordersPanel(orders, canDelete)}</div></main>`;
 
   const editingOrders = new Set();
   const productEditorsOpen = new Set();
@@ -2913,7 +2911,7 @@ async function renderAdminSecurity(embedded = false) {
       : `<div class="security-alert-empty"><strong>Sin alertas activas</strong><span>No se detectaron patrones anormales en la actividad reciente.</span></div>`;
 
     app.innerHTML = `<main class="admin-shell"><div class="admin-wrap">
-      <div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">${embedded ? 'Usuarios' : 'Seguridad'}</h1><p class="admin-subtitle">${embedded ? 'Cuentas, acceso y protección de YHORS' : 'Centro de control de acceso de YHORS'}</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>
+      <div class="admin-top"><div><a class="brand admin-brand" href="${ADMIN_PATH}/inteligente" data-smooth-route><span>YHORS</span><small>Panel Administrativo</small></a><h1 class="admin-title">${embedded ? 'Usuarios' : 'Seguridad'}</h1><p class="admin-subtitle">${embedded ? 'Cuentas, acceso y protección de YHORS' : 'Centro de control de acceso de YHORS'}</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>
       ${adminSectionNav(session, 'usuarios')}
       ${embedded ? `<div class="users-module-switch" role="tablist" aria-label="Usuarios y seguridad"><button type="button" class="users-module-tab" data-open-users>Usuarios</button><button type="button" class="users-module-tab is-active" data-open-security>Seguridad</button></div>` : ''}
       <section class="admin-panel security-panel">
@@ -2961,7 +2959,7 @@ async function renderAdminSecurity(embedded = false) {
     const username = escapeHTML(session.username || 'Usuario');
     const role = escapeHTML(userRoleLabel(session.role || ''));
     app.innerHTML = `<main class="admin-shell"><div class="admin-wrap">
-      <div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Usuarios</h1><p class="admin-subtitle">Cuentas, acceso y protección de YHORS</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>
+      <div class="admin-top"><div><a class="brand admin-brand" href="${ADMIN_PATH}/inteligente" data-smooth-route><span>YHORS</span><small>Panel Administrativo</small></a><h1 class="admin-title">Usuarios</h1><p class="admin-subtitle">Cuentas, acceso y protección de YHORS</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>
       ${adminSectionNav(session, 'usuarios')}
       <div class="users-module-switch" role="tablist" aria-label="Usuarios y seguridad"><button type="button" class="users-module-tab" data-open-users>Usuarios</button><button type="button" class="users-module-tab is-active" data-open-security>Seguridad</button></div>
       <section class="admin-panel security-panel"><div class="security-hero"><div><span class="eyebrow">V15.5 · ALERTAS</span><h2>Seguridad y sesiones</h2><p>El panel se abrió, pero algunos datos no pudieron cargarse. Puedes volver a intentarlo.</p></div><div class="security-live"><span></span> Sistema protegido</div></div>
@@ -2982,7 +2980,7 @@ async function renderAdminAudit() {
   const nav = adminSectionNav(session, 'auditoria');
 
   app.innerHTML = `<main class="admin-shell"><div class="admin-wrap">
-    <div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Auditoría</h1><p class="admin-subtitle">Historial de acciones importantes de YHORS</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>
+    <div class="admin-top"><div><a class="brand admin-brand" href="${ADMIN_PATH}/inteligente" data-smooth-route><span>YHORS</span><small>Panel Administrativo</small></a><h1 class="admin-title">Auditoría</h1><p class="admin-subtitle">Historial de acciones importantes de YHORS</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>
     ${nav}
     <section class="admin-panel audit-panel">
       <div class="section-heading"><div><span class="eyebrow">V15.3 · Pedidos e inventario</span><h2>Actividad del sistema</h2></div><p>Consulta quién hizo cada acción, cuándo ocurrió y qué cambió.</p></div>
@@ -3180,7 +3178,7 @@ async function renderAdminUsers(panel = 'usuarios') {
 
   let users = await request('/api/admin/users').catch(() => []);
   app.innerHTML = `<main class="admin-shell"><div class="admin-wrap">
-    <div class="admin-top"><div><a class="brand" href="${ADMIN_PATH}/inteligente" data-smooth-route>YHORS</a><h1 class="admin-title">Administración</h1><p class="admin-subtitle">Control de usuarios y accesos</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>
+    <div class="admin-top"><div><a class="brand admin-brand" href="${ADMIN_PATH}/inteligente" data-smooth-route><span>YHORS</span><small>Panel Administrativo</small></a><h1 class="admin-title">Administración</h1><p class="admin-subtitle">Control de usuarios y accesos</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>
     ${adminSectionNav(session, 'usuarios')}
     ${usersPanel(users)}
   </div></main>`;
@@ -3470,7 +3468,7 @@ function inventoryPageMarkup(products = [], options = {}) {
   }).join('') : '<div class="empty">No hay productos registrados.</div>';
 
   return `<main class="admin-shell"><div class="admin-wrap">
-    <div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Inventario</h1><p class="admin-subtitle">Control de costos, precios y existencias</p></div><div class="admin-top-actions">${accountMenu(window.__yhorsSession || {})}</div></div>
+    <div class="admin-top"><div><a class="brand admin-brand" href="${ADMIN_PATH}/inteligente" data-smooth-route><span>YHORS</span><small>Panel Administrativo</small></a><h1 class="admin-title">Inventario</h1><p class="admin-subtitle">Control de costos, precios y existencias</p></div><div class="admin-top-actions">${accountMenu(window.__yhorsSession || {})}</div></div>
     ${adminSectionNav({ role }, 'inventario')}
     <section class="admin-panel inventory-page-panel">
       <div class="section-heading"><div><span class="eyebrow">Control de existencias</span><h2>Inventario de productos</h2></div><p>La ficha del producto permanece limpia; aquí solo se editan los datos de inventario.</p></div>
@@ -3645,7 +3643,7 @@ async function renderAdminCatalogSearch() {
   const roleLabel = userRoleLabel(session.role || '');
 
   app.innerHTML = `<main class="admin-shell catalog-search-shell"><div class="admin-wrap catalog-search-wrap">
-    <div class="admin-top"><div><a class="brand" href="${ADMIN_PATH}">YHORS</a><h1 class="admin-title">Buscar productos</h1></div><div class="admin-top-actions">${accountMenu(session)}</div></div>
+    <div class="admin-top"><div><a class="brand admin-brand" href="${ADMIN_PATH}"><span>YHORS</span><small>Panel Administrativo</small></a><h1 class="admin-title">Buscar productos</h1></div><div class="admin-top-actions">${accountMenu(session)}</div></div>
     ${adminSectionNav(session, 'buscar-productos')}
     <section class="catalog-search-hero"><div><span class="eyebrow">Catálogo interno · ${escapeHTML(roleLabel)}</span><h2>Encuentra. Consulta. Selecciona.</h2><p>Precios de venta, stock, marca y datos comerciales en una sola vista. Disponible para vendedores, jefes y administradores.</p></div><div class="catalog-search-count"><strong id="catalogResultCount">0</strong><span>productos visibles</span></div></section>
     <section class="catalog-search-toolbar"><label class="catalog-main-search"><span>⌕</span><input id="catalogMainSearch" type="search" placeholder="Buscar por código, nombre, modelo o marca…" autocomplete="off"><button id="catalogClearSearch" type="button" aria-label="Limpiar">×</button></label><select id="catalogBrandFilter"><option value="">Todas las marcas</option>${brands.map(b=>`<option value="${escapeHTML(b)}">${escapeHTML(b)}</option>`).join('')}</select><select id="catalogCategoryFilter"><option value="">Todas las categorías</option>${categoryEntries.map(([k,v])=>`<option value="${escapeHTML(k)}">${escapeHTML(v)}</option>`).join('')}</select><select id="catalogStockFilter"><option value="">Todo el stock</option><option value="available">Disponibles</option><option value="empty">Sin stock</option></select><select id="catalogSort"><option value="name">Nombre A–Z</option><option value="price-asc">Precio menor</option><option value="price-desc">Precio mayor</option><option value="stock-desc">Mayor stock</option></select><button class="button secondary catalog-invert-button" id="catalogInvertButton" type="button">⇄ Invertir</button><button class="button secondary catalog-clear-selection" id="catalogClearSelection" type="button">⌫ Olvidar</button></section>
@@ -3990,7 +3988,7 @@ async function renderYhorsInteligente() {
     : cardLink(`${ADMIN_PATH}/historial-ventas`, 'Mis ventas confirmadas', 'HOY', String(confirmedSales.length), `${money(salesTotal)} vendidos hoy`, 'is-large is-sales');
 
   app.innerHTML = `<main class="admin-shell yh-intelligent-shell"><div class="admin-wrap">
-    <div class="admin-top yh-intelligent-top"><div><a class="brand" href="${ADMIN_PATH}/inteligente" data-smooth-route>YHORS</a><h1 class="admin-title">YHORS Inteligente</h1><p class="admin-subtitle">Tu centro de control para saber qué está pasando hoy en YHORS.</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>
+    <div class="admin-top yh-intelligent-top"><div><a class="brand admin-brand" href="${ADMIN_PATH}/inteligente" data-smooth-route><span>YHORS</span><small>Panel Administrativo</small></a><h1 class="admin-title">YHORS Inteligente</h1><p class="admin-subtitle">Tu centro de control para saber qué está pasando hoy en YHORS.</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>
     ${nav}
     <section class="yh-intelligent-hero"><div><span class="eyebrow">CENTRO INTELIGENTE · ${today}</span><h2>Buenos días, ${escapeHTML(session.name || session.username || 'equipo')} <span aria-hidden="true">👋</span></h2><p>Todo lo importante de hoy, organizado en bloques. Cada indicador te lleva directamente al lugar donde puedes actuar.</p></div><div class="yh-intelligent-hero-meta"><span class="yh-intelligent-status"><span class="yh-status-dot"></span><span>YHORS operativo</span></span><small>Actualizado al abrir esta pantalla</small></div></section>
     <section class="yh-intelligent-grid" aria-label="Resumen inteligente">
@@ -4028,7 +4026,7 @@ async function renderAdmin() {
     <button type="button" data-admin-scroll="classificationPanel">Categorías</button>
     <button type="button" data-admin-scroll="productEditorPanel">Producto</button>
     <button type="button" data-admin-scroll="inventoryPanel">Inventario</button>
-  </aside><div class="admin-wrap"><div class="admin-top"><div><a class="brand" href="${ADMIN_PATH}/inteligente" data-smooth-route>YHORS</a><h1 class="admin-title">Administración · Página Web</h1><p class="admin-subtitle">Gestiona la portada, productos destacados y catálogo público de YHORS.</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>${adminSectionNav(session, 'web')}${backupPanel(backupState)}${selectionPanel(products, settings)}${classificationPanel(classifications)}<section class="admin-panel product-editor-panel" id="productEditorPanel"><span class="eyebrow">Catálogo</span><h2 id="formTitle">Agregar producto</h2><div id="formArea"></div></section><section class="admin-products" id="inventoryPanel"><div class="section-heading inventory-heading"><div><span class="eyebrow">Inventario</span><h2>Productos e inventario (${products.length})</h2></div><p>Edita datos, imágenes, portada y destacados.</p></div><div class="inventory-toolbar"><label class="inventory-search"><span aria-hidden="true">⌕</span><input id="inventorySearch" type="search" placeholder="Buscar por nombre, SKU, marca o categoría…" autocomplete="off"><button id="clearInventorySearch" type="button" aria-label="Limpiar búsqueda">×</button></label><label class="inventory-filter"><span>Categoría</span><select id="inventoryCategoryFilter"><option value="">Todas las categorías</option><option value="elegant">Elegante</option><option value="sports">Deportes</option><option value="tech">Tech</option><option value="cosplay">Cosplay</option><option value="pets">Mascotas</option><option value="details">Detalles</option><option value="collectibles">Coleccionables</option></select></label><span class="inventory-count" id="inventoryCount">${products.length} productos</span></div><div id="adminProducts"></div></section></div></main>`;
+  </aside><div class="admin-wrap"><div class="admin-top"><div><a class="brand admin-brand" href="${ADMIN_PATH}/inteligente" data-smooth-route><span>YHORS</span><small>Panel Administrativo</small></a><h1 class="admin-title">Administración · Página Web</h1><p class="admin-subtitle">Gestiona la portada, productos destacados y catálogo público de YHORS.</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>${adminSectionNav(session, 'web')}${backupPanel(backupState)}${selectionPanel(products, settings)}${classificationPanel(classifications)}<section class="admin-panel product-editor-panel" id="productEditorPanel"><span class="eyebrow">Catálogo</span><h2 id="formTitle">Agregar producto</h2><div id="formArea"></div></section><section class="admin-products" id="inventoryPanel"><div class="section-heading inventory-heading"><div><span class="eyebrow">Inventario</span><h2>Productos e inventario (${products.length})</h2></div><p>Edita datos, imágenes, portada y destacados.</p></div><div class="inventory-toolbar"><label class="inventory-search"><span aria-hidden="true">⌕</span><input id="inventorySearch" type="search" placeholder="Buscar por nombre, SKU, marca o categoría…" autocomplete="off"><button id="clearInventorySearch" type="button" aria-label="Limpiar búsqueda">×</button></label><label class="inventory-filter"><span>Categoría</span><select id="inventoryCategoryFilter"><option value="">Todas las categorías</option><option value="elegant">Elegante</option><option value="sports">Deportes</option><option value="tech">Tech</option><option value="cosplay">Cosplay</option><option value="pets">Mascotas</option><option value="details">Detalles</option><option value="collectibles">Coleccionables</option></select></label><span class="inventory-count" id="inventoryCount">${products.length} productos</span></div><div id="adminProducts"></div></section></div></main>`;
   const quickNav = document.querySelector('.admin-quick-nav');
   quickNav?.querySelectorAll('[data-admin-scroll]').forEach(button => button.addEventListener('click', () => {
     const target = document.getElementById(button.dataset.adminScroll);
@@ -4444,7 +4442,7 @@ async function renderMyAccount() {
   const me = await request('/api/me').catch(() => null); if (!me) return renderLogin();
   const passkeys = me.passkeys || [];
   app.innerHTML = `<main class="admin-shell"><div class="admin-wrap">
-    <div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Mi cuenta</h1><p class="admin-subtitle">Datos y métodos de inicio de sesión</p></div><div class="admin-top-actions account-page-actions"><a class="button secondary small account-back-button" href="#" data-account-back>← Volver</a>${accountMenu(me)}</div></div>
+    <div class="admin-top"><div><a class="brand admin-brand" href="${ADMIN_PATH}/inteligente" data-smooth-route><span>YHORS</span><small>Panel Administrativo</small></a><h1 class="admin-title">Mi cuenta</h1><p class="admin-subtitle">Datos y métodos de inicio de sesión</p></div><div class="admin-top-actions account-page-actions">${accountMenu(me)}</div></div>
     <section class="admin-panel users-panel"><div class="section-heading"><div><span class="eyebrow">Cuenta</span><h2>${escapeHTML(me.name)}</h2></div><p>@${escapeHTML(me.username)} · ${escapeHTML(userRoleLabel(me.role))}</p></div>
       <div class="form-grid account-readonly"><div class="field"><label>Nombre</label><input value="${escapeHTML(me.name)}" disabled></div><div class="field"><label>Usuario</label><input value="${escapeHTML(me.username)}" disabled></div><div class="field"><label>Rol</label><input value="${escapeHTML(userRoleLabel(me.role))}" disabled></div><div class="field"><label>Estado</label><input value="Activo" disabled></div></div>
       <hr><div class="section-heading"><div><span class="eyebrow">Inicio de sesión moderno</span><h2>Passkeys</h2></div><p>Windows Hello, huella, Face ID o el método seguro compatible con tu dispositivo.</p></div>
@@ -4452,11 +4450,6 @@ async function renderMyAccount() {
       <div class="form-actions"><button class="button primary" id="addPasskey" type="button" ${me.passkeyAllowed ? '' : 'disabled'}>+ Registrar Passkey</button><span class="message" id="passkeyMessage">${me.passkeyAllowed ? 'Permitido en esta cuenta.' : 'El administrador ha bloqueado el inicio con Passkey para esta cuenta.'}</span></div>
     </section></div></main>`;
   wireAccountMenu();
-  document.querySelector('[data-account-back]')?.addEventListener('click', event => {
-    event.preventDefault();
-    if (window.history.length > 1) window.history.back();
-    else navigateToRoute(`${ADMIN_PATH}/inteligente`, { replace: true });
-  });
   document.querySelector('#addPasskey').addEventListener('click', async () => {
     const button = document.querySelector('#addPasskey');
     const message = document.querySelector('#passkeyMessage');
@@ -4498,7 +4491,7 @@ function loginRequestWithTimeout(url, options, ms = 20000) {
 }
 
 function renderLogin() {
-  app.innerHTML = `<main class="login-page"><section class="login-card"><a class="brand" href="/">YHORS</a><span class="eyebrow">Panel privado</span><h1>Acceso a YHORS</h1><p>Ingresa con tu cuenta autorizada.</p><form id="loginForm" class="form-grid"><div class="field full"><label for="username">Usuario</label><input id="username" name="username" autocomplete="username webauthn" required></div><div class="field full"><label for="password">Contraseña</label><input id="password" name="password" type="password" autocomplete="current-password" required></div><div class="login-attempts" id="loginAttempts" aria-live="polite"></div><div class="form-actions"><button class="button" id="loginSubmit" type="submit">Iniciar sesión</button><button class="button secondary" id="passkeyLogin" type="button">🔐 Iniciar con Passkey</button><span class="message" id="loginMessage"></span></div></form></section><div class="login-loading-overlay" id="loginLoadingOverlay" hidden role="status" aria-live="polite"><div class="login-loading-card"><div class="login-loading-spinner"></div><strong data-login-loading-text>Iniciando sesión…</strong><small>Estamos preparando YHORS Inteligente</small><div class="login-loading-dots"><i></i><i></i><i></i></div></div></div></main>`;
+  app.innerHTML = `<main class="login-page"><section class="login-card"><a class="brand admin-brand" href="${ADMIN_PATH}/inteligente" data-smooth-route><span>YHORS</span><small>Panel Administrativo</small></a><span class="eyebrow">Panel privado</span><h1>Acceso a YHORS</h1><p>Ingresa con tu cuenta autorizada.</p><form id="loginForm" class="form-grid"><div class="field full"><label for="username">Usuario</label><input id="username" name="username" autocomplete="username webauthn" required></div><div class="field full"><label for="password">Contraseña</label><input id="password" name="password" type="password" autocomplete="current-password" required></div><div class="login-attempts" id="loginAttempts" aria-live="polite"></div><div class="form-actions"><button class="button" id="loginSubmit" type="submit">Iniciar sesión</button><button class="button secondary" id="passkeyLogin" type="button">🔐 Iniciar con Passkey</button><span class="message" id="loginMessage"></span></div></form></section><div class="login-loading-overlay" id="loginLoadingOverlay" hidden role="status" aria-live="polite"><div class="login-loading-card"><div class="login-loading-spinner"></div><strong data-login-loading-text>Iniciando sesión…</strong><small>Estamos preparando YHORS Inteligente</small><div class="login-loading-dots"><i></i><i></i><i></i></div></div></div></main>`;
   let loginLockTimer = null;
   const attemptsBox = document.querySelector('#loginAttempts');
   const submitButton = document.querySelector('#loginSubmit');

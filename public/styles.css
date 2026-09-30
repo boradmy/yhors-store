@@ -4094,3 +4094,24 @@ body.login-loading-active{overflow:hidden}
   .admin-nav-group-links--limited{position:static!important;grid-template-columns:1fr!important;margin-top:6px;box-shadow:none!important;background:#f8f6f1!important}
   .admin-nav-group--operation>summary{justify-content:space-between!important}
 }
+
+
+/* YHORS V15.8.6 · Header administrativo unificado */
+.admin-top{align-items:center;gap:24px}
+.admin-top>div:first-child{min-width:0}
+.admin-brand{display:inline-flex;align-items:center;gap:10px;letter-spacing:.24em;color:var(--ink)!important;text-decoration:none;line-height:1}
+.admin-brand span{font-size:1.08rem;font-weight:900;letter-spacing:.28em}
+.admin-brand small{font-size:.57rem;letter-spacing:.13em;text-transform:uppercase;color:#8b857b;font-weight:800;padding-left:10px;border-left:1px solid #d9d2c6;white-space:nowrap}
+.admin-brand:hover{opacity:.82}
+.account-menu-trigger{min-width:190px;max-width:310px}
+.account-menu-trigger-copy strong{max-width:190px}
+.account-menu-user strong{line-height:1.25}
+.account-page-actions{margin-left:auto}
+@media(max-width:800px){
+  .admin-top{align-items:flex-start;gap:12px}
+  .admin-brand{gap:7px}
+  .admin-brand span{font-size:.95rem;letter-spacing:.22em}
+  .admin-brand small{font-size:.5rem;padding-left:7px}
+  .account-menu-trigger{min-width:50px;width:50px;max-width:50px}
+  .account-menu-trigger-copy{display:none}
+}
