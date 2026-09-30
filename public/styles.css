@@ -3460,7 +3460,7 @@ body.generate-modal-open{overflow:hidden}
   .flyer-modal-foot>span{display:none}
   .flyer-modal-foot>div{width:100%}.flyer-modal-foot .button{flex:1}
   .catalog-search-card{height:auto;min-height:0}.catalog-search-image{height:205px;min-height:205px;padding:10px 14px}.catalog-search-body{min-height:150px}
-  .flyer-page{padding:0}.flyer-toolbar{border-radius:0;position:sticky;top:0;z-index:10}.flyer-generated-wrap{gap:8px}.flyer-sheet{border-radius:0;box-shadow:none;min-height:0;padding:24px 18px}.flyer-header{grid-template-columns:1fr;gap:9px}.flyer-date{text-align:left}.flyer-products{grid-template-columns:repeat(2,minmax(0,1fr))!important;grid-auto-rows:auto}.flyer-product-image{height:150px}.flyer-generated-wrap .flyer-product.featured{grid-template-columns:1fr}.flyer-generated-wrap .flyer-product.featured .flyer-product-image{min-height:230px}.flyer-footer{display:block}.flyer-contact{margin-top:8px;flex-wrap:wrap}
+  .flyer-page{padding:0}.flyer-toolbar{border-radius:0;position:sticky;top:0;z-index:10}.flyer-generated-wrap{gap:8px}.flyer-sheet{border-radius:0;box-shadow:none;min-height:0;padding:24px 18px}.flyer-header{grid-template-columns:1fr;gap:9px}.flyer-date{text-align:left}.flyer-products{grid-template-columns:1fr!important;grid-auto-rows:auto}.flyer-product-image{height:150px}.flyer-generated-wrap .flyer-product.featured{grid-template-columns:1fr}.flyer-generated-wrap .flyer-product.featured .flyer-product-image{min-height:230px}.flyer-footer{display:block}.flyer-contact{margin-top:8px;flex-wrap:wrap}
 }
 @media print{
   html,body{background:#fff!important}
@@ -4053,7 +4053,7 @@ body.login-loading-active{overflow:hidden}
 }
 .admin-nav-group--operation[open]>summary{background:#f1eee7!important;border-color:#cdbf9f!important}
 .admin-nav-group--operation>summary span{margin-left:7px;font-size:.7rem;transition:transform .2s}
-.admin-nav-group--operation[open]>summary span{transform:rotate(180deg)}
+.admin-nav-group--operation[open]>summary span{transform:none}
 .admin-nav-group-links--limited{
   position:absolute!important;
   top:calc(100% + 8px)!important;
@@ -4608,6 +4608,20 @@ body.login-loading-active{overflow:hidden}
 .catalog-search-shell .admin-brand{cursor:pointer}
 .catalog-search-shell .admin-brand-mark img{display:block;width:100%;height:100%;object-fit:contain}
 
+/* YHORS 15.8.14 · Operación desplegable vertical y etiqueta estable */
+.admin-section-nav--limited .admin-nav-group--operation > summary span{
+  transform:none!important;
+  writing-mode:horizontal-tb!important;
+  rotate:0deg!important;
+  display:inline-block!important;
+}
+.admin-section-nav--limited .admin-nav-group--operation > summary{
+  writing-mode:horizontal-tb!important;
+  transform:none!important;
+}
+.admin-section-nav--limited .admin-nav-group--operation .admin-nav-group-links--limited{
+  grid-template-columns:1fr!important;
+}
 /* YHORS 15.8.13 · Operación desplegable para Jefes y Vendedores */
 .admin-section-nav--limited{
   display:flex!important;
@@ -4646,7 +4660,7 @@ body.login-loading-active{overflow:hidden}
   width:auto!important;
   min-width:0!important;
   max-width:none!important;
-  grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  grid-template-columns:1fr!important;
   padding:9px!important;
   gap:5px!important;
   background:#fff!important;
