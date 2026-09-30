@@ -4115,3 +4115,72 @@ body.login-loading-active{overflow:hidden}
   .account-menu-trigger{min-width:50px;width:50px;max-width:50px}
   .account-menu-trigger-copy{display:none}
 }
+
+/* YHORS V15.8.7 · Header administrativo refinado y cuenta estable */
+.admin-top{overflow:visible;isolation:isolate}
+.admin-top-actions{position:relative;display:flex;align-items:center;justify-content:center;min-height:54px;z-index:100}
+.admin-brand{
+  display:inline-flex!important;
+  align-items:center;
+  gap:10px;
+  min-height:54px;
+  padding:4px 0;
+  color:var(--ink)!important;
+  text-decoration:none;
+  letter-spacing:0!important;
+  line-height:1;
+}
+.admin-brand-mark{
+  width:42px;height:42px;flex:0 0 42px;
+  display:grid;place-items:center;
+  border-radius:12px;
+  background:#171513;
+  border:1px solid rgba(184,143,72,.72);
+  box-shadow:0 5px 16px rgba(30,25,18,.14), inset 0 0 0 1px rgba(255,255,255,.05);
+  overflow:hidden;
+}
+.admin-brand-mark img{width:31px;height:31px;display:block;border-radius:8px}
+.admin-brand-word{font-size:1.08rem;font-weight:950;letter-spacing:.28em;line-height:1}
+.admin-brand-divider{width:1px;height:24px;background:#d6cec0;margin:0 2px 0 0}
+.admin-brand small{font-size:.59rem;letter-spacing:.14em;text-transform:uppercase;color:#716b62;font-weight:900;white-space:nowrap}
+.admin-brand:hover .admin-brand-mark{transform:translateY(-1px);box-shadow:0 8px 20px rgba(30,25,18,.18),inset 0 0 0 1px rgba(255,255,255,.05)}
+.admin-brand-mark{transition:transform .18s ease,box-shadow .18s ease}
+
+/* La cuenta nunca queda recortada ni pierde su alineación vertical. */
+.account-menu-wrap{position:relative;display:flex;align-items:center;justify-content:center}
+.account-menu-trigger{
+  min-width:218px;
+  min-height:52px;
+  height:52px;
+  padding:6px 10px 6px 7px;
+  align-items:center;
+  justify-content:flex-start;
+  box-sizing:border-box;
+}
+.account-menu-trigger-copy{flex:1;min-width:0}
+.account-menu-trigger-copy strong{display:block;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.15}
+.account-menu-trigger-copy small{display:block;line-height:1.15}
+.account-menu-avatar{display:grid;place-items:center;align-self:center}
+.account-menu-caret{display:grid;place-items:center;align-self:center;line-height:1;width:18px;height:18px}
+.account-menu{top:calc(100% + 10px);right:0;max-width:min(280px,calc(100vw - 24px));box-sizing:border-box}
+
+/* Un solo indicador de apertura en Operación. */
+.admin-nav-group summary::after{content:'⌄';font-size:.78rem;line-height:1;transform:translateY(-1px);transition:transform .18s ease}
+.admin-nav-group[open] summary::after{transform:rotate(180deg) translateY(1px)}
+
+@media(max-width:800px){
+  .admin-brand{gap:8px;min-height:48px}
+  .admin-brand-mark{width:38px;height:38px;flex-basis:38px;border-radius:10px}
+  .admin-brand-mark img{width:28px;height:28px}
+  .admin-brand-word{font-size:.95rem;letter-spacing:.22em}
+  .admin-brand-divider{height:20px}
+  .admin-brand small{font-size:.49rem;letter-spacing:.10em}
+  .account-menu-trigger{min-width:52px;width:52px;height:52px;padding:6px;justify-content:center}
+  .account-menu-trigger-copy{display:none}
+  .account-menu-caret{display:none}
+}
+@media(max-width:520px){
+  .admin-brand small{display:none}
+  .admin-brand-divider{display:none}
+  .admin-brand-word{font-size:.9rem}
+}
