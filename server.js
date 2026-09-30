@@ -3205,6 +3205,9 @@ app.post('/api/orders', async (req, res) => {
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     assignedSellerId: null,
+    // El stock se descuenta al crear el pedido, por lo que dejamos una marca
+    // explícita para que una futura eliminación pueda devolverlo de forma segura.
+    stockReservedAt: new Date().toISOString(),
     ...result.order
   };
 
@@ -3264,7 +3267,7 @@ app.post('/api/admin/generar-orden', requireOrdersAccess, async (req, res) => {
   }
 
   const orders = readOrders();
-  const order = { id: crypto.randomUUID(), orderNumber: nextOrderNumber(orders), status: 'Pendiente', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), assignedSellerId, source: 'admin_generated', ...result.order };
+  const order = { id: crypto.randomUUID(), orderNumber: nextOrderNumber(orders), status: 'Pendiente', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), assignedSellerId, source: 'admin_generated', stockReservedAt: new Date().toISOString(), ...result.order };
   const previousProducts = result.stockProducts.map(product => ({ ...product }));
   let updatedProducts;
   try {
@@ -4419,8 +4422,13 @@ app.delete('/api/admin/orders/:id', requireStoreManagerOrAdmin, (req, res) => {
 
   let stockMovements = [];
   try {
-    // Si ya fue cancelado, el stock ya volvió al inventario y no se duplica.
-    if (order.stockReservedAt && !order.stockRestoredAt) {
+    // Un pedido activo ya descontó/reservó stock al crearse.
+    // Las versiones anteriores no guardaban stockReservedAt al crear el pedido,
+    // así que NO debemos depender de esa marca para decidir si hay que devolverlo.
+    // Si el pedido está Cancelado, su stock ya fue restaurado al cambiar de estado.
+    // Para cualquier otro estado, eliminarlo debe devolver sus unidades.
+    const stockWasRestored = Boolean(order.stockRestoredAt) || !orderStatusUsesStock(order.status);
+    if (!stockWasRestored) {
       stockMovements = restoreOrderPurchaseStock(order);
     }
   } catch (error) {
