@@ -4753,3 +4753,12 @@ body.login-loading-active{overflow:hidden}
 .detail-description p,.detail-description div{margin:0 0 .75em}
 .detail-description ul,.detail-description ol{margin:.25em 0 1em;padding-left:1.55rem}
 .detail-description li{margin:.28em 0;padding-left:.15rem}
+
+/* YHORS 15.8.17 · descripción enriquecida: saltos y bloques sin colapsar */
+.rich-tool-heading{min-width:76px!important}
+.rich-editor-content{white-space:pre-wrap;tab-size:4}
+.product-description{margin:0;line-height:1.55}
+.product-description p,.product-description div{margin:0 0 .65em}
+.product-description h2,.product-description h3{margin:.15em 0 .7em}
+.product-description ul,.product-description ol{margin:.2em 0 .8em;padding-left:1.45rem}
+.product-description li{margin:.15em 0}
