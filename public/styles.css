@@ -2096,6 +2096,18 @@ body.generate-modal-open{overflow:hidden}
 .sales-date-filter input,.sales-status-filter select{height:40px;box-sizing:border-box;border:1px solid var(--line,#ded8cc);background:#fff;border-radius:9px;padding:8px 11px;font:inherit}
 .sales-date-filter input{min-width:145px}
 .sales-status-filter select{min-width:190px}
+.sales-search{display:flex;flex-direction:column;gap:5px;flex:1 1 330px;min-width:280px}
+.sales-search>span{font-size:.68rem;text-transform:uppercase;letter-spacing:.08em;color:#777;font-weight:700}
+.sales-search-box{position:relative;display:flex;align-items:center;height:40px;border:1px solid var(--line,#ded8cc);background:#fff;border-radius:9px;box-sizing:border-box;transition:border-color .16s,box-shadow .16s}
+.sales-search-box:focus-within{border-color:#b88a3e;box-shadow:0 0 0 3px rgba(184,138,62,.11)}
+.sales-search-icon{width:36px;display:grid;place-items:center;color:#9b907f;font-size:18px;line-height:1;pointer-events:none}
+.sales-search-box input{flex:1;min-width:0;height:100%;border:0!important;outline:0!important;background:transparent!important;padding:0 4px!important;font:inherit;box-shadow:none!important}
+.sales-search-box input::placeholder{color:#9a948b}
+.sales-search-clear{width:30px;height:30px;margin-right:4px;border:0;background:transparent;border-radius:7px;color:#8b8173;font-size:18px;cursor:pointer}
+.sales-search-clear:hover{background:#f3efe8;color:#171717}
+.sales-my-sales-badge{height:40px;box-sizing:border-box;display:flex;align-items:center;gap:9px;padding:5px 13px;border:1px solid #d9c7a5;background:#fbf6ea;border-radius:9px;min-width:145px}
+.sales-my-sales-dot{width:7px;height:7px;border-radius:50%;background:#b88a3e;box-shadow:0 0 0 4px rgba(184,138,62,.12)}
+.sales-my-sales-badge div{display:grid;gap:1px}.sales-my-sales-badge small{font-size:.6rem;text-transform:uppercase;letter-spacing:.08em;color:#8a7a61;font-weight:800}.sales-my-sales-badge strong{font-size:.8rem;color:#171717}
 .sales-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:18px 0}
 .sales-summary>div{border:1px solid var(--line,#ded8cc);background:#faf8f3;border-radius:11px;padding:12px 14px;display:grid;gap:4px}
 .sales-summary span{font-size:.64rem;letter-spacing:.08em;color:#777;font-weight:700}
@@ -2119,7 +2131,7 @@ body.generate-modal-open{overflow:hidden}
 .sales-manager-total span{font-size:.66rem;text-transform:uppercase;letter-spacing:.09em;color:#7b6741;font-weight:800}
 .sales-manager-total strong{font-size:1.35rem}
 .sales-manager-total small{color:#777;font-size:.72rem}
-@media(max-width:800px){.sales-summary{grid-template-columns:1fr 1fr}.sales-heading{align-items:flex-start}.sales-toolbar{align-items:stretch}.sales-date-range{width:100%}.sales-date-filter{flex:1}.sales-date-filter input{width:100%}.sales-status-filter{flex:1}.sales-status-filter select{width:100%}.sales-toolbar>#salesRefresh{width:100%}}
+@media(max-width:800px){.sales-search{min-width:100%;flex-basis:100%}.sales-my-sales-badge{flex:1}.sales-summary{grid-template-columns:1fr 1fr}.sales-heading{align-items:flex-start}.sales-toolbar{align-items:stretch}.sales-date-range{width:100%}.sales-date-filter{flex:1}.sales-date-filter input{width:100%}.sales-status-filter{flex:1}.sales-status-filter select{width:100%}.sales-toolbar>#salesRefresh{width:100%}}
 @media(max-width:520px){.sales-summary{grid-template-columns:1fr}.sales-manager-total>div{width:100%;box-sizing:border-box}}
 
 /* RESUMEN FINANCIERO · YHORS */
@@ -4809,3 +4821,5 @@ body.login-loading-active{overflow:hidden}
   .customer-card-actions{width:100%;justify-content:flex-start}
   .customer-card-actions .button{flex:1;min-width:0}
 }
+
+/* V16.0.16 · Historial de ventas: búsqueda mejorada y aislamiento visual para vendedores */

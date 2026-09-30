@@ -1,6 +1,6 @@
 {
   "name": "yhors-store",
-  "version": "16.0.10",
+  "version": "16.0.16",
   "private": true,
   "description": "Tienda YHORS con dashboard inteligente, gestión empresarial, clientes, compras, inventario y administración privada.",
   "main": "server.js",
