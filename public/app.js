@@ -66,7 +66,7 @@ function productSlug(product) {
 function productHref(product) { return `/producto/${encodeURIComponent(productSlug(product))}`; }
 
 async function request(url, options = {}) {
-  const response = await fetch(url, { credentials: 'same-origin', ...options, headers: { ...(options.headers || {}) } });
+  const response = await fetch(url, { credentials: 'same-origin', cache: 'no-store', ...options, headers: { 'Cache-Control': 'no-cache', ...(options.headers || {}) } });
   const json = response.status === 204 ? null : await response.json().catch(() => ({}));
   if (!response.ok) {
     const error = new Error(json.error || (response.status === 401 ? 'Tu sesión administrativa expiró. Inicia sesión nuevamente.' : 'No se pudo completar la operación.'));
@@ -1311,7 +1311,7 @@ async function renderAdminGenerateOrder() {
   const sellers = await request('/api/admin/order-sellers').catch(() => []);
   let customer = {};
   let customerId = '';
-  let customers = await request('/api/admin/clientes').catch(() => []);
+  let customers = await request(`/api/admin/clientes?_=${Date.now()}`).catch(() => []);
   let lines = [];
   let saving = false;
 
@@ -1426,7 +1426,7 @@ async function renderAdminGenerateOrder() {
     document.querySelector('#generateCustomerMessage')?.setAttribute('hidden','');
     const input = document.querySelector('#generateCustomerSearch');
     if (input) input.value = '';
-    try { customers = await request('/api/admin/clientes'); } catch {}
+    try { customers = await request(`/api/admin/clientes?_=${Date.now()}`); } catch {}
     renderGenerateCustomerPicker();
     openModal('customerModal');
     requestAnimationFrame(() => input?.focus());
@@ -1487,7 +1487,7 @@ async function renderAdminGenerateOrder() {
     } catch (error) {
       const existing = error?.data?.customer || error?.customer;
       if (existing) {
-        try { customers = await request('/api/admin/clientes'); } catch {}
+        try { customers = await request(`/api/admin/clientes?_=${Date.now()}`); } catch {}
         const selected = customers.find(item => String(item.id) === String(existing.id)) || existing;
         customerId = selected.id;
         customer = { ...selected, deliveryMethod: document.querySelector('input[name="generateDelivery"]:checked')?.value || 'office' };
@@ -4132,7 +4132,7 @@ async function renderAdminClientes() {
     document.querySelector('#cancelCustomerEdit')?.addEventListener('click',()=>showCustomer(c.id));
     document.querySelector('#customerEditForm')?.addEventListener('submit',async e=>{e.preventDefault();const msg=document.querySelector('#customerEditMessage');try{const saved=await request(`/api/admin/clientes/${encodeURIComponent(c.id)}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.fromEntries(new FormData(e.currentTarget)))});customers=customers.map(x=>x.id===saved.id?{...x,...saved}:x);renderList();await showCustomer(saved.id);msg.className='message success';msg.textContent='Ficha actualizada.';}catch(err){msg.className='message error';msg.textContent=err.message;}});
   };
-  const load = async()=>{customers=await request('/api/admin/clientes');renderList(); if(customers[0]) await showCustomer(customers[0].id);};
+  const load = async()=>{customers=await request(`/api/admin/clientes?_=${Date.now()}`);renderList(); if(customers[0]) await showCustomer(customers[0].id);};
   document.querySelector('#customerSearch')?.addEventListener('input',renderList);
   // Alta manual, separada para no sobrecargar el flujo de consulta.
   document.querySelector('#newCustomer')?.addEventListener('click',()=>{detail.innerHTML=`<div class="customer-detail-head"><div><span class="eyebrow">FICHA DEL CLIENTE</span><h2>Nuevo cliente</h2></div></div><form id="newCustomerForm" class="form-grid customer-edit-form"><div class="field"><label>Nombre</label><input name="name" required></div><div class="field"><label>Cédula / RUC</label><input name="cedula" required></div><div class="field"><label>Teléfono</label><input name="phone"></div><div class="field"><label>Correo</label><input name="email" type="email"></div><div class="field"><label>Ciudad</label><input name="city"></div><div class="field full"><label>Dirección</label><input name="address"></div><div class="field full"><label>Notas internas</label><textarea name="notes" rows="4"></textarea></div><div class="form-actions full"><button class="button primary" type="submit">Crear cliente</button><span class="message" id="newCustomerMessage"></span></div></form>`;document.querySelector('#newCustomerForm')?.addEventListener('submit',async e=>{e.preventDefault();try{const created=await request('/api/admin/clientes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.fromEntries(new FormData(e.currentTarget)))});customers.unshift(created);renderList();await showCustomer(created.id);}catch(err){document.querySelector('#newCustomerMessage').className='message error';document.querySelector('#newCustomerMessage').textContent=err.message;}});});
@@ -4150,7 +4150,7 @@ async function renderAdminInventoryMovements() {
 async function renderAdminReports() {
   const session=await request('/api/admin/session').catch(()=>({authenticated:false})); if(!session.authenticated)return renderLogin(); if(String(session.role||'').toLowerCase()!=='admin')return renderAdminOrders();
   const nav=adminSectionNav(session,'reportes'); const today=new Date().toLocaleDateString('en-CA',{timeZone:'America/Guayaquil'});
-  const [orders,sales,products,customers]=await Promise.all([request('/api/admin/orders').catch(()=>[]),request(`/api/admin/historial-ventas?from=2000-01-01&to=${today}`).catch(()=>[]),request('/api/admin/catalog-products').catch(()=>[]),request('/api/admin/clientes').catch(()=>[])]);
+  const [orders,sales,products,customers]=await Promise.all([request('/api/admin/orders').catch(()=>[]),request(`/api/admin/historial-ventas?from=2000-01-01&to=${today}`).catch(()=>[]),request('/api/admin/catalog-products').catch(()=>[]),request(`/api/admin/clientes?_=${Date.now()}`).catch(()=>[])]);
   const salesTotal=sales.reduce((a,x)=>a+Number(x.total||0),0); const stockUnits=products.reduce((a,x)=>a+Number(x.stock||0),0); const low=products.filter(x=>Number(x.stock||0)<=3).length;
   app.innerHTML=`<main class="admin-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand admin-brand" href="${ADMIN_PATH}/inteligente" data-smooth-route><span class="admin-brand-mark"><img src="/favicon.svg" alt=""></span><span class="admin-brand-word">YHORS</span><span class="admin-brand-divider"></span><small>Panel Administrativo</small></a><h1 class="admin-title">Reportes</h1><p class="admin-subtitle">Información de gestión para tomar decisiones sin depender de Excel.</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>${nav}<section class="admin-panel reports-panel"><div class="report-grid"><article><span>VENTAS REGISTRADAS</span><strong>${money(salesTotal)}</strong><small>${sales.length} ventas</small></article><article><span>PEDIDOS ACTIVOS</span><strong>${orders.length}</strong><small>Operación pendiente</small></article><article><span>UNIDADES EN STOCK</span><strong>${stockUnits}</strong><small>${products.length} productos</small></article><article><span>STOCK BAJO</span><strong>${low}</strong><small>3 unidades o menos</small></article><article><span>CLIENTES</span><strong>${customers.length}</strong><small>Fichero comercial</small></article></div><div class="report-actions"><button class="button primary" id="exportSalesCsv">Exportar ventas CSV</button><button class="button" id="exportInventoryCsv">Exportar inventario CSV</button><a class="button secondary" href="${ADMIN_PATH}/movimientos" data-smooth-route>Ver kardex de inventario →</a><a class="button secondary" href="${ADMIN_PATH}/resumen-financiero" data-smooth-route>Resumen financiero →</a></div></section></div></main>`;wireAccountMenu();
   const downloadCsv=(name,rows)=>{if(!rows.length)return;const headers=Object.keys(rows[0]);const csv=[headers.join(','),...rows.map(row=>headers.map(h=>`"${String(row[h]??'').replace(/"/g,'""')}"`).join(','))].join('\n');const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();URL.revokeObjectURL(a.href);};
@@ -4169,7 +4169,7 @@ async function renderYhorsInteligente() {
     request('/api/admin/orders').catch(() => []),
     request(`/api/admin/historial-ventas?from=${today}&to=${today}`).catch(() => []),
     request('/api/admin/catalog-products').catch(() => []),
-    request('/api/admin/clientes').catch(() => [])
+    request(`/api/admin/clientes?_=${Date.now()}`).catch(() => [])
   ]);
 
   const activeOrders = Array.isArray(orders) ? orders : [];
