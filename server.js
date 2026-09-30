@@ -28,6 +28,8 @@ const CLASSIFICATIONS_FILE = path.join(DATA_DIR, 'classifications.json');
 const ORDERS_FILE = path.join(DATA_DIR, 'orders.json');
 const SALES_FILE = path.join(DATA_DIR, 'sales.json');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
+const CUSTOMERS_FILE = path.join(DATA_DIR, 'customers.json');
+const PURCHASES_FILE = path.join(DATA_DIR, 'purchases.json');
 const AUDIT_FILE = path.join(DATA_DIR, 'audit.json');
 const AUDIT_MAX_RECORDS = 50000;
 
@@ -604,6 +606,105 @@ function writeUsers(users) {
   fs.writeFileSync(USERS_FILE, `${JSON.stringify(users, null, 2)}\n`, 'utf8');
 }
 
+
+// V16 · Fichero de clientes: registro persistente y reutilizable de la relación comercial.
+// Los datos personales se guardan cifrados igual que los datos de los pedidos.
+const ENCRYPTED_CUSTOMER_FIELDS = ['name','phone','cedula','email','city','address','mapsUrl','notes'];
+function encryptCustomer(customer) {
+  const copy = { ...customer };
+  for (const field of ENCRYPTED_CUSTOMER_FIELDS) {
+    if (Object.prototype.hasOwnProperty.call(copy, field)) copy[field] = encryptOrderValue(copy[field]);
+  }
+  return copy;
+}
+function decryptCustomer(customer) {
+  const copy = { ...customer };
+  for (const field of ENCRYPTED_CUSTOMER_FIELDS) {
+    if (Object.prototype.hasOwnProperty.call(copy, field)) copy[field] = decryptOrderValue(copy[field]);
+  }
+  return copy;
+}
+function readCustomers() {
+  try {
+    if (!fs.existsSync(CUSTOMERS_FILE)) return [];
+    const parsed = JSON.parse(fs.readFileSync(CUSTOMERS_FILE, 'utf8'));
+    return Array.isArray(parsed) ? parsed.map(decryptCustomer) : [];
+  } catch { return []; }
+}
+function writeCustomers(customers) {
+  maybeAutoBackup();
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  const tmp = `${CUSTOMERS_FILE}.tmp`;
+  fs.writeFileSync(tmp, `${JSON.stringify(customers.map(encryptCustomer), null, 2)}\n`, 'utf8');
+  fs.renameSync(tmp, CUSTOMERS_FILE);
+}
+function customerIdentity(input = {}) {
+  const cedula = cleanText(input.cedula, 20).replace(/\D/g, '');
+  const email = cleanText(input.email, 160).toLowerCase();
+  const phone = cleanText(input.phone, 50).replace(/\D/g, '');
+  if (cedula) return `cedula:${cedula}`;
+  if (email) return `email:${email}`;
+  if (phone) return `phone:${phone}`;
+  return `name:${cleanText(input.name, 120).toLowerCase()}`;
+}
+function upsertCustomerFromOrder(order, req = null) {
+  try {
+    const source = order?.customer || {};
+    const identity = customerIdentity(source);
+    if (!identity || identity === 'name:') return null;
+    const customers = readCustomers();
+    const index = customers.findIndex(customer => customer.identity === identity);
+    const now = new Date().toISOString();
+    const base = index >= 0 ? customers[index] : { id: crypto.randomUUID(), identity, createdAt: now };
+    const next = {
+      ...base,
+      identity,
+      name: cleanText(source.name, 120), phone: cleanText(source.phone, 50), cedula: cleanText(source.cedula, 20),
+      email: cleanText(source.email, 160), city: cleanText(source.city, 80), address: cleanText(source.address, 240),
+      mapsUrl: cleanText(source.mapsUrl, 500), notes: cleanText(source.notes, 1000), updatedAt: now,
+      lastOrderAt: order.createdAt || now,
+      orderCount: Number(base.orderCount || 0) + (index >= 0 ? 0 : 0)
+    };
+    // El contador se calcula dinámicamente desde pedidos; aquí solo conservamos ficha.
+    if (index >= 0) customers[index] = next; else customers.unshift(next);
+    writeCustomers(customers);
+    return next;
+  } catch (error) {
+    console.error('[YHORS V16] No se pudo actualizar el fichero de clientes:', error.message);
+    return null;
+  }
+}
+function customerTransactions(customer, orders = null, sales = null) {
+  const identity = customerIdentity(customer);
+  const orderRows = (orders || readOrders()).filter(order => customerIdentity(order.customer || {}) === identity);
+  const saleRows = (sales || readSales()).filter(sale => customerIdentity(sale.customer || {}) === identity);
+  const transactions = [
+    ...orderRows.map(order => ({ type: 'pedido', id: order.id, number: order.orderNumber, date: order.createdAt, status: order.status, total: Number(order.total || 0), source: order.source === 'admin_generated' ? 'Orden interna' : 'Pedido WEB' })),
+    ...saleRows.map(sale => ({ type: 'venta', id: sale.id, number: sale.orderNumber, date: sale.notifiedAt || sale.createdAt, status: sale.status || 'Vendida', total: Number(sale.total || 0), source: 'Historial de ventas' }))
+  ];
+  const unique = new Map();
+  for (const row of transactions) unique.set(`${row.type}:${row.id}`, row);
+  return [...unique.values()].sort((a,b) => new Date(b.date || 0) - new Date(a.date || 0));
+}
+
+
+function readPurchases() {
+  try {
+    if (!fs.existsSync(PURCHASES_FILE)) return [];
+    const parsed = JSON.parse(fs.readFileSync(PURCHASES_FILE, 'utf8'));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch { return []; }
+}
+function writePurchases(purchases) {
+  maybeAutoBackup(); fs.mkdirSync(DATA_DIR,{recursive:true});
+  const tmp=`${PURCHASES_FILE}.tmp`;
+  fs.writeFileSync(tmp,`${JSON.stringify(purchases,null,2)}\n`,'utf8'); fs.renameSync(tmp,PURCHASES_FILE);
+}
+function nextPurchaseNumber(purchases) {
+  const max=purchases.reduce((m,row)=>{const match=String(row.number||'').match(/YC-(\d+)/i);return match?Math.max(m,Number(match[1])):m;},0);
+  return `YC-${String(max+1).padStart(4,'0')}`;
+}
+
 function ensureUserSeed(users, username, name, password, role) {
   const normalized = normalizeUsername(username);
   if (!normalized || !password || !USER_ROLES.has(role)) return users;
@@ -686,7 +787,7 @@ function ensureStorage() {
   // Primera ejecución con disco vacío: copia los datos que viajan con el código.
   // Nunca sobrescribe un archivo que ya exista en el almacenamiento persistente.
   if (process.env.YHORS_STORAGE_DIR) {
-    const seedFiles = ['products.json', 'storefront.json', 'classifications.json', 'orders.json', 'sales.json', 'users.json', 'security.json', 'expenses.json'];
+    const seedFiles = ['products.json', 'storefront.json', 'classifications.json', 'orders.json', 'sales.json', 'users.json', 'security.json', 'expenses.json', 'customers.json', 'purchases.json'];
     for (const fileName of seedFiles) {
       const source = path.join(__dirname, 'data', fileName);
       const target = path.join(DATA_DIR, fileName);
@@ -703,9 +804,9 @@ function ensureStorage() {
     }
   }
 
-  for (const fileName of ['products.json', 'storefront.json', 'classifications.json', 'orders.json', 'sales.json']) {
+  for (const fileName of ['products.json', 'storefront.json', 'classifications.json', 'orders.json', 'sales.json', 'customers.json', 'purchases.json']) {
     const target = path.join(DATA_DIR, fileName);
-    if (!fs.existsSync(target)) fs.writeFileSync(target, fileName === 'orders.json' ? '[]\n' : fileName === 'products.json' ? '[]\n' : fileName === 'storefront.json' ? '{\n  "heroProductIds": [],\n  "featuredProductIds": []\n}\n' : '{\n  "brands": {},\n  "productTypes": {}\n}\n', 'utf8');
+    if (!fs.existsSync(target)) fs.writeFileSync(target, ['orders.json','sales.json','customers.json','purchases.json'].includes(fileName) ? '[]\n' : fileName === 'products.json' ? '[]\n' : fileName === 'storefront.json' ? '{\n  "heroProductIds": [],\n  "featuredProductIds": []\n}\n' : '{\n  "brands": {},\n  "productTypes": {}\n}\n', 'utf8');
   }
   if (!fs.existsSync(EXPENSES_FILE)) fs.writeFileSync(EXPENSES_FILE, '[]\n', 'utf8');
   if (!fs.existsSync(SALES_FILE)) fs.writeFileSync(SALES_FILE, '[]\n', 'utf8');
@@ -1903,7 +2004,7 @@ function createBackup(reason = 'manual', options = {}) {
   fs.mkdirSync(backupDataDir, { recursive: true });
   fs.mkdirSync(backupUploadsDir, { recursive: true });
 
-  for (const fileName of ['products.json', 'storefront.json', 'classifications.json', 'orders.json', 'users.json', 'security.json', 'expenses.json']) {
+  for (const fileName of ['products.json', 'storefront.json', 'classifications.json', 'orders.json', 'users.json', 'security.json', 'expenses.json', 'customers.json', 'purchases.json']) {
     const source = path.join(DATA_DIR, fileName);
     if (fs.existsSync(source)) fs.copyFileSync(source, path.join(backupDataDir, fileName));
   }
@@ -1911,7 +2012,7 @@ function createBackup(reason = 'manual', options = {}) {
 
   const manifest = {
     app: 'YHORS-STORE',
-    backupVersion: 2,
+    backupVersion: 3,
     createdAt: new Date().toISOString(),
     reason,
     storageMode: process.env.YHORS_STORAGE_DIR ? 'persistent-configured' : 'local-filesystem',
@@ -1975,7 +2076,7 @@ function validateBackupDirectory(backupDir) {
     if (!fs.existsSync(file)) throw new Error(`Falta ${fileName} en el respaldo.`);
     JSON.parse(fs.readFileSync(file, 'utf8'));
   }
-  for (const fileName of ['users.json', 'security.json', 'expenses.json']) {
+  for (const fileName of ['users.json', 'security.json', 'expenses.json', 'customers.json', 'purchases.json']) {
     const file = path.join(dataDir, fileName);
     if (fs.existsSync(file)) JSON.parse(fs.readFileSync(file, 'utf8'));
   }
@@ -2037,7 +2138,7 @@ function applyBackupDirectory(backupDir) {
       fs.copyFileSync(source, temporaryFile);
       fs.renameSync(temporaryFile, target);
     }
-    for (const fileName of ['users.json', 'security.json', 'expenses.json']) {
+    for (const fileName of ['users.json', 'security.json', 'expenses.json', 'customers.json', 'purchases.json']) {
       const source = path.join(backupDataDir, fileName);
       if (!fs.existsSync(source)) continue;
       const target = path.join(DATA_DIR, fileName);
@@ -3251,6 +3352,8 @@ app.post('/api/orders', async (req, res) => {
     return res.status(500).json({ error: 'No se pudo registrar el pedido. No se realizó el descuento de inventario.' });
   }
 
+  upsertCustomerFromOrder(order, req);
+
   auditLog(req, 'Pedido creado', 'Pedidos', {
     orderId: order.id,
     orderNumber: order.orderNumber,
@@ -3298,6 +3401,8 @@ app.post('/api/admin/generar-orden', requireOrdersAccess, async (req, res) => {
     console.error('[YHORS] No se pudo generar la orden desde administración:', error.message);
     return res.status(500).json({ error: 'No se pudo generar la orden. No se realizó el descuento de inventario.' });
   }
+  upsertCustomerFromOrder(order, req);
+
   auditLog(req, 'Pedido creado', 'Pedidos', {
     orderId: order.id,
     orderNumber: order.orderNumber,
@@ -4808,6 +4913,119 @@ app.put('/api/admin/series-imeis/registered', requireStoreManagerOrAdmin, (req, 
   return res.json({ ok: true, row: collectRegisteredIdentifiers().find(row => String(row.orderId) === orderId && row.itemIndex === itemIndex && Number(row.unit) === unit) || null });
 });
 
+
+app.get('/api/admin/clientes', requireOrdersAccess, (req, res) => {
+  const session = getSession(req);
+  let customers = readCustomers();
+  // Fallback inteligente: clientes históricos aunque todavía no exista customers.json.
+  const allOrders = readOrders();
+  let seededCustomers = false;
+  for (const order of allOrders) {
+    const source = order.customer || {};
+    const identity = customerIdentity(source);
+    if (!identity || identity === 'name:') continue;
+    if (!customers.some(customer => customer.identity === identity)) {
+      customers.push({ id: crypto.randomUUID(), identity, name: source.name || '', phone: source.phone || '', cedula: source.cedula || '', email: source.email || '', city: source.city || '', address: source.address || '', mapsUrl: source.mapsUrl || '', notes: source.notes || '', createdAt: order.createdAt || new Date().toISOString(), updatedAt: order.updatedAt || order.createdAt || new Date().toISOString() });
+      seededCustomers = true;
+    }
+  }
+  if (seededCustomers) { try { writeCustomers(customers); } catch {} }
+  const q = cleanText(req.query?.q, 120).toLocaleLowerCase('es-EC');
+  const sales = readSales();
+  const rows = customers.map(customer => {
+    const tx = customerTransactions(customer, allOrders, sales);
+    const activeOrders = tx.filter(item => item.type === 'pedido' && item.status !== 'Cancelado').length;
+    const sales = tx.filter(item => item.type === 'venta');
+    return { ...customer, orderCount: tx.filter(item => item.type === 'pedido').length, activeOrderCount: activeOrders, salesCount: sales.length, salesTotal: sales.reduce((sum,item)=>sum+Number(item.total||0),0), lastActivityAt: tx[0]?.date || customer.updatedAt || customer.createdAt };
+  }).filter(customer => !q || `${customer.name} ${customer.cedula} ${customer.phone} ${customer.email} ${customer.city}`.toLocaleLowerCase('es-EC').includes(q));
+  if (String(session.role || '').toLowerCase() === 'vendedor') {
+    // El vendedor solo consulta clientes que tengan pedidos asignados a su usuario.
+    const assignedIds = new Set(allOrders.filter(order => String(order.assignedSellerId || '') === String(session.accountId || '')).map(order => customerIdentity(order.customer || {})));
+    return res.json(rows.filter(row => assignedIds.has(row.identity)));
+  }
+  return res.json(rows);
+});
+
+app.get('/api/admin/clientes/:id', requireOrdersAccess, (req, res) => {
+  const customer = readCustomers().find(item => String(item.id) === String(req.params.id));
+  if (!customer) return res.status(404).json({ error: 'Cliente no encontrado.' });
+  const tx = customerTransactions(customer);
+  return res.json({ customer, transactions: tx, totals: { orders: tx.filter(item=>item.type==='pedido').length, sales: tx.filter(item=>item.type==='venta').length, salesTotal: tx.filter(item=>item.type==='venta').reduce((sum,item)=>sum+Number(item.total||0),0) } });
+});
+
+app.post('/api/admin/clientes', requireStoreManagerOrAdmin, (req, res) => {
+  const body = req.body || {};
+  const identity = customerIdentity(body);
+  if (!body.name || !body.cedula) return res.status(400).json({ error: 'Nombre y cédula/RUC son obligatorios.' });
+  const customers = readCustomers();
+  if (customers.some(item => item.identity === identity)) return res.status(409).json({ error: 'Ya existe un cliente con esos datos.' });
+  const now = new Date().toISOString();
+  const customer = { id: crypto.randomUUID(), identity, name: cleanText(body.name,120), phone: cleanText(body.phone,50), cedula: cleanText(body.cedula,20).replace(/\D/g,''), email: cleanText(body.email,160), city: cleanText(body.city,80), address: cleanText(body.address,240), mapsUrl: cleanText(body.mapsUrl,500), notes: cleanText(body.notes,1000), createdAt: now, updatedAt: now };
+  customers.unshift(customer); writeCustomers(customers); auditLog(req,'Cliente creado','Clientes',{customerId:customer.id,identity:customer.identity});
+  return res.status(201).json(customer);
+});
+
+app.put('/api/admin/clientes/:id', requireStoreManagerOrAdmin, (req, res) => {
+  const customers = readCustomers();
+  const index = customers.findIndex(item => String(item.id) === String(req.params.id));
+  if (index < 0) return res.status(404).json({ error: 'Cliente no encontrado.' });
+  const current = customers[index]; const body = req.body || {};
+  const updated = { ...current, name: cleanText(body.name ?? current.name,120), phone: cleanText(body.phone ?? current.phone,50), cedula: cleanText(body.cedula ?? current.cedula,20).replace(/\D/g,''), email: cleanText(body.email ?? current.email,160), city: cleanText(body.city ?? current.city,80), address: cleanText(body.address ?? current.address,240), mapsUrl: cleanText(body.mapsUrl ?? current.mapsUrl,500), notes: cleanText(body.notes ?? current.notes,1000), updatedAt: new Date().toISOString() };
+  updated.identity = customerIdentity(updated);
+  const duplicate = customers.find((item,i)=>i!==index && item.identity===updated.identity);
+  if (duplicate) return res.status(409).json({ error: 'Los datos corresponden a otro cliente existente.' });
+  customers[index] = updated; writeCustomers(customers); auditLog(req,'Cliente actualizado','Clientes',{customerId:updated.id,changes:auditDiff(current,updated,['name','phone','cedula','email','city','address','mapsUrl','notes'])});
+  return res.json(updated);
+});
+
+
+app.get('/api/admin/compras', requireAdmin, (req,res)=>{
+  return res.json(readPurchases().sort((a,b)=>new Date(b.createdAt||0)-new Date(a.createdAt||0)));
+});
+
+app.post('/api/admin/compras', requireAdmin, (req,res)=>{
+  const body=req.body||{}; const supplier=cleanText(body.supplier,140); const note=cleanText(body.note,1000); const rawItems=Array.isArray(body.items)?body.items:[];
+  if(!supplier) return res.status(400).json({error:'Ingresa el proveedor.'}); if(!rawItems.length) return res.status(400).json({error:'Agrega al menos un producto.'});
+  const products=readProducts().map(normalizeProduct); const byId=new Map(products.map(p=>[String(p.id),p])); const items=[];
+  for(const raw of rawItems){const product=byId.get(String(raw.productId||''));const quantity=Number.parseInt(raw.quantity,10);const unitCost=Number(raw.unitCost);if(!product||!Number.isInteger(quantity)||quantity<1||quantity>100000||!Number.isFinite(unitCost)||unitCost<0)return res.status(400).json({error:'Revisa los productos, cantidades y costos de la compra.'});items.push({productId:product.id,sku:product.sku||'',name:product.name,quantity,unitCost:Math.round(unitCost*100)/100,subtotal:Math.round(quantity*unitCost*100)/100});}
+  const total=Math.round(items.reduce((sum,item)=>sum+item.subtotal,0)*100)/100; const purchases=readPurchases(); const now=new Date().toISOString();
+  const purchase={id:crypto.randomUUID(),number:nextPurchaseNumber(purchases),supplier,items,total,note,status:'Borrador',stockApplied:false,createdAt:now,updatedAt:now,createdBy:getSession(req)?.accountId||null}; purchases.unshift(purchase); writePurchases(purchases); auditLog(req,'Compra creada','Compras',{purchaseId:purchase.id,number:purchase.number,supplier,total}); return res.status(201).json(purchase);
+});
+
+app.put('/api/admin/compras/:id', requireAdmin, (req,res)=>{
+  const purchases=readPurchases(); const index=purchases.findIndex(row=>String(row.id)===String(req.params.id)); if(index<0)return res.status(404).json({error:'Compra no encontrada.'});
+  const purchase=purchases[index]; const nextStatus=cleanText(req.body?.status,30); if(!['Borrador','Ordenada','Recibida','Cancelada'].includes(nextStatus))return res.status(400).json({error:'Estado de compra no válido.'});
+  if(purchase.status==='Recibida' && nextStatus!=='Recibida')return res.status(409).json({error:'Una compra recibida no puede retroceder de estado.'});
+  if(nextStatus==='Recibida' && !purchase.stockApplied){
+    const products=readProducts().map(normalizeProduct); const byId=new Map(purchase.items.map(item=>[String(item.productId),item])); const before=products.map(p=>({...p}));
+    const updated=products.map(product=>{const item=byId.get(String(product.id));if(!item)return product;return normalizeProduct({...product,stock:Number(product.stock||0)+Number(item.quantity||0),purchasePrice:Number(item.unitCost||product.purchasePrice||0),updatedAt:new Date().toISOString()});});
+    writeProducts(updated); purchase.stockApplied=true; purchase.receivedAt=new Date().toISOString(); auditLog(req,'Compra recibida','Compras',{purchaseId:purchase.id,number:purchase.number,supplier:purchase.supplier,inventory:{synchronized:true,movements:auditStockMovementDiff(before,updated,`Recepción de compra ${purchase.number}`)}});
+  }
+  purchase.status=nextStatus; purchase.updatedAt=new Date().toISOString(); purchases[index]=purchase; writePurchases(purchases); auditLog(req,'Estado de compra actualizado','Compras',{purchaseId:purchase.id,number:purchase.number,status:nextStatus}); return res.json(purchase);
+});
+
+app.delete('/api/admin/compras/:id', requireAdmin, (req,res)=>{const purchases=readPurchases();const purchase=purchases.find(row=>String(row.id)===String(req.params.id));if(!purchase)return res.status(404).json({error:'Compra no encontrada.'});if(purchase.stockApplied||purchase.status==='Recibida')return res.status(409).json({error:'Una compra recibida no se puede eliminar desde aquí.'});writePurchases(purchases.filter(row=>String(row.id)!==String(req.params.id)));auditLog(req,'Compra eliminada','Compras',{purchaseId:purchase.id,number:purchase.number});return res.status(204).end();});
+
+app.get('/api/admin/inventory-movements', requireAdmin, (req, res) => {
+  const q = cleanText(req.query?.q, 120).toLocaleLowerCase('es-EC');
+  const from = cleanText(req.query?.from, 10); const to = cleanText(req.query?.to, 10); const direction = cleanText(req.query?.direction, 20).toLowerCase();
+  const rows = [];
+  for (const entry of readAudit()) {
+    const movements = entry?.details?.inventory?.movements;
+    if (!Array.isArray(movements)) continue;
+    for (const movement of movements) {
+      const day = entry.createdAt ? new Intl.DateTimeFormat('en-CA',{timeZone:'America/Guayaquil'}).format(new Date(entry.createdAt)) : '';
+      if (from && day < from) continue; if (to && day > to) continue;
+      if (direction && String(movement.direction||'').toLowerCase() !== direction) continue;
+      const hay = `${movement.name||''} ${movement.sku||''} ${movement.reason||''} ${entry.action||''}`.toLocaleLowerCase('es-EC');
+      if (q && !hay.includes(q)) continue;
+      rows.push({ id:`${entry.id}-${movement.productId}`, date:entry.createdAt, action:entry.action, module:entry.module, user:entry.username || 'Sistema', productId:movement.productId, sku:movement.sku || '', name:movement.name || '', quantity:Number(movement.quantity||0), direction:movement.direction || '', before:Number(movement.before||0), after:Number(movement.after||0), reason:movement.reason || '' });
+    }
+  }
+  rows.sort((a,b)=>new Date(b.date)-new Date(a.date));
+  return res.json({ rows, total: rows.length });
+});
+
 app.put('/api/admin/inventory/:id', requireAdmin, (req, res) => {
   const products = readProducts();
   const index = products.findIndex(product => product.id === req.params.id);
@@ -4857,6 +5075,10 @@ app.put('/api/admin/inventory/:id', requireAdmin, (req, res) => {
 
   products[index] = normalizeProduct(updated);
   writeProducts(products);
+  const manualMovements = auditStockMovementDiff([previous], [products[index]], 'Ajuste manual de inventario');
+  if (manualMovements.length || previous.purchasePrice !== products[index].purchasePrice || previous.salePrice !== products[index].salePrice) {
+    auditLog(req, 'Inventario actualizado', 'Inventario', { productId: products[index].id, sku: products[index].sku, name: products[index].name, inventory: { synchronized: true, movements: manualMovements }, priceChange: auditDiff(previous, products[index], ['purchasePrice','salePrice','rentalPrice']) });
+  }
   return res.json(products[index]);
 });
 app.get('/api/admin/storefront', requireAdmin, (_, res) => res.json(readStorefront()));
