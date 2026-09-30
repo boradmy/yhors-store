@@ -5094,12 +5094,27 @@ app.put('/api/admin/compras/:id', requireAdmin, (req,res)=>{
   if(nextStatus==='Recibida' && !purchase.stockApplied){
     const products=readProducts().map(normalizeProduct); const byId=new Map(purchase.items.map(item=>[String(item.productId),item])); const before=products.map(p=>({...p}));
     const updated=products.map(product=>{const item=byId.get(String(product.id));if(!item)return product;return normalizeProduct({...product,stock:Number(product.stock||0)+Number(item.quantity||0),purchasePrice:Number(item.unitCost||product.purchasePrice||0),updatedAt:new Date().toISOString()});});
+    purchase.items=purchase.items.map(item=>({...item,beforePurchasePrice:Number(products.find(p=>String(p.id)===String(item.productId))?.purchasePrice||0)}));
     writeProducts(updated); purchase.stockApplied=true; purchase.receivedAt=new Date().toISOString(); auditLog(req,'Compra recibida','Compras',{purchaseId:purchase.id,number:purchase.number,supplier:purchase.supplier,inventory:{synchronized:true,movements:auditStockMovementDiff(before,updated,`Recepción de compra ${purchase.number}`)}});
+  }
+  if(nextStatus==='Cancelada' && purchase.stockApplied){
+    const products=readProducts().map(normalizeProduct); const byId=new Map(purchase.items.map(item=>[String(item.productId),item])); const before=products.map(p=>({...p}));
+    const updated=products.map(product=>{const item=byId.get(String(product.id));if(!item)return product;const previousCost=Number(item.beforePurchasePrice);return normalizeProduct({...product,stock:Math.max(0,Number(product.stock||0)-Number(item.quantity||0)),purchasePrice:Number.isFinite(previousCost)?previousCost:product.purchasePrice,updatedAt:new Date().toISOString()});});
+    writeProducts(updated); purchase.stockApplied=false; purchase.cancelledAt=new Date().toISOString(); auditLog(req,'Recepción de compra anulada','Compras',{purchaseId:purchase.id,number:purchase.number,supplier:purchase.supplier,inventory:{synchronized:true,movements:auditStockMovementDiff(before,updated,`Anulación de compra ${purchase.number}`)}});
   }
   purchase.status=nextStatus; purchase.updatedAt=new Date().toISOString(); purchases[index]=purchase; writePurchases(purchases); auditLog(req,'Estado de compra actualizado','Compras',{purchaseId:purchase.id,number:purchase.number,status:nextStatus}); return res.json(purchase);
 });
 
-app.delete('/api/admin/compras/:id', requireAdmin, (req,res)=>{const purchases=readPurchases();const purchase=purchases.find(row=>String(row.id)===String(req.params.id));if(!purchase)return res.status(404).json({error:'Compra no encontrada.'});if(purchase.stockApplied||purchase.status==='Recibida')return res.status(409).json({error:'Una compra recibida no se puede eliminar desde aquí.'});writePurchases(purchases.filter(row=>String(row.id)!==String(req.params.id)));auditLog(req,'Compra eliminada','Compras',{purchaseId:purchase.id,number:purchase.number});return res.status(204).end();});
+app.delete('/api/admin/compras/:id', requireAdmin, (req,res)=>{
+  const purchases=readPurchases(); const index=purchases.findIndex(row=>String(row.id)===String(req.params.id)); if(index<0)return res.status(404).json({error:'Compra no encontrada.'});
+  const purchase=purchases[index];
+  if(purchase.stockApplied){
+    const products=readProducts().map(normalizeProduct); const byId=new Map(purchase.items.map(item=>[String(item.productId),item])); const before=products.map(p=>({...p}));
+    const updated=products.map(product=>{const item=byId.get(String(product.id));if(!item)return product;const previousCost=Number(item.beforePurchasePrice);return normalizeProduct({...product,stock:Math.max(0,Number(product.stock||0)-Number(item.quantity||0)),purchasePrice:Number.isFinite(previousCost)?previousCost:product.purchasePrice,updatedAt:new Date().toISOString()});});
+    writeProducts(updated); purchase.stockApplied=false; auditLog(req,'Compra eliminada y recepción revertida','Compras',{purchaseId:purchase.id,number:purchase.number,inventory:{synchronized:true,movements:auditStockMovementDiff(before,updated,`Eliminación de compra ${purchase.number}`)}});
+  }
+  writePurchases(purchases.filter((_,i)=>i!==index)); auditLog(req,'Compra eliminada','Compras',{purchaseId:purchase.id,number:purchase.number}); return res.status(204).end();
+});
 
 app.get('/api/admin/inventory-movements', requireAdmin, (req, res) => {
   const q = cleanText(req.query?.q, 120).toLocaleLowerCase('es-EC');
