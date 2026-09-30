@@ -4374,22 +4374,46 @@ async function renderAdmin() {
       updateRichToolbar();
     };
     descriptionEditor?.addEventListener('keydown', event => {
-      if (event.key !== 'Enter' || event.shiftKey) return;
+      if (event.key !== 'Enter' || event.ctrlKey || event.metaKey || event.altKey) return;
       const selection = window.getSelection();
       const node = selection?.rangeCount ? selection.getRangeAt(0).commonAncestorContainer : null;
       const element = node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
       const block = element?.closest?.('h2,h3');
-      if (!block || !descriptionEditor.contains(block)) return;
-      // Al salir de un título, Enter crea una línea normal y no otro H2.
+      const listItem = element?.closest?.('li');
+      if (!descriptionEditor.contains(element || descriptionEditor)) return;
+
+      // En listas dejamos el comportamiento nativo: Enter crea otra viñeta
+      // y Enter dos veces sale de la lista como en Word.
+      if (listItem) return;
+
+      // El navegador no se comporta igual en todos los contenteditable cuando
+      // se usa white-space: pre-wrap. Interceptamos Enter para garantizar que
+      // SIEMPRE cree una nueva línea y que quede guardada como HTML.
       event.preventDefault();
-      const paragraph = document.createElement('p');
-      paragraph.appendChild(document.createElement('br'));
-      block.parentNode.insertBefore(paragraph, block.nextSibling);
-      const range = document.createRange();
-      range.setStart(paragraph, 0);
-      range.collapse(true);
-      selection.removeAllRanges();
-      selection.addRange(range);
+
+      if (block) {
+        // Al salir de un título, Enter crea una línea de texto normal.
+        const paragraph = document.createElement('p');
+        paragraph.appendChild(document.createElement('br'));
+        block.parentNode.insertBefore(paragraph, block.nextSibling);
+        const range = document.createRange();
+        range.setStart(paragraph, 0);
+        range.collapse(true);
+        selection.removeAllRanges();
+        selection.addRange(range);
+      } else {
+        // En texto normal usamos un párrafo real. Si el navegador no soporta
+        // insertParagraph correctamente, insertLineBreak deja al menos el
+        // salto visible y conserva el formato actual.
+        const before = descriptionEditor.innerHTML;
+        try { document.execCommand('insertParagraph', false, null); } catch {}
+        if (descriptionEditor.innerHTML === before) {
+          try { document.execCommand('insertLineBreak', false, null); } catch {}
+        }
+        if (descriptionEditor.innerHTML === before) {
+          try { document.execCommand('insertHTML', false, '<br>'); } catch {}
+        }
+      }
       syncDescription();
       updateRichToolbar();
     });

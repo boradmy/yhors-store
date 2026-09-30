@@ -4762,3 +4762,7 @@ body.login-loading-active{overflow:hidden}
 .product-description h2,.product-description h3{margin:.15em 0 .7em}
 .product-description ul,.product-description ol{margin:.2em 0 .8em;padding-left:1.45rem}
 .product-description li{margin:.15em 0}
+
+/* YHORS 15.8.18 · Editor: los saltos de línea deben verse y conservarse */
+.rich-editor-content p { min-height: 1.6em; }
+.rich-editor-content br { line-height: 1.6; }
