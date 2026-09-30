@@ -760,7 +760,8 @@ function findProductBySlug(products, slug) {
   return products.find(product => productSlug(product).toLowerCase() === target);
 }
 function esc(value = '') { return String(value).replace(/[&<>'"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', "'":'&#39;', '"':'&quot;' }[c])); }
-function stripText(value = '') { return String(value).replace(/\s+/g, ' ').trim(); }
+function stripText(value = '') { return String(value).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim(); }
+function renderDescriptionHtml(value = '') { return sanitizeDescriptionHtml(value, 2000); }
 function absoluteImage(value = '') {
   if (!value) return `${SITE_URL}/favicon.svg`;
   return value.startsWith('http') ? value : `${SITE_URL}${value.startsWith('/') ? '' : '/'}${value}`;
@@ -803,7 +804,7 @@ function productSeoBody(product) {
   const category = CATEGORY_LABELS[product.category] || product.category;
   const price = Number(product.salePrice ?? product.price);
   const rental = product.category === 'cosplay' && Number.isFinite(Number(product.rentalPrice)) ? `<p class="price-secondary">Alquiler: $${Number(product.rentalPrice).toFixed(2)}</p>` : '';
-  return `<main class="product-detail-page"><div class="breadcrumbs"><a href="/categoria/${encodeURIComponent(product.category)}">${esc(category)}</a><span>/</span><strong>${esc(product.name)}</strong></div><section class="detail-layout"><div class="detail-gallery"><div class="detail-main-image"><img src="${esc(absoluteImage(image))}" alt="${esc(product.name)}" width="800" height="800"></div>${images.length > 1 ? `<div class="thumbnail-row">${images.slice(1,4).map((url,i)=>`<img src="${esc(absoluteImage(url))}" alt="${esc(product.name)} - imagen ${i+2}" width="200" height="200">`).join('')}</div>`:''}</div><div class="detail-copy"><span class="eyebrow">${esc(category)}</span><h1>${esc(product.name)}</h1><div class="detail-price">$${price.toFixed(2)}</div>${rental}<div class="detail-sku"><span>SKU: <strong>${esc(product.sku || '—')}</strong></span></div><div class="detail-divider"></div><h2>Descripción</h2><div class="detail-description">${esc(product.description).replace(/\n/g,'<br>')}</div><div class="detail-buy"><a class="button" href="/categoria/${encodeURIComponent(product.category)}">Ver más productos <span>→</span></a></div></div></section></main>`;
+  return `<main class="product-detail-page"><div class="breadcrumbs"><a href="/categoria/${encodeURIComponent(product.category)}">${esc(category)}</a><span>/</span><strong>${esc(product.name)}</strong></div><section class="detail-layout"><div class="detail-gallery"><div class="detail-main-image"><img src="${esc(absoluteImage(image))}" alt="${esc(product.name)}" width="800" height="800"></div>${images.length > 1 ? `<div class="thumbnail-row">${images.slice(1,4).map((url,i)=>`<img src="${esc(absoluteImage(url))}" alt="${esc(product.name)} - imagen ${i+2}" width="200" height="200">`).join('')}</div>`:''}</div><div class="detail-copy"><span class="eyebrow">${esc(category)}</span><h1>${esc(product.name)}</h1><div class="detail-price">$${price.toFixed(2)}</div>${rental}<div class="detail-sku"><span>SKU: <strong>${esc(product.sku || '—')}</strong></span></div><div class="detail-divider"></div><h2>Descripción</h2><div class="detail-description">${renderDescriptionHtml(product.description)}</div><div class="detail-buy"><a class="button" href="/categoria/${encodeURIComponent(product.category)}">Ver más productos <span>→</span></a></div></div></section></main>`;
 }
 function categorySeoBody(categoryKey, products) {
   const label = CATEGORY_LABELS[categoryKey];
@@ -2676,6 +2677,24 @@ function cleanText(value, maxLength) {
   return typeof value === 'string' ? value.trim().slice(0, maxLength) : '';
 }
 
+// Descripciones de producto: permitimos únicamente formato visual seguro.
+// No se aceptan atributos, scripts, enlaces ni HTML arbitrario.
+function sanitizeDescriptionHtml(value, maxLength = 2000) {
+  if (typeof value !== 'string') return '';
+  let html = value.replace(/\r/g, '').trim();
+  html = html.replace(/<\s*(script|style|iframe|object|embed|link|meta|svg|math)[^>]*>[\s\S]*?<\s*\/\s*\1\s*>/gi, '');
+  html = html.replace(/<\s*(script|style|iframe|object|embed|link|meta|svg|math)[^>]*\/?>/gi, '');
+  html = html.replace(/\s+on[a-z]+\s*=\s*(?:\"[^\"]*\"|'[^']*'|[^\s>]+)/gi, '');
+  html = html.replace(/javascript\s*:/gi, '');
+  html = html.replace(/<\s*([^>]+)>/g, (full, inside) => {
+    const match = String(inside).match(/^\s*\/?\s*([a-z0-9]+)/i);
+    if (!match) return '';
+    const tag = match[1].toLowerCase();
+    return ['b','strong','i','em','u','br','p','div','ul','ol','li'].includes(tag) ? `<${inside.replace(/\s+(?:style|class|id|title|href|src|target|rel)\s*=\s*(?:\"[^\"]*\"|'[^']*'|[^\s>]+)/gi,'')}>` : '';
+  });
+  return html.slice(0, maxLength);
+}
+
 
 function escapeEmailHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, char => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[char]));
@@ -2777,7 +2796,7 @@ function makeUniqueSku(inputSku, product, products, currentId = '') {
 
 function validateProduct(input, current = {}, allProducts = []) {
   const name = cleanText(input.name, 90);
-  const description = cleanText(input.description, 2000);
+  const description = sanitizeDescriptionHtml(input.description, 2000);
   const category = cleanText(input.category, 30).toLowerCase();
   const brand = cleanText(input.brand, 50);
   const productType = cleanText(input.productType, 50);

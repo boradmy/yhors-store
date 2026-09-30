@@ -4701,3 +4701,26 @@ body.login-loading-active{overflow:hidden}
     background:#f8f6f1!important;
   }
 }
+
+/* YHORS · editor de descripción enriquecida tipo Word */
+.rich-description-field{min-width:0}
+.rich-editor{border:1px solid #cfcac0;border-radius:8px;background:#fff;overflow:hidden;box-shadow:0 1px 2px rgba(30,25,18,.03)}
+.rich-editor:focus-within{outline:2px solid rgba(180,147,88,.2);border-color:var(--gold)}
+.rich-editor-toolbar{display:flex;align-items:center;gap:4px;padding:7px 8px;background:#f7f4ee;border-bottom:1px solid #e3ddd3}
+.rich-tool{min-width:32px;height:30px;padding:0 8px;border:1px solid transparent;border-radius:6px;background:transparent;color:#24211d;cursor:pointer;font:800 .78rem/1 inherit}
+.rich-tool:hover:not(:disabled){background:#fff;border-color:#ddd5c8}
+.rich-tool:active:not(:disabled){background:#eee9df}
+.rich-tool-wide{font-weight:700;font-size:.68rem;margin-left:4px}
+.rich-tool:disabled{opacity:.45;cursor:not-allowed}
+.rich-editor-content{min-height:190px;padding:13px 14px;outline:none;font:inherit;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere}
+.rich-editor-content:empty:before{content:'Escribe la descripción del producto…';color:#aaa298;pointer-events:none}
+.rich-editor-content p{margin:0 0 .65em}
+.rich-editor-content p:last-child{margin-bottom:0}
+.rich-editor-content strong,.rich-editor-content b{font-weight:800}
+.rich-editor-content em,.rich-editor-content i{font-style:italic}
+.rich-editor-content u{text-decoration:underline}
+
+/* YHORS · navegación administrativa estable: siempre debajo del header y antes del contenido */
+.admin-wrap > .admin-navigation-stack:first-of-type{position:relative;z-index:90;margin:0 0 24px}
+.admin-wrap > .admin-navigation-stack:first-of-type .admin-section-nav{position:relative!important;top:auto!important;z-index:90!important;margin:0!important}
+.admin-wrap > .admin-navigation-stack:first-of-type + .admin-panel{margin-top:0}
