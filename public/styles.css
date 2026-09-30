@@ -4013,3 +4013,84 @@ body.login-loading-active{overflow:hidden}
   .admin-section-nav--compact .admin-nav-group-links-static{position:static;margin-top:5px;box-shadow:none;background:#f8f6f1;}
   .admin-section-nav--compact .admin-nav-group-links-static .admin-section-link{width:100%;justify-content:center;}
 }
+
+/* YHORS 15.8.5 · Header limpio para Jefe de tienda y Vendedor */
+.admin-navigation-stack--limited{margin:0 0 22px}
+.admin-section-nav--limited{
+  display:grid!important;
+  grid-template-columns:minmax(230px,1fr) minmax(260px,1fr)!important;
+  align-items:stretch;
+  gap:8px;
+  padding:6px!important;
+  background:rgba(248,246,241,.96);
+  border:1px solid var(--line,#ded8cc);
+  border-radius:16px;
+  box-shadow:0 8px 22px rgba(30,25,18,.045);
+  overflow:visible!important;
+}
+.admin-section-nav--limited>.admin-section-link:first-child{
+  width:auto!important;
+  min-width:0!important;
+  min-height:46px;
+  background:#171918;
+  color:#fff;
+  border:0;
+  border-radius:11px;
+  box-shadow:0 5px 14px rgba(0,0,0,.13);
+  font-size:.7rem;
+  letter-spacing:.02em;
+}
+.admin-section-nav--limited>.admin-section-link:first-child:hover{transform:translateY(-1px)}
+.admin-nav-group--operation{min-width:0!important;position:relative}
+.admin-nav-group--operation>summary{
+  min-height:46px!important;
+  justify-content:center!important;
+  border-radius:11px!important;
+  background:#fff!important;
+  border:1px solid var(--line,#ded8cc)!important;
+  font-size:.7rem!important;
+  letter-spacing:.04em;
+}
+.admin-nav-group--operation[open]>summary{background:#f1eee7!important;border-color:#cdbf9f!important}
+.admin-nav-group--operation>summary span{margin-left:7px;font-size:.7rem;transition:transform .2s}
+.admin-nav-group--operation[open]>summary span{transform:rotate(180deg)}
+.admin-nav-group-links--limited{
+  position:absolute!important;
+  top:calc(100% + 8px)!important;
+  left:0!important;
+  right:0!important;
+  transform:none!important;
+  width:auto!important;
+  min-width:0!important;
+  max-width:none!important;
+  padding:9px!important;
+  display:grid!important;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:5px!important;
+  background:#fff!important;
+  border:1px solid var(--line,#ded8cc)!important;
+  border-radius:14px!important;
+  box-shadow:0 18px 42px rgba(30,25,18,.16)!important;
+  z-index:5000!important;
+}
+.admin-nav-group-links--limited .admin-section-link{
+  width:auto!important;
+  min-height:40px!important;
+  justify-content:flex-start!important;
+  padding:8px 11px!important;
+  border-radius:9px!important;
+  font-size:.62rem!important;
+  white-space:nowrap!important;
+}
+.admin-nav-group-links--limited .admin-section-link:hover{background:#f4f1eb}
+.admin-nav-group-links--limited .admin-section-link.active{background:#171918;color:#fff}
+
+/* Nombre real del colaborador, no el username, en el saludo y cuenta */
+.yh-intelligent-hero h2{max-width:850px}
+.account-menu-trigger-copy strong{max-width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+@media(max-width:760px){
+  .admin-section-nav--limited{grid-template-columns:1fr!important}
+  .admin-nav-group-links--limited{position:static!important;grid-template-columns:1fr!important;margin-top:6px;box-shadow:none!important;background:#f8f6f1!important}
+  .admin-nav-group--operation>summary{justify-content:space-between!important}
+}

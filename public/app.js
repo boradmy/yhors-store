@@ -49,16 +49,17 @@ async function request(url, options = {}) {
 
 function accountMenu(account = {}) {
   const username = escapeHTML(account.username || 'Usuario');
+  const displayName = escapeHTML(account.name || account.username || 'Usuario');
   const role = escapeHTML(userRoleLabel(account.role || ''));
   const initial = escapeHTML((account.name || account.username || 'U').trim().slice(0, 1).toUpperCase());
   return `<div class="account-menu-wrap">
     <button class="account-menu-trigger" id="accountMenuTrigger" type="button" aria-label="Abrir menú de cuenta" aria-haspopup="menu" aria-expanded="false">
       <span class="account-menu-avatar" aria-hidden="true">${initial}</span>
-      <span class="account-menu-trigger-copy"><strong>${username}</strong><small>${role}</small></span>
+      <span class="account-menu-trigger-copy"><strong>${displayName}</strong><small>${role}</small></span>
       <span class="account-menu-caret" aria-hidden="true">⌄</span>
     </button>
     <div class="account-menu" id="accountMenu" role="menu" hidden>
-      <div class="account-menu-user"><span class="account-menu-user-label">CUENTA YHORS</span><strong>${username}</strong><small>${role}</small></div>
+      <div class="account-menu-user"><span class="account-menu-user-label">CUENTA YHORS</span><strong>${displayName}</strong><small>@${username} · ${role}</small></div>
       <a href="/mi-cuenta" data-smooth-route role="menuitem">Mi cuenta <span>→</span></a>
       <button type="button" role="menuitem" id="accountMenuLogout">Cerrar sesión <span>↗</span></button>
     </div>
@@ -1170,9 +1171,9 @@ function adminSectionNav(session = {}, active = '') {
   const limitedOperations = role === 'vendedor' || role === 'orders' || role === 'store_manager';
   const link = (key, href, label) => `<a href="${href}" class="admin-section-link${active === key ? ' active' : ''}" data-smooth-route>${label}</a>`;
   if (limitedOperations) {
-    return `<div class="admin-navigation-stack"><nav class="admin-section-nav admin-section-nav--compact" id="adminSectionNav" aria-label="Secciones operativas">
+    return `<div class="admin-navigation-stack admin-navigation-stack--limited"><nav class="admin-section-nav admin-section-nav--limited" id="adminSectionNav" aria-label="Navegación YHORS">
       ${link('inteligente', `${ADMIN_PATH}/inteligente`, '🧠 YHORS INTELIGENTE')}
-      <details class="admin-nav-group"><summary>Operación</summary><div class="admin-nav-group-links admin-nav-group-links-static">${link('buscar-productos', `${ADMIN_PATH}/buscar-productos`, 'BUSCAR PRODUCTOS')}${link('ventas-generales', `${ADMIN_PATH}/ventas-generales`, 'VENTAS GENERALES')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('generar-orden', `${ADMIN_PATH}/generar-orden`, 'GENERAR ORDEN')}${link('historial-ventas', `${ADMIN_PATH}/historial-ventas`, 'HISTORIAL DE VENTAS')}${role === 'vendedor' || role === 'orders' ? '' : link('series-imeis', `${ADMIN_PATH}/series-imeis`, 'SERIES/IMEIS')}</div></details>
+      <details class="admin-nav-group admin-nav-group--operation"${['buscar-productos','ventas-generales','pedidos','generar-orden','historial-ventas','series-imeis'].includes(active) ? ' open' : ''}><summary>OPERACIÓN <span aria-hidden="true">⌄</span></summary><div class="admin-nav-group-links admin-nav-group-links--limited">${link('buscar-productos', `${ADMIN_PATH}/buscar-productos`, 'BUSCAR PRODUCTOS')}${link('ventas-generales', `${ADMIN_PATH}/ventas-generales`, 'VENTAS GENERALES')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('generar-orden', `${ADMIN_PATH}/generar-orden`, 'GENERAR ORDEN')}${link('historial-ventas', `${ADMIN_PATH}/historial-ventas`, 'HISTORIAL DE VENTAS')}${role === 'vendedor' || role === 'orders' ? '' : link('series-imeis', `${ADMIN_PATH}/series-imeis`, 'SERIES / IMEIS')}</div></details>
     </nav></div>`;
   }
   const group = (label, activeKeys, items, open = false) => `<details class="admin-nav-group${activeKeys.includes(active) ? ' has-active' : ''}"${open ? ' open' : ''}><summary><span>${label}</span>${activeKeys.includes(active) ? '<i aria-hidden="true"></i>' : ''}</summary><div class="admin-nav-group-links">${items}</div></details>`;
@@ -3991,7 +3992,7 @@ async function renderYhorsInteligente() {
   app.innerHTML = `<main class="admin-shell yh-intelligent-shell"><div class="admin-wrap">
     <div class="admin-top yh-intelligent-top"><div><a class="brand" href="${ADMIN_PATH}/inteligente" data-smooth-route>YHORS</a><h1 class="admin-title">YHORS Inteligente</h1><p class="admin-subtitle">Tu centro de control para saber qué está pasando hoy en YHORS.</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>
     ${nav}
-    <section class="yh-intelligent-hero"><div><span class="eyebrow">CENTRO INTELIGENTE · ${today}</span><h2>Buenos días, ${escapeHTML(session.username || 'equipo')} <span aria-hidden="true">👋</span></h2><p>Todo lo importante de hoy, organizado en bloques. Cada indicador te lleva directamente al lugar donde puedes actuar.</p></div><div class="yh-intelligent-hero-meta"><span class="yh-intelligent-status"><span class="yh-status-dot"></span><span>YHORS operativo</span></span><small>Actualizado al abrir esta pantalla</small></div></section>
+    <section class="yh-intelligent-hero"><div><span class="eyebrow">CENTRO INTELIGENTE · ${today}</span><h2>Buenos días, ${escapeHTML(session.name || session.username || 'equipo')} <span aria-hidden="true">👋</span></h2><p>Todo lo importante de hoy, organizado en bloques. Cada indicador te lleva directamente al lugar donde puedes actuar.</p></div><div class="yh-intelligent-hero-meta"><span class="yh-intelligent-status"><span class="yh-status-dot"></span><span>YHORS operativo</span></span><small>Actualizado al abrir esta pantalla</small></div></section>
     <section class="yh-intelligent-grid" aria-label="Resumen inteligente">
       ${salesCard}
       ${cardLink(`${ADMIN_PATH}/pedidos`, 'Pedidos pendientes', 'OPERACIÓN', pending.length, `${readyToShip.length} listos para avanzar`, 'is-orders')}
@@ -4443,7 +4444,7 @@ async function renderMyAccount() {
   const me = await request('/api/me').catch(() => null); if (!me) return renderLogin();
   const passkeys = me.passkeys || [];
   app.innerHTML = `<main class="admin-shell"><div class="admin-wrap">
-    <div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Mi cuenta</h1><p class="admin-subtitle">Datos y métodos de inicio de sesión</p></div><div class="admin-top-actions account-page-actions"><a class="button secondary small account-back-button" href="${orderBackHref(me.role)}">← Volver</a>${accountMenu(me)}</div></div>
+    <div class="admin-top"><div><a class="brand" href="/">YHORS</a><h1 class="admin-title">Mi cuenta</h1><p class="admin-subtitle">Datos y métodos de inicio de sesión</p></div><div class="admin-top-actions account-page-actions"><a class="button secondary small account-back-button" href="#" data-account-back>← Volver</a>${accountMenu(me)}</div></div>
     <section class="admin-panel users-panel"><div class="section-heading"><div><span class="eyebrow">Cuenta</span><h2>${escapeHTML(me.name)}</h2></div><p>@${escapeHTML(me.username)} · ${escapeHTML(userRoleLabel(me.role))}</p></div>
       <div class="form-grid account-readonly"><div class="field"><label>Nombre</label><input value="${escapeHTML(me.name)}" disabled></div><div class="field"><label>Usuario</label><input value="${escapeHTML(me.username)}" disabled></div><div class="field"><label>Rol</label><input value="${escapeHTML(userRoleLabel(me.role))}" disabled></div><div class="field"><label>Estado</label><input value="Activo" disabled></div></div>
       <hr><div class="section-heading"><div><span class="eyebrow">Inicio de sesión moderno</span><h2>Passkeys</h2></div><p>Windows Hello, huella, Face ID o el método seguro compatible con tu dispositivo.</p></div>
@@ -4451,6 +4452,11 @@ async function renderMyAccount() {
       <div class="form-actions"><button class="button primary" id="addPasskey" type="button" ${me.passkeyAllowed ? '' : 'disabled'}>+ Registrar Passkey</button><span class="message" id="passkeyMessage">${me.passkeyAllowed ? 'Permitido en esta cuenta.' : 'El administrador ha bloqueado el inicio con Passkey para esta cuenta.'}</span></div>
     </section></div></main>`;
   wireAccountMenu();
+  document.querySelector('[data-account-back]')?.addEventListener('click', event => {
+    event.preventDefault();
+    if (window.history.length > 1) window.history.back();
+    else navigateToRoute(`${ADMIN_PATH}/inteligente`, { replace: true });
+  });
   document.querySelector('#addPasskey').addEventListener('click', async () => {
     const button = document.querySelector('#addPasskey');
     const message = document.querySelector('#passkeyMessage');
