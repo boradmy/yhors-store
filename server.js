@@ -4312,14 +4312,47 @@ app.get('/api/admin/historial-ventas', requireOrdersAccess, (req, res) => {
   sales.sort((a,b)=>String(b.notifiedAt||b.createdAt||'').localeCompare(String(a.notifiedAt||a.createdAt||''))); return res.json(sales.map(decorateOrderAssignment));
 });
 app.post('/api/admin/orders/:id/notificar-venta', requireOrdersAccess, (req,res)=>{
-  const session=getSession(req), orders=readOrders(), index=orders.findIndex(o=>o.id===req.params.id); if(index<0)return res.status(404).json({error:'Pedido no encontrado.'}); const order=orders[index];
+  const session=getSession(req), orders=readOrders(), index=orders.findIndex(o=>o.id===req.params.id);
+  if(index<0)return res.status(404).json({error:'Pedido no encontrado.'});
+  const order=orders[index];
   if(isSellerRole(session.role)&&order.assignedSellerId!==session.accountId)return res.status(403).json({error:'Este pedido no está asignado a tu usuario.'});
-  if(!['Enviado','Entregado'].includes(String(order.status||'')))return res.status(400).json({error:'Solo puedes notificar una venta cuando el pedido está Enviado o Entregado.'});
+  if(String(order.status||'').toLocaleLowerCase('es-EC')==='cancelado')return res.status(400).json({error:'No puedes notificar como venta un pedido cancelado.'});
   if(order.salesNotifiedAt||order.salesHistoryId)return res.status(409).json({error:'Esta venta ya fue notificada y está en Historial de ventas.'});
-  const sales=readSales(); if(sales.some(s=>String(s.orderId)===String(order.id)))return res.status(409).json({error:'Esta venta ya existe en Historial de ventas.'});
-  const sale=getSalesHistoryRecord(decorateOrderAssignment(order),req); sales.unshift(sale); try{writeSales(sales);}catch(e){return res.status(500).json({error:'No se pudo guardar la venta en Historial de ventas.'});}
-  order.salesNotifiedAt=sale.notifiedAt; order.salesHistoryId=sale.id; order.updatedAt=sale.notifiedAt; orders[index]=order; try{writeOrders(orders);}catch(e){writeSales(sales.filter(s=>s.id!==sale.id));return res.status(500).json({error:'No se pudo cerrar el pedido como venta.'});}
-  auditLog(req,'Venta notificada','Historial de ventas',{orderId:order.id,orderNumber:order.orderNumber,salesId:sale.id,status:order.status,total:order.total}); return res.status(201).json(decorateOrderAssignment(sale));
+  const sales=readSales();
+  if(sales.some(s=>String(s.orderId)===String(order.id)))return res.status(409).json({error:'Esta venta ya existe en Historial de ventas.'});
+
+  // Atajo de venta desde Generar orden: la acción confirma la entrega y
+  // registra la venta en un solo paso. Entregado sigue usando stock, por lo
+  // que no se realiza ningún segundo descuento ni devolución de inventario.
+  const now=new Date().toISOString();
+  const previousStatus=String(order.status||'Pendiente');
+  order.status='Entregado';
+  order.updatedAt=now;
+  order.salesNotifiedAt=now;
+  order.salesHistoryId=crypto.randomUUID();
+
+  const sale={
+    ...getSalesHistoryRecord(decorateOrderAssignment(order),req),
+    id:order.salesHistoryId,
+    notifiedAt:now,
+    status:'Entregado',
+    updatedAt:now
+  };
+  sales.unshift(sale);
+  try{
+    writeSales(sales);
+    orders[index]=order;
+    writeOrders(orders);
+  }catch(e){
+    try{ writeSales(sales.filter(s=>s.id!==sale.id)); }catch{}
+    return res.status(500).json({error:'No se pudo registrar la venta. La orden no fue cerrada.'});
+  }
+
+  auditLog(req,'Venta notificada desde Generar orden','Historial de ventas',{
+    orderId:order.id, orderNumber:order.orderNumber, salesId:sale.id,
+    previousStatus, status:'Entregado', total:order.total, source:'generar-orden'
+  });
+  return res.status(201).json(decorateOrderAssignment(sale));
 });
 app.patch('/api/admin/historial-ventas/:id/nota', requireAdmin, (req,res)=>{
   const sales=readSales(); const index=sales.findIndex(s=>s.id===req.params.id);
