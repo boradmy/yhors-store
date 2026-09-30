@@ -2690,7 +2690,7 @@ function sanitizeDescriptionHtml(value, maxLength = 2000) {
     const match = String(inside).match(/^\s*\/?\s*([a-z0-9]+)/i);
     if (!match) return '';
     const tag = match[1].toLowerCase();
-    return ['b','strong','i','em','u','br','p','div','ul','ol','li'].includes(tag) ? `<${inside.replace(/\s+(?:style|class|id|title|href|src|target|rel)\s*=\s*(?:\"[^\"]*\"|'[^']*'|[^\s>]+)/gi,'')}>` : '';
+    return ['b','strong','i','em','u','br','p','div','h2','h3','ul','ol','li'].includes(tag) ? `<${inside.replace(/\s+(?:style|class|id|title|href|src|target|rel)\s*=\s*(?:\"[^\"]*\"|'[^']*'|[^\s>]+)/gi,'')}>` : '';
   });
   return html.slice(0, maxLength);
 }

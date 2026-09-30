@@ -21,12 +21,12 @@ const placeholder = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg
 
 function escapeHTML(value = '') { return String(value).replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char])); }
 function richDescriptionHTML(value = '') {
-  const raw = String(value ?? '');
+  const raw = String(value ?? '').replace(/\r/g, '');
   if (!raw) return '';
   if (!/[<>]/.test(raw)) return escapeHTML(raw).replace(/\n/g, '<br>');
   const parser = new DOMParser();
   const doc = parser.parseFromString(raw, 'text/html');
-  const allowed = new Set(['B','STRONG','I','EM','U','BR','P','DIV','UL','OL','LI']);
+  const allowed = new Set(['B','STRONG','I','EM','U','BR','P','DIV','H2','H3','UL','OL','LI']);
   const clean = node => {
     [...node.childNodes].forEach(child => {
       if (child.nodeType === Node.TEXT_NODE) return;
@@ -969,7 +969,7 @@ function productForm(product = {}, classifications = {}) {
       const num=index+1, id=index===0?'image':'image'+num, fileId=index===0?'imageFile':'imageFile'+num, label=index===0?'FOTO PRINCIPAL':'FOTO '+num, urlLabel=index===0?'URL de imagen principal':'Imagen adicional '+num+' · URL', currentImage=images[index] || (index===0 ? product.image || '' : ''), previewId=`productImagePreview${num}`;
       return `<div class="image-upload-row field full"><div class="image-upload-layout"><div class="image-upload-preview"><span>Foto referencial</span><div class="image-reference-preview"><img id="${previewId}" data-fallback src="${escapeHTML(currentImage || placeholder)}" alt="Vista previa ${escapeHTML(label)}"></div></div><div class="image-upload-file"><label for="${fileId}">SUBIR ${label} <small>(máx. 5 MB)</small></label><input id="${fileId}" name="${fileId}" type="file" ${lock} accept="image/jpeg,image/png,image/webp,image/gif"></div><div class="image-upload-url"><label for="${id}">${urlLabel}</label><input id="${id}" name="${id}" type="url" ${lock} placeholder="https://..." value="${escapeHTML(currentImage)}"></div></div></div>`;
     }).join('')}
-    <div class="field full rich-description-field"><label for="descriptionEditor">Descripción completa</label><div class="rich-editor" data-rich-editor ${locked ? 'aria-disabled="true"' : ''}><div class="rich-editor-toolbar" role="toolbar" aria-label="Formato de descripción"><button type="button" class="rich-tool" data-rich-command="bold" title="Negrita" ${locked ? 'disabled' : ''}><strong>B</strong></button><button type="button" class="rich-tool" data-rich-command="italic" title="Cursiva" ${locked ? 'disabled' : ''}><em>I</em></button><button type="button" class="rich-tool" data-rich-command="underline" title="Subrayado" ${locked ? 'disabled' : ''}><u>U</u></button><button type="button" class="rich-tool rich-tool-wide" data-rich-command="removeFormat" title="Quitar formato" ${locked ? 'disabled' : ''}>Limpiar</button></div><div id="descriptionEditor" class="rich-editor-content" contenteditable="${locked ? 'false' : 'true'}" role="textbox" aria-multiline="true" aria-label="Descripción completa">${product.description || ''}</div></div><textarea id="description" name="description" required maxlength="2000" rows="9" ${lock} hidden>${escapeHTML(product.description || '')}</textarea><small class="field-help">Escribe como en Word: usa <strong>negrita</strong>, cursiva, subrayado y saltos de línea.</small></div>
+    <div class="field full rich-description-field"><label for="descriptionEditor">Descripción completa</label><div class="rich-editor" data-rich-editor ${locked ? 'aria-disabled="true"' : ''}><div class="rich-editor-toolbar" role="toolbar" aria-label="Formato de descripción"><button type="button" class="rich-tool rich-tool-heading" data-rich-command="formatBlock" data-rich-value="h2" title="Título" ${locked ? 'disabled' : ''}><strong>H2</strong></button><span class="rich-tool-separator" aria-hidden="true"></span><button type="button" class="rich-tool" data-rich-command="bold" title="Negrita" aria-label="Negrita" ${locked ? 'disabled' : ''}><strong>B</strong></button><button type="button" class="rich-tool" data-rich-command="italic" title="Cursiva" aria-label="Cursiva" ${locked ? 'disabled' : ''}><em>I</em></button><button type="button" class="rich-tool" data-rich-command="underline" title="Subrayado" aria-label="Subrayado" ${locked ? 'disabled' : ''}><u>U</u></button><span class="rich-tool-separator" aria-hidden="true"></span><button type="button" class="rich-tool rich-tool-list" data-rich-command="insertUnorderedList" title="Lista con viñetas" aria-label="Lista con viñetas" ${locked ? 'disabled' : ''}>• Lista</button><button type="button" class="rich-tool rich-tool-list" data-rich-command="insertOrderedList" title="Lista numerada" aria-label="Lista numerada" ${locked ? 'disabled' : ''}>1. Lista</button><span class="rich-tool-separator" aria-hidden="true"></span><button type="button" class="rich-tool rich-tool-wide" data-rich-command="removeFormat" title="Quitar formato" ${locked ? 'disabled' : ''}>Limpiar</button></div><div id="descriptionEditor" class="rich-editor-content" contenteditable="${locked ? 'false' : 'true'}" role="textbox" aria-multiline="true" aria-label="Descripción completa">${product.description || ''}</div></div><textarea id="description" name="description" required maxlength="2000" rows="9" ${lock} hidden>${escapeHTML(product.description || '')}</textarea><small class="field-help">Escribe como en Word: <strong>negrita</strong>, <em>cursiva</em>, subrayado, títulos, viñetas y saltos de línea.</small></div>
     <div class="field featured-field"><label><input id="published" name="published" type="checkbox" ${lock} ${product.published !== false ? 'checked' : ''}> Publicado en la tienda</label><label><input id="hero" name="hero" type="checkbox" ${lock} ${product.hero ? 'checked' : ''}> Usar en slider de portada</label><label><input id="featured" name="featured" type="checkbox" ${lock} ${product.featured ? 'checked' : ''}> Mostrar como destacado</label></div>
   </div><div class="form-actions"><button class="button" type="submit" ${lock}>${product.id ? 'Guardar cambios' : 'Crear producto'}</button><button class="button secondary ${product.id ? '' : 'hidden'}" type="button" id="cancelEdit">Cancelar</button><span class="message" id="formMessage"></span></div></form>`;
 }
@@ -4046,14 +4046,14 @@ async function renderAdmin() {
   const session = await request('/api/admin/session').catch(() => ({ authenticated: false })); if (!session.authenticated) return renderLogin(); if (isSellerRole(session.role) || session.role === 'store_manager') return renderAdminOrders();
   let products = await request('/api/admin/products').catch(() => []); let classifications = await request('/api/admin/classifications').catch(() => ({ brands: {}, productTypes: {} })); let settings = await request('/api/admin/storefront').catch(() => ({ heroProductIds: [], featuredProductIds: [] })); let editing = null;
   const backupState = await request('/api/admin/backups').catch(() => ({ storageMode: 'local', backups: [], retention: 30 }));
-  app.innerHTML = `<main class="admin-shell"><aside class="admin-quick-nav" aria-label="Navegación rápida">
+  app.innerHTML = `<main class="admin-shell admin-web-shell"><aside class="admin-quick-nav" aria-label="Navegación rápida">
     <strong>YHORS</strong>
     <button type="button" data-admin-scroll="backupPanel">Backup</button>
     <button type="button" data-admin-scroll="selectionPanel">Portada</button>
     <button type="button" data-admin-scroll="classificationPanel">Categorías</button>
     <button type="button" data-admin-scroll="productEditorPanel">Producto</button>
     <button type="button" data-admin-scroll="inventoryPanel">Inventario</button>
-  </aside><div class="admin-wrap"><div class="admin-top"><div><a class="brand admin-brand" href="${ADMIN_PATH}/inteligente" data-smooth-route aria-label="YHORS · Panel Administrativo · Ir a YHORS Inteligente"><span class="admin-brand-mark" aria-hidden="true"><img src="/favicon.svg" alt=""></span><span class="admin-brand-word">YHORS</span><span class="admin-brand-divider" aria-hidden="true"></span><small>Panel Administrativo</small></a><h1 class="admin-title">Administración · Página Web</h1><p class="admin-subtitle">Gestiona la portada, productos destacados y catálogo público de YHORS.</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>${adminSectionNav(session, 'web')}${backupPanel(backupState)}${selectionPanel(products, settings)}${classificationPanel(classifications)}<section class="admin-panel product-editor-panel" id="productEditorPanel"><span class="eyebrow">Catálogo</span><h2 id="formTitle">Agregar producto</h2><div id="formArea"></div></section><section class="admin-products" id="inventoryPanel"><div class="section-heading inventory-heading"><div><span class="eyebrow">Inventario</span><h2>Productos e inventario (${products.length})</h2></div><p>Edita datos, imágenes, portada y destacados.</p></div><div class="inventory-toolbar"><label class="inventory-search"><span aria-hidden="true">⌕</span><input id="inventorySearch" type="search" placeholder="Buscar por nombre, SKU, marca o categoría…" autocomplete="off"><button id="clearInventorySearch" type="button" aria-label="Limpiar búsqueda">×</button></label><label class="inventory-filter"><span>Categoría</span><select id="inventoryCategoryFilter"><option value="">Todas las categorías</option><option value="elegant">Elegante</option><option value="sports">Deportes</option><option value="tech">Tech</option><option value="cosplay">Cosplay</option><option value="pets">Mascotas</option><option value="details">Detalles</option><option value="collectibles">Coleccionables</option></select></label><span class="inventory-count" id="inventoryCount">${products.length} productos</span></div><div id="adminProducts"></div></section></div></main>`;
+  </aside><div class="admin-wrap"><div class="admin-top"><div><a class="brand admin-brand" href="${ADMIN_PATH}/inteligente" data-smooth-route aria-label="YHORS · Panel Administrativo · Ir a YHORS Inteligente"><span class="admin-brand-mark" aria-hidden="true"><img src="/favicon.svg" alt=""></span><span class="admin-brand-word">YHORS</span><span class="admin-brand-divider" aria-hidden="true"></span><small>Panel Administrativo</small></a><h1 class="admin-title">Administración · Página Web</h1><p class="admin-subtitle">Gestiona la portada, productos destacados y catálogo público de YHORS.</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>${adminSectionNav(session, 'web')}${backupPanel(backupState)}<div id="selectionPanelMount">${selectionPanel(products, settings)}</div>${classificationPanel(classifications)}<section class="admin-panel product-editor-panel" id="productEditorPanel"><span class="eyebrow">Catálogo</span><h2 id="formTitle">Agregar producto</h2><div id="formArea"></div></section><section class="admin-products" id="inventoryPanel"><div class="section-heading inventory-heading"><div><span class="eyebrow">Inventario</span><h2>Productos e inventario (${products.length})</h2></div><p>Edita datos, imágenes, portada y destacados.</p></div><div class="inventory-toolbar"><label class="inventory-search"><span aria-hidden="true">⌕</span><input id="inventorySearch" type="search" placeholder="Buscar por nombre, SKU, marca o categoría…" autocomplete="off"><button id="clearInventorySearch" type="button" aria-label="Limpiar búsqueda">×</button></label><label class="inventory-filter"><span>Categoría</span><select id="inventoryCategoryFilter"><option value="">Todas las categorías</option><option value="elegant">Elegante</option><option value="sports">Deportes</option><option value="tech">Tech</option><option value="cosplay">Cosplay</option><option value="pets">Mascotas</option><option value="details">Detalles</option><option value="collectibles">Coleccionables</option></select></label><span class="inventory-count" id="inventoryCount">${products.length} productos</span></div><div id="adminProducts"></div></section></div></main>`;
   const quickNav = document.querySelector('.admin-quick-nav');
   quickNav?.querySelectorAll('[data-admin-scroll]').forEach(button => button.addEventListener('click', () => {
     const target = document.getElementById(button.dataset.adminScroll);
@@ -4087,7 +4087,7 @@ async function renderAdmin() {
   document.querySelector('#inventorySearch')?.addEventListener('input', drawList);
   document.querySelector('#inventoryCategoryFilter')?.addEventListener('change', drawList);
   document.querySelector('#clearInventorySearch')?.addEventListener('click', () => { const input = document.querySelector('#inventorySearch'); if (!input) return; input.value = ''; input.focus(); drawList(); });
-  function drawSelectionPanel() { document.querySelector('.selection-panel')?.remove(); const anchor = document.querySelector('.admin-top'); anchor.insertAdjacentHTML('afterend', selectionPanel(products, settings)); bindSelectionEvents(); }
+  function drawSelectionPanel() { const mount = document.querySelector('#selectionPanelMount'); if (!mount) return; mount.innerHTML = selectionPanel(products, settings); bindSelectionEvents(); }
   function bindSelectionEvents() {
     const panel = document.querySelector('.selection-panel');
     if (!panel) return;
@@ -4325,16 +4325,46 @@ async function renderAdmin() {
     document.querySelector('#category')?.addEventListener('change', event => drawForm({ ...(editing || {}), category: event.target.value }));
     const descriptionEditor = document.querySelector('#descriptionEditor');
     const descriptionField = document.querySelector('#description');
+    const richButtons = [...document.querySelectorAll('[data-rich-command]')];
     const syncDescription = () => { if (descriptionEditor && descriptionField) descriptionField.value = descriptionEditor.innerHTML.trim(); };
-    descriptionEditor?.addEventListener('input', syncDescription);
-    descriptionEditor?.addEventListener('paste', () => setTimeout(syncDescription, 0));
-    document.querySelectorAll('[data-rich-command]').forEach(button => button.addEventListener('mousedown', event => event.preventDefault()));
-    document.querySelectorAll('[data-rich-command]').forEach(button => button.addEventListener('click', () => {
+    const updateRichToolbar = () => {
+      if (!descriptionEditor) return;
+      const commandState = command => { try { return document.queryCommandState(command); } catch { return false; } };
+      richButtons.forEach(button => {
+        const command = button.dataset.richCommand;
+        let active = false;
+        if (command === 'bold' || command === 'italic' || command === 'underline' || command === 'insertUnorderedList' || command === 'insertOrderedList') active = commandState(command);
+        if (command === 'formatBlock') {
+          const selection = window.getSelection();
+          const node = selection?.rangeCount ? selection.getRangeAt(0).commonAncestorContainer : null;
+          const element = node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
+          const block = element?.closest?.('h2,h3');
+          active = Boolean(block);
+        }
+        button.classList.toggle('is-active', active);
+        button.setAttribute('aria-pressed', String(active));
+      });
+    };
+    const execRichCommand = button => {
       if (!descriptionEditor || descriptionEditor.getAttribute('contenteditable') !== 'true') return;
       descriptionEditor.focus();
-      document.execCommand(button.dataset.richCommand, false, null);
+      const command = button.dataset.richCommand;
+      const value = button.dataset.richValue || null;
+      document.execCommand(command, false, value);
       syncDescription();
-    }));
+      updateRichToolbar();
+    };
+    descriptionEditor?.addEventListener('input', () => { syncDescription(); updateRichToolbar(); });
+    descriptionEditor?.addEventListener('keyup', updateRichToolbar);
+    descriptionEditor?.addEventListener('mouseup', updateRichToolbar);
+    descriptionEditor?.addEventListener('focus', updateRichToolbar);
+    descriptionEditor?.addEventListener('paste', () => setTimeout(() => { syncDescription(); updateRichToolbar(); }, 0));
+    document.querySelectorAll('[data-rich-command]').forEach(button => button.addEventListener('mousedown', event => event.preventDefault()));
+    richButtons.forEach(button => button.addEventListener('click', () => execRichCommand(button)));
+    if (window.__yhorsRichSelectionHandler) document.removeEventListener('selectionchange', window.__yhorsRichSelectionHandler);
+    window.__yhorsRichSelectionHandler = updateRichToolbar;
+    document.addEventListener('selectionchange', window.__yhorsRichSelectionHandler);
+    updateRichToolbar();
     document.querySelector('#productForm').addEventListener('submit', async event => {
       event.preventDefault(); const form = event.currentTarget; const submit = form.querySelector('[type="submit"]'); const message = document.querySelector('#formMessage');
       if (!form.elements.category.value) { message.className='message error'; message.textContent='Selecciona una categoría antes de guardar el producto.'; form.elements.category.focus(); return; }
