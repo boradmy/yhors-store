@@ -4268,3 +4268,147 @@ body.login-loading-active{overflow:hidden}
   .account-back-button{font-size:.7rem;padding:0 10px}
   .login-private-label{margin-bottom:16px}
 }
+
+/* YHORS V15.8.9 · Cuenta y login: acabado limpio */
+.account-page-actions .account-menu-wrap{
+  position:relative;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+.account-page-actions .account-menu-trigger{
+  width:auto;
+  min-width:188px;
+  max-width:280px;
+  height:54px;
+  min-height:54px;
+  padding:6px 11px 6px 7px;
+  border-radius:16px;
+  background:#fff;
+  border:1px solid #d9d2c6;
+  box-shadow:0 7px 22px rgba(30,25,18,.08);
+  display:flex;
+  align-items:center;
+  gap:9px;
+}
+.account-page-actions .account-menu-trigger:hover,
+.account-page-actions .account-menu-trigger[aria-expanded="true"]{
+  background:#fbf8f2;
+  border-color:#b58a43;
+  box-shadow:0 10px 26px rgba(30,25,18,.11);
+}
+.account-page-actions .account-menu-avatar{
+  width:40px;
+  height:40px;
+  flex:0 0 40px;
+  border-radius:50%;
+  background:#171513;
+  color:#fff;
+  border:1px solid rgba(181,138,67,.7);
+  box-shadow:0 2px 7px rgba(30,25,18,.12);
+  display:grid;
+  place-items:center;
+  font-size:.76rem;
+  font-weight:900;
+}
+.account-page-actions .account-menu-trigger-copy{
+  display:grid;
+  min-width:0;
+  flex:1;
+  text-align:left;
+  line-height:1.15;
+}
+.account-page-actions .account-menu-trigger-copy strong{
+  max-width:150px;
+  font-size:.76rem;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.account-page-actions .account-menu-trigger-copy small{
+  margin-top:4px;
+  font-size:.6rem;
+  color:#7d776e;
+  text-transform:uppercase;
+  letter-spacing:.08em;
+  white-space:nowrap;
+}
+.account-page-actions .account-menu-caret{
+  width:18px;
+  height:18px;
+  margin-left:auto;
+  color:#777066;
+  display:grid;
+  place-items:center;
+  font-size:.7rem;
+}
+.account-page-actions .account-menu{
+  right:0;
+  top:calc(100% + 10px);
+  min-width:235px;
+  border-radius:16px;
+  padding:8px;
+  box-shadow:0 20px 48px rgba(30,25,18,.16);
+}
+.account-page-actions .account-menu-user{
+  border-radius:12px;
+  padding:13px 13px 14px;
+}
+.account-page-actions .account-back-button{
+  min-height:46px;
+  border:1px solid #d9d2c6;
+  border-radius:12px;
+  background:#fff;
+  color:#171513;
+  font-weight:800;
+  box-shadow:0 4px 14px rgba(30,25,18,.05);
+}
+.account-page-actions .account-back-button:hover{
+  background:#fbf8f2;
+  border-color:#b58a43;
+  transform:translateY(-1px);
+}
+
+/* El identificador del login es solo identidad visual: no es un enlace. */
+.login-brand,
+.login-brand:hover,
+.login-brand:focus{
+  cursor:default;
+  pointer-events:none;
+  text-decoration:none;
+  opacity:1;
+}
+.login-brand .admin-brand-mark,
+.login-brand:hover .admin-brand-mark{
+  transform:none;
+}
+
+@media(max-width:700px){
+  .account-page-actions .account-menu-trigger{
+    min-width:0;
+    width:54px;
+    max-width:54px;
+    height:54px;
+    padding:6px;
+    border-radius:50%;
+    justify-content:center;
+  }
+  .account-page-actions .account-menu-trigger-copy,
+  .account-page-actions .account-menu-caret{
+    display:none;
+  }
+  .account-page-actions .account-menu-avatar{
+    width:40px;
+    height:40px;
+    flex-basis:40px;
+  }
+  .account-page-actions .account-menu{
+    right:0;
+    min-width:220px;
+    max-width:calc(100vw - 24px);
+  }
+  .account-page-actions .account-back-button{
+    min-height:42px;
+    padding:0 12px;
+  }
+}
