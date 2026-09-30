@@ -3924,3 +3924,35 @@ body.generate-modal-open{overflow:hidden}
     margin-top:14px;
   }
 }
+
+
+/* YHORS 15.8.2 · Navegación estable + Página Web separada */
+.admin-navigation-stack{position:relative;z-index:80;display:grid;gap:7px;margin-bottom:22px}
+.admin-navigation-stack .admin-section-nav{position:relative;top:auto;z-index:90;margin:0;overflow:visible}
+.admin-web-row{display:flex;align-items:center;min-height:40px;padding:5px 7px;background:rgba(247,244,238,.92);border:1px solid var(--line,#ded8cc);border-radius:13px;box-shadow:0 5px 18px rgba(30,25,18,.035)}
+.admin-web-row .admin-section-link{display:inline-flex;align-items:center;justify-content:flex-start;width:auto;min-width:180px;min-height:34px;padding:7px 13px;background:#fff;border:1px solid #e6e0d5;border-radius:9px;color:#6e6a63;font-size:.67rem}
+.admin-web-row .admin-section-link.active{background:#171513;color:#fff;border-color:#171513}
+.admin-nav-group{z-index:20}
+.admin-nav-group-links{z-index:3000}
+.admin-section-nav{z-index:90!important}
+/* En páginas administrativas normales evitamos que los desplegables se mezclen con el header. */
+.admin-shell>.admin-wrap{position:relative;z-index:1}
+.admin-top{z-index:100!important}
+
+/* Pantalla de carga de acceso: aparece tanto con contraseña como con Passkey. */
+.login-loading-overlay{position:fixed;inset:0;z-index:99999;display:grid;place-items:center;padding:24px;background:rgba(20,19,17,.72);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+.login-loading-overlay[hidden]{display:none!important}
+.login-loading-card{width:min(340px,100%);padding:28px 26px;border:1px solid rgba(255,255,255,.14);border-radius:20px;background:rgba(31,30,27,.96);box-shadow:0 25px 70px rgba(0,0,0,.28);color:#fff;text-align:center;display:grid;justify-items:center;gap:9px}
+.login-loading-card strong{font-size:1rem;letter-spacing:.01em}
+.login-loading-card small{color:rgba(255,255,255,.66);font-size:.73rem}
+.login-loading-spinner{width:48px;height:48px;border-radius:50%;border:3px solid rgba(255,255,255,.18);border-top-color:#fff;animation:yhorsLoginSpin .85s linear infinite}
+.login-loading-dots{display:flex;gap:5px;margin-top:2px}
+.login-loading-dots i{width:5px;height:5px;border-radius:50%;background:#fff;opacity:.25;animation:yhorsLoginDot 1s ease-in-out infinite}
+.login-loading-dots i:nth-child(2){animation-delay:.14s}.login-loading-dots i:nth-child(3){animation-delay:.28s}
+@keyframes yhorsLoginSpin{to{transform:rotate(360deg)}}
+@keyframes yhorsLoginDot{0%,100%{opacity:.22;transform:translateY(0)}50%{opacity:1;transform:translateY(-3px)}}
+body.login-loading-active{overflow:hidden}
+@media(max-width:700px){
+  .admin-navigation-stack{gap:6px;margin-bottom:16px}
+  .admin-web-row{overflow-x:auto}.admin-web-row .admin-section-link{min-width:0;flex:1}
+}
