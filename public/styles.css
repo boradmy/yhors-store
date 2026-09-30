@@ -4412,3 +4412,83 @@ body.login-loading-active{overflow:hidden}
     padding:0 12px;
   }
 }
+
+/* YHORS V15.8.10 — Mi cuenta: cabecera reconstruida, sin desbordes */
+.account-page-top{
+  width:100%;
+  max-width:100%;
+  box-sizing:border-box;
+  display:grid!important;
+  grid-template-columns:minmax(0,1fr) auto;
+  align-items:center!important;
+  gap:28px;
+  margin:0 0 18px;
+  padding:18px 22px 20px;
+  background:#f7f4ee;
+  border:1px solid #e1dbd0;
+  border-radius:18px;
+  overflow:visible!important;
+  position:relative;
+  z-index:30;
+}
+.account-page-heading{min-width:0!important;overflow:visible}
+.account-page-heading .admin-brand{margin-bottom:12px}
+.account-page-heading .admin-title{margin:0 0 5px;line-height:1.05}
+.account-page-heading .admin-subtitle{margin:0}
+.account-page-actions{
+  display:flex!important;
+  align-items:center!important;
+  justify-content:flex-end!important;
+  gap:10px;
+  min-width:0;
+  margin:0!important;
+  position:relative;
+  z-index:40;
+}
+.account-page-actions .account-menu-wrap{position:relative;z-index:50}
+.account-page-actions .account-menu-trigger{
+  width:232px;
+  min-width:232px;
+  max-width:232px;
+  height:58px;
+  min-height:58px;
+  box-sizing:border-box;
+  border-radius:999px;
+  padding:6px 12px 6px 7px;
+  background:#fff;
+  border:1px solid #d8d0c2;
+  box-shadow:0 7px 20px rgba(30,25,18,.07);
+  display:flex;
+  align-items:center;
+  gap:10px;
+}
+.account-page-actions .account-menu-trigger-copy{display:flex!important;flex-direction:column;justify-content:center;min-width:0;flex:1;text-align:left}
+.account-page-actions .account-menu-trigger-copy strong{display:block;max-width:150px;font-size:.75rem;line-height:1.15;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.account-page-actions .account-menu-trigger-copy small{display:block;margin-top:4px;font-size:.59rem;line-height:1;text-transform:uppercase;letter-spacing:.08em;color:#777067;white-space:nowrap}
+.account-page-actions .account-menu-avatar{width:42px;height:42px;flex:0 0 42px;border-radius:50%;display:grid;place-items:center;background:#171513;color:#fff;border:1px solid rgba(181,138,67,.7);font-weight:900}
+.account-page-actions .account-menu-caret{width:18px;height:18px;flex:0 0 18px;display:grid;place-items:center;color:#777067}
+.account-page-actions .account-menu{right:0;top:calc(100% + 9px);z-index:2000;min-width:245px;max-width:calc(100vw - 24px);box-sizing:border-box}
+.account-page-actions .account-back-button{height:46px;min-height:46px;box-sizing:border-box;padding:0 16px;border-radius:12px;white-space:nowrap;background:#fff;border:1px solid #d8d0c2;color:#171513;font-weight:800;box-shadow:0 4px 12px rgba(30,25,18,.04)}
+.account-page-actions .account-back-button:hover{background:#fbf8f2;border-color:#b58a43}
+
+@media(max-width:760px){
+  .account-page-top{grid-template-columns:1fr;gap:14px;padding:16px;border-radius:15px}
+  .account-page-actions{width:100%;justify-content:flex-end!important}
+  .account-page-actions .account-menu-trigger{width:210px;min-width:210px;max-width:210px}
+}
+@media(max-width:520px){
+  .account-page-top{padding:14px;margin-bottom:14px}
+  .account-page-heading .admin-brand small{display:inline;font-size:.47rem}
+  .account-page-heading .admin-brand-divider{display:block;height:18px}
+  .account-page-actions{justify-content:space-between!important;gap:8px}
+  .account-page-actions .account-back-button{height:44px;min-height:44px;padding:0 13px}
+  .account-page-actions .account-menu-trigger{width:calc(100vw - 120px);min-width:0;max-width:245px;height:52px;min-height:52px}
+}
+@media(max-width:370px){
+  .account-page-actions .account-menu-trigger{width:52px;min-width:52px;max-width:52px;padding:5px;justify-content:center;border-radius:50%}
+  .account-page-actions .account-menu-trigger-copy,.account-page-actions .account-menu-caret{display:none!important}
+  .account-page-actions .account-menu-avatar{width:40px;height:40px;flex-basis:40px}
+}
+
+/* Login: identidad visual solamente, nunca navegación */
+.login-brand{pointer-events:none!important;cursor:default!important;user-select:none}
