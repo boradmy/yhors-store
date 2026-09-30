@@ -1174,9 +1174,10 @@ function adminSectionNav(session = {}, active = '') {
     // Jefe/Vendedor usan el mismo patrón desplegable elegante del panel:
     // cerrado en YHORS Inteligente y abierto solo cuando una opción de Operación está activa.
     const limitedItems = `${link('buscar-productos', `${ADMIN_PATH}/buscar-productos`, 'BUSCAR PRODUCTOS')}${link('ventas-generales', `${ADMIN_PATH}/ventas-generales`, 'VENTAS GENERALES')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('generar-orden', `${ADMIN_PATH}/generar-orden`, 'GENERAR ORDEN')}${link('historial-ventas', `${ADMIN_PATH}/historial-ventas`, 'HISTORIAL DE VENTAS')}${role === 'vendedor' || role === 'orders' ? '' : link('series-imeis', `${ADMIN_PATH}/series-imeis`, 'SERIES / IMEIS')}`;
-    const operationKeys = ['buscar-productos','ventas-generales','pedidos','generar-orden','historial-ventas','series-imeis'];
-    const isOpen = operationKeys.includes(active);
-    return `<div class="admin-navigation-stack admin-navigation-stack--limited"><nav class="admin-section-nav admin-section-nav--limited" id="adminSectionNav" aria-label="Navegación YHORS"><details class="admin-nav-group admin-nav-group--operation${isOpen ? ' has-active' : ''}"${isOpen ? ' open' : ''}><summary><span>OPERACIÓN</span></summary><div class="admin-nav-group-links admin-nav-group-links--limited">${limitedItems}</div></details></nav></div>`;
+    // El menú OPERACIÓN siempre inicia cerrado. La página activa se marca dentro
+    // del desplegable, pero navegar a ella NO debe volver a abrir el menú.
+    // Solo el clic explícito sobre OPERACIÓN puede desplegarlo.
+    return `<div class="admin-navigation-stack admin-navigation-stack--limited"><nav class="admin-section-nav admin-section-nav--limited" id="adminSectionNav" aria-label="Navegación YHORS"><details class="admin-nav-group admin-nav-group--operation"><summary><span>OPERACIÓN</span></summary><div class="admin-nav-group-links admin-nav-group-links--limited">${limitedItems}</div></details></nav></div>`;
   }
   const group = (label, activeKeys, items, open = false) => `<details class="admin-nav-group${activeKeys.includes(active) ? ' has-active' : ''}"${open ? ' open' : ''}><summary><span>${label}</span>${activeKeys.includes(active) ? '<i aria-hidden="true"></i>' : ''}</summary><div class="admin-nav-group-links">${items}</div></details>`;
   return `<div class="admin-navigation-stack">
