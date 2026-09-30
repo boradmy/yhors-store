@@ -5093,7 +5093,7 @@ app.post('/api/admin/clientes', requireOrdersAccess, (req, res) => {
   return res.status(201).json(customer);
 });
 
-app.put('/api/admin/clientes/:id', requireStoreManagerOrAdmin, (req, res) => {
+app.put('/api/admin/clientes/:id', requireOrdersAccess, (req, res) => {
   const customers = readCustomers();
   const index = customers.findIndex(item => String(item.id) === String(req.params.id));
   if (index < 0) return res.status(404).json({ error: 'Cliente no encontrado.' });
