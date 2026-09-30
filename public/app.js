@@ -65,6 +65,41 @@ function productSlug(product) {
 }
 function productHref(product) { return `/producto/${encodeURIComponent(productSlug(product))}`; }
 
+const YHORS_CUSTOMER_CACHE_KEY = 'yhors-admin-customers-v16';
+function readLocalCustomerCache() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(YHORS_CUSTOMER_CACHE_KEY) || '[]');
+    return Array.isArray(parsed) ? parsed.filter(c => c && c.id && c.name && c.cedula) : [];
+  } catch { return []; }
+}
+function writeLocalCustomerCache(customers = []) {
+  try {
+    const safe = customers.map(c => ({ id:c.id, identity:c.identity, name:c.name||'', phone:c.phone||'', cedula:c.cedula||'', email:c.email||'', city:c.city||'', address:c.address||'', mapsUrl:c.mapsUrl||'', notes:c.notes||'', createdAt:c.createdAt||'', updatedAt:c.updatedAt||'' }));
+    localStorage.setItem(YHORS_CUSTOMER_CACHE_KEY, JSON.stringify(safe));
+  } catch {}
+}
+async function recoverCustomersFromLocalCache(customers = []) {
+  const cached = readLocalCustomerCache();
+  if (!cached.length) return customers;
+  const byIdentity = new Map();
+  for (const row of [...customers, ...cached]) {
+    const key = row.identity || `cedula:${String(row.cedula||'').replace(/\D/g,'')}`;
+    byIdentity.set(key, { ...byIdentity.get(key), ...row });
+  }
+  const merged = [...byIdentity.values()];
+  if (!customers.length) {
+    for (const row of cached) {
+      try { await request('/api/admin/clientes', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(row) }); } catch {}
+    }
+    try {
+      const fresh = await request(`/api/admin/clientes?_=${Date.now()}`);
+      if (Array.isArray(fresh) && fresh.length) { writeLocalCustomerCache(fresh); return fresh; }
+    } catch {}
+  }
+  writeLocalCustomerCache(merged);
+  return merged;
+}
+
 async function request(url, options = {}) {
   const response = await fetch(url, { credentials: 'same-origin', cache: 'no-store', ...options, headers: { 'Cache-Control': 'no-cache', ...(options.headers || {}) } });
   const json = response.status === 204 ? null : await response.json().catch(() => ({}));
@@ -1312,6 +1347,7 @@ async function renderAdminGenerateOrder() {
   let customer = {};
   let customerId = '';
   let customers = await request(`/api/admin/clientes?_=${Date.now()}`).catch(() => []);
+  customers = await recoverCustomersFromLocalCache(Array.isArray(customers) ? customers : []);
   let lines = [];
   let saving = false;
 
@@ -1427,6 +1463,7 @@ async function renderAdminGenerateOrder() {
     const input = document.querySelector('#generateCustomerSearch');
     if (input) input.value = '';
     try { customers = await request(`/api/admin/clientes?_=${Date.now()}`); } catch {}
+    customers = await recoverCustomersFromLocalCache(Array.isArray(customers) ? customers : []);
     renderGenerateCustomerPicker();
     openModal('customerModal');
     requestAnimationFrame(() => input?.focus());
@@ -1482,12 +1519,14 @@ async function renderAdminGenerateOrder() {
       customerId = created.id;
       customer = { ...created, deliveryMethod: document.querySelector('input[name="generateDelivery"]:checked')?.value || 'office' };
       customers = [created, ...customers.filter(item => String(item.id) !== String(created.id))];
+      writeLocalCustomerCache(customers);
       drawCustomer();
       closeModal('customerModal');
     } catch (error) {
       const existing = error?.data?.customer || error?.customer;
       if (existing) {
         try { customers = await request(`/api/admin/clientes?_=${Date.now()}`); } catch {}
+        customers = await recoverCustomersFromLocalCache(Array.isArray(customers) ? customers : []);
         const selected = customers.find(item => String(item.id) === String(existing.id)) || existing;
         customerId = selected.id;
         customer = { ...selected, deliveryMethod: document.querySelector('input[name="generateDelivery"]:checked')?.value || 'office' };
@@ -4130,12 +4169,12 @@ async function renderAdminClientes() {
   const openEditCustomer = c => {
     detail.innerHTML=`<div class="customer-detail-head"><div><span class="eyebrow">FICHA DEL CLIENTE</span><h2>Editar datos</h2></div></div><form id="customerEditForm" class="form-grid customer-edit-form"><div class="field"><label>Nombre</label><input name="name" value="${escapeHTML(c.name||'')}" required></div><div class="field"><label>Cédula / RUC</label><input name="cedula" value="${escapeHTML(c.cedula||'')}" required></div><div class="field"><label>Teléfono</label><input name="phone" value="${escapeHTML(c.phone||'')}"></div><div class="field"><label>Correo</label><input name="email" type="email" value="${escapeHTML(c.email||'')}"></div><div class="field"><label>Ciudad</label><input name="city" value="${escapeHTML(c.city||'')}"></div><div class="field full"><label>Dirección</label><input name="address" value="${escapeHTML(c.address||'')}"></div><div class="field full"><label>Google Maps</label><input name="mapsUrl" value="${escapeHTML(c.mapsUrl||'')}"></div><div class="field full"><label>Notas internas</label><textarea name="notes" rows="4">${escapeHTML(c.notes||'')}</textarea></div><div class="form-actions full"><button class="button primary" type="submit">Guardar ficha</button><button class="button secondary" type="button" id="cancelCustomerEdit">Cancelar</button><span class="message" id="customerEditMessage"></span></div></form>`;
     document.querySelector('#cancelCustomerEdit')?.addEventListener('click',()=>showCustomer(c.id));
-    document.querySelector('#customerEditForm')?.addEventListener('submit',async e=>{e.preventDefault();const msg=document.querySelector('#customerEditMessage');try{const saved=await request(`/api/admin/clientes/${encodeURIComponent(c.id)}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.fromEntries(new FormData(e.currentTarget)))});customers=customers.map(x=>x.id===saved.id?{...x,...saved}:x);renderList();await showCustomer(saved.id);msg.className='message success';msg.textContent='Ficha actualizada.';}catch(err){msg.className='message error';msg.textContent=err.message;}});
+    document.querySelector('#customerEditForm')?.addEventListener('submit',async e=>{e.preventDefault();const msg=document.querySelector('#customerEditMessage');try{const saved=await request(`/api/admin/clientes/${encodeURIComponent(c.id)}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.fromEntries(new FormData(e.currentTarget)))});customers=customers.map(x=>x.id===saved.id?{...x,...saved}:x);writeLocalCustomerCache(customers);renderList();await showCustomer(saved.id);msg.className='message success';msg.textContent='Ficha actualizada.';}catch(err){msg.className='message error';msg.textContent=err.message;}});
   };
-  const load = async()=>{customers=await request(`/api/admin/clientes?_=${Date.now()}`);renderList(); if(customers[0]) await showCustomer(customers[0].id);};
+  const load = async()=>{let remote=[];try { remote=await request(`/api/admin/clientes?_=${Date.now()}`); } catch {} customers=await recoverCustomersFromLocalCache(Array.isArray(remote)?remote:[]); writeLocalCustomerCache(customers); renderList(); if(customers[0]) await showCustomer(customers[0].id);};
   document.querySelector('#customerSearch')?.addEventListener('input',renderList);
   // Alta manual, separada para no sobrecargar el flujo de consulta.
-  document.querySelector('#newCustomer')?.addEventListener('click',()=>{detail.innerHTML=`<div class="customer-detail-head"><div><span class="eyebrow">FICHA DEL CLIENTE</span><h2>Nuevo cliente</h2></div></div><form id="newCustomerForm" class="form-grid customer-edit-form"><div class="field"><label>Nombre</label><input name="name" required></div><div class="field"><label>Cédula / RUC</label><input name="cedula" required></div><div class="field"><label>Teléfono</label><input name="phone"></div><div class="field"><label>Correo</label><input name="email" type="email"></div><div class="field"><label>Ciudad</label><input name="city"></div><div class="field full"><label>Dirección</label><input name="address"></div><div class="field full"><label>Notas internas</label><textarea name="notes" rows="4"></textarea></div><div class="form-actions full"><button class="button primary" type="submit">Crear cliente</button><span class="message" id="newCustomerMessage"></span></div></form>`;document.querySelector('#newCustomerForm')?.addEventListener('submit',async e=>{e.preventDefault();try{const created=await request('/api/admin/clientes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.fromEntries(new FormData(e.currentTarget)))});customers.unshift(created);renderList();await showCustomer(created.id);}catch(err){document.querySelector('#newCustomerMessage').className='message error';document.querySelector('#newCustomerMessage').textContent=err.message;}});});
+  document.querySelector('#newCustomer')?.addEventListener('click',()=>{detail.innerHTML=`<div class="customer-detail-head"><div><span class="eyebrow">FICHA DEL CLIENTE</span><h2>Nuevo cliente</h2></div></div><form id="newCustomerForm" class="form-grid customer-edit-form"><div class="field"><label>Nombre</label><input name="name" required></div><div class="field"><label>Cédula / RUC</label><input name="cedula" required></div><div class="field"><label>Teléfono</label><input name="phone"></div><div class="field"><label>Correo</label><input name="email" type="email"></div><div class="field"><label>Ciudad</label><input name="city"></div><div class="field full"><label>Dirección</label><input name="address"></div><div class="field full"><label>Notas internas</label><textarea name="notes" rows="4"></textarea></div><div class="form-actions full"><button class="button primary" type="submit">Crear cliente</button><span class="message" id="newCustomerMessage"></span></div></form>`;document.querySelector('#newCustomerForm')?.addEventListener('submit',async e=>{e.preventDefault();try{const created=await request('/api/admin/clientes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.fromEntries(new FormData(e.currentTarget)))});customers.unshift(created);writeLocalCustomerCache(customers);renderList();await showCustomer(created.id);}catch(err){document.querySelector('#newCustomerMessage').className='message error';document.querySelector('#newCustomerMessage').textContent=err.message;}});});
   await load();
 }
 

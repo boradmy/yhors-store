@@ -29,6 +29,10 @@ const ORDERS_FILE = path.join(DATA_DIR, 'orders.json');
 const SALES_FILE = path.join(DATA_DIR, 'sales.json');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const CUSTOMERS_FILE = path.join(DATA_DIR, 'customers.json');
+// V16.0.5: espejo local de emergencia para clientes. Sirve como respaldo del
+// fichero principal cuando el almacenamiento de Render se reinicia sin montar
+// correctamente el disco. No sustituye PostgreSQL; es un puente temporal.
+const CUSTOMERS_RUNTIME_FILE = path.join(__dirname, 'data', 'customers.runtime.json');
 const PURCHASES_FILE = path.join(DATA_DIR, 'purchases.json');
 const AUDIT_FILE = path.join(DATA_DIR, 'audit.json');
 const AUDIT_MAX_RECORDS = 50000;
@@ -624,20 +628,33 @@ function decryptCustomer(customer) {
   }
   return copy;
 }
-function readCustomers() {
+function parseCustomerFile(filePath) {
   try {
-    if (!fs.existsSync(CUSTOMERS_FILE)) return [];
-    const parsed = JSON.parse(fs.readFileSync(CUSTOMERS_FILE, 'utf8'));
+    if (!fs.existsSync(filePath)) return [];
+    const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8'));
     if (!Array.isArray(parsed)) return [];
-    // No descartes todo el fichero si una ficha antigua está dañada: recupera
-    // las demás fichas y conserva siempre la identidad para poder encontrarlas.
     return parsed.map((customer) => {
       try { return decryptCustomer(customer); }
-      catch (error) {
-        return { ...customer, _customerReadError: true };
-      }
+      catch (error) { return { ...customer, _customerReadError: true }; }
     }).filter(Boolean);
   } catch { return []; }
+}
+
+function mergeCustomerRecords(primary = [], fallback = []) {
+  const map = new Map();
+  for (const customer of [...primary, ...fallback]) {
+    const identity = customer?.identity || customerIdentity(customer || {});
+    if (!identity || identity === 'name:') continue;
+    const previous = map.get(identity);
+    map.set(identity, previous ? { ...previous, ...Object.fromEntries(Object.entries(customer).filter(([k,v]) => v !== '' && v !== null && v !== undefined)) } : customer);
+  }
+  return [...map.values()];
+}
+
+function readCustomers() {
+  const primary = parseCustomerFile(CUSTOMERS_FILE);
+  const fallback = CUSTOMERS_RUNTIME_FILE === CUSTOMERS_FILE ? [] : parseCustomerFile(CUSTOMERS_RUNTIME_FILE);
+  return mergeCustomerRecords(primary, fallback);
 }
 
 function buildCustomerDirectory() {
@@ -673,12 +690,23 @@ function buildCustomerDirectory() {
 
   return [...byIdentity.values()];
 }
+function writeCustomerFile(filePath, customers) {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  const tmp = `${filePath}.tmp`;
+  fs.writeFileSync(tmp, `${JSON.stringify(customers.map(encryptCustomer), null, 2)}\n`, 'utf8');
+  fs.renameSync(tmp, filePath);
+}
+
 function writeCustomers(customers) {
   maybeAutoBackup();
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-  const tmp = `${CUSTOMERS_FILE}.tmp`;
-  fs.writeFileSync(tmp, `${JSON.stringify(customers.map(encryptCustomer), null, 2)}\n`, 'utf8');
-  fs.renameSync(tmp, CUSTOMERS_FILE);
+  writeCustomerFile(CUSTOMERS_FILE, customers);
+  // Mantén un espejo fuera del volumen /var/data. Mientras YHORS siga usando
+  // JSON, esto permite recuperar clientes si el volumen persistente no está
+  // montado. Cuando migremos todo a PostgreSQL este puente se elimina.
+  if (CUSTOMERS_RUNTIME_FILE !== CUSTOMERS_FILE) {
+    try { writeCustomerFile(CUSTOMERS_RUNTIME_FILE, customers); }
+    catch (error) { console.error('[YHORS Clientes] No se pudo escribir el espejo temporal:', error.message); }
+  }
 }
 function customerIdentity(input = {}) {
   const cedula = cleanText(input.cedula, 20).replace(/\D/g, '');
@@ -854,6 +882,15 @@ function ensureStorage() {
   if (!fs.existsSync(SALES_FILE)) fs.writeFileSync(SALES_FILE, '[]\n', 'utf8');
 }
 ensureStorage();
+// Recuperación temporal de clientes: si el volumen persistente arrancó vacío
+// pero existe el espejo local, lo rehidrata antes de atender peticiones.
+try {
+  const primaryCustomers = parseCustomerFile(CUSTOMERS_FILE);
+  const fallbackCustomers = parseCustomerFile(CUSTOMERS_RUNTIME_FILE);
+  if (primaryCustomers.length === 0 && fallbackCustomers.length > 0) writeCustomerFile(CUSTOMERS_FILE, fallbackCustomers);
+} catch (error) {
+  console.error('[YHORS Clientes] No se pudo rehidratar el fichero de clientes:', error.message);
+}
 migrateAllOrderStorageToEncryption();
 setTimeout(() => maybeAutoBackup(), 1500);
 
@@ -4983,12 +5020,12 @@ app.get('/api/admin/clientes', requireOrdersAccess, (req, res) => {
   } catch {}
   const allOrders = readOrders();
   const q = cleanText(req.query?.q, 120).toLocaleLowerCase('es-EC');
-  const sales = readSales();
+  const allSales = readSales();
   const rows = customers.map(customer => {
-    const tx = customerTransactions(customer, allOrders, sales);
+    const tx = customerTransactions(customer, allOrders, allSales);
     const activeOrders = tx.filter(item => item.type === 'pedido' && item.status !== 'Cancelado').length;
-    const sales = tx.filter(item => item.type === 'venta');
-    return { ...customer, orderCount: tx.filter(item => item.type === 'pedido').length, activeOrderCount: activeOrders, salesCount: sales.length, salesTotal: sales.reduce((sum,item)=>sum+Number(item.total||0),0), lastActivityAt: tx[0]?.date || customer.updatedAt || customer.createdAt };
+    const customerSales = tx.filter(item => item.type === 'venta');
+    return { ...customer, orderCount: tx.filter(item => item.type === 'pedido').length, activeOrderCount: activeOrders, salesCount: customerSales.length, salesTotal: customerSales.reduce((sum,item)=>sum+Number(item.total||0),0), lastActivityAt: tx[0]?.date || customer.updatedAt || customer.createdAt };
   }).filter(customer => !q || `${customer.name} ${customer.cedula} ${customer.phone} ${customer.email} ${customer.city}`.toLocaleLowerCase('es-EC').includes(q));
   if (String(session.role || '').toLowerCase() === 'vendedor') {
     // El vendedor solo consulta clientes que tengan pedidos asignados a su usuario.
