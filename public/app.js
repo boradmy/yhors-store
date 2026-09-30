@@ -1181,11 +1181,10 @@ function adminSectionNav(session = {}, active = '') {
   const group = (label, activeKeys, items, open = false) => `<details class="admin-nav-group${activeKeys.includes(active) ? ' has-active' : ''}"${open ? ' open' : ''}><summary><span>${label}</span>${activeKeys.includes(active) ? '<i aria-hidden="true"></i>' : ''}</summary><div class="admin-nav-group-links">${items}</div></details>`;
   return `<div class="admin-navigation-stack">
     <nav class="admin-section-nav" id="adminSectionNav" aria-label="Administración YHORS">
-      ${group('Operación', ['inventario','buscar-productos','pedidos','generar-orden','historial-ventas'], `${link('buscar-productos', `${ADMIN_PATH}/buscar-productos`, 'BUSCAR PRODUCTOS')}${link('inventario', `${ADMIN_PATH}/inventario`, 'INVENTARIO')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('generar-orden', `${ADMIN_PATH}/generar-orden`, 'GENERAR ORDEN')}${link('historial-ventas', `${ADMIN_PATH}/historial-ventas`, 'HISTORIAL DE VENTAS')}`)}
+      ${group('Operación', ['web','inventario','buscar-productos','pedidos','generar-orden','historial-ventas'], `${link('web', `${ADMIN_PATH}/web`, '🌐 PÁGINA WEB')}${link('buscar-productos', `${ADMIN_PATH}/buscar-productos`, 'BUSCAR PRODUCTOS')}${link('inventario', `${ADMIN_PATH}/inventario`, 'INVENTARIO')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('generar-orden', `${ADMIN_PATH}/generar-orden`, 'GENERAR ORDEN')}${link('historial-ventas', `${ADMIN_PATH}/historial-ventas`, 'HISTORIAL DE VENTAS')}`)}
       ${group('Gestión', ['usuarios','series-imeis','auditoria'], `${link('usuarios', `${ADMIN_PATH}/usuarios`, 'USUARIOS')}${link('series-imeis', `${ADMIN_PATH}/series-imeis`, 'SERIES/IMEIS')}${link('auditoria', `${ADMIN_PATH}/auditoria`, 'AUDITORÍA')}`)}
       ${group('Finanzas', ['resumen-financiero','ventas-generales','multas','calculo-comision'], `${link('resumen-financiero', `${ADMIN_PATH}/resumen-financiero`, 'RESUMEN FINANCIERO')}${link('ventas-generales', `${ADMIN_PATH}/ventas-generales`, 'VENTAS GENERALES')}${link('multas', `${ADMIN_PATH}/multas`, 'MULTAS')}${link('calculo-comision', `${ADMIN_PATH}/calculo-comision`, 'CÁLCULO DE COMISIÓN')}`)}
     </nav>
-    <div class="admin-web-row">${link('web', `${ADMIN_PATH}/web`, '🌐 PÁGINA WEB')}</div>
   </div>`;
 }
 

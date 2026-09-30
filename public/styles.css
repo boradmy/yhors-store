@@ -3926,7 +3926,7 @@ body.generate-modal-open{overflow:hidden}
 }
 
 
-/* YHORS 15.8.2 · Navegación estable + Página Web separada */
+/* YHORS 15.8.3 · Página Web integrada dentro de Operación */
 .admin-navigation-stack{position:relative;z-index:80;display:grid;gap:7px;margin-bottom:22px}
 .admin-navigation-stack .admin-section-nav{position:relative;top:auto;z-index:90;margin:0;overflow:visible}
 .admin-web-row{display:flex;align-items:center;min-height:40px;padding:5px 7px;background:rgba(247,244,238,.92);border:1px solid var(--line,#ded8cc);border-radius:13px;box-shadow:0 5px 18px rgba(30,25,18,.035)}
