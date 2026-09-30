@@ -536,7 +536,10 @@ async function renderAdminAfterLogin(session) {
   // /generar-orden en la barra mientras visualmente se mostraban PEDIDOS.
   // Desde aquí la URL y la vista siempre se resuelven juntas.
   let target = current;
-  if (!isAdminRoute) target = limitedRole ? `${ADMIN_PATH}/pedidos` : ADMIN_PATH;
+  // YHORS Inteligente es ahora la pantalla principal del panel.
+  // Solo conservamos una ruta administrativa distinta cuando el usuario
+  // llegó expresamente a ella antes de autenticarse.
+  if (!isAdminRoute || current === ADMIN_PATH || current === `${ADMIN_PATH}/`) target = `${ADMIN_PATH}/inteligente`;
 
   if (limitedRole) {
     const allowed = [`${ADMIN_PATH}/inteligente`, `${ADMIN_PATH}/ventas-generales`, `${ADMIN_PATH}/pedidos`, `${ADMIN_PATH}/generar-orden`, `${ADMIN_PATH}/buscar-productos`, `${ADMIN_PATH}/historial-ventas`];
@@ -3985,7 +3988,7 @@ async function renderYhorsInteligente() {
   app.innerHTML = `<main class="admin-shell yh-intelligent-shell"><div class="admin-wrap">
     <div class="admin-top yh-intelligent-top"><div><a class="brand" href="${ADMIN_PATH}/inteligente" data-smooth-route>YHORS</a><h1 class="admin-title">YHORS Inteligente</h1><p class="admin-subtitle">Tu centro de control para saber qué está pasando hoy en YHORS.</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>
     ${nav}
-    <section class="yh-intelligent-hero"><div><span class="eyebrow">CENTRO INTELIGENTE · ${today}</span><h2>Buenos días, ${escapeHTML(session.username || 'equipo')} <span aria-hidden="true">👋</span></h2><p>Información operativa resumida en bloques. Entra directamente al módulo que necesita tu atención.</p></div><div class="yh-intelligent-status"><span class="yh-status-dot"></span><span>YHORS operativo</span></div></section>
+    <section class="yh-intelligent-hero"><div><span class="eyebrow">CENTRO INTELIGENTE · ${today}</span><h2>Buenos días, ${escapeHTML(session.username || 'equipo')} <span aria-hidden="true">👋</span></h2><p>Todo lo importante de hoy, organizado en bloques. Cada indicador te lleva directamente al lugar donde puedes actuar.</p></div><div class="yh-intelligent-hero-meta"><span class="yh-intelligent-status"><span class="yh-status-dot"></span><span>YHORS operativo</span></span><small>Actualizado al abrir esta pantalla</small></div></section>
     <section class="yh-intelligent-grid" aria-label="Resumen inteligente">
       ${salesCard}
       ${cardLink(`${ADMIN_PATH}/pedidos`, 'Pedidos pendientes', 'OPERACIÓN', pending.length, `${readyToShip.length} listos para avanzar`, 'is-orders')}

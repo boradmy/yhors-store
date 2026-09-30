@@ -3809,3 +3809,118 @@ body.generate-modal-open{overflow:hidden}
 .yh-intel-note p{margin:3px 0 0;font-size:.72rem;line-height:1.5}
 @media(max-width:900px){.yh-intelligent-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.yh-intel-card.is-large{grid-column:span 2}.yh-intelligent-lower{grid-template-columns:1fr}}
 @media(max-width:600px){.yh-intelligent-hero{display:block;padding:20px;border-radius:16px}.yh-intelligent-status{margin-top:15px;width:max-content}.yh-intelligent-grid{grid-template-columns:1fr;gap:10px}.yh-intel-card,.yh-intel-card.is-large{grid-column:auto;min-height:132px;padding:17px}.yh-intelligent-lower{display:grid;grid-template-columns:1fr}.yh-intel-panel{padding:16px;border-radius:16px}.yh-intel-action-grid{grid-template-columns:1fr}.yh-intel-note{margin-bottom:10px}.yh-intelligent-shell{padding:10px}.yh-intelligent-shell .admin-top{align-items:flex-start}.yh-intelligent-top .admin-title{font-size:1.45rem}}
+
+/* YHORS 15.8.1 · Header de YHORS Inteligente refinado
+   El centro inteligente usa una navegación de bloques estable. Evita que los
+   desplegables de Operación/Gestión/Finanzas se monten sobre el encabezado. */
+.yh-intelligent-shell .admin-top{
+  position:relative;
+  top:auto;
+  z-index:20;
+  margin:0 0 12px;
+  padding:10px 2px 14px;
+  background:transparent;
+  backdrop-filter:none;
+  -webkit-backdrop-filter:none;
+  border-bottom:1px solid rgba(222,215,204,.78);
+}
+.yh-intelligent-shell .admin-section-nav{
+  position:relative;
+  top:auto;
+  z-index:30;
+  display:grid;
+  grid-template-columns:minmax(220px,1.25fr) repeat(3,minmax(0,1fr));
+  align-items:stretch;
+  gap:5px;
+  width:100%;
+  max-width:none;
+  margin:0 0 18px;
+  padding:5px;
+  overflow:visible;
+}
+.yh-intelligent-shell .admin-section-link{
+  min-height:44px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  width:auto;
+  padding:8px 12px;
+  border-radius:10px;
+  white-space:nowrap;
+  font-size:.66rem;
+}
+.yh-intelligent-shell .admin-section-nav > .admin-section-link.active{
+  background:#171918;
+  color:#fff;
+  box-shadow:0 4px 12px rgba(0,0,0,.12);
+}
+.yh-intelligent-shell .admin-nav-group{flex:initial;min-width:0}
+.yh-intelligent-shell .admin-nav-group summary{
+  min-height:44px;
+  padding:0 12px;
+  border-radius:10px;
+  white-space:nowrap;
+}
+.yh-intelligent-shell .admin-nav-group-links{
+  top:calc(100% + 6px);
+  left:50%;
+  right:auto;
+  transform:translateX(-50%);
+  min-width:235px;
+  max-width:min(320px,calc(100vw - 28px));
+}
+.yh-intelligent-shell .admin-nav-group-links .admin-section-link{
+  justify-content:flex-start;
+  min-height:40px;
+  white-space:nowrap;
+}
+.yh-intelligent-shell .yh-intelligent-hero-meta{
+  display:grid;
+  justify-items:end;
+  gap:6px;
+  align-self:flex-end;
+}
+.yh-intelligent-shell .yh-intelligent-hero-meta small{
+  color:#918b82;
+  font-size:.62rem;
+}
+
+@media(max-width:1050px){
+  .yh-intelligent-shell .admin-section-nav{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+  .yh-intelligent-shell .admin-section-nav > .admin-section-link{
+    grid-column:1/-1;
+  }
+}
+@media(max-width:700px){
+  .yh-intelligent-shell .admin-top{
+    padding-top:6px;
+  }
+  .yh-intelligent-shell .admin-section-nav{
+    display:grid;
+    grid-template-columns:1fr;
+    gap:4px;
+    overflow:visible;
+  }
+  .yh-intelligent-shell .admin-section-nav > .admin-section-link{
+    grid-column:auto;
+  }
+  .yh-intelligent-shell .admin-nav-group summary{
+    justify-content:space-between;
+  }
+  .yh-intelligent-shell .admin-nav-group-links{
+    position:static;
+    transform:none;
+    max-width:none;
+    min-width:0;
+    margin-top:4px;
+    box-shadow:none;
+    background:#f8f6f1;
+  }
+  .yh-intelligent-shell .yh-intelligent-hero-meta{
+    justify-items:start;
+    align-self:auto;
+    margin-top:14px;
+  }
+}
