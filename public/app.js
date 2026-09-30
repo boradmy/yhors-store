@@ -4171,7 +4171,19 @@ async function renderAdminClientes() {
     document.querySelector('#cancelCustomerEdit')?.addEventListener('click',()=>showCustomer(c.id));
     document.querySelector('#customerEditForm')?.addEventListener('submit',async e=>{e.preventDefault();const msg=document.querySelector('#customerEditMessage');try{const saved=await request(`/api/admin/clientes/${encodeURIComponent(c.id)}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.fromEntries(new FormData(e.currentTarget)))});customers=customers.map(x=>x.id===saved.id?{...x,...saved}:x);writeLocalCustomerCache(customers);renderList();await showCustomer(saved.id);msg.className='message success';msg.textContent='Ficha actualizada.';}catch(err){msg.className='message error';msg.textContent=err.message;}});
   };
-  const load = async()=>{let remote=[];try { remote=await request(`/api/admin/clientes?_=${Date.now()}`); } catch {} customers=await recoverCustomersFromLocalCache(Array.isArray(remote)?remote:[]); writeLocalCustomerCache(customers); renderList(); if(customers[0]) await showCustomer(customers[0].id);};
+  const load = async()=>{
+    let remote=[];
+    let remoteError=null;
+    try { remote=await request(`/api/admin/clientes?_=${Date.now()}`); } catch (error) { remoteError=error; }
+    customers=await recoverCustomersFromLocalCache(Array.isArray(remote)?remote:[]);
+    writeLocalCustomerCache(customers);
+    renderList();
+    if(customers[0]) await showCustomer(customers[0].id);
+    else if(remoteError){
+      list.innerHTML=`<div class="empty"><strong>No se pudo cargar el fichero de clientes.</strong><br><small>${escapeHTML(remoteError.message||'Error del servidor')}</small><br><button type="button" class="button secondary small" id="retryCustomers">Reintentar</button></div>`;
+      document.querySelector('#retryCustomers')?.addEventListener('click',load);
+    }
+  };
   document.querySelector('#customerSearch')?.addEventListener('input',renderList);
   // Alta manual, separada para no sobrecargar el flujo de consulta.
   document.querySelector('#newCustomer')?.addEventListener('click',()=>{detail.innerHTML=`<div class="customer-detail-head"><div><span class="eyebrow">FICHA DEL CLIENTE</span><h2>Nuevo cliente</h2></div></div><form id="newCustomerForm" class="form-grid customer-edit-form"><div class="field"><label>Nombre</label><input name="name" required></div><div class="field"><label>Cédula / RUC</label><input name="cedula" required></div><div class="field"><label>Teléfono</label><input name="phone"></div><div class="field"><label>Correo</label><input name="email" type="email"></div><div class="field"><label>Ciudad</label><input name="city"></div><div class="field full"><label>Dirección</label><input name="address"></div><div class="field full"><label>Notas internas</label><textarea name="notes" rows="4"></textarea></div><div class="form-actions full"><button class="button primary" type="submit">Crear cliente</button><span class="message" id="newCustomerMessage"></span></div></form>`;document.querySelector('#newCustomerForm')?.addEventListener('submit',async e=>{e.preventDefault();try{const created=await request('/api/admin/clientes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.fromEntries(new FormData(e.currentTarget)))});customers.unshift(created);writeLocalCustomerCache(customers);renderList();await showCustomer(created.id);}catch(err){document.querySelector('#newCustomerMessage').className='message error';document.querySelector('#newCustomerMessage').textContent=err.message;}});});

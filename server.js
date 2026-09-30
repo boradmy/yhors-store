@@ -698,7 +698,6 @@ function writeCustomerFile(filePath, customers) {
 }
 
 function writeCustomers(customers) {
-  maybeAutoBackup();
   writeCustomerFile(CUSTOMERS_FILE, customers);
   // Mantén un espejo fuera del volumen /var/data. Mientras YHORS siga usando
   // JSON, esto permite recuperar clientes si el volumen persistente no está
@@ -707,6 +706,8 @@ function writeCustomers(customers) {
     try { writeCustomerFile(CUSTOMERS_RUNTIME_FILE, customers); }
     catch (error) { console.error('[YHORS Clientes] No se pudo escribir el espejo temporal:', error.message); }
   }
+  // El backup se hace después de guardar para que incluya el cliente recién creado.
+  maybeAutoBackup();
 }
 function customerIdentity(input = {}) {
   const cedula = cleanText(input.cedula, 20).replace(/\D/g, '');
