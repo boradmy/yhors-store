@@ -539,7 +539,7 @@ async function renderAdminAfterLogin(session) {
   if (!isAdminRoute) target = limitedRole ? `${ADMIN_PATH}/pedidos` : ADMIN_PATH;
 
   if (limitedRole) {
-    const allowed = [`${ADMIN_PATH}/ventas-generales`, `${ADMIN_PATH}/pedidos`, `${ADMIN_PATH}/generar-orden`, `${ADMIN_PATH}/buscar-productos`];
+    const allowed = [`${ADMIN_PATH}/inteligente`, `${ADMIN_PATH}/ventas-generales`, `${ADMIN_PATH}/pedidos`, `${ADMIN_PATH}/generar-orden`, `${ADMIN_PATH}/buscar-productos`, `${ADMIN_PATH}/historial-ventas`];
     if (!allowed.includes(target.replace(/\/$/, ''))) target = `${ADMIN_PATH}/pedidos`;
   }
 
@@ -604,6 +604,7 @@ async function navigateToRoute(href, { replace = false } = {}) {
 
 async function renderCurrentRoute() {
   const path = window.location.pathname;
+  if (path === `${ADMIN_PATH}/inteligente` || path === `${ADMIN_PATH}/inteligente/`) return renderYhorsInteligente();
   if (path === ADMIN_PATH || path === `${ADMIN_PATH}/`) return renderAdmin();
   if (path === `${ADMIN_PATH}/ventas-generales` || path === `${ADMIN_PATH}/ventas-generales/`) return renderAdminSales();
   if (path === `${ADMIN_PATH}/resumen-financiero` || path === `${ADMIN_PATH}/resumen-financiero/`) return renderAdminFinancial();
@@ -1167,11 +1168,12 @@ function adminSectionNav(session = {}, active = '') {
   const link = (key, href, label) => `<a href="${href}" class="admin-section-link${active === key ? ' active' : ''}" data-smooth-route>${label}</a>`;
   if (limitedOperations) {
     return `<nav class="admin-section-nav admin-section-nav--compact" id="adminSectionNav" aria-label="Secciones operativas">
-      <details class="admin-nav-group"><summary>Operación</summary><div class="admin-nav-group-links">${link('buscar-productos', `${ADMIN_PATH}/buscar-productos`, 'BUSCAR PRODUCTOS')}${link('ventas-generales', `${ADMIN_PATH}/ventas-generales`, 'VENTAS GENERALES')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('generar-orden', `${ADMIN_PATH}/generar-orden`, 'GENERAR ORDEN')}${link('historial-ventas', `${ADMIN_PATH}/historial-ventas`, 'HISTORIAL DE VENTAS')}${role === 'vendedor' || role === 'orders' ? '' : link('series-imeis', `${ADMIN_PATH}/series-imeis`, 'SERIES/IMEIS')}</div></details>
+      ${link('inteligente', `${ADMIN_PATH}/inteligente`, '🧠 YHORS INTELIGENTE')}<details class="admin-nav-group"><summary>Operación</summary><div class="admin-nav-group-links">${link('buscar-productos', `${ADMIN_PATH}/buscar-productos`, 'BUSCAR PRODUCTOS')}${link('ventas-generales', `${ADMIN_PATH}/ventas-generales`, 'VENTAS GENERALES')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('generar-orden', `${ADMIN_PATH}/generar-orden`, 'GENERAR ORDEN')}${link('historial-ventas', `${ADMIN_PATH}/historial-ventas`, 'HISTORIAL DE VENTAS')}${role === 'vendedor' || role === 'orders' ? '' : link('series-imeis', `${ADMIN_PATH}/series-imeis`, 'SERIES/IMEIS')}</div></details>
     </nav>`;
   }
   const group = (label, activeKeys, items, open = false) => `<details class="admin-nav-group${activeKeys.includes(active) ? ' has-active' : ''}"${open ? ' open' : ''}><summary><span>${label}</span>${activeKeys.includes(active) ? '<i aria-hidden="true"></i>' : ''}</summary><div class="admin-nav-group-links">${items}</div></details>`;
   return `<nav class="admin-section-nav" id="adminSectionNav" aria-label="Administración YHORS">
+    ${link('inteligente', `${ADMIN_PATH}/inteligente`, '🧠 YHORS INTELIGENTE')}
     ${group('Operación', ['web','inventario','buscar-productos','pedidos','generar-orden','historial-ventas'], `${link('web', ADMIN_PATH, 'PÁGINA WEB')}${link('buscar-productos', `${ADMIN_PATH}/buscar-productos`, 'BUSCAR PRODUCTOS')}${link('inventario', `${ADMIN_PATH}/inventario`, 'INVENTARIO')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('generar-orden', `${ADMIN_PATH}/generar-orden`, 'GENERAR ORDEN')}${link('historial-ventas', `${ADMIN_PATH}/historial-ventas`, 'HISTORIAL DE VENTAS')}`)}
     ${group('Gestión', ['usuarios','series-imeis','auditoria'], `${link('usuarios', `${ADMIN_PATH}/usuarios`, 'USUARIOS')}${link('series-imeis', `${ADMIN_PATH}/series-imeis`, 'SERIES/IMEIS')}${link('auditoria', `${ADMIN_PATH}/auditoria`, 'AUDITORÍA')}`)}
     ${group('Finanzas', ['resumen-financiero','ventas-generales','multas','calculo-comision'], `${link('resumen-financiero', `${ADMIN_PATH}/resumen-financiero`, 'RESUMEN FINANCIERO')}${link('ventas-generales', `${ADMIN_PATH}/ventas-generales`, 'VENTAS GENERALES')}${link('multas', `${ADMIN_PATH}/multas`, 'MULTAS')}${link('calculo-comision', `${ADMIN_PATH}/calculo-comision`, 'CÁLCULO DE COMISIÓN')}`)}
@@ -3942,6 +3944,70 @@ async function renderAdminInventory() {
   document.querySelector('#inventoryPageCategoryFilter')?.addEventListener('change', draw);
   wireAccountMenu();
   document.querySelector('#clearInventoryPageSearch')?.addEventListener('click', () => { const input=document.querySelector('#inventoryPageSearch'); if(input){input.value='';input.focus();draw();} });
+}
+
+async function renderYhorsInteligente() {
+  const session = await request('/api/admin/session').catch(() => ({ authenticated: false }));
+  if (!session.authenticated) return renderLogin();
+  const role = String(session.role || '').toLowerCase();
+  if (!['admin', 'store_manager', 'vendedor', 'orders'].includes(role)) return renderAdmin();
+
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Guayaquil' });
+  const [orders, sales, products] = await Promise.all([
+    request('/api/admin/orders').catch(() => []),
+    request(`/api/admin/historial-ventas?from=${today}&to=${today}`).catch(() => []),
+    request('/api/admin/catalog-products').catch(() => [])
+  ]);
+
+  const activeOrders = Array.isArray(orders) ? orders : [];
+  const confirmedSales = Array.isArray(sales) ? sales : [];
+  const catalog = Array.isArray(products) ? products : [];
+  const pending = activeOrders.filter(order => !['Enviado', 'Entregado', 'Cancelado'].includes(String(order.status || '')));
+  const readyToShip = activeOrders.filter(order => ['Pendiente', 'Confirmado', 'Preparado'].includes(String(order.status || '')));
+  const preparing = activeOrders.filter(order => String(order.status || '') === 'Preparado');
+  const unassigned = activeOrders.filter(order => !order.assignedSellerId);
+  const lowStock = catalog.filter(product => product.published !== false && Number(product.stock || 0) <= 3);
+  const salesTotal = confirmedSales.reduce((sum, sale) => sum + Number(sale.total || 0), 0);
+  const commissionEligible = confirmedSales.filter(sale => ['Enviado', 'Entregado'].includes(String(sale.status || ''))).length;
+  const recentActivity = [
+    ...confirmedSales.slice(0, 4).map(sale => ({ date: sale.notifiedAt || sale.createdAt, type: 'sale', text: `Venta #${sale.orderNumber || '—'} · ${sale.status || 'Confirmada'}`, amount: sale.total })),
+    ...activeOrders.slice(0, 5).map(order => ({ date: order.updatedAt || order.createdAt, type: 'order', text: `Orden #${order.orderNumber || '—'} · ${order.status || 'Pendiente'}` }))
+  ].filter(item => item.date).sort((a,b) => new Date(b.date) - new Date(a.date)).slice(0, 6);
+
+  const canSeeFinancial = role === 'admin';
+  const nav = adminSectionNav(session, 'inteligente');
+  const cardLink = (href, title, label, value, detail, cls = '') => `<a class="yh-intel-card ${cls}" href="${href}" data-smooth-route><div class="yh-intel-card-head"><span>${label}</span><span class="yh-intel-arrow">↗</span></div><strong>${value}</strong><small>${detail}</small><h3>${title}</h3></a>`;
+  const moneyValue = money(salesTotal);
+  const salesCard = canSeeFinancial
+    ? cardLink(`${ADMIN_PATH}/historial-ventas`, 'Ventas confirmadas', 'HOY', moneyValue, `${confirmedSales.length} venta${confirmedSales.length === 1 ? '' : 's'} en Historial de Ventas`, 'is-large is-sales')
+    : cardLink(`${ADMIN_PATH}/historial-ventas`, 'Mis ventas confirmadas', 'HOY', String(confirmedSales.length), `${money(salesTotal)} vendidos hoy`, 'is-large is-sales');
+
+  app.innerHTML = `<main class="admin-shell yh-intelligent-shell"><div class="admin-wrap">
+    <div class="admin-top yh-intelligent-top"><div><a class="brand" href="${ADMIN_PATH}/inteligente" data-smooth-route>YHORS</a><h1 class="admin-title">YHORS Inteligente</h1><p class="admin-subtitle">Tu centro de control para saber qué está pasando hoy en YHORS.</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>
+    ${nav}
+    <section class="yh-intelligent-hero"><div><span class="eyebrow">CENTRO INTELIGENTE · ${today}</span><h2>Buenos días, ${escapeHTML(session.username || 'equipo')} <span aria-hidden="true">👋</span></h2><p>Información operativa resumida en bloques. Entra directamente al módulo que necesita tu atención.</p></div><div class="yh-intelligent-status"><span class="yh-status-dot"></span><span>YHORS operativo</span></div></section>
+    <section class="yh-intelligent-grid" aria-label="Resumen inteligente">
+      ${salesCard}
+      ${cardLink(`${ADMIN_PATH}/pedidos`, 'Pedidos pendientes', 'OPERACIÓN', pending.length, `${readyToShip.length} listos para avanzar`, 'is-orders')}
+      ${cardLink(`${ADMIN_PATH}/pedidos`, 'Por enviar', 'LOGÍSTICA', readyToShip.length, `${preparing.length} en Preparado`, 'is-shipping')}
+      ${cardLink(`${ADMIN_PATH}/pedidos`, 'Sin vendedor', 'ATENCIÓN', unassigned.length, unassigned.length ? 'Requieren asignación' : 'Todo asignado', unassigned.length ? 'is-alert' : 'is-ok')}
+      ${cardLink(`${ADMIN_PATH}/inventario`, 'Stock bajo', 'INVENTARIO', lowStock.length, lowStock.length ? 'Productos con 3 o menos unidades' : 'Sin alertas de stock', lowStock.length ? 'is-alert' : 'is-ok')}
+      ${cardLink(`${ADMIN_PATH}/pedidos`, 'En preparación', 'BODEGA', preparing.length, 'Órdenes con estado Preparado', 'is-prep')}
+    </section>
+    <section class="yh-intelligent-lower">
+      <article class="yh-intel-panel yh-intel-activity"><div class="yh-intel-panel-title"><div><span class="eyebrow">SEGUIMIENTO</span><h2>Actividad reciente</h2></div><a href="${ADMIN_PATH}/pedidos" data-smooth-route>Ver pedidos →</a></div>
+        ${recentActivity.length ? `<div class="yh-intel-timeline">${recentActivity.map(item => `<div class="yh-intel-activity-row"><span class="yh-activity-icon ${item.type}">${item.type === 'sale' ? '✓' : '↗'}</span><div><strong>${escapeHTML(item.text)}</strong><small>${new Date(item.date).toLocaleString('es-EC',{dateStyle:'short',timeStyle:'short'})}${item.amount !== undefined ? ` · ${money(item.amount)}` : ''}</small></div></div>`).join('')}</div>` : '<div class="yh-intel-empty">Todavía no hay actividad reciente para mostrar.</div>'}
+      </article>
+      <article class="yh-intel-panel yh-intel-actions"><div class="yh-intel-panel-title"><div><span class="eyebrow">ACCESOS RÁPIDOS</span><h2>¿Qué quieres hacer?</h2></div></div><div class="yh-intel-action-grid">
+        <a href="${ADMIN_PATH}/generar-orden" data-smooth-route><span>＋</span><strong>Generar orden</strong><small>Nueva orden de venta</small></a>
+        <a href="${ADMIN_PATH}/pedidos" data-smooth-route><span>▣</span><strong>Ver pedidos</strong><small>Revisar estados y asignaciones</small></a>
+        <a href="${ADMIN_PATH}/inventario" data-smooth-route><span>⌂</span><strong>Inventario</strong><small>Consultar stock</small></a>
+        <a href="${ADMIN_PATH}/historial-ventas" data-smooth-route><span>✓</span><strong>Historial de ventas</strong><small>Ventas notificadas</small></a>
+      </div></article>
+    </section>
+    <section class="yh-intel-note"><span>💡</span><div><strong>El estado manda</strong><p>Las órdenes pasan a Historial de Ventas cuando se notifican estando <b>Enviado</b> o <b>Entregado</b>. El Dashboard solo resume ese flujo; no modifica tus pedidos.</p></div></section>
+  </div></main>`;
+  wireAccountMenu();
 }
 
 async function renderAdmin() {

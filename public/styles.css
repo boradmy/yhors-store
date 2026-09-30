@@ -3755,3 +3755,57 @@ body.generate-modal-open{overflow:hidden}
   .history-note-details summary{justify-content:center;width:100%;box-sizing:border-box}
   .history-note-content{min-width:0}
 }
+
+/* YHORS Inteligente · inicio por bloques inspirado en Windows, con identidad YHORS */
+.yh-intelligent-shell{background:linear-gradient(180deg,#f2f0ea 0%,#ece9e1 100%)}
+.yh-intelligent-top{margin-bottom:14px}
+.yh-intelligent-top .brand{font-size:1rem;letter-spacing:.08em}
+.yh-intelligent-shell .admin-section-nav{margin-bottom:18px}
+.yh-intelligent-shell .admin-section-nav>.admin-section-link:first-child{background:#171918;color:#fff;border-color:#171918;box-shadow:0 5px 14px rgba(20,22,21,.12)}
+.yh-intelligent-hero{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;padding:28px 30px;border:1px solid #dcd8cf;border-radius:20px;background:linear-gradient(135deg,#ffffff 0%,#f6f4ef 100%);box-shadow:0 8px 30px rgba(30,25,18,.055);margin-bottom:16px}
+.yh-intelligent-hero .eyebrow{color:#8c7447}
+.yh-intelligent-hero h2{font-size:clamp(1.65rem,3vw,2.35rem);margin:7px 0 7px;letter-spacing:-.03em}
+.yh-intelligent-hero p{max-width:690px;color:#6e6a62;margin:0;line-height:1.55}
+.yh-intelligent-status{display:flex;align-items:center;gap:8px;white-space:nowrap;border:1px solid #d8d4ca;background:#fff;padding:9px 12px;border-radius:999px;font-size:.72rem;font-weight:800;color:#55514a}
+.yh-status-dot{width:8px;height:8px;border-radius:50%;background:#3d9b67;box-shadow:0 0 0 4px rgba(61,155,103,.12)}
+.yh-intelligent-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:14px}
+.yh-intel-card{position:relative;min-height:150px;display:flex;flex-direction:column;justify-content:space-between;padding:20px;border:1px solid #dcd8cf;border-radius:18px;background:#fff;box-shadow:0 6px 22px rgba(30,25,18,.045);text-decoration:none;color:inherit;overflow:hidden;transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease}
+.yh-intel-card:hover{transform:translateY(-2px);box-shadow:0 11px 28px rgba(30,25,18,.09);border-color:#c8c0b1}
+.yh-intel-card:focus-visible,.yh-intel-action-grid a:focus-visible{outline:3px solid rgba(180,147,88,.28);outline-offset:2px}
+.yh-intel-card.is-large{grid-column:span 2;min-height:180px;background:linear-gradient(135deg,#fff,#f8f5ed)}
+.yh-intel-card.is-sales{border-top:4px solid #b59658}
+.yh-intel-card.is-orders{border-top:4px solid #2b80d7}
+.yh-intel-card.is-shipping{border-top:4px solid #5c8fbd}
+.yh-intel-card.is-prep{border-top:4px solid #a07c43}
+.yh-intel-card.is-alert{border-top:4px solid #b84b45;background:linear-gradient(135deg,#fff,#fcf5f4)}
+.yh-intel-card.is-ok{border-top:4px solid #3d8b5a}
+.yh-intel-card-head{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:.67rem;letter-spacing:.1em;font-weight:900;color:#777169}
+.yh-intel-arrow{font-size:1rem;opacity:.55}
+.yh-intel-card strong{font-size:clamp(1.75rem,3.3vw,2.55rem);line-height:1;letter-spacing:-.04em;margin:12px 0 2px}
+.yh-intel-card small{font-size:.74rem;color:#77736b;line-height:1.4}
+.yh-intel-card h3{font-size:.92rem;margin:7px 0 0;color:#2d2b28}
+.yh-intelligent-lower{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(320px,.65fr);gap:14px}
+.yh-intel-panel{border:1px solid #dcd8cf;border-radius:18px;background:#fff;box-shadow:0 6px 22px rgba(30,25,18,.045);padding:20px}
+.yh-intel-panel-title{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:14px}
+.yh-intel-panel-title h2{margin:4px 0 0;font-size:1.15rem}
+.yh-intel-panel-title a{font-size:.74rem;font-weight:800;color:#78623d;text-decoration:none;margin-top:6px}
+.yh-intel-timeline{display:grid;gap:0}
+.yh-intel-activity-row{display:flex;gap:12px;padding:12px 0;border-bottom:1px solid #eeeae2}
+.yh-intel-activity-row:last-child{border-bottom:0}
+.yh-activity-icon{width:32px;height:32px;display:grid;place-items:center;border-radius:10px;background:#f0eee8;color:#78623d;font-weight:900;flex:0 0 32px}
+.yh-activity-icon.sale{background:#edf7f0;color:#3d8b5a}
+.yh-intel-activity-row strong{display:block;font-size:.83rem}
+.yh-intel-activity-row small{display:block;color:#88837a;font-size:.7rem;margin-top:3px}
+.yh-intel-empty{padding:24px 0;color:#817c73;font-size:.8rem}
+.yh-intel-action-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.yh-intel-action-grid a{display:grid;grid-template-columns:32px 1fr;column-gap:10px;align-items:center;padding:13px;border:1px solid #e4e0d8;border-radius:13px;background:#faf9f6;color:inherit;text-decoration:none;transition:background .18s ease,border-color .18s ease,transform .18s ease}
+.yh-intel-action-grid a:hover{background:#f4f1ea;border-color:#d5cec0;transform:translateY(-1px)}
+.yh-intel-action-grid a>span{grid-row:span 2;width:32px;height:32px;border-radius:10px;background:#eee9df;display:grid;place-items:center;font-weight:900;color:#75603d}
+.yh-intel-action-grid strong{font-size:.78rem}
+.yh-intel-action-grid small{font-size:.66rem;color:#88837a;line-height:1.3}
+.yh-intel-note{display:flex;align-items:flex-start;gap:12px;margin-top:14px;padding:14px 16px;border:1px solid #ded8ca;border-radius:15px;background:#f8f5ed;color:#625d54}
+.yh-intel-note>span{font-size:1rem}
+.yh-intel-note strong{font-size:.78rem;color:#3b3833}
+.yh-intel-note p{margin:3px 0 0;font-size:.72rem;line-height:1.5}
+@media(max-width:900px){.yh-intelligent-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.yh-intel-card.is-large{grid-column:span 2}.yh-intelligent-lower{grid-template-columns:1fr}}
+@media(max-width:600px){.yh-intelligent-hero{display:block;padding:20px;border-radius:16px}.yh-intelligent-status{margin-top:15px;width:max-content}.yh-intelligent-grid{grid-template-columns:1fr;gap:10px}.yh-intel-card,.yh-intel-card.is-large{grid-column:auto;min-height:132px;padding:17px}.yh-intelligent-lower{display:grid;grid-template-columns:1fr}.yh-intel-panel{padding:16px;border-radius:16px}.yh-intel-action-grid{grid-template-columns:1fr}.yh-intel-note{margin-bottom:10px}.yh-intelligent-shell{padding:10px}.yh-intelligent-shell .admin-top{align-items:flex-start}.yh-intelligent-top .admin-title{font-size:1.45rem}}
