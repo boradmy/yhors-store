@@ -551,12 +551,8 @@ async function renderAdminAfterLogin(session) {
 }
 
 async function navigateToRoute(href, { replace = false } = {}) {
-  // Nunca dejamos una navegación anterior bloqueando indefinidamente las
-  // siguientes. Esto era especialmente visible justo después del login.
-  if (__yhorsNavigationPromise) {
-    try { await __yhorsNavigationPromise; } catch (_) {}
-  }
-
+  // Cada clic inicia su propia navegación. Una navegación anterior nunca debe
+  // bloquear la siguiente, especialmente justo después del inicio de sesión.
   const target = new URL(href, window.location.origin);
   if (target.origin !== window.location.origin) return;
   const next = `${target.pathname}${target.search}${target.hash}`;
@@ -1175,12 +1171,14 @@ function adminSectionNav(session = {}, active = '') {
   const link = (key, href, label) => `<a href="${href}" class="admin-section-link${active === key ? ' active' : ''}" data-smooth-route>${label}</a>`;
   if (limitedOperations) {
     return `<div class="admin-navigation-stack"><nav class="admin-section-nav admin-section-nav--compact" id="adminSectionNav" aria-label="Secciones operativas">
-      <details class="admin-nav-group" open><summary>Operación</summary><div class="admin-nav-group-links admin-nav-group-links-static">${link('buscar-productos', `${ADMIN_PATH}/buscar-productos`, 'BUSCAR PRODUCTOS')}${link('ventas-generales', `${ADMIN_PATH}/ventas-generales`, 'VENTAS GENERALES')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('generar-orden', `${ADMIN_PATH}/generar-orden`, 'GENERAR ORDEN')}${link('historial-ventas', `${ADMIN_PATH}/historial-ventas`, 'HISTORIAL DE VENTAS')}${role === 'vendedor' || role === 'orders' ? '' : link('series-imeis', `${ADMIN_PATH}/series-imeis`, 'SERIES/IMEIS')}</div></details>
+      ${link('inteligente', `${ADMIN_PATH}/inteligente`, '🧠 YHORS INTELIGENTE')}
+      <details class="admin-nav-group"><summary>Operación</summary><div class="admin-nav-group-links admin-nav-group-links-static">${link('buscar-productos', `${ADMIN_PATH}/buscar-productos`, 'BUSCAR PRODUCTOS')}${link('ventas-generales', `${ADMIN_PATH}/ventas-generales`, 'VENTAS GENERALES')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('generar-orden', `${ADMIN_PATH}/generar-orden`, 'GENERAR ORDEN')}${link('historial-ventas', `${ADMIN_PATH}/historial-ventas`, 'HISTORIAL DE VENTAS')}${role === 'vendedor' || role === 'orders' ? '' : link('series-imeis', `${ADMIN_PATH}/series-imeis`, 'SERIES/IMEIS')}</div></details>
     </nav></div>`;
   }
   const group = (label, activeKeys, items, open = false) => `<details class="admin-nav-group${activeKeys.includes(active) ? ' has-active' : ''}"${open ? ' open' : ''}><summary><span>${label}</span>${activeKeys.includes(active) ? '<i aria-hidden="true"></i>' : ''}</summary><div class="admin-nav-group-links">${items}</div></details>`;
   return `<div class="admin-navigation-stack">
     <nav class="admin-section-nav" id="adminSectionNav" aria-label="Administración YHORS">
+      ${link('inteligente', `${ADMIN_PATH}/inteligente`, '🧠 YHORS INTELIGENTE')}
       ${group('Operación', ['web','inventario','buscar-productos','pedidos','generar-orden','historial-ventas'], `${link('web', `${ADMIN_PATH}/web`, '🌐 PÁGINA WEB')}${link('buscar-productos', `${ADMIN_PATH}/buscar-productos`, 'BUSCAR PRODUCTOS')}${link('inventario', `${ADMIN_PATH}/inventario`, 'INVENTARIO')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('generar-orden', `${ADMIN_PATH}/generar-orden`, 'GENERAR ORDEN')}${link('historial-ventas', `${ADMIN_PATH}/historial-ventas`, 'HISTORIAL DE VENTAS')}`)}
       ${group('Gestión', ['usuarios','series-imeis','auditoria'], `${link('usuarios', `${ADMIN_PATH}/usuarios`, 'USUARIOS')}${link('series-imeis', `${ADMIN_PATH}/series-imeis`, 'SERIES/IMEIS')}${link('auditoria', `${ADMIN_PATH}/auditoria`, 'AUDITORÍA')}`)}
       ${group('Finanzas', ['resumen-financiero','ventas-generales','multas','calculo-comision'], `${link('resumen-financiero', `${ADMIN_PATH}/resumen-financiero`, 'RESUMEN FINANCIERO')}${link('ventas-generales', `${ADMIN_PATH}/ventas-generales`, 'VENTAS GENERALES')}${link('multas', `${ADMIN_PATH}/multas`, 'MULTAS')}${link('calculo-comision', `${ADMIN_PATH}/calculo-comision`, 'CÁLCULO DE COMISIÓN')}`)}
@@ -4437,6 +4435,7 @@ async function loginWithPasskey() {
   const assertion = await nativeStartAuthentication(options);
   await request('/api/passkey/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(assertion) });
   const session = await request('/api/admin/session');
+  hideLoginLoading();
   await renderAdminAfterLogin(session);
 }
 
@@ -4526,6 +4525,7 @@ function renderLogin() {
       showLoginLoading('Verificando tus credenciales…');
       const result = await loginRequestWithTimeout('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.fromEntries(new FormData(e.currentTarget))) });
       const session = await loginRequestWithTimeout('/api/admin/session', undefined, 12000);
+      hideLoginLoading();
       await renderAdminAfterLogin(session);
     } catch (error) {
       hideLoginLoading();

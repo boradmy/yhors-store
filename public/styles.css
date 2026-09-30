@@ -3956,3 +3956,60 @@ body.login-loading-active{overflow:hidden}
   .admin-navigation-stack{gap:6px;margin-bottom:16px}
   .admin-web-row{overflow-x:auto}.admin-web-row .admin-section-link{min-width:0;flex:1}
 }
+
+/* YHORS 15.8.4 · navegación principal de YHORS Inteligente
+   El acceso inteligente queda siempre primero; la navegación de roles limitados
+   conserva Operación en un bloque compacto y estable. */
+.admin-section-nav > .admin-section-link:first-child{
+  flex:0 0 auto;
+  width:auto;
+  min-width:210px;
+  justify-content:center;
+  background:#fff;
+  border:1px solid var(--line,#ded8cc);
+  box-shadow:0 2px 9px rgba(30,25,18,.05);
+  font-weight:900;
+}
+.admin-section-nav > .admin-section-link:first-child.active{
+  background:#171918;
+  border-color:#171918;
+  color:#fff;
+}
+.admin-section-nav--compact{
+  display:grid;
+  grid-template-columns:minmax(210px,auto) minmax(0,1fr);
+  align-items:stretch;
+}
+.admin-section-nav--compact > .admin-nav-group{
+  min-width:0;
+}
+.admin-section-nav--compact > .admin-nav-group > summary{
+  justify-content:center;
+}
+.admin-section-nav--compact .admin-nav-group-links-static{
+  position:absolute;
+  left:0;
+  right:0;
+  top:calc(100% + 7px);
+  margin:0;
+  padding:9px;
+  display:flex;
+  flex-wrap:wrap;
+  gap:5px;
+  background:#fff;
+  border:1px solid var(--line,#ded8cc);
+  border-radius:13px;
+  box-shadow:0 18px 42px rgba(30,25,18,.14);
+  z-index:3000;
+}
+.admin-section-nav--compact .admin-nav-group-links-static .admin-section-link{
+  width:auto;
+  flex:0 0 auto;
+  min-height:38px;
+}
+@media(max-width:700px){
+  .admin-section-nav--compact{grid-template-columns:1fr;}
+  .admin-section-nav--compact > .admin-section-link:first-child{width:100%;}
+  .admin-section-nav--compact .admin-nav-group-links-static{position:static;margin-top:5px;box-shadow:none;background:#f8f6f1;}
+  .admin-section-nav--compact .admin-nav-group-links-static .admin-section-link{width:100%;justify-content:center;}
+}
