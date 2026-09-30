@@ -628,8 +628,50 @@ function readCustomers() {
   try {
     if (!fs.existsSync(CUSTOMERS_FILE)) return [];
     const parsed = JSON.parse(fs.readFileSync(CUSTOMERS_FILE, 'utf8'));
-    return Array.isArray(parsed) ? parsed.map(decryptCustomer) : [];
+    if (!Array.isArray(parsed)) return [];
+    // No descartes todo el fichero si una ficha antigua está dañada: recupera
+    // las demás fichas y conserva siempre la identidad para poder encontrarlas.
+    return parsed.map((customer) => {
+      try { return decryptCustomer(customer); }
+      catch (error) {
+        return { ...customer, _customerReadError: true };
+      }
+    }).filter(Boolean);
   } catch { return []; }
+}
+
+function buildCustomerDirectory() {
+  const customers = readCustomers();
+  const byIdentity = new Map();
+  const put = (source, fallbackDate = null) => {
+    const identity = customerIdentity(source || {});
+    if (!identity || identity === 'name:') return;
+    const existing = byIdentity.get(identity);
+    if (existing) {
+      // Completa campos que falten en la ficha permanente con el histórico.
+      const merged = { ...existing };
+      for (const field of ['name','phone','cedula','email','city','address','mapsUrl','notes']) {
+        if (!merged[field] && source?.[field]) merged[field] = source[field];
+      }
+      merged.identity = identity;
+      byIdentity.set(identity, merged);
+      return;
+    }
+    byIdentity.set(identity, {
+      id: source?.id || crypto.randomUUID(), identity,
+      name: source?.name || '', phone: source?.phone || '', cedula: source?.cedula || '',
+      email: source?.email || '', city: source?.city || '', address: source?.address || '',
+      mapsUrl: source?.mapsUrl || '', notes: source?.notes || '',
+      createdAt: source?.createdAt || fallbackDate || new Date().toISOString(),
+      updatedAt: source?.updatedAt || fallbackDate || new Date().toISOString()
+    });
+  };
+
+  customers.forEach(customer => put(customer, customer.createdAt));
+  for (const order of readOrders()) put(order?.customer || {}, order?.createdAt);
+  for (const sale of readSales()) put(sale?.customer || {}, sale?.createdAt || sale?.notifiedAt);
+
+  return [...byIdentity.values()];
 }
 function writeCustomers(customers) {
   maybeAutoBackup();
@@ -4925,36 +4967,16 @@ app.put('/api/admin/series-imeis/registered', requireStoreManagerOrAdmin, (req, 
 
 app.get('/api/admin/clientes', requireOrdersAccess, (req, res) => {
   const session = getSession(req);
-  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-  res.set('Pragma', 'no-cache');
-  res.set('Expires', '0');
-  let customers = readCustomers();
-  // Fallback inteligente: reconstruye el fichero desde pedidos y ventas históricos.
-  // Esto evita que un expediente desaparezca del directorio si customers.json quedó vacío
-  // después de una migración, despliegue o restauración.
+  let customers = buildCustomerDirectory();
+  // Rehidrata customers.json si hubo clientes históricos o una migración que dejó
+  // el fichero vacío. Así el directorio y el selector usan la misma fuente.
+  try {
+    const current = readCustomers();
+    if (customers.length > current.length) writeCustomers(customers);
+  } catch {}
   const allOrders = readOrders();
-  const allSales = readSales();
-  let seededCustomers = false;
-  const seedFromRecord = (record) => {
-    const source = record?.customer || {};
-    const identity = customerIdentity(source);
-    if (!identity || identity === 'name:') return;
-    if (!customers.some(customer => customer.identity === identity)) {
-      customers.push({
-        id: crypto.randomUUID(), identity, name: source.name || '', phone: source.phone || '',
-        cedula: source.cedula || '', email: source.email || '', city: source.city || '',
-        address: source.address || '', mapsUrl: source.mapsUrl || '', notes: source.notes || '',
-        createdAt: record.createdAt || new Date().toISOString(),
-        updatedAt: record.updatedAt || record.createdAt || new Date().toISOString()
-      });
-      seededCustomers = true;
-    }
-  };
-  allOrders.forEach(seedFromRecord);
-  allSales.forEach(seedFromRecord);
-  if (seededCustomers) { try { writeCustomers(customers); } catch {} }
   const q = cleanText(req.query?.q, 120).toLocaleLowerCase('es-EC');
-  const sales = allSales;
+  const sales = readSales();
   const rows = customers.map(customer => {
     const tx = customerTransactions(customer, allOrders, sales);
     const activeOrders = tx.filter(item => item.type === 'pedido' && item.status !== 'Cancelado').length;
@@ -4980,9 +5002,13 @@ app.post('/api/admin/clientes', requireOrdersAccess, (req, res) => {
   const body = req.body || {};
   const identity = customerIdentity(body);
   if (!body.name || !body.cedula) return res.status(400).json({ error: 'Nombre y cédula/RUC son obligatorios.' });
-  const customers = readCustomers();
+  const customers = buildCustomerDirectory();
   const duplicate = customers.find(item => item.identity === identity);
-  if (duplicate) return res.status(409).json({ error: 'Ya existe un cliente con esos datos.', customer: duplicate });
+  if (duplicate) {
+    // Crear desde Generar Orden es idempotente: si ya existe, devuelve la ficha
+    // existente para que el frontend pueda seleccionarla sin duplicarla.
+    return res.status(200).json({ ...duplicate, existing: true });
+  }
   const now = new Date().toISOString();
   const customer = { id: crypto.randomUUID(), identity, name: cleanText(body.name,120), phone: cleanText(body.phone,50), cedula: cleanText(body.cedula,20).replace(/\D/g,''), email: cleanText(body.email,160), city: cleanText(body.city,80), address: cleanText(body.address,240), mapsUrl: cleanText(body.mapsUrl,500), notes: cleanText(body.notes,1000), createdAt: now, updatedAt: now };
   customers.unshift(customer); writeCustomers(customers); auditLog(req,'Cliente creado','Clientes',{customerId:customer.id,identity:customer.identity});
