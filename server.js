@@ -3370,7 +3370,16 @@ app.post('/api/orders', async (req, res) => {
 
 app.post('/api/admin/generar-orden', requireOrdersAccess, async (req, res) => {
   const session = getSession(req);
-  const result = validateOrder(req.body || {}, { requireDeviceIdentifiers: true });
+  const body = req.body || {};
+  let selectedCustomer = null;
+  if (body.customerId) {
+    selectedCustomer = readCustomers().find(item => String(item.id) === String(body.customerId));
+    if (!selectedCustomer) return res.status(404).json({ error: 'El cliente seleccionado ya no existe en el fichero.' });
+    // El expediente guardado es la fuente de verdad: así una orden nunca crea
+    // una segunda ficha ni guarda datos escritos de forma distinta para el mismo cliente.
+    body.customer = { ...selectedCustomer, notes: body.customer?.notes ?? selectedCustomer.notes ?? '' };
+  }
+  const result = validateOrder(body, { requireDeviceIdentifiers: true });
   if (result.error) return res.status(400).json(result);
 
   const hasSellerSelection = Object.prototype.hasOwnProperty.call(req.body || {}, 'assignedSellerId');
@@ -3389,7 +3398,7 @@ app.post('/api/admin/generar-orden', requireOrdersAccess, async (req, res) => {
   }
 
   const orders = readOrders();
-  const order = { id: crypto.randomUUID(), orderNumber: nextOrderNumber(orders), status: 'Pendiente', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), assignedSellerId, source: 'admin_generated', stockReservedAt: new Date().toISOString(), ...result.order };
+  const order = { id: crypto.randomUUID(), orderNumber: nextOrderNumber(orders), status: 'Pendiente', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), assignedSellerId, source: 'admin_generated', stockReservedAt: new Date().toISOString(), ...(selectedCustomer ? { customerId: selectedCustomer.id } : {}), ...result.order };
   const previousProducts = result.stockProducts.map(product => ({ ...product }));
   let updatedProducts;
   try {
@@ -4953,12 +4962,13 @@ app.get('/api/admin/clientes/:id', requireOrdersAccess, (req, res) => {
   return res.json({ customer, transactions: tx, totals: { orders: tx.filter(item=>item.type==='pedido').length, sales: tx.filter(item=>item.type==='venta').length, salesTotal: tx.filter(item=>item.type==='venta').reduce((sum,item)=>sum+Number(item.total||0),0) } });
 });
 
-app.post('/api/admin/clientes', requireStoreManagerOrAdmin, (req, res) => {
+app.post('/api/admin/clientes', requireOrdersAccess, (req, res) => {
   const body = req.body || {};
   const identity = customerIdentity(body);
   if (!body.name || !body.cedula) return res.status(400).json({ error: 'Nombre y cédula/RUC son obligatorios.' });
   const customers = readCustomers();
-  if (customers.some(item => item.identity === identity)) return res.status(409).json({ error: 'Ya existe un cliente con esos datos.' });
+  const duplicate = customers.find(item => item.identity === identity);
+  if (duplicate) return res.status(409).json({ error: 'Ya existe un cliente con esos datos.', customer: duplicate });
   const now = new Date().toISOString();
   const customer = { id: crypto.randomUUID(), identity, name: cleanText(body.name,120), phone: cleanText(body.phone,50), cedula: cleanText(body.cedula,20).replace(/\D/g,''), email: cleanText(body.email,160), city: cleanText(body.city,80), address: cleanText(body.address,240), mapsUrl: cleanText(body.mapsUrl,500), notes: cleanText(body.notes,1000), createdAt: now, updatedAt: now };
   customers.unshift(customer); writeCustomers(customers); auditLog(req,'Cliente creado','Clientes',{customerId:customer.id,identity:customer.identity});
