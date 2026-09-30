@@ -1358,7 +1358,7 @@ async function renderAdminGenerateOrder() {
     <section class="generate-order-page">
       <div class="generate-order-header"><div><span class="eyebrow">Nueva orden</span><h2>Orden de venta</h2><p>Registra al cliente, selecciona sus productos y asigna el vendedor responsable.</p></div><div class="generate-doc-badge"><span>DOCUMENTO</span><strong>ORDEN DE PEDIDO</strong><small>YHORS · ${new Date().toLocaleDateString('es-EC')}</small></div></div>
       <div class="generate-top-grid">
-        <section class="generate-card customer-card"><div class="generate-card-head"><div><span class="generate-card-kicker">01 · Cliente</span><h3>Información del cliente</h3></div><button type="button" class="button secondary small" id="openCustomerModal">Buscar / seleccionar →</button></div><div id="customerSummary">${customerSummaryMarkup(customer)}</div></section>
+        <section class="generate-card customer-card"><div class="generate-card-head"><div><span class="generate-card-kicker">01 · Cliente</span><h3>Información del cliente</h3></div><div class="customer-card-actions"><button type="button" class="button secondary small" id="editSelectedCustomer" ${customer.id ? "" : "disabled"}>Editar cliente</button><button type="button" class="button secondary small" id="openCustomerModal">Cambiar cliente →</button></div></div><div id="customerSummary">${customerSummaryMarkup(customer)}</div></section>
         <section class="generate-card seller-card"><div class="generate-card-kicker">02 · Responsable</div><h3>Vendedor</h3><p>Define quién queda responsable de esta orden.</p><div class="fine-person-field generate-seller-field"><span>Vendedor asignado</span><button type="button" class="fine-person-picker-trigger" id="generateSellerPickerOpen" aria-haspopup="dialog" aria-controls="generateSellerPickerModal"><span class="fine-person-picker-avatar" id="generateSellerAvatar">?</span><span class="fine-person-picker-copy"><strong id="generateSellerName">Sin asignar</strong><small id="generateSellerUsername">Puedes buscar y seleccionar un vendedor</small></span><span class="fine-person-picker-chevron">⌄</span></button><input type="hidden" id="generateSeller" value="${sellers.some(s => s.id === session.accountId) ? escapeHTML(session.accountId) : ''}"></div><small class="generate-field-note">${role === 'vendedor' || role === 'orders' ? 'Puedes generar la orden con tu usuario o asignarla a otro vendedor.' : 'Puedes cambiar el vendedor antes de generar la orden.'}</small></section>
       </div>
       <section class="generate-card generate-products-card"><div class="generate-card-head"><div><span class="generate-card-kicker">03 · Productos</span><h3>Detalle de la orden</h3></div><button type="button" class="button primary small" id="openProductPicker">+ Agregar productos</button></div><div class="generate-products-table-head"><span>Producto</span><span>Cant.</span><span>Precio</span><span>Total</span><span></span></div><div id="generateOrderLines">${generateOrderProductRows(lines)}</div></section>
@@ -1446,6 +1446,8 @@ async function renderAdminGenerateOrder() {
     customer.deliveryMethod = document.querySelector('input[name="generateDelivery"]:checked')?.value || 'office';
     document.querySelector('#customerSummary').innerHTML = customerSummaryMarkup(customer);
     document.querySelector('#openCustomerModal').textContent = `${customer.name ? 'Cambiar cliente' : 'Buscar / seleccionar'} →`;
+    const editSelected = document.querySelector('#editSelectedCustomer');
+    if (editSelected) editSelected.disabled = !customer.id;
   }
   const customerLabel = c => `${c.name || 'Sin nombre'} ${c.cedula || ''} ${c.phone || ''} ${c.email || ''} ${c.city || ''}`.toLowerCase();
   const renderGenerateCustomerPicker = () => {
@@ -1455,7 +1457,7 @@ async function renderAdminGenerateOrder() {
     if (count) count.textContent = `${rows.length} cliente${rows.length === 1 ? '' : 's'}${q ? ' encontrados' : ''}`;
     const list = document.querySelector('#generateCustomerPickerList');
     if (!list) return;
-    list.innerHTML = rows.length ? rows.map(c => `<button type="button" class="generate-customer-option${String(c.id) === String(customerId) ? ' is-selected' : ''}" data-select-generate-customer="${escapeHTML(c.id)}"><span class="generate-customer-option-avatar">${escapeHTML((c.name || 'C').trim().slice(0,1).toUpperCase())}</span><span class="generate-customer-option-copy"><strong>${escapeHTML(c.name || 'Sin nombre')}</strong><small>${escapeHTML(c.cedula || 'Sin cédula')} · ${escapeHTML(c.phone || 'Sin teléfono')}</small></span><span class="generate-customer-option-check">${String(c.id) === String(customerId) ? '✓' : '›'}</span></button>`).join('') : '<div class="generate-customer-empty"><span>⌕</span><strong>No encontramos ese cliente</strong><small>Prueba con otro dato o registra un cliente nuevo.</small></div>';
+    list.innerHTML = rows.length ? rows.map(c => `<div class="generate-customer-option${String(c.id) === String(customerId) ? ' is-selected' : ''}"><button type="button" class="generate-customer-option-main" data-select-generate-customer="${escapeHTML(c.id)}"><span class="generate-customer-option-avatar">${escapeHTML((c.name || 'C').trim().slice(0,1).toUpperCase())}</span><span class="generate-customer-option-copy"><strong>${escapeHTML(c.name || 'Sin nombre')}</strong><small>${escapeHTML(c.cedula || 'Sin cédula')} · ${escapeHTML(c.phone || 'Sin teléfono')}</small></span><span class="generate-customer-option-check">${String(c.id) === String(customerId) ? '✓' : '›'}</span></button><button type="button" class="generate-customer-option-edit" data-edit-generate-customer="${escapeHTML(c.id)}">Editar</button></div>`).join('') : '<div class="generate-customer-empty"><span>⌕</span><strong>No encontramos ese cliente</strong><small>Prueba con otro dato o registra un cliente nuevo.</small></div>';
   };
   const openCustomerPicker = async () => {
     document.querySelector('#customerPickerView')?.removeAttribute('hidden');
@@ -1470,7 +1472,49 @@ async function renderAdminGenerateOrder() {
     requestAnimationFrame(() => input?.focus());
   };
   document.querySelector('#generateCustomerSearch')?.addEventListener('input', renderGenerateCustomerPicker);
+  const openGenerateCustomerEdit = (selected) => {
+    if (!selected) return;
+    document.querySelector('#customerPickerView')?.setAttribute('hidden','');
+    document.querySelector('#generateCustomerForm')?.removeAttribute('hidden');
+    document.querySelector('#generateCustomerMessage')?.setAttribute('hidden','');
+    const form = document.querySelector('#generateCustomerForm');
+    form.dataset.editCustomerId = String(selected.id);
+    const head = form.querySelector('.generate-new-customer-head');
+    if (head) head.innerHTML = `<button type="button" class="button secondary small" id="backToCustomerSearch">← Volver a buscar</button><span class="eyebrow">EDITAR EXPEDIENTE</span>`;
+    form.querySelector('#genCustomerName').value = selected.name || '';
+    form.querySelector('#genCustomerCedula').value = selected.cedula || '';
+    form.querySelector('#genCustomerPhone').value = selected.phone || '';
+    form.querySelector('#genCustomerEmail').value = selected.email || '';
+    form.querySelector('#genCustomerCity').value = selected.city || '';
+    form.querySelector('#genCustomerAddress').value = selected.address || '';
+    form.querySelector('#genCustomerMaps').value = selected.mapsUrl || '';
+    const submit = form.querySelector('button[type="submit"]');
+    if (submit) submit.textContent = 'Guardar cambios';
+    form.querySelector('#cancelNewCustomer').textContent = 'Cancelar';
+    form.querySelector('#backToCustomerSearch')?.addEventListener('click', () => {
+      form.dataset.editCustomerId = '';
+      if (submit) submit.textContent = 'Guardar y seleccionar';
+      document.querySelector('#generateCustomerForm')?.setAttribute('hidden','');
+      document.querySelector('#customerPickerView')?.removeAttribute('hidden');
+      renderGenerateCustomerPicker();
+      document.querySelector('#generateCustomerSearch')?.focus();
+    }, { once: true });
+    form.querySelector('#genCustomerName')?.focus();
+    openModal('customerModal');
+  };
+  document.querySelector('#editSelectedCustomer')?.addEventListener('click', () => {
+    if (!customer?.id) return;
+    openGenerateCustomerEdit(customer);
+  });
   document.querySelector('#generateCustomerPickerList')?.addEventListener('click', event => {
+    const editButton = event.target.closest('[data-edit-generate-customer]');
+    if (editButton) {
+      event.preventDefault();
+      event.stopPropagation();
+      const selected = customers.find(c => String(c.id) === String(editButton.dataset.editGenerateCustomer));
+      openGenerateCustomerEdit(selected);
+      return;
+    }
     const button = event.target.closest('[data-select-generate-customer]');
     if (!button) return;
     const selected = customers.find(c => String(c.id) === String(button.dataset.selectGenerateCustomer));
@@ -1481,13 +1525,29 @@ async function renderAdminGenerateOrder() {
     closeModal('customerModal');
   });
   document.querySelector('#generateNewCustomer')?.addEventListener('click', () => {
+    const form = document.querySelector('#generateCustomerForm');
+    form?.removeAttribute('data-edit-customer-id');
+    const head = form?.querySelector('.generate-new-customer-head');
+    if (head) head.innerHTML = `<button type="button" class="button secondary small" id="backToCustomerSearch">← Volver a buscar</button><span class="eyebrow">NUEVO EXPEDIENTE</span>`;
+    const submit = form?.querySelector('button[type="submit"]');
+    if (submit) submit.textContent = 'Guardar y seleccionar';
+    form?.querySelector('#backToCustomerSearch')?.addEventListener('click', () => {
+      form.setAttribute('hidden','');
+      document.querySelector('#customerPickerView')?.removeAttribute('hidden');
+      renderGenerateCustomerPicker();
+      document.querySelector('#generateCustomerSearch')?.focus();
+    }, { once: true });
     document.querySelector('#customerPickerView')?.setAttribute('hidden','');
-    document.querySelector('#generateCustomerForm')?.removeAttribute('hidden');
+    form?.removeAttribute('hidden');
     document.querySelector('#generateCustomerMessage')?.setAttribute('hidden','');
     fillCustomerForm();
     document.querySelector('#genCustomerName')?.focus();
   });
   document.querySelector('#backToCustomerSearch')?.addEventListener('click', () => {
+    const form = document.querySelector('#generateCustomerForm');
+    form?.removeAttribute('data-edit-customer-id');
+    const submit = form?.querySelector('button[type="submit"]');
+    if (submit) submit.textContent = 'Guardar y seleccionar';
     document.querySelector('#generateCustomerForm')?.setAttribute('hidden','');
     document.querySelector('#customerPickerView')?.removeAttribute('hidden');
     renderGenerateCustomerPicker();
@@ -1503,20 +1563,34 @@ async function renderAdminGenerateOrder() {
   document.querySelector('#generateCustomerForm')?.addEventListener('submit', async event => {
     event.preventDefault();
     const message = document.querySelector('#generateCustomerMessage');
+    const form = event.currentTarget;
+    const editingId = form.dataset.editCustomerId || '';
+
     const cedula = document.querySelector('#genCustomerCedula').value.replace(/\D/g, '');
     if (!/^\d{10,13}$/.test(cedula)) { message.hidden = false; message.className = 'message error'; message.textContent = 'La cédula/RUC debe tener entre 10 y 13 dígitos.'; return; }
     const submit = event.currentTarget.querySelector('button[type="submit"]');
     submit.disabled = true;
+    const payload = {
+      name: document.querySelector('#genCustomerName').value.trim(),
+      cedula,
+      phone: document.querySelector('#genCustomerPhone').value.trim(),
+      email: document.querySelector('#genCustomerEmail').value.trim(),
+      city: document.querySelector('#genCustomerCity').value.trim(),
+      address: document.querySelector('#genCustomerAddress').value.trim(),
+      mapsUrl: document.querySelector('#genCustomerMaps').value.trim()
+    };
     try {
-      const created = await request('/api/admin/clientes', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({
-        name: document.querySelector('#genCustomerName').value.trim(),
-        cedula,
-        phone: document.querySelector('#genCustomerPhone').value.trim(),
-        email: document.querySelector('#genCustomerEmail').value.trim(),
-        city: document.querySelector('#genCustomerCity').value.trim(),
-        address: document.querySelector('#genCustomerAddress').value.trim(),
-        mapsUrl: document.querySelector('#genCustomerMaps').value.trim()
-      }) });
+      if (editingId) {
+        const saved = await request(`/api/admin/clientes/${encodeURIComponent(editingId)}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
+        customers = [saved, ...customers.filter(item => String(item.id) !== String(saved.id))];
+        writeLocalCustomerCache(customers);
+        customerId = saved.id;
+        customer = { ...saved, deliveryMethod: document.querySelector('input[name="generateDelivery"]:checked')?.value || 'office' };
+        drawCustomer();
+        closeModal('customerModal');
+        return;
+      }
+      const created = await request('/api/admin/clientes', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
       customerId = created.id;
       customer = { ...created, deliveryMethod: document.querySelector('input[name="generateDelivery"]:checked')?.value || 'office' };
       customers = [created, ...customers.filter(item => String(item.id) !== String(created.id))];
