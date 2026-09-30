@@ -1171,9 +1171,11 @@ function adminSectionNav(session = {}, active = '') {
   const limitedOperations = role === 'vendedor' || role === 'orders' || role === 'store_manager';
   const link = (key, href, label) => `<a href="${href}" class="admin-section-link${active === key ? ' active' : ''}" data-smooth-route>${label}</a>`;
   if (limitedOperations) {
-    return `<div class="admin-navigation-stack admin-navigation-stack--limited"><nav class="admin-section-nav admin-section-nav--limited" id="adminSectionNav" aria-label="Navegación YHORS">
-      <details class="admin-nav-group admin-nav-group--operation"${['buscar-productos','ventas-generales','pedidos','generar-orden','historial-ventas','series-imeis'].includes(active) ? ' open' : ''}><summary>OPERACIÓN</summary><div class="admin-nav-group-links admin-nav-group-links--limited">${link('buscar-productos', `${ADMIN_PATH}/buscar-productos`, 'BUSCAR PRODUCTOS')}${link('ventas-generales', `${ADMIN_PATH}/ventas-generales`, 'VENTAS GENERALES')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('generar-orden', `${ADMIN_PATH}/generar-orden`, 'GENERAR ORDEN')}${link('historial-ventas', `${ADMIN_PATH}/historial-ventas`, 'HISTORIAL DE VENTAS')}${role === 'vendedor' || role === 'orders' ? '' : link('series-imeis', `${ADMIN_PATH}/series-imeis`, 'SERIES / IMEIS')}</div></details>
-    </nav></div>`;
+    // Para Jefe/Vendedor la navegación es deliberadamente vertical y siempre visible.
+    // No usamos <details> aquí: abrir/cerrar OPERACIÓN al cambiar de ruta provocaba
+    // que YHORS Inteligente reapareciera con el menú desplegado después de cada clic.
+    const limitedLinks = `${link('buscar-productos', `${ADMIN_PATH}/buscar-productos`, 'BUSCAR PRODUCTOS')}${link('ventas-generales', `${ADMIN_PATH}/ventas-generales`, 'VENTAS GENERALES')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('generar-orden', `${ADMIN_PATH}/generar-orden`, 'GENERAR ORDEN')}${link('historial-ventas', `${ADMIN_PATH}/historial-ventas`, 'HISTORIAL DE VENTAS')}${role === 'vendedor' || role === 'orders' ? '' : link('series-imeis', `${ADMIN_PATH}/series-imeis`, 'SERIES / IMEIS')}`;
+    return `<div class="admin-navigation-stack admin-navigation-stack--limited"><nav class="admin-section-nav admin-section-nav--limited admin-section-nav--vertical" id="adminSectionNav" aria-label="Navegación YHORS"><div class="admin-nav-vertical-title">OPERACIÓN</div><div class="admin-nav-vertical-links">${limitedLinks}</div></nav></div>`;
   }
   const group = (label, activeKeys, items, open = false) => `<details class="admin-nav-group${activeKeys.includes(active) ? ' has-active' : ''}"${open ? ' open' : ''}><summary><span>${label}</span>${activeKeys.includes(active) ? '<i aria-hidden="true"></i>' : ''}</summary><div class="admin-nav-group-links">${items}</div></details>`;
   return `<div class="admin-navigation-stack">

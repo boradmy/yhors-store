@@ -4492,3 +4492,47 @@ body.login-loading-active{overflow:hidden}
 
 /* Login: identidad visual solamente, nunca navegación */
 .login-brand{pointer-events:none!important;cursor:default!important;user-select:none}
+
+
+/* V15.8.11 · Navegación vertical estable para Jefe de Tienda y Vendedor */
+.admin-section-nav--limited.admin-section-nav--vertical{
+  width:100%;
+  max-width:360px;
+  display:block;
+  box-sizing:border-box;
+  padding:8px;
+  margin:0 0 24px;
+  background:rgba(247,244,238,.94);
+  border:1px solid var(--line,#ded8cc);
+  border-radius:16px;
+  box-shadow:0 7px 22px rgba(30,25,18,.05);
+}
+.admin-nav-vertical-title{
+  padding:8px 12px 7px;
+  color:#777168;
+  font-size:.68rem;
+  font-weight:850;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+  border-bottom:1px solid #e8e2d8;
+}
+.admin-nav-vertical-links{display:grid;grid-template-columns:1fr;gap:4px;padding-top:6px}
+.admin-section-nav--limited.admin-section-nav--vertical .admin-section-link{
+  display:flex;
+  align-items:center;
+  min-height:38px;
+  padding:9px 12px;
+  border-radius:9px;
+  color:#68635c;
+  font-size:.7rem;
+  font-weight:800;
+  letter-spacing:.035em;
+  text-decoration:none;
+  transition:background .16s ease,color .16s ease,transform .16s ease;
+}
+.admin-section-nav--limited.admin-section-nav--vertical .admin-section-link:hover{background:#eeeae2;color:var(--ink,#171717);transform:translateX(2px)}
+.admin-section-nav--limited.admin-section-nav--vertical .admin-section-link.active{background:#171717;color:#fff;box-shadow:0 5px 14px rgba(20,18,15,.12)}
+@media(max-width:620px){
+  .admin-section-nav--limited.admin-section-nav--vertical{max-width:none;width:100%;}
+  .admin-nav-vertical-title{padding-left:10px}
+}
