@@ -4648,10 +4648,15 @@ app.put('/api/admin/series-imeis/config', requireAdmin, (req, res) => {
 });
 
 function collectRegisteredIdentifiers() {
-  const orders = readOrders();
+  // Las ventas son una copia del pedido. Consultamos ambos orígenes para que
+  // una serie/IMEI siga apareciendo aunque el registro operativo haya cambiado
+  // de estado o la venta ya esté en Historial de ventas.
+  const sources = [...readOrders(), ...readSales()];
   const products = new Map(readProducts().map(product => [String(product.id), normalizeProduct(product)]));
   const rows = [];
-  for (const order of orders) {
+  const seen = new Set();
+  for (const order of sources) {
+    const canonicalOrderId = String(order.orderId || order.id || '');
     for (const item of (Array.isArray(order.items) ? order.items : [])) {
       const product = products.get(String(item.productId));
       const identifiers = Array.isArray(item.deviceIdentifiers) ? item.deviceIdentifiers : [];
@@ -4663,9 +4668,16 @@ function collectRegisteredIdentifiers() {
         const entry = byUnit.get(unit);
         const primary = cleanText(entry?.primary, 50);
         const secondary = cleanText(entry?.secondary, 50);
+        // Mostrar siempre identificadores que ya fueron registrados, aunque la
+        // configuración actual del producto haya cambiado a NO SOLICITAR.
+        // La configuración controla nuevas órdenes; no debe ocultar el historial
+        // de series/IMEIS que ya existen.
         if (!entry && !requiresIdentifier) continue;
+        const rowKey = `${canonicalOrderId}|${itemIndex}|${unit}`;
+        if (seen.has(rowKey)) continue;
+        seen.add(rowKey);
         rows.push({
-          orderId: order.id,
+          orderId: canonicalOrderId,
           orderNumber: order.orderNumber || order.id,
           createdAt: order.createdAt || null,
           status: order.status || 'Pendiente',
