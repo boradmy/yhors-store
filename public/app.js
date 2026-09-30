@@ -1244,13 +1244,14 @@ function adminSectionNav(session = {}, active = '') {
   const limitedOperations = role === 'vendedor' || role === 'orders' || role === 'store_manager';
   const link = (key, href, label) => `<a href="${href}" class="admin-section-link${active === key ? ' active' : ''}" data-smooth-route>${label}</a>`;
   if (limitedOperations) {
-    // Jefe/Vendedor usan el mismo patrón desplegable elegante del panel:
-    // cerrado en YHORS Inteligente y abierto solo cuando una opción de Operación está activa.
-    const limitedItems = `${link('buscar-productos', `${ADMIN_PATH}/buscar-productos`, 'BUSCAR PRODUCTOS')}${link('ventas-generales', `${ADMIN_PATH}/ventas-generales`, 'VENTAS GENERALES')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('generar-orden', `${ADMIN_PATH}/generar-orden`, 'GENERAR ORDEN')}${link('historial-ventas', `${ADMIN_PATH}/historial-ventas`, 'HISTORIAL DE VENTAS')}${link('clientes', `${ADMIN_PATH}/clientes`, 'CLIENTES')}${role === 'vendedor' || role === 'orders' ? '' : link('series-imeis', `${ADMIN_PATH}/series-imeis`, 'SERIES / IMEIS')}`;
-    // El menú OPERACIÓN siempre inicia cerrado. La página activa se marca dentro
-    // del desplegable, pero navegar a ella NO debe volver a abrir el menú.
-    // Solo el clic explícito sobre OPERACIÓN puede desplegarlo.
-    return `<div class="admin-navigation-stack admin-navigation-stack--limited"><nav class="admin-section-nav admin-section-nav--limited" id="adminSectionNav" aria-label="Navegación YHORS"><details class="admin-nav-group admin-nav-group--operation"><summary><span>OPERACIÓN</span></summary><div class="admin-nav-group-links admin-nav-group-links--limited">${limitedItems}</div></details></nav></div>`;
+    // Vendedores y jefes tienen dos áreas claras: primero agendar la venta
+    // y luego las herramientas para darle seguimiento/gestión.
+    const saleItems = `${link('clientes', `${ADMIN_PATH}/clientes`, 'CLIENTES')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('generar-orden', `${ADMIN_PATH}/generar-orden`, 'GENERAR ORDEN')}`;
+    const managementItems = `${link('buscar-productos', `${ADMIN_PATH}/buscar-productos`, 'BUSCAR PRODUCTOS')}${link('ventas-generales', `${ADMIN_PATH}/ventas-generales`, 'VENTAS GENERALES')}${link('historial-ventas', `${ADMIN_PATH}/historial-ventas`, 'HISTORIAL DE VENTAS')}${role === 'vendedor' || role === 'orders' ? '' : link('series-imeis', `${ADMIN_PATH}/series-imeis`, 'SERIES / IMEIS')}`;
+    const saleActive = ['clientes','pedidos','generar-orden'].includes(active);
+    const managementActive = ['buscar-productos','ventas-generales','historial-ventas','series-imeis'].includes(active);
+    const limitedGroup = (label, items, isActive, extraClass = '') => `<details class="admin-nav-group admin-nav-group--limited ${extraClass}${isActive ? ' has-active' : ''}"><summary><span>${label}</span>${isActive ? '<i aria-hidden="true"></i>' : ''}</summary><div class="admin-nav-group-links admin-nav-group-links--limited">${items}</div></details>`;
+    return `<div class="admin-navigation-stack admin-navigation-stack--limited"><nav class="admin-section-nav admin-section-nav--limited" id="adminSectionNav" aria-label="Navegación YHORS">${limitedGroup('AGENDAR VENTA', saleItems, saleActive, 'admin-nav-group--sales')}${limitedGroup('GESTIÓN', managementItems, managementActive, 'admin-nav-group--management')}</nav></div>`;
   }
   const group = (label, activeKeys, items, open = false) => `<details class="admin-nav-group${activeKeys.includes(active) ? ' has-active' : ''}"${open ? ' open' : ''}><summary><span>${label}</span>${activeKeys.includes(active) ? '<i aria-hidden="true"></i>' : ''}</summary><div class="admin-nav-group-links">${items}</div></details>`;
   return `<div class="admin-navigation-stack">
