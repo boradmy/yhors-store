@@ -1063,10 +1063,7 @@ function openProductImagePicker(slot, current = '', onApply) {
   document.querySelector('#productImagePickerModal')?.remove();
   document.body.insertAdjacentHTML('beforeend', productImagePickerModal(slot, current));
   const modal = document.querySelector('#productImagePickerModal');
-<<<<<<< HEAD
   if (modal) { modal.hidden = false; modal.setAttribute('aria-hidden', 'false'); document.body.classList.add('generate-modal-open'); }
-=======
->>>>>>> 1a248974b646b667c0b236b165307a5198ff10f9
   const file = document.querySelector('#productImagePickerFile');
   const url = document.querySelector('#productImagePickerUrl');
   const preview = document.querySelector('#productImagePickerPreview');
@@ -1074,11 +1071,7 @@ function openProductImagePicker(slot, current = '', onApply) {
   const updatePreview = src => { if (preview) preview.src = src || placeholder; };
   file?.addEventListener('change', () => { selectedFile = file.files?.[0] || null; if (selectedFile) updatePreview(URL.createObjectURL(selectedFile)); });
   url?.addEventListener('input', () => { if (!selectedFile) updatePreview(url.value.trim()); });
-<<<<<<< HEAD
   const close = () => { document.body.classList.remove('generate-modal-open'); modal?.remove(); };
-=======
-  const close = () => modal?.remove();
->>>>>>> 1a248974b646b667c0b236b165307a5198ff10f9
   modal?.querySelectorAll('[data-image-picker-close]').forEach(btn => btn.addEventListener('click', close));
   modal?.addEventListener('click', e => { if (e.target === modal) close(); });
   modal?.querySelector('#productImagePickerApply')?.addEventListener('click', () => {
@@ -1106,7 +1099,6 @@ function productForm(product = {}, classifications = {}) {
     <div class="field"><label for="brand">Marca</label><select id="brand" name="brand" ${lock}><option value="">Sin marca</option>${brands.map(v => `<option value="${escapeHTML(v)}" ${product.brand === v ? 'selected' : ''}>${escapeHTML(v)}</option>`).join('')}</select></div>
     <div class="field"><label for="productType">Tipo de producto</label><select id="productType" name="productType" ${lock}><option value="">Sin clasificación</option>${types.map(v => `<option value="${escapeHTML(v)}" ${product.productType === v ? 'selected' : ''}>${escapeHTML(v)}</option>`).join('')}</select></div>
     <div class="field"><label for="salePrice">Precio de venta (USD)</label><input id="salePrice" name="salePrice" required min="0" step="0.01" type="number" ${lock} value="${escapeHTML(product.salePrice ?? product.price ?? '')}"></div>
-<<<<<<< HEAD
     <div class="field"><label for="purchasePrice">Precio de compra (USD)</label><input id="purchasePrice" name="purchasePrice" min="0" step="0.01" type="number" ${lock} value="${escapeHTML(product.purchasePrice ?? '')}"></div>
     <div class="field"><label for="stock">Stock disponible</label><input id="stock" name="stock" min="0" step="1" type="number" ${lock} value="${escapeHTML(product.stock ?? 0)}"></div>
     <div class="field"><label for="stockMin">Stock mínimo</label><input id="stockMin" name="stockMin" min="0" step="1" type="number" ${lock} value="${escapeHTML(product.stockMin ?? 0)}"></div>
@@ -1116,8 +1108,6 @@ function productForm(product = {}, classifications = {}) {
       ${selectedCategory === 'tech' ? `<label><input type="checkbox" id="requiresDeviceIdentifier" name="requiresDeviceIdentifier" ${product.requiresDeviceIdentifier !== false ? 'checked' : ''} ${lock}> Requiere Serie / IMEI</label>` : ''}
       ${isCosplay ? `<label><input type="checkbox" id="isRental" name="isRental" ${product.isRental ? 'checked' : ''} ${lock}> Disponible para alquiler</label>` : ''}
     </div>
-=======
->>>>>>> 1a248974b646b667c0b236b165307a5198ff10f9
     <div class="field ${isCosplay ? '' : 'hidden'}"><label for="rentalPrice">Precio de alquiler por día (USD)</label><input id="rentalPrice" name="rentalPrice" ${isCosplay ? 'required' : ''} ${lock} min="0" step="0.01" type="number" value="${escapeHTML(product.rentalPrice ?? '')}"><small class="field-help">Disponible para productos de Cosplay.</small></div>
     <div class="field full"><span class="eyebrow image-section-label">Fotos del producto</span><small class="field-help">Haz clic en cada imagen para abrir el selector y elegir archivo o enlace.</small></div>
     ${[0,1,2,3].map((index) => { const slot=index+1, current=images[index] || (index===0 ? product.image || '' : ''); return `<div class="field full product-image-slot"><div class="product-image-slot-head"><div><strong>${index===0?'Imagen principal':`Imagen ${slot}`}</strong><small>${current ? 'Imagen cargada' : 'Sin imagen · puedes agregarla después'}</small></div><button type="button" class="button secondary small" data-open-image-picker="${slot}" ${lock}>${current ? 'Cambiar imagen' : '+ Agregar imagen'}</button></div><input type="hidden" id="image${index===0?'':slot}" name="image${index===0?'':slot}" value="${escapeHTML(current)}"><div class="product-image-slot-preview ${current?'has-image':''}"><img id="productImagePreview${slot}" data-fallback src="${escapeHTML(current || placeholder)}" alt="Imagen ${slot}"><span>${current ? '' : 'SIN IMAGEN'}</span></div></div>`; }).join('')}
@@ -4298,7 +4288,6 @@ async function renderFlyerPreview() {
   wireImageFallback(document.querySelector('.flyer-page'));
 }
 
-<<<<<<< HEAD
 function openInventoryNewProductModal({ classifications, product = null, onSaved }) {
   document.querySelector('#inventoryNewProductModal')?.remove();
   document.querySelector('#productImagePickerModal')?.remove();
@@ -4337,56 +4326,17 @@ function openInventoryNewProductModal({ classifications, product = null, onSaved
     const editor = area.querySelector('#descriptionEditor'); const hidden = area.querySelector('#description');
     editor?.addEventListener('input', () => { if (hidden) hidden.value = editor.innerHTML.trim(); });
     area.querySelectorAll('[data-rich-command]').forEach(button => button.addEventListener('click', () => { editor?.focus(); document.execCommand(button.dataset.richCommand, false, button.dataset.richValue || null); if(hidden) hidden.value=editor?.innerHTML?.trim() || ''; }));
-=======
-function openInventoryNewProductModal({ classifications, onSaved }) {
-  document.querySelector('#inventoryNewProductModal')?.remove();
-  const modal = document.createElement('div');
-  modal.id = 'inventoryNewProductModal';
-  modal.className = 'inventory-new-product-modal';
-  modal.innerHTML = `<div class="inventory-new-product-backdrop" data-inventory-new-close></div><div class="inventory-new-product-dialog" role="dialog" aria-modal="true" aria-labelledby="inventoryNewProductTitle"><div class="inventory-new-product-head"><div><span class="eyebrow">INVENTARIO · NUEVO PRODUCTO</span><h2 id="inventoryNewProductTitle">Agregar nuevo producto</h2><small>Completa la ficha y agrega las imágenes sin salir de Inventario.</small></div><button type="button" class="product-image-picker-close" data-inventory-new-close aria-label="Cerrar">×</button></div><div id="inventoryNewProductFormArea"></div></div>`;
-  document.body.appendChild(modal);
-  const area = modal.querySelector('#inventoryNewProductFormArea');
-  let draft = {};
-  const draw = () => {
-    area.innerHTML = productForm(draft, classifications);
-    wireImageFallback(area);
-    const category = area.querySelector('#category');
-    category?.addEventListener('change', e => { draft = { ...draft, category: e.target.value }; draw(); });
-    area.querySelectorAll('[data-open-image-picker]').forEach(button => button.addEventListener('click', () => {
-      const slot = Number(button.dataset.openImagePicker || 1);
-      const fieldId = slot === 1 ? '#image' : `#image${slot}`;
-      const current = area.querySelector(fieldId)?.value || '';
-      openProductImagePicker(slot, current, ({ file, url, preview }) => {
-        const field = area.querySelector(fieldId); const imagePreview = area.querySelector(`#productImagePreview${slot}`);
-        if (field) field.value = url || '';
-        window.__yhorsPendingImageFiles ||= {};
-        if (file) window.__yhorsPendingImageFiles[slot] = file; else delete window.__yhorsPendingImageFiles[slot];
-        if (imagePreview) imagePreview.src = preview || placeholder;
-        const box = button.closest('.product-image-slot');
-        box?.querySelector('small')?.replaceChildren(document.createTextNode(file ? 'Archivo seleccionado · se subirá al guardar' : (url ? 'Imagen cargada por enlace' : 'Sin imagen · puedes agregarla después')));
-        box?.querySelector('.product-image-slot-preview')?.classList.toggle('has-image', Boolean(file || url));
-      });
-    }));
-    const editor = area.querySelector('#descriptionEditor'); const hidden = area.querySelector('#description');
-    editor?.addEventListener('input', () => { if (hidden) hidden.value = editor.innerHTML.trim(); });
-    area.querySelectorAll('[data-rich-command]').forEach(button => button.addEventListener('click', () => { editor?.focus(); document.execCommand(button.dataset.richCommand, false, button.dataset.richValue || null); if(hidden) hidden.value=editor.innerHTML.trim(); }));
->>>>>>> 1a248974b646b667c0b236b165307a5198ff10f9
     area.querySelector('#productForm')?.addEventListener('submit', async e => {
       e.preventDefault(); const form=e.currentTarget; const msg=area.querySelector('#formMessage'); const submit=form.querySelector('[type="submit"]');
       if (!form.elements.category.value) { msg.className='message error'; msg.textContent='Selecciona una categoría antes de guardar.'; return; }
       if (!form.elements.name.value.trim() || !form.elements.sku.value.trim()) { msg.className='message error'; msg.textContent='Completa nombre y SKU.'; return; }
-<<<<<<< HEAD
       const salePrice=Number(form.elements.salePrice.value), purchasePrice=Number(form.elements.purchasePrice?.value||0), stock=Number(form.elements.stock?.value||0), stockMin=Number(form.elements.stockMin?.value||0);
       if (!Number.isFinite(salePrice)||salePrice<0||!Number.isFinite(purchasePrice)||purchasePrice<0||!Number.isInteger(stock)||stock<0||!Number.isInteger(stockMin)||stockMin<0) { msg.className='message error'; msg.textContent='Revisa precios, stock y stock mínimo.'; return; }
       const confirmed=await showYhorsConfirm(editingProduct?'¿Guardar los cambios?':'¿Crear este producto?',editingProduct?`Se actualizará <strong>${escapeHTML(product.name)}</strong> con la nueva ficha e imágenes.`:'Se registrará el producto en YHORS con la ficha que acabas de completar.'); if(!confirmed)return;
-=======
-      const confirmed=await showYhorsConfirm('¿Crear este producto?', 'Se registrará en YHORS y quedará disponible para completar su ficha e imágenes.'); if(!confirmed)return;
->>>>>>> 1a248974b646b667c0b236b165307a5198ff10f9
       submit.disabled=true; msg.textContent='Guardando…';
       try {
         if(hidden) hidden.value=editor?.innerHTML?.trim() || hidden.value || '';
         const data=Object.fromEntries(new FormData(form).entries());
-<<<<<<< HEAD
         data.published=form.elements.published?form.elements.published.checked:true; data.requiresDeviceIdentifier=form.elements.requiresDeviceIdentifier?form.elements.requiresDeviceIdentifier.checked:false; data.isRental=form.elements.isRental?form.elements.isRental.checked:false; data.featured=Boolean(product?.featured); data.hero=Boolean(product?.hero); data.price=data.salePrice; data.purchasePrice=purchasePrice; data.stock=stock; data.stockMin=stockMin; data.tags=String(form.elements.tags?.value||'').split(',').map(v=>v.trim()).filter(Boolean).slice(0,30); data.images=[data.image,data.image2,data.image3,data.image4].filter(Boolean);
         const pending=window.__yhorsPendingImageFiles||{};
         for(let slot=1;slot<=4;slot++){const file=pending[slot];if(!file)continue;const fd=new FormData();fd.append('image',file);const uploaded=await request('/api/admin/upload',{method:'POST',body:fd});const key=slot===1?'image':`image${slot}`;data[key]=uploaded.image;data.images[slot-1]=uploaded.image;}
@@ -4399,20 +4349,6 @@ function openInventoryNewProductModal({ classifications, onSaved }) {
   };
   modal.querySelectorAll('[data-inventory-new-close]').forEach(b=>b.addEventListener('click',close));
   window.__yhorsPendingImageFiles={}; draw();
-=======
-        data.published=form.elements.published?.checked !== false; data.featured=Boolean(form.elements.featured?.checked); data.hero=Boolean(form.elements.hero?.checked); data.price=data.salePrice;
-        data.images=[data.image,data.image2,data.image3,data.image4].filter(Boolean);
-        const pending=window.__yhorsPendingImageFiles||{};
-        for(let slot=1;slot<=4;slot++){const file=pending[slot];if(!file)continue;const fd=new FormData();fd.append('image',file);const uploaded=await request('/api/admin/upload',{method:'POST',body:fd});const key=slot===1?'image':`image${slot}`;data[key]=uploaded.image;data.images[slot-1]=uploaded.image;}
-        data.images=data.images.filter(Boolean); data.image=data.images[0]||'';
-        const created=await request('/api/admin/products',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
-        window.__yhorsPendingImageFiles={}; await onSaved?.(created); modal.remove();
-      } catch(err){submit.disabled=false;msg.className='message error';msg.textContent=err.message||'No se pudo crear el producto.';}
-    });
-  };
-  modal.querySelectorAll('[data-inventory-new-close]').forEach(b=>b.addEventListener('click',()=>modal.remove()));
-  draw();
->>>>>>> 1a248974b646b667c0b236b165307a5198ff10f9
 }
 
 async function renderAdminInventory() {
@@ -4521,7 +4457,6 @@ async function renderAdminInventory() {
     });
   };
   app.innerHTML = inventoryPageMarkup(products, { readOnly: inventoryReadOnly, role: session.role, classifications });
-<<<<<<< HEAD
 
   const renderInventoryClassifications = () => {
     const render = (target, values, type) => {
@@ -4559,8 +4494,6 @@ async function renderAdminInventory() {
   };
   renderInventoryClassifications();
   bindInventoryClassificationEvents();
-=======
->>>>>>> 1a248974b646b667c0b236b165307a5198ff10f9
   document.querySelector('#inventoryAddProduct')?.addEventListener('click', () => openInventoryNewProductModal({ classifications, onSaved: async created => { products = [created, ...products]; draw(); } }));
   draw();
   document.querySelector('#inventoryPageSearch')?.addEventListener('input', draw);
