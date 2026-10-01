@@ -5411,3 +5411,126 @@ body.login-loading-active{overflow:hidden}
   .inventory-classification-dialog{padding:18px;border-radius:14px;max-height:92vh}
   .classification-modal-content .classification-grid{grid-template-columns:1fr}
 }
+
+
+/* =========================================================
+   YHORS · Ajustes UI 2026-10-01
+   Página Web / Inventario · filtros y final de página
+   ========================================================= */
+
+/* Filtros de "Productos ya registrados": compactos pero respirados,
+   con cada criterio como un bloque vertical consistente. */
+.inventory-products-card .inventory-toolbar-extended{
+  display:grid!important;
+  grid-template-columns:minmax(300px,1.9fr) repeat(3,minmax(175px,1fr))!important;
+  gap:14px!important;
+  align-items:end!important;
+  padding:14px 0 18px!important;
+  margin:0!important;
+}
+.inventory-products-card .inventory-toolbar-extended .inventory-search{
+  min-width:0!important;
+  width:100%!important;
+}
+.inventory-products-card .inventory-toolbar-extended .inventory-filter{
+  display:grid!important;
+  grid-template-columns:1fr!important;
+  gap:6px!important;
+  min-width:0!important;
+  align-items:stretch!important;
+}
+.inventory-products-card .inventory-toolbar-extended .inventory-filter > span{
+  display:block!important;
+  margin:0!important;
+  font-size:.68rem!important;
+  line-height:1.15!important;
+  font-weight:850!important;
+  letter-spacing:.08em!important;
+  text-transform:uppercase!important;
+  color:#4c4842!important;
+}
+.inventory-products-card .inventory-toolbar-extended .inventory-filter select{
+  width:100%!important;
+  min-width:0!important;
+  height:42px!important;
+  box-sizing:border-box!important;
+  padding:0 34px 0 13px!important;
+  border:1px solid #dcd5c9!important;
+  border-radius:10px!important;
+  background:#fff!important;
+  color:#171513!important;
+  font:inherit!important;
+  font-size:.76rem!important;
+  outline:none!important;
+  text-overflow:ellipsis!important;
+}
+.inventory-products-card .inventory-toolbar-extended .inventory-filter select:focus{
+  border-color:rgba(181,138,67,.75)!important;
+  box-shadow:0 0 0 3px rgba(181,138,67,.10)!important;
+}
+
+/* La página web no necesita conservar una altura artificial una vez
+   terminado "Portada y productos destacados". */
+.admin-shell.admin-web-shell{
+  min-height:0!important;
+  height:auto!important;
+}
+.admin-web-shell .admin-wrap{
+  min-height:0!important;
+  height:auto!important;
+}
+.admin-web-shell #selectionPanelMount{
+  height:auto!important;
+  min-height:0!important;
+  margin-bottom:0!important;
+  padding-bottom:0!important;
+}
+.admin-web-shell #selectionPanel{
+  height:auto!important;
+  min-height:0!important;
+  margin-bottom:0!important;
+}
+
+/* Evita que un contenedor general de la ruta cree una cola vacía
+   después del último panel. */
+.admin-web-shell .selection-panel{
+  overflow:visible;
+}
+
+/* Navegación: un único icono para Página Web y aspecto consistente. */
+.admin-section-link .admin-nav-icon{
+  display:inline-flex;
+  width:18px;
+  min-width:18px;
+  align-items:center;
+  justify-content:center;
+  margin-right:5px;
+  line-height:1;
+}
+.admin-section-link .admin-nav-label{
+  min-width:0;
+}
+
+/* En pantallas medianas los filtros se reorganizan sin aplastarse. */
+@media (max-width:1100px){
+  .inventory-products-card .inventory-toolbar-extended{
+    grid-template-columns:minmax(260px,1.6fr) repeat(3,minmax(145px,1fr))!important;
+    gap:10px!important;
+  }
+}
+@media (max-width:820px){
+  .inventory-products-card .inventory-toolbar-extended{
+    grid-template-columns:1fr 1fr!important;
+  }
+  .inventory-products-card .inventory-toolbar-extended .inventory-search{
+    grid-column:1/-1;
+  }
+}
+@media (max-width:520px){
+  .inventory-products-card .inventory-toolbar-extended{
+    grid-template-columns:1fr!important;
+  }
+  .inventory-products-card .inventory-toolbar-extended .inventory-search{
+    grid-column:auto;
+  }
+}
