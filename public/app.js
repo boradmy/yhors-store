@@ -502,8 +502,33 @@ function productCard(product) {
     : `<button class="add" data-id="${escapeHTML(product.id)}" ${!inStock ? 'disabled' : ''}><span>${inStock ? 'Añadir' : 'Sin stock'}</span><span>${inStock ? '+' : '—'}</span></button>`;
   return `<article class="product" data-product="${escapeHTML(product.id)}"><a class="product-open" data-open="${escapeHTML(product.id)}" href="${escapeHTML(productHref(product))}" aria-label="Ver ${escapeHTML(product.name)}"><div class="product-image"><img data-fallback src="${escapeHTML(image)}" alt="${escapeHTML(product.name)}" loading="lazy"></div><div class="product-info"><span class="product-category">${escapeHTML(categories[product.category] || product.category)}</span>${meta ? `<small class="product-meta">${escapeHTML(meta)}</small>` : ''}<h3>${escapeHTML(product.name)}</h3><div class="product-description">${escapeHTML(compactProductDescription(product.description, 112))}</div><span class="detail-link">Ver detalles <span>→</span></span></div></a><div class="product-bottom"><div><span class="price">${productPriceLabel(product)}</span>${rental}<span class="price-secondary">${availability}</span></div>${action}</div></article>`;
 }
-function renderProductsInto(area, products, onOpen, onAdd) {
-  area.innerHTML = products.length ? products.map(productCard).join('') : '<div class="empty">Aún no hay productos en esta colección.</div>';
+function renderProductsInto(area, products, onOpen, onAdd, options = {}) {
+  const groupByType = options.groupByType === true;
+  const groupLabel = value => String(value || 'Otros productos').trim() || 'Otros productos';
+  const groupedMarkup = () => {
+    const groups = [];
+    const groupMap = new Map();
+    products.forEach(product => {
+      const key = groupLabel(product.productType);
+      if (!groupMap.has(key)) {
+        const group = { key, items: [] };
+        groupMap.set(key, group);
+        groups.push(group);
+      }
+      groupMap.get(key).items.push(product);
+    });
+    return groups.map(group => `
+      <section class="product-type-group" data-product-type-group="${escapeHTML(group.key)}">
+        <div class="product-type-divider" aria-label="${escapeHTML(group.key)}">
+          <h2>${escapeHTML(group.key)}</h2>
+          <span class="product-type-rule" aria-hidden="true"></span>
+        </div>
+        <div class="products product-type-grid">${group.items.map(productCard).join('')}</div>
+      </section>`).join('');
+  };
+  area.innerHTML = products.length
+    ? (groupByType ? groupedMarkup() : products.map(productCard).join(''))
+    : '<div class="empty">Aún no hay productos en esta colección.</div>';
   wireImageFallback(area);
   area.querySelectorAll('[data-open]').forEach(button => button.addEventListener('click', e => { e.preventDefault(); onOpen(button.dataset.open); }));
   area.querySelectorAll('.add').forEach(button => button.addEventListener('click', e => { e.stopPropagation();
@@ -977,9 +1002,9 @@ async function renderCategoryPage(categoryKey) {
   try { ({ products, storefront, classifications } = await loadStoreData()); } catch { /* empty */ }
   const categoryProducts = products.filter(product => categoryKey === 'all' || product.category === categoryKey);
   const slides = categoryProducts.slice(0, 4).map(product => ({ ...product, image: productImages(product)[0], heroTitle: product.name, heroDescription: product.description }));
-  app.innerHTML = `${renderHeader(categoryKey)}<main>${heroMarkup(slides, true, categoryKey)}<section class="section category-page-section" id="productos-categoria"><div class="category-intro"><div><span class="eyebrow">Colección independiente</span><h1>${escapeHTML(categories[categoryKey])}</h1></div><p>${escapeHTML(categoryDescriptions[categoryKey])}</p></div><div class="catalog-layout">${catalogFilters(classifications, categoryKey, { category: categoryKey })}<div class="catalog-results"><div class="results-count" id="resultsCount"></div><div class="products" id="categoryProducts"></div></div></div></section></main>${renderFooter()}${cartMarkup()}`;
+  app.innerHTML = `${renderHeader(categoryKey)}<main>${heroMarkup(slides, true, categoryKey)}<section class="section category-page-section" id="productos-categoria"><div class="category-intro"><div><span class="eyebrow">Colección independiente</span><h1>${escapeHTML(categories[categoryKey])}</h1></div><p>${escapeHTML(categoryDescriptions[categoryKey])}</p></div><div class="catalog-layout">${catalogFilters(classifications, categoryKey, { category: categoryKey })}<div class="catalog-results"><div class="results-count" id="resultsCount"></div><div class="products product-type-container" id="categoryProducts"></div></div></div></section></main>${renderFooter()}${cartMarkup()}`;
   wireCategoryNavigation(); wireMobileMenu(); wireSearch(); wireHero(slides); markPageEnter(); const cart = wireCart(products, storefront); const area = document.querySelector('#categoryProducts');
-  const renderCategoryResults = (items) => { renderProductsInto(area, items, id => openProduct(id, products), (product, button) => cart.addToCart(product, button)); const count = document.querySelector('#resultsCount'); if (count) count.textContent = `${items.length} producto${items.length === 1 ? '' : 's'} en ${escapeHTML(categories[categoryKey])}`; if (!items.length) area.innerHTML = '<div class="empty">No hay productos que coincidan con estos filtros.</div>'; };
+  const renderCategoryResults = (items) => { renderProductsInto(area, items, id => openProduct(id, products), (product, button) => cart.addToCart(product, button), { groupByType: true }); const count = document.querySelector('#resultsCount'); if (count) count.textContent = `${items.length} producto${items.length === 1 ? '' : 's'} en ${escapeHTML(categories[categoryKey])}`; if (!items.length) area.innerHTML = '<div class="empty">No hay productos que coincidan con estos filtros.</div>'; };
   wireCatalogFilters(categoryProducts, classifications, { category: categoryKey }, renderCategoryResults);
 }
 
@@ -1019,6 +1044,45 @@ async function renderStore() {
   return renderHome();
 }
 
+function productImagePickerModal(slot, current = '') {
+  const title = slot === 1 ? 'Imagen principal' : `Imagen ${slot}`;
+  return `<div class="product-image-picker-backdrop" id="productImagePickerModal" hidden>
+    <div class="product-image-picker" role="dialog" aria-modal="true" aria-labelledby="productImagePickerTitle">
+      <div class="product-image-picker-head"><div><span class="eyebrow">FOTOS DEL PRODUCTO</span><h3 id="productImagePickerTitle">${escapeHTML(title)}</h3><small>Agrega la imagen desde tu equipo o pega un enlace.</small></div><button type="button" class="product-image-picker-close" data-image-picker-close aria-label="Cerrar">×</button></div>
+      <div class="product-image-picker-options">
+        <section class="product-image-picker-option"><div class="image-picker-icon">↑</div><div><strong>Agregar por archivo</strong><small>JPG, PNG, WEBP o GIF · máximo 5 MB</small></div><label class="button secondary small image-picker-file-label">Seleccionar archivo<input id="productImagePickerFile" type="file" accept="image/jpeg,image/png,image/webp,image/gif" hidden></label></section>
+        <section class="product-image-picker-option"><div class="image-picker-icon">↗</div><div><strong>Agregar por link</strong><small>Usa una URL directa de la imagen.</small></div><input id="productImagePickerUrl" type="url" placeholder="https://..." value="${escapeHTML(current)}"></section>
+      </div>
+      <div class="product-image-picker-preview"><span>Vista previa</span><div><img id="productImagePickerPreview" data-fallback src="${escapeHTML(current || placeholder)}" alt="Vista previa"></div></div>
+      <div class="product-image-picker-foot"><button type="button" class="button secondary" data-image-picker-close>Cancelar</button><button type="button" class="button primary" id="productImagePickerApply">Usar esta imagen</button></div>
+    </div>
+  </div>`;
+}
+
+function openProductImagePicker(slot, current = '', onApply) {
+  document.querySelector('#productImagePickerModal')?.remove();
+  document.body.insertAdjacentHTML('beforeend', productImagePickerModal(slot, current));
+  const modal = document.querySelector('#productImagePickerModal');
+  if (modal) { modal.hidden = false; modal.setAttribute('aria-hidden', 'false'); document.body.classList.add('generate-modal-open'); }
+  const file = document.querySelector('#productImagePickerFile');
+  const url = document.querySelector('#productImagePickerUrl');
+  const preview = document.querySelector('#productImagePickerPreview');
+  let selectedFile = null;
+  const updatePreview = src => { if (preview) preview.src = src || placeholder; };
+  file?.addEventListener('change', () => { selectedFile = file.files?.[0] || null; if (selectedFile) updatePreview(URL.createObjectURL(selectedFile)); });
+  url?.addEventListener('input', () => { if (!selectedFile) updatePreview(url.value.trim()); });
+  const close = () => { document.body.classList.remove('generate-modal-open'); modal?.remove(); };
+  modal?.querySelectorAll('[data-image-picker-close]').forEach(btn => btn.addEventListener('click', close));
+  modal?.addEventListener('click', e => { if (e.target === modal) close(); });
+  modal?.querySelector('#productImagePickerApply')?.addEventListener('click', () => {
+    const link = String(url?.value || '').trim();
+    if (!selectedFile && !link) { url?.focus(); return; }
+    if (selectedFile && selectedFile.size > 5 * 1024 * 1024) { alert('La imagen no puede superar 5 MB.'); return; }
+    onApply?.({ file: selectedFile, url: link, preview: selectedFile ? URL.createObjectURL(selectedFile) : link });
+    close();
+  });
+}
+
 function productForm(product = {}, classifications = {}) {
   const images = Array.isArray(product.images) && product.images.length ? product.images : (product.image ? [product.image] : []);
   const selectedCategory = product.category || '';
@@ -1027,6 +1091,7 @@ function productForm(product = {}, classifications = {}) {
   const isCosplay = selectedCategory === 'cosplay';
   const locked = !selectedCategory;
   const lock = locked ? 'disabled' : '';
+  window.__yhorsPendingImageFiles = {};
   return `<form id="productForm"><div class="form-grid">
     <div class="field full"><label for="category">Categoría / universo</label><select id="category" name="category" required><option value="">Elegir Categoría</option>${Object.entries(categories).filter(([key]) => key !== 'all').map(([key, label]) => `<option value="${key}" ${selectedCategory === key ? 'selected' : ''}>${label}</option>`).join('')}</select><small class="field-help">Las clasificaciones se administran abajo. Elige una categoría para habilitar el resto del formulario.</small></div>
     <div class="field"><label for="name">Nombre del producto</label><input id="name" name="name" required maxlength="90" ${lock} value="${escapeHTML(product.name || '')}"></div>
@@ -1034,16 +1099,23 @@ function productForm(product = {}, classifications = {}) {
     <div class="field"><label for="brand">Marca</label><select id="brand" name="brand" ${lock}><option value="">Sin marca</option>${brands.map(v => `<option value="${escapeHTML(v)}" ${product.brand === v ? 'selected' : ''}>${escapeHTML(v)}</option>`).join('')}</select></div>
     <div class="field"><label for="productType">Tipo de producto</label><select id="productType" name="productType" ${lock}><option value="">Sin clasificación</option>${types.map(v => `<option value="${escapeHTML(v)}" ${product.productType === v ? 'selected' : ''}>${escapeHTML(v)}</option>`).join('')}</select></div>
     <div class="field"><label for="salePrice">Precio de venta (USD)</label><input id="salePrice" name="salePrice" required min="0" step="0.01" type="number" ${lock} value="${escapeHTML(product.salePrice ?? product.price ?? '')}"></div>
-    <div class="field ${isCosplay ? '' : 'hidden'}"><label for="rentalPrice">Precio de alquiler por día (USD)</label><input id="rentalPrice" name="rentalPrice" ${isCosplay ? 'required' : ''} ${lock} min="0" step="0.01" type="number" value="${escapeHTML(product.rentalPrice ?? '')}"><small class="field-help">Disponible para productos de Cosplay. Este valor se cobra por cada día de alquiler.</small></div>
-    <div class="field full"><span class="eyebrow image-section-label">Fotos del producto</span><small class="field-help">Puedes subir cada foto desde tu equipo o pegar directamente su URL.</small></div>
-    ${[0,1,2,3].map((index) => {
-      const num=index+1, id=index===0?'image':'image'+num, fileId=index===0?'imageFile':'imageFile'+num, label=index===0?'FOTO PRINCIPAL':'FOTO '+num, urlLabel=index===0?'URL de imagen principal':'Imagen adicional '+num+' · URL', currentImage=images[index] || (index===0 ? product.image || '' : ''), previewId=`productImagePreview${num}`;
-      return `<div class="image-upload-row field full"><div class="image-upload-layout"><div class="image-upload-preview"><span>Foto referencial</span><div class="image-reference-preview"><img id="${previewId}" data-fallback src="${escapeHTML(currentImage || placeholder)}" alt="Vista previa ${escapeHTML(label)}"></div></div><div class="image-upload-file"><label for="${fileId}">SUBIR ${label} <small>(máx. 5 MB)</small></label><input id="${fileId}" name="${fileId}" type="file" ${lock} accept="image/jpeg,image/png,image/webp,image/gif"></div><div class="image-upload-url"><label for="${id}">${urlLabel}</label><input id="${id}" name="${id}" type="url" ${lock} placeholder="https://..." value="${escapeHTML(currentImage)}"></div></div></div>`;
-    }).join('')}
+    <div class="field"><label for="purchasePrice">Precio de compra (USD)</label><input id="purchasePrice" name="purchasePrice" min="0" step="0.01" type="number" ${lock} value="${escapeHTML(product.purchasePrice ?? '')}"></div>
+    <div class="field"><label for="stock">Stock disponible</label><input id="stock" name="stock" min="0" step="1" type="number" ${lock} value="${escapeHTML(product.stock ?? 0)}"></div>
+    <div class="field"><label for="stockMin">Stock mínimo</label><input id="stockMin" name="stockMin" min="0" step="1" type="number" ${lock} value="${escapeHTML(product.stockMin ?? 0)}"></div>
+    <div class="field full"><label for="tags">Etiquetas <small>(separadas por coma)</small></label><input id="tags" name="tags" ${lock} value="${escapeHTML(Array.isArray(product.tags) ? product.tags.join(', ') : '')}" placeholder="Gaming, Xiaomi, 512GB..."></div>
+    <div class="field full product-form-options">
+      <label><input type="checkbox" id="published" name="published" ${product.published !== false ? 'checked' : ''} ${lock}> Publicado en web</label>
+      ${selectedCategory === 'tech' ? `<label><input type="checkbox" id="requiresDeviceIdentifier" name="requiresDeviceIdentifier" ${product.requiresDeviceIdentifier !== false ? 'checked' : ''} ${lock}> Requiere Serie / IMEI</label>` : ''}
+      ${isCosplay ? `<label><input type="checkbox" id="isRental" name="isRental" ${product.isRental ? 'checked' : ''} ${lock}> Disponible para alquiler</label>` : ''}
+    </div>
+    <div class="field ${isCosplay ? '' : 'hidden'}"><label for="rentalPrice">Precio de alquiler por día (USD)</label><input id="rentalPrice" name="rentalPrice" ${isCosplay ? 'required' : ''} ${lock} min="0" step="0.01" type="number" value="${escapeHTML(product.rentalPrice ?? '')}"><small class="field-help">Disponible para productos de Cosplay.</small></div>
+    <div class="field full"><span class="eyebrow image-section-label">Fotos del producto</span><small class="field-help">Haz clic en cada imagen para abrir el selector y elegir archivo o enlace.</small></div>
+    ${[0,1,2,3].map((index) => { const slot=index+1, current=images[index] || (index===0 ? product.image || '' : ''); return `<div class="field full product-image-slot"><div class="product-image-slot-head"><div><strong>${index===0?'Imagen principal':`Imagen ${slot}`}</strong><small>${current ? 'Imagen cargada' : 'Sin imagen · puedes agregarla después'}</small></div><button type="button" class="button secondary small" data-open-image-picker="${slot}" ${lock}>${current ? 'Cambiar imagen' : '+ Agregar imagen'}</button></div><input type="hidden" id="image${index===0?'':slot}" name="image${index===0?'':slot}" value="${escapeHTML(current)}"><div class="product-image-slot-preview ${current?'has-image':''}"><img id="productImagePreview${slot}" data-fallback src="${escapeHTML(current || placeholder)}" alt="Imagen ${slot}"><span>${current ? '' : 'SIN IMAGEN'}</span></div></div>`; }).join('')}
     <div class="field full rich-description-field"><label for="descriptionEditor">Descripción completa</label><div class="rich-editor" data-rich-editor ${locked ? 'aria-disabled="true"' : ''}><div class="rich-editor-toolbar" role="toolbar" aria-label="Formato de descripción"><button type="button" class="rich-tool rich-tool-heading" data-rich-command="formatBlock" data-rich-value="h2" title="Título (H2) · activar/desactivar" aria-label="Título" ${locked ? 'disabled' : ''}><strong>Título</strong></button><span class="rich-tool-separator" aria-hidden="true"></span><button type="button" class="rich-tool" data-rich-command="bold" title="Negrita" aria-label="Negrita" ${locked ? 'disabled' : ''}><strong>B</strong></button><button type="button" class="rich-tool" data-rich-command="italic" title="Cursiva" aria-label="Cursiva" ${locked ? 'disabled' : ''}><em>I</em></button><button type="button" class="rich-tool" data-rich-command="underline" title="Subrayado" aria-label="Subrayado" ${locked ? 'disabled' : ''}><u>U</u></button><span class="rich-tool-separator" aria-hidden="true"></span><button type="button" class="rich-tool rich-tool-list" data-rich-command="insertUnorderedList" title="Lista con viñetas" aria-label="Lista con viñetas" ${locked ? 'disabled' : ''}>• Lista</button><button type="button" class="rich-tool rich-tool-list" data-rich-command="insertOrderedList" title="Lista numerada" aria-label="Lista numerada" ${locked ? 'disabled' : ''}>1. Lista</button><span class="rich-tool-separator" aria-hidden="true"></span><button type="button" class="rich-tool rich-tool-wide" data-rich-command="removeFormat" title="Quitar formato" ${locked ? 'disabled' : ''}>Limpiar</button></div><div id="descriptionEditor" class="rich-editor-content" contenteditable="${locked ? 'false' : 'true'}" role="textbox" aria-multiline="true" aria-label="Descripción completa">${richDescriptionHTML(product.description || '')}</div></div><textarea id="description" name="description" required maxlength="2000" rows="9" ${lock} hidden>${escapeHTML(product.description || '')}</textarea><small class="field-help">Escribe como en Word: <strong>negrita</strong>, <em>cursiva</em>, subrayado, títulos, viñetas y saltos de línea.</small></div>
     <div class="field featured-field"><label><input id="published" name="published" type="checkbox" ${lock} ${product.published !== false ? 'checked' : ''}> Publicado en la tienda</label><label><input id="hero" name="hero" type="checkbox" ${lock} ${product.hero ? 'checked' : ''}> Usar en slider de portada</label><label><input id="featured" name="featured" type="checkbox" ${lock} ${product.featured ? 'checked' : ''}> Mostrar como destacado</label></div>
   </div><div class="form-actions"><button class="button" type="submit" ${lock}>${product.id ? 'Guardar cambios' : 'Crear producto'}</button><button class="button secondary ${product.id ? '' : 'hidden'}" type="button" id="cancelEdit">Cancelar</button><span class="message" id="formMessage"></span></div></form>`;
 }
+
 function selectionPanel(products, settings) {
   const heroIds = settings.heroProductIds || [];
   const featuredIds = settings.featuredProductIds || [];
@@ -3833,7 +3905,7 @@ function inventoryPageMarkup(products = [], options = {}) {
     <div class="admin-top"><div><a class="brand admin-brand" href="${ADMIN_PATH}/inteligente" data-smooth-route aria-label="YHORS · Panel Administrativo · Ir a YHORS Inteligente"><span class="admin-brand-mark" aria-hidden="true"><img src="/favicon.svg" alt=""></span><span class="admin-brand-word">YHORS</span><span class="admin-brand-divider" aria-hidden="true"></span><small>Panel Administrativo</small></a><h1 class="admin-title">Inventario</h1><p class="admin-subtitle">Control de costos, precios, existencias y clasificación</p></div><div class="admin-top-actions">${accountMenu(window.__yhorsSession || {})}</div></div>
     ${adminSectionNav({ role }, 'inventario')}
     <section class="admin-panel inventory-page-panel">
-      <div class="section-heading inventory-page-heading"><div><span class="eyebrow">Control de existencias</span><h2>Inventario de productos</h2></div><div class="inventory-page-heading-actions"><p>Desde aquí puedes completar la ficha comercial y dejar las imágenes para después.</p><a class="button primary small inventory-add-product" href="${ADMIN_PATH}/web?nuevo=1" data-smooth-route>+ Agregar nuevo producto</a></div></div>
+      <div class="section-heading inventory-page-heading"><div><span class="eyebrow">Control de existencias</span><h2>Inventario de productos</h2></div><div class="inventory-page-heading-actions"><p>Desde aquí puedes completar la ficha comercial y dejar las imágenes para después.</p><button class="button primary small inventory-add-product" type="button" id="inventoryAddProduct">+ Agregar nuevo producto</button></div></div>
       <div class="inventory-toolbar inventory-toolbar-extended">
         <label class="inventory-search"><span aria-hidden="true">⌕</span><input id="inventoryPageSearch" type="search" placeholder="Buscar por nombre, SKU, marca, tipo o etiqueta…" autocomplete="off"><button id="clearInventoryPageSearch" type="button" aria-label="Limpiar búsqueda">×</button></label>
         <label class="inventory-filter"><span>Categoría</span><select id="inventoryPageCategoryFilter"><option value="">Todas las categorías</option>${categoryOptions.map(([key,label])=>`<option value="${escapeHTML(key)}">${escapeHTML(label)}</option>`).join('')}</select></label>
@@ -3841,6 +3913,7 @@ function inventoryPageMarkup(products = [], options = {}) {
         <label class="inventory-filter"><span>Marca</span><select id="inventoryPageBrandFilter"><option value="">Todas las marcas</option>${allValues('brands').map(v=>`<option value="${escapeHTML(v)}">${escapeHTML(v)}</option>`).join('')}</select></label>
         <span class="inventory-count" id="inventoryPageCount">${products.length} productos</span>
       </div>
+      ${classificationPanel(classifications)}
       <div id="inventoryPageList">${rows}</div>
     </section>
   </div></main>`;
@@ -4215,6 +4288,69 @@ async function renderFlyerPreview() {
   wireImageFallback(document.querySelector('.flyer-page'));
 }
 
+function openInventoryNewProductModal({ classifications, product = null, onSaved }) {
+  document.querySelector('#inventoryNewProductModal')?.remove();
+  document.querySelector('#productImagePickerModal')?.remove();
+  const modal = document.createElement('div');
+  modal.id = 'inventoryNewProductModal';
+  modal.className = 'inventory-new-product-modal';
+  const editingProduct = Boolean(product?.id);
+  modal.innerHTML = `<div class="inventory-new-product-backdrop" data-inventory-new-close></div><div class="inventory-new-product-dialog" role="dialog" aria-modal="true" aria-labelledby="inventoryNewProductTitle"><div class="inventory-new-product-head"><div><span class="eyebrow">INVENTARIO · ${editingProduct ? 'EDITAR PRODUCTO' : 'NUEVO PRODUCTO'}</span><h2 id="inventoryNewProductTitle">${editingProduct ? 'Editar producto' : 'Agregar nuevo producto'}</h2><small>Completa la ficha comercial, existencias y las imágenes sin salir de Inventario.</small></div><button type="button" class="product-image-picker-close" data-inventory-new-close aria-label="Cerrar">×</button></div><div id="inventoryNewProductFormArea"></div></div>`;
+  document.body.appendChild(modal);
+  const area = modal.querySelector('#inventoryNewProductFormArea');
+  let draft = product ? { ...product } : {};
+  const close = () => { document.querySelector('#productImagePickerModal')?.remove(); modal.remove(); };
+  const draw = () => {
+    area.innerHTML = productForm(draft, classifications);
+    wireImageFallback(area);
+    area.querySelectorAll('[data-open-image-picker]').forEach(button => {
+      button.disabled = false;
+      button.addEventListener('click', event => {
+        event.preventDefault(); event.stopPropagation();
+        const slot = Number(button.dataset.openImagePicker || 1);
+        const fieldId = slot === 1 ? '#image' : `#image${slot}`;
+        const current = area.querySelector(fieldId)?.value || '';
+        openProductImagePicker(slot, current, ({ file, url, preview }) => {
+          const field = area.querySelector(fieldId); const imagePreview = area.querySelector(`#productImagePreview${slot}`);
+          if (field) field.value = url || '';
+          window.__yhorsPendingImageFiles ||= {};
+          if (file) window.__yhorsPendingImageFiles[slot] = file; else delete window.__yhorsPendingImageFiles[slot];
+          if (imagePreview) imagePreview.src = preview || placeholder;
+          const box = button.closest('.product-image-slot');
+          box?.querySelector('small')?.replaceChildren(document.createTextNode(file ? 'Archivo seleccionado · se subirá al guardar' : (url ? 'Imagen cargada por enlace' : 'Sin imagen · puedes agregarla después')));
+          box?.querySelector('.product-image-slot-preview')?.classList.toggle('has-image', Boolean(file || url));
+        });
+      });
+    });
+    area.querySelector('#category')?.addEventListener('change', e => { draft = { ...draft, category: e.target.value }; draw(); });
+    const editor = area.querySelector('#descriptionEditor'); const hidden = area.querySelector('#description');
+    editor?.addEventListener('input', () => { if (hidden) hidden.value = editor.innerHTML.trim(); });
+    area.querySelectorAll('[data-rich-command]').forEach(button => button.addEventListener('click', () => { editor?.focus(); document.execCommand(button.dataset.richCommand, false, button.dataset.richValue || null); if(hidden) hidden.value=editor?.innerHTML?.trim() || ''; }));
+    area.querySelector('#productForm')?.addEventListener('submit', async e => {
+      e.preventDefault(); const form=e.currentTarget; const msg=area.querySelector('#formMessage'); const submit=form.querySelector('[type="submit"]');
+      if (!form.elements.category.value) { msg.className='message error'; msg.textContent='Selecciona una categoría antes de guardar.'; return; }
+      if (!form.elements.name.value.trim() || !form.elements.sku.value.trim()) { msg.className='message error'; msg.textContent='Completa nombre y SKU.'; return; }
+      const salePrice=Number(form.elements.salePrice.value), purchasePrice=Number(form.elements.purchasePrice?.value||0), stock=Number(form.elements.stock?.value||0), stockMin=Number(form.elements.stockMin?.value||0);
+      if (!Number.isFinite(salePrice)||salePrice<0||!Number.isFinite(purchasePrice)||purchasePrice<0||!Number.isInteger(stock)||stock<0||!Number.isInteger(stockMin)||stockMin<0) { msg.className='message error'; msg.textContent='Revisa precios, stock y stock mínimo.'; return; }
+      const confirmed=await showYhorsConfirm(editingProduct?'¿Guardar los cambios?':'¿Crear este producto?',editingProduct?`Se actualizará <strong>${escapeHTML(product.name)}</strong> con la nueva ficha e imágenes.`:'Se registrará el producto en YHORS con la ficha que acabas de completar.'); if(!confirmed)return;
+      submit.disabled=true; msg.textContent='Guardando…';
+      try {
+        if(hidden) hidden.value=editor?.innerHTML?.trim() || hidden.value || '';
+        const data=Object.fromEntries(new FormData(form).entries());
+        data.published=form.elements.published?form.elements.published.checked:true; data.requiresDeviceIdentifier=form.elements.requiresDeviceIdentifier?form.elements.requiresDeviceIdentifier.checked:false; data.isRental=form.elements.isRental?form.elements.isRental.checked:false; data.featured=Boolean(product?.featured); data.hero=Boolean(product?.hero); data.price=data.salePrice; data.purchasePrice=purchasePrice; data.stock=stock; data.stockMin=stockMin; data.tags=String(form.elements.tags?.value||'').split(',').map(v=>v.trim()).filter(Boolean).slice(0,30); data.images=[data.image,data.image2,data.image3,data.image4].filter(Boolean);
+        const pending=window.__yhorsPendingImageFiles||{};
+        for(let slot=1;slot<=4;slot++){const file=pending[slot];if(!file)continue;const fd=new FormData();fd.append('image',file);const uploaded=await request('/api/admin/upload',{method:'POST',body:fd});const key=slot===1?'image':`image${slot}`;data[key]=uploaded.image;data.images[slot-1]=uploaded.image;}
+        data.images=data.images.filter(Boolean); data.image=data.images[0]||'';
+        const url=editingProduct?`/api/admin/products/${encodeURIComponent(product.id)}`:'/api/admin/products';
+        const saved=await request(url,{method:editingProduct?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+        window.__yhorsPendingImageFiles={}; await onSaved?.(saved); close();
+      } catch(err){submit.disabled=false;msg.className='message error';msg.textContent=err.message||'No se pudo guardar el producto.';}
+    });
+  };
+  modal.querySelectorAll('[data-inventory-new-close]').forEach(b=>b.addEventListener('click',close));
+  window.__yhorsPendingImageFiles={}; draw();
+}
+
 async function renderAdminInventory() {
   const session = await request('/api/admin/session').catch(() => ({ authenticated: false }));
   if (!session.authenticated) return renderLogin();
@@ -4264,13 +4400,12 @@ async function renderAdminInventory() {
     list.querySelectorAll('.inventory-record').forEach(record => {
       record.querySelectorAll('[data-field="purchasePrice"],[data-field="salePrice"]').forEach(input => input.addEventListener('input', () => refreshProfit(record)));
       record.querySelector('[data-inventory-edit]')?.addEventListener('click', () => {
-        record.classList.add('is-editing');
-        record.querySelectorAll('[data-field]').forEach(input => input.disabled = false);
-        record.querySelectorAll('[data-image-index]').forEach(input => input.disabled = false);
-        record.querySelector('[data-inventory-edit]').disabled = true;
-        record.querySelector('[data-inventory-save]').disabled = false;
-        record.querySelector('[data-inventory-cancel]').disabled = false;
-        record.querySelector('[data-inventory-message]').textContent = '';
+        const product = products.find(p => p.id === record.dataset.inventoryId);
+        if (!product) return;
+        openInventoryNewProductModal({ classifications, product, onSaved: async updated => {
+          products = products.map(p => p.id === updated.id ? updated : p);
+          draw();
+        }});
       });
       record.querySelector('[data-inventory-cancel]')?.addEventListener('click', () => draw());
       record.querySelector('[data-inventory-save]')?.addEventListener('click', async () => {
@@ -4322,6 +4457,44 @@ async function renderAdminInventory() {
     });
   };
   app.innerHTML = inventoryPageMarkup(products, { readOnly: inventoryReadOnly, role: session.role, classifications });
+
+  const renderInventoryClassifications = () => {
+    const render = (target, values, type) => {
+      const container = document.querySelector(target);
+      if (!container) return;
+      container.innerHTML = Object.entries(values || {}).filter(([, list]) => Array.isArray(list) && list.length).map(([cat, list]) => `<div class="classification-group"><strong>${escapeHTML(categories[cat])}</strong><div class="classification-chips">${list.map((v,i)=>`<span class="classification-chip"><span class="classification-chip-text">${escapeHTML(v)}</span><button type="button" class="classification-edit" data-edit-class="${type}" data-category="${escapeHTML(cat)}" data-index="${i}" title="Editar">✎</button><button type="button" class="classification-delete" data-remove-class="${type}" data-category="${escapeHTML(cat)}" data-index="${i}" title="Eliminar">×</button></span>`).join('')}</div></div>`).join('') || '<small class="field-help">Todavía no hay clasificaciones.</small>';
+      container.querySelectorAll('[data-remove-class]').forEach(btn => btn.addEventListener('click', async () => { classifications[btn.dataset.removeClass][btn.dataset.category].splice(Number(btn.dataset.index), 1); await saveInventoryClassifications(); }));
+      container.querySelectorAll('[data-edit-class]').forEach(btn => btn.addEventListener('click', async () => {
+        const key=btn.dataset.editClass, cat=btn.dataset.category, index=Number(btn.dataset.index), current=classifications[key]?.[cat]?.[index] || '';
+        const value=window.prompt('Editar clasificación:', current); if (value === null) return;
+        const clean=value.trim().slice(0,50); if (!clean) return;
+        if (classifications[key][cat].some((v,i)=>i!==index && v.toLowerCase()===clean.toLowerCase())) { alert('Ya existe una clasificación con ese nombre en esta categoría.'); return; }
+        classifications[key][cat][index]=clean; await saveInventoryClassifications();
+      }));
+    };
+    render('#brandLists', classifications.brands, 'brands'); render('#typeLists', classifications.productTypes, 'productTypes');
+  };
+  const saveInventoryClassifications = async () => {
+    const confirmed = await showYhorsConfirm('¿Seguro que quieres guardar este cambio?', 'Se actualizarán las clasificaciones del catálogo.');
+    if (!confirmed) { const fresh=await request('/api/admin/classifications').catch(()=>classifications); classifications.brands=fresh.brands||{}; classifications.productTypes=fresh.productTypes||{}; renderInventoryClassifications(); return false; }
+    try {
+      const saved=await request('/api/admin/classifications',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(classifications)});
+      classifications.brands=saved.brands||{}; classifications.productTypes=saved.productTypes||{}; renderInventoryClassifications(); draw();
+      const message=document.querySelector('#classificationMessage'); if(message){message.className='message success';message.textContent='✓ Clasificaciones guardadas.';}
+      return true;
+    } catch(e) { const message=document.querySelector('#classificationMessage'); if(message){message.className='message error';message.textContent=e.message;} return false; }
+  };
+  const bindInventoryClassificationEvents = () => {
+    const bind=(buttonId,inputId,selectId,key)=>document.querySelector(buttonId)?.addEventListener('click',async()=>{
+      const input=document.querySelector(inputId), cat=document.querySelector(selectId)?.value, value=input?.value.trim(); if(!value||!cat)return;
+      classifications[key][cat] ||= [];
+      if(!classifications[key][cat].some(v=>v.toLowerCase()===value.toLowerCase())) { classifications[key][cat].push(value); if(input) input.value=''; await saveInventoryClassifications(); }
+    });
+    bind('#addBrand','#newBrand','#classBrandCategory','brands'); bind('#addType','#newType','#classTypeCategory','productTypes');
+  };
+  renderInventoryClassifications();
+  bindInventoryClassificationEvents();
+  document.querySelector('#inventoryAddProduct')?.addEventListener('click', () => openInventoryNewProductModal({ classifications, onSaved: async created => { products = [created, ...products]; draw(); } }));
   draw();
   document.querySelector('#inventoryPageSearch')?.addEventListener('input', draw);
   document.querySelector('#inventoryPageCategoryFilter')?.addEventListener('change', draw);
@@ -4526,10 +4699,7 @@ async function renderAdmin() {
     <strong>YHORS</strong>
     <button type="button" data-admin-scroll="backupPanel">Backup</button>
     <button type="button" data-admin-scroll="selectionPanel">Portada</button>
-    <button type="button" data-admin-scroll="classificationPanel">Categorías</button>
-    <button type="button" data-admin-scroll="productEditorPanel">Producto</button>
-    <button type="button" data-admin-scroll="inventoryPanel">Inventario</button>
-  </aside><div class="admin-wrap"><div class="admin-top"><div><a class="brand admin-brand" href="${ADMIN_PATH}/inteligente" data-smooth-route aria-label="YHORS · Panel Administrativo · Ir a YHORS Inteligente"><span class="admin-brand-mark" aria-hidden="true"><img src="/favicon.svg" alt=""></span><span class="admin-brand-word">YHORS</span><span class="admin-brand-divider" aria-hidden="true"></span><small>Panel Administrativo</small></a><h1 class="admin-title">Administración · Página Web</h1><p class="admin-subtitle">Gestiona la portada, productos destacados y catálogo público de YHORS.</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>${adminSectionNav(session, 'web')}${backupPanel(backupState)}<div id="selectionPanelMount">${selectionPanel(products, settings)}</div>${classificationPanel(classifications)}<section class="admin-panel product-editor-panel" id="productEditorPanel"><span class="eyebrow">Catálogo</span><h2 id="formTitle">Agregar producto</h2><div id="formArea"></div></section><section class="admin-products" id="inventoryPanel"><div class="section-heading inventory-heading"><div><span class="eyebrow">Inventario</span><h2>Productos e inventario (${products.length})</h2></div><p>Edita datos, imágenes, portada y destacados.</p></div><div class="inventory-toolbar"><label class="inventory-search"><span aria-hidden="true">⌕</span><input id="inventorySearch" type="search" placeholder="Buscar por nombre, SKU, marca o categoría…" autocomplete="off"><button id="clearInventorySearch" type="button" aria-label="Limpiar búsqueda">×</button></label><label class="inventory-filter"><span>Categoría</span><select id="inventoryCategoryFilter"><option value="">Todas las categorías</option><option value="elegant">Elegante</option><option value="sports">Deportes</option><option value="tech">Tech</option><option value="cosplay">Cosplay</option><option value="pets">Mascotas</option><option value="details">Detalles</option><option value="collectibles">Coleccionables</option></select></label><span class="inventory-count" id="inventoryCount">${products.length} productos</span></div><div id="adminProducts"></div></section></div></main>`;
+  </aside><div class="admin-wrap"><div class="admin-top"><div><a class="brand admin-brand" href="${ADMIN_PATH}/inteligente" data-smooth-route aria-label="YHORS · Panel Administrativo · Ir a YHORS Inteligente"><span class="admin-brand-mark" aria-hidden="true"><img src="/favicon.svg" alt=""></span><span class="admin-brand-word">YHORS</span><span class="admin-brand-divider" aria-hidden="true"></span><small>Panel Administrativo</small></a><h1 class="admin-title">Administración · Página Web</h1><p class="admin-subtitle">Gestiona la portada y productos destacados de la página pública de YHORS.</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>${adminSectionNav(session, 'web')}${backupPanel(backupState)}<div id="selectionPanelMount">${selectionPanel(products, settings)}</div></div></main>`;
   const quickNav = document.querySelector('.admin-quick-nav');
   quickNav?.querySelectorAll('[data-admin-scroll]').forEach(button => button.addEventListener('click', () => {
     const target = document.getElementById(button.dataset.adminScroll);
@@ -4779,23 +4949,24 @@ async function renderAdmin() {
     formArea.innerHTML = productForm(draft, classifications);
     wireImageFallback(formArea);
     document.querySelector('#formTitle').textContent = editing ? `Editar: ${editing.name}` : 'Agregar producto';
-    const imageUrl = document.querySelector('#image');
-    const imageFile = document.querySelector('#imageFile');
-    const preview = document.querySelector('#productImagePreview');
     const previewName = document.querySelector('.product-editor-preview-copy strong');
-    const updatePreview = (src) => {
-      if (!preview) return;
-      preview.src = src || placeholder;
-      preview.alt = imageUrl?.value ? `Vista previa de ${draft.name || 'producto'}` : 'Vista previa del producto';
-    };
-    imageUrl?.addEventListener('input', () => updatePreview(imageUrl.value.trim()));
-    imageFile?.addEventListener('change', () => {
-      const file = imageFile.files?.[0];
-      if (!file) return;
-      const objectUrl = URL.createObjectURL(file);
-      updatePreview(objectUrl);
-      preview?.addEventListener('load', () => URL.revokeObjectURL(objectUrl), { once: true });
-    });
+    document.querySelectorAll('[data-open-image-picker]').forEach(button => button.addEventListener('click', () => {
+      const slot = Number(button.dataset.openImagePicker || 1);
+      const fieldId = slot === 1 ? '#image' : `#image${slot}`;
+      const current = document.querySelector(fieldId)?.value || '';
+      openProductImagePicker(slot, current, ({ file, url, preview }) => {
+        const field = document.querySelector(fieldId);
+        const imagePreview = document.querySelector(`#productImagePreview${slot}`);
+        if (field) field.value = url || '';
+        window.__yhorsPendingImageFiles ||= {};
+        if (file) window.__yhorsPendingImageFiles[slot] = file; else delete window.__yhorsPendingImageFiles[slot];
+        if (imagePreview) imagePreview.src = preview || placeholder;
+        const slotBox = button.closest('.product-image-slot');
+        slotBox?.querySelector('small')?.replaceChildren(document.createTextNode(file ? 'Archivo seleccionado · se subirá al guardar' : (url ? 'Imagen cargada por enlace' : 'Sin imagen · puedes agregarla después')));
+        slotBox?.querySelector('.product-image-slot-preview')?.classList.toggle('has-image', Boolean(file || url));
+      });
+    }));
+    document.querySelectorAll('[data-open-image-picker]').forEach(button => button.disabled = false);
     document.querySelector('#name')?.addEventListener('input', e => { if (previewName) previewName.textContent = e.target.value.trim() || 'Nuevo producto'; });
     document.querySelector('#cancelEdit')?.addEventListener('click', () => { editing = null; drawForm(); });
     document.querySelector('#category')?.addEventListener('change', event => drawForm({ ...(editing || {}), category: event.target.value }));
@@ -4902,16 +5073,16 @@ async function renderAdmin() {
       try {
         syncDescription();
         const data = Object.fromEntries(new FormData(form).entries()); delete data.heroOrder; data.published = form.elements.published ? form.elements.published.checked : true; data.featured = form.elements.featured.checked; data.hero = form.elements.hero.checked; data.price = data.salePrice; data.images = [data.image, data.image2, data.image3, data.image4].filter(Boolean);
-        const fileFields = ['imageFile','imageFile2','imageFile3','imageFile4'];
-         for (let index = 0; index < fileFields.length; index++) {
-           const file = form.elements[fileFields[index]]?.files?.[0];
-           if (!file) continue;
-           const uploadData = new FormData(); uploadData.append('image', file);
-           const uploaded = await request('/api/admin/upload', { method: 'POST', body: uploadData });
-           const urlField = index === 0 ? 'image' : `image${index+1}`;
-           data[urlField] = uploaded.image;
-           data.images[index] = uploaded.image;
-         }
+        const pendingImages = window.__yhorsPendingImageFiles || {};
+        for (let slot = 1; slot <= 4; slot++) {
+          const file = pendingImages[slot];
+          if (!file) continue;
+          const uploadData = new FormData(); uploadData.append('image', file);
+          const uploaded = await request('/api/admin/upload', { method: 'POST', body: uploadData });
+          const urlField = slot === 1 ? 'image' : `image${slot}`;
+          data[urlField] = uploaded.image;
+          data.images[slot - 1] = uploaded.image;
+        }
          data.images = data.images.filter(Boolean);
          data.image = data.images[0] || '';
         const url = editing ? `/api/admin/products/${editing.id}` : '/api/admin/products';
@@ -5007,7 +5178,7 @@ async function renderAdmin() {
 
   wireAccountMenu();
   bindBackupEvents();
-  drawList(); renderClassifications(); bindClassificationEvents(); drawForm(); bindSelectionEvents();
+  bindSelectionEvents();
   if (new URLSearchParams(location.search).get('nuevo') === '1') {
     setTimeout(() => {
       document.querySelector('#productEditorPanel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
