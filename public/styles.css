@@ -5000,3 +5000,22 @@ body.login-loading-active{overflow:hidden}
     margin-top:5px!important;
   }
 }
+
+/* V16.1.5 · Agendar Venta / Gestión en paralelo
+   En escritorio cada sección ocupa su mitad; al abrirla, sus opciones
+   siguen desplegándose en columna completa dentro de su propia sección. */
+.admin-section-nav--limited{
+  grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  gap:8px!important;
+}
+.admin-section-nav--limited > .admin-nav-group{
+  width:auto!important;
+}
+.admin-section-nav--limited .admin-nav-group-links--limited{
+  width:100%!important;
+}
+@media(max-width:760px){
+  .admin-section-nav--limited{
+    grid-template-columns:1fr!important;
+  }
+}
