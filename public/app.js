@@ -4426,26 +4426,43 @@ async function renderYhorsInteligente() {
 
   const canSeeFinancial = role === 'admin';
   const nav = adminSectionNav(session, 'inteligente');
-  const cardLink = (href, title, label, value, detail, cls = '') => `<a class="yh-intel-card ${cls}" href="${href}" data-smooth-route><div class="yh-intel-card-head"><span>${label}</span><span class="yh-intel-arrow">↗</span></div><strong>${value}</strong><small>${detail}</small><h3>${title}</h3></a>`;
+  const dashboardOrderKey = `yh-intelligent-card-order:${session.username || session.userId || session.name || role || 'default'}`;
+  const cardLink = (href, title, label, value, detail, cls = '') => {
+    const key = String(title || label).toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    return `<a class="yh-intel-card ${cls}" data-card-key="${key}" href="${href}" data-smooth-route><div class="yh-intel-card-head"><span>${label}</span><span class="yh-intel-arrow">↗</span></div><strong>${value}</strong><small>${detail}</small><h3>${title}</h3></a>`;
+  };
   const moneyValue = money(salesTotal);
   const salesCard = canSeeFinancial
     ? cardLink(`${ADMIN_PATH}/historial-ventas`, 'Ventas confirmadas', 'HOY', moneyValue, `${confirmedSales.length} venta${confirmedSales.length === 1 ? '' : 's'} en Historial de Ventas`, 'is-large is-sales')
     : cardLink(`${ADMIN_PATH}/historial-ventas`, 'Mis ventas confirmadas', 'HOY', String(confirmedSales.length), `${money(salesTotal)} vendidos hoy`, 'is-large is-sales');
+  const intelligentCards = [
+    salesCard,
+    cardLink(`${ADMIN_PATH}/pedidos`, 'Pedidos pendientes', 'OPERACIÓN', pending.length, `${readyToShip.length} listos para avanzar`, 'is-orders'),
+    cardLink(`${ADMIN_PATH}/pedidos`, 'Por enviar', 'LOGÍSTICA', readyToShip.length, `${preparing.length} en Preparado`, 'is-shipping'),
+    cardLink(`${ADMIN_PATH}/pedidos`, 'Sin vendedor', 'ATENCIÓN', unassigned.length, unassigned.length ? 'Requieren asignación' : 'Todo asignado', unassigned.length ? 'is-alert' : 'is-ok'),
+    cardLink(`${ADMIN_PATH}/inventario`, 'Stock bajo', 'INVENTARIO', lowStock.length, lowStock.length ? 'Productos con 3 o menos unidades' : 'Sin alertas de stock', lowStock.length ? 'is-alert' : 'is-ok'),
+    cardLink(`${ADMIN_PATH}/pedidos`, 'En preparación', 'BODEGA', preparing.length, 'Órdenes con estado Preparado', 'is-prep'),
+    cardLink(`${ADMIN_PATH}/clientes`, 'Clientes', 'EMPRESA', customerList.length, 'Fichero comercial de YHORS', 'is-customers'),
+    cardLink(`${ADMIN_PATH}/dinero`, 'Cobros pendientes', 'DINERO · ATENCIÓN', money(receivableBalance), `${receivables.length} cuenta${receivables.length === 1 ? '' : 's'} con saldo${urgentReceivables ? ` · ${urgentReceivables} con antigüedad` : ''}`, receivables.length ? 'is-alert is-receivable' : 'is-ok is-receivable'),
+    cardLink(`${ADMIN_PATH}/dinero`, 'Dinero ingresado hoy', 'DINERO · HOY', money(todayMoneyIn), `${todayPayments.length} ingreso${todayPayments.length === 1 ? '' : 's'} registrado${todayPayments.length === 1 ? '' : 's'}`, 'is-money-in')
+  ];
 
   app.innerHTML = `<main class="admin-shell yh-intelligent-shell"><div class="admin-wrap">
     <div class="admin-top yh-intelligent-top"><div><a class="brand admin-brand" href="${ADMIN_PATH}/inteligente" data-smooth-route aria-label="YHORS · Panel Administrativo · Ir a YHORS Inteligente"><span class="admin-brand-mark" aria-hidden="true"><img src="/favicon.svg" alt=""></span><span class="admin-brand-word">YHORS</span><span class="admin-brand-divider" aria-hidden="true"></span><small>Panel Administrativo</small></a><h1 class="admin-title">YHORS Inteligente</h1><p class="admin-subtitle">Tu centro de control para saber qué está pasando hoy en YHORS.</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>
     ${nav}
     <section class="yh-intelligent-hero"><div><span class="eyebrow">CENTRO INTELIGENTE · ${today}</span><h2>Buenos días, ${escapeHTML(session.name || session.username || 'equipo')} <span aria-hidden="true">👋</span></h2><p>Todo lo importante de hoy, organizado en bloques. Cada indicador te lleva directamente al lugar donde puedes actuar.</p></div><div class="yh-intelligent-hero-meta"><span class="yh-intelligent-status"><span class="yh-status-dot"></span><span>YHORS operativo</span></span><small>Actualizado al abrir esta pantalla</small></div></section>
-    <section class="yh-intelligent-grid" aria-label="Resumen inteligente">
-      ${salesCard}
-      ${cardLink(`${ADMIN_PATH}/pedidos`, 'Pedidos pendientes', 'OPERACIÓN', pending.length, `${readyToShip.length} listos para avanzar`, 'is-orders')}
-      ${cardLink(`${ADMIN_PATH}/pedidos`, 'Por enviar', 'LOGÍSTICA', readyToShip.length, `${preparing.length} en Preparado`, 'is-shipping')}
-      ${cardLink(`${ADMIN_PATH}/pedidos`, 'Sin vendedor', 'ATENCIÓN', unassigned.length, unassigned.length ? 'Requieren asignación' : 'Todo asignado', unassigned.length ? 'is-alert' : 'is-ok')}
-      ${cardLink(`${ADMIN_PATH}/inventario`, 'Stock bajo', 'INVENTARIO', lowStock.length, lowStock.length ? 'Productos con 3 o menos unidades' : 'Sin alertas de stock', lowStock.length ? 'is-alert' : 'is-ok')}
-      ${cardLink(`${ADMIN_PATH}/pedidos`, 'En preparación', 'BODEGA', preparing.length, 'Órdenes con estado Preparado', 'is-prep')}
-      ${cardLink(`${ADMIN_PATH}/clientes`, 'Clientes', 'EMPRESA', customerList.length, 'Fichero comercial de YHORS', 'is-customers')}
-      ${cardLink(`${ADMIN_PATH}/dinero`, 'Cobros pendientes', 'DINERO · ATENCIÓN', money(receivableBalance), `${receivables.length} cuenta${receivables.length === 1 ? '' : 's'} con saldo${urgentReceivables ? ` · ${urgentReceivables} con antigüedad` : ''}`, receivables.length ? 'is-alert is-receivable' : 'is-ok is-receivable')}
-      ${cardLink(`${ADMIN_PATH}/dinero`, 'Dinero ingresado hoy', 'DINERO · HOY', money(todayMoneyIn), `${todayPayments.length} ingreso${todayPayments.length === 1 ? '' : 's'} registrado${todayPayments.length === 1 ? '' : 's'}`, 'is-money-in')}
+    <div class="yh-intelligent-customize-bar" aria-label="Personalizar panel">
+      <div class="yh-intelligent-customize-copy"><span class="yh-customize-grip">⠿</span><div><strong>Tu panel, a tu manera</strong><small>Ordena las tarjetas como prefieras.</small></div></div>
+      <div class="yh-intelligent-customize-actions">
+        <button type="button" class="yh-customize-toggle" data-intelligent-customize>✦ Personalizar panel</button>
+        <div class="yh-customize-edit-actions" hidden>
+          <button type="button" class="yh-customize-cancel" data-intelligent-cancel>Cancelar</button>
+          <button type="button" class="yh-customize-save" data-intelligent-save>Guardar cambios</button>
+        </div>
+      </div>
+    </div>
+    <section class="yh-intelligent-grid" aria-label="Resumen inteligente" data-intelligent-grid>
+      ${intelligentCards.join('')}
     </section>
     <section class="yh-intelligent-lower">
       <article class="yh-intel-panel yh-intel-activity"><div class="yh-intel-panel-title"><div><span class="eyebrow">SEGUIMIENTO</span><h2>Actividad reciente</h2></div><a href="${ADMIN_PATH}/pedidos" data-smooth-route>Ver pedidos →</a></div>
@@ -4462,7 +4479,114 @@ async function renderYhorsInteligente() {
     </section>
     <section class="yh-intel-note"><span>💡</span><div><strong>El estado manda</strong><p>Las órdenes pasan a Historial de Ventas cuando se notifican estando <b>Enviado</b> o <b>Entregado</b>. El Dashboard solo resume ese flujo; no modifica tus pedidos.</p></div></section>
   </div></main>`;
+  wireIntelligentDashboard(dashboardOrderKey);
   wireAccountMenu();
+}
+
+function wireIntelligentDashboard(storageKey) {
+  const grid = document.querySelector('[data-intelligent-grid]');
+  const toggle = document.querySelector('[data-intelligent-customize]');
+  const editActions = document.querySelector('.yh-customize-edit-actions');
+  const save = document.querySelector('[data-intelligent-save]');
+  const cancel = document.querySelector('[data-intelligent-cancel]');
+  if (!grid || !toggle || !editActions || !save || !cancel) return;
+
+  const cards = () => Array.from(grid.querySelectorAll('.yh-intel-card'));
+  storageKey = storageKey || 'yh-intelligent-card-order:default';
+  const readOrder = () => {
+    try {
+      const raw = localStorage.getItem(storageKey);
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed.filter(Boolean) : [];
+    } catch (_) { return []; }
+  };
+  const applyOrder = (order) => {
+    const current = cards();
+    const byKey = new Map(current.map(card => [card.dataset.cardKey, card]));
+    const used = new Set();
+    order.forEach(key => {
+      const card = byKey.get(key);
+      if (card) { grid.appendChild(card); used.add(key); }
+    });
+    current.forEach(card => {
+      if (!used.has(card.dataset.cardKey)) grid.appendChild(card);
+    });
+  };
+
+  const savedOrder = readOrder();
+  if (savedOrder.length) applyOrder(savedOrder);
+
+  let editing = false;
+  let originalOrder = cards().map(card => card.dataset.cardKey);
+  let dragged = null;
+
+  const setEditing = (value) => {
+    editing = value;
+    grid.classList.toggle('is-customizing', editing);
+    toggle.hidden = editing;
+    editActions.hidden = !editing;
+    cards().forEach(card => {
+      card.draggable = editing;
+      card.setAttribute('aria-grabbed', editing ? 'false' : 'false');
+    });
+  };
+
+  const stopEventNavigation = (event) => {
+    if (editing) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+  };
+
+  toggle.addEventListener('click', () => {
+    originalOrder = cards().map(card => card.dataset.cardKey);
+    setEditing(true);
+  });
+
+  cancel.addEventListener('click', () => {
+    applyOrder(originalOrder);
+    setEditing(false);
+  });
+
+  save.addEventListener('click', () => {
+    const order = cards().map(card => card.dataset.cardKey);
+    try { localStorage.setItem(storageKey, JSON.stringify(order)); } catch (_) {}
+    setEditing(false);
+    toggle.classList.add('is-saved');
+    setTimeout(() => toggle.classList.remove('is-saved'), 1200);
+  });
+
+  cards().forEach(card => {
+    card.addEventListener('click', stopEventNavigation);
+    card.addEventListener('dragstart', event => {
+      if (!editing) { event.preventDefault(); return; }
+      dragged = card;
+      card.classList.add('is-dragging');
+      card.setAttribute('aria-grabbed', 'true');
+      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.setData('text/plain', card.dataset.cardKey || '');
+    });
+    card.addEventListener('dragend', () => {
+      card.classList.remove('is-dragging');
+      cards().forEach(item => item.classList.remove('is-drag-over'));
+      dragged = null;
+    });
+    card.addEventListener('dragover', event => {
+      if (!editing || !dragged || dragged === card) return;
+      event.preventDefault();
+      const rect = card.getBoundingClientRect();
+      const before = event.clientY < rect.top + rect.height / 2;
+      cards().forEach(item => item.classList.remove('is-drag-over'));
+      card.classList.add('is-drag-over');
+      if (before) grid.insertBefore(dragged, card);
+      else grid.insertBefore(dragged, card.nextSibling);
+    });
+    card.addEventListener('drop', event => {
+      if (!editing) return;
+      event.preventDefault();
+      card.classList.remove('is-drag-over');
+    });
+  });
 }
 
 async function renderAdmin() {

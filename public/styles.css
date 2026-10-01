@@ -4909,3 +4909,36 @@ body.login-loading-active{overflow:hidden}
 /* V16.1.1 · Pago obligatorio antes de notificar venta */
 .generate-payment-status{margin:18px auto 20px;max-width:620px;padding:15px 18px;border:1px solid #dfcda9;border-radius:10px;background:#fffaf0;text-align:left;display:grid;gap:4px}.generate-payment-status span{font-size:.62rem;letter-spacing:.12em;font-weight:850;color:var(--muted)}.generate-payment-status strong{font-size:1rem;letter-spacing:.04em}.generate-payment-status small{color:var(--muted)}.generate-payment-status.is-paid{border-color:#b9d6bf;background:#f3faf4}.generate-payment-status.is-paid strong{color:#2d7543}.generate-payment-status.is-partial{border-color:#d8c18e;background:#fff8e8}.generate-payment-status.is-pending strong,.generate-payment-status.is-partial strong{color:#9b6a1b}.generated-notify-sale:disabled{opacity:.5;cursor:not-allowed;filter:grayscale(.35)}.generated-notify-sale.is-payment-ready{background:#2f7d48;border-color:#2f7d48;color:#fff}.generate-payment-modal{position:fixed;inset:0;z-index:95;display:grid;place-items:center;padding:18px}.generate-payment-modal[hidden]{display:none}.generate-payment-backdrop{position:absolute;inset:0;background:rgba(15,13,11,.64);backdrop-filter:blur(5px)}.generate-payment-dialog{position:relative;width:min(720px,100%);max-height:92vh;overflow:auto;background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:0 30px 90px rgba(0,0,0,.28);padding:25px}.generate-payment-head{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;border-bottom:1px solid var(--line);padding-bottom:15px;margin-bottom:18px}.generate-payment-head h3{margin:5px 0 3px;font-size:1.35rem}.generate-payment-head small{color:var(--muted)}.generate-payment-close{width:34px;height:34px;border:1px solid var(--line);background:#fff;border-radius:6px;font-size:1.3rem;color:var(--muted)}.generate-payment-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:18px}.generate-payment-summary>div{border:1px solid var(--line);border-radius:8px;padding:12px;background:#faf8f4}.generate-payment-summary span{display:block;font-size:.6rem;letter-spacing:.1em;color:var(--muted);font-weight:850}.generate-payment-summary strong{display:block;margin-top:5px}.generate-payment-summary .balance{border-color:#d7b77d;background:#fcf6ea}.generate-payment-actions{display:flex;justify-content:flex-end;gap:9px;flex-wrap:wrap;margin-top:14px}.generate-payment-modal .field[hidden]{display:none}.generate-payment-modal .message{margin-top:12px}.generate-payment-modal .button.is-loading{opacity:.7}
 @media(max-width:600px){.generate-payment-modal{padding:10px}.generate-payment-dialog{padding:18px}.generate-payment-summary{grid-template-columns:1fr}.generate-payment-actions>*{flex:1}.generate-payment-status{margin-left:0;margin-right:0}.generated-notify-sale{width:100%}}
+
+/* YHORS Inteligente · personalización del panel */
+.yh-intelligent-customize-bar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:0 0 12px;padding:10px 12px 10px 14px;border:1px solid #ddd8ce;border-radius:16px;background:rgba(255,255,255,.82);box-shadow:0 5px 18px rgba(30,25,18,.035)}
+.yh-intelligent-customize-copy{display:flex;align-items:center;gap:10px;min-width:0}
+.yh-customize-grip{width:32px;height:32px;display:grid;place-items:center;border-radius:10px;background:#f1eee7;color:#8f7547;font-size:1.25rem;line-height:1}
+.yh-intelligent-customize-copy div{display:flex;flex-direction:column;gap:2px}
+.yh-intelligent-customize-copy strong{font-size:.78rem;letter-spacing:.02em;color:#292724}
+.yh-intelligent-customize-copy small{font-size:.7rem;color:#817c73}
+.yh-intelligent-customize-actions{display:flex;align-items:center;gap:8px}
+.yh-customize-toggle,.yh-customize-cancel,.yh-customize-save{border:1px solid #d8d1c4;border-radius:10px;background:#fff;padding:9px 13px;font:inherit;font-size:.72rem;font-weight:850;cursor:pointer;transition:transform .15s ease,box-shadow .15s ease,background .15s ease,border-color .15s ease}
+.yh-customize-toggle{color:#2a2926}
+.yh-customize-toggle:hover,.yh-customize-cancel:hover{transform:translateY(-1px);box-shadow:0 5px 14px rgba(30,25,18,.08)}
+.yh-customize-toggle.is-saved{border-color:#3d8b5a;background:#f3faf5;color:#2f744a}
+.yh-customize-edit-actions{display:flex;gap:8px}.yh-customize-edit-actions[hidden]{display:none!important}
+.yh-customize-save{border-color:#b59658;background:#b59658;color:#fff}
+.yh-customize-save:hover{transform:translateY(-1px);box-shadow:0 6px 15px rgba(181,150,88,.25)}
+.yh-intelligent-grid.is-customizing{padding:6px;border:2px dashed #c5a66d;border-radius:22px;background:rgba(181,150,88,.055)}
+.yh-intelligent-grid.is-customizing .yh-intel-card{cursor:grab;animation:yhors-card-wiggle .22s ease-in-out infinite alternate;box-shadow:0 7px 20px rgba(30,25,18,.08);border-color:#d6c39f}
+.yh-intelligent-grid.is-customizing .yh-intel-card:hover{transform:none}
+.yh-intelligent-grid.is-customizing .yh-intel-card:active,.yh-intelligent-grid.is-customizing .yh-intel-card.is-dragging{cursor:grabbing;animation:none;opacity:.68;transform:scale(.985);box-shadow:0 14px 32px rgba(30,25,18,.15);z-index:5}
+.yh-intelligent-grid.is-customizing .yh-intel-card.is-drag-over{outline:2px solid #b59658;outline-offset:3px}
+.yh-intelligent-grid.is-customizing .yh-intel-card::after{content:"⠿";position:absolute;top:9px;right:12px;font-size:1.05rem;line-height:1;color:#b59658;opacity:.7}
+@keyframes yhors-card-wiggle{0%{transform:rotate(-.35deg)}100%{transform:rotate(.35deg)}}
+@media (prefers-reduced-motion:reduce){
+  .yh-intelligent-grid.is-customizing .yh-intel-card{animation:none}
+}
+@media (max-width:760px){
+  .yh-intelligent-customize-bar{align-items:stretch;flex-direction:column}
+  .yh-intelligent-customize-actions{width:100%}
+  .yh-customize-toggle,.yh-customize-edit-actions{width:100%}
+  .yh-customize-edit-actions{display:flex}
+  .yh-customize-edit-actions button{flex:1}
+}
