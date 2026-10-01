@@ -5359,6 +5359,7 @@ body.login-loading-active{overflow:hidden}
 .catalog-results > .product-type-container{
   display:block;
 }
+<<<<<<< HEAD
 /* Selector de imágenes desde Inventario / Página Web */
 .product-image-slot{border:1px solid var(--line);border-radius:9px;padding:12px;background:#fbfaf7}
 .product-image-slot-head{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:10px}
@@ -5392,3 +5393,5 @@ body.login-loading-active{overflow:hidden}
 .inventory-new-product-dialog #productForm{padding-bottom:2px}
 .inventory-new-product-modal .form-grid{margin-top:0}
 @media(max-width:650px){.product-image-picker-backdrop,.inventory-new-product-modal{padding:9px}.product-image-picker,.inventory-new-product-dialog{padding:17px;max-height:95vh}.product-image-picker-option{grid-template-columns:34px 1fr}.product-image-picker-option .button,.product-image-picker-option input[type=url]{grid-column:1/-1;width:100%}.product-image-picker-foot{flex-direction:column}.product-image-picker-foot .button{width:100%}.product-image-slot-head{align-items:flex-start;flex-direction:column}.product-image-slot-head .button{width:100%}}
+=======
+>>>>>>> ef9614db5e29b4c1bdc9f1c2813f013b87032ab5
