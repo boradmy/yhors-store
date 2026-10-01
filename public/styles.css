@@ -4823,3 +4823,66 @@ body.login-loading-active{overflow:hidden}
 }
 
 /* V16.0.16 · Historial de ventas: búsqueda mejorada y aislamiento visual para vendedores */
+
+
+/* YHORS · tarjetas públicas: descripción ligera, elegante y respirada */
+.product-info{
+  padding:18px 17px 9px;
+  gap:8px;
+}
+.product-info .product-category{
+  font-size:.67rem;
+  font-weight:700;
+  letter-spacing:.13em;
+}
+.product-info .product-meta{
+  font-size:.76rem;
+  font-weight:400;
+  line-height:1.35;
+  margin:1px 0 0;
+  color:#777168;
+}
+.product-info h3{
+  margin:2px 0 1px;
+  font-size:.96rem;
+  line-height:1.28;
+  font-weight:650;
+  letter-spacing:-.012em;
+  color:#211f1c;
+}
+.product-info .product-description{
+  margin:3px 0 2px;
+  color:#514c45;
+  font-size:.88rem;
+  line-height:1.62;
+  font-weight:400;
+  letter-spacing:.005em;
+  display:-webkit-box;
+  -webkit-box-orient:vertical;
+  -webkit-line-clamp:4;
+  overflow:hidden;
+  min-height:5.7em;
+  max-height:5.7em;
+}
+.product-info .detail-link{
+  margin-top:3px;
+  font-size:.73rem;
+  font-weight:700;
+  letter-spacing:.01em;
+  color:#211f1c;
+}
+.product-info .detail-link span{color:var(--gold);margin-left:3px}
+@media(max-width:760px){
+  .product-info{padding:13px 12px 7px;gap:6px}
+  .product-info .product-category{font-size:.58rem}
+  .product-info .product-meta{font-size:.68rem}
+  .product-info h3{font-size:.79rem;line-height:1.25}
+  .product-info .product-description{
+    font-size:.72rem;
+    line-height:1.5;
+    -webkit-line-clamp:3;
+    min-height:4.5em;
+    max-height:4.5em;
+  }
+  .product-info .detail-link{font-size:.68rem}
+}

@@ -20,13 +20,21 @@ const publicCategories = Object.entries(categories);
 const placeholder = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="800" height="800"%3E%3Crect width="100%25" height="100%25" fill="%23e8e5de"/%3E%3Ctext x="50%25" y="50%25" dominant-baseline="middle" text-anchor="middle" fill="%23706d66" font-family="Arial" font-size="32"%3EYHORS%3C/text%3E%3C/svg%3E';
 
 function escapeHTML(value = '') { return String(value).replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char])); }
-function compactProductDescription(value = '', maxLength = 150) {
-  const raw = String(value ?? '').replace(/\r/g, '');
-  if (!raw) return '';
-  const doc = new DOMParser().parseFromString(raw, 'text/html');
-  const text = String(doc.body?.textContent || raw)
-    .replace(/\s+/g, ' ')
-    .trim();
+function compactProductDescription(value = '', maxLength = 145) {
+  let text = String(value ?? '').replace(/\r/g, '');
+  if (!text) return '';
+
+  // Algunas fichas antiguas guardaron etiquetas HTML como texto escapado
+  // (por ejemplo &lt;b&gt;...&lt;/b&gt;). Decodificamos dos veces como máximo
+  // para que nunca aparezcan etiquetas dentro de la tarjeta pública.
+  for (let i = 0; i < 2; i += 1) {
+    const doc = new DOMParser().parseFromString(text, 'text/html');
+    const decoded = String(doc.body?.textContent || text);
+    if (decoded === text) break;
+    text = decoded;
+  }
+
+  text = text.replace(/\s+/g, ' ').trim();
   if (!text) return '';
   if (text.length <= maxLength) return text;
   const cut = text.slice(0, maxLength).replace(/\s+\S*$/, '').trim();
