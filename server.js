@@ -34,6 +34,7 @@ const CUSTOMERS_FILE = path.join(DATA_DIR, 'customers.json');
 // correctamente el disco. No sustituye PostgreSQL; es un puente temporal.
 const CUSTOMERS_RUNTIME_FILE = path.join(__dirname, 'data', 'customers.runtime.json');
 const PURCHASES_FILE = path.join(DATA_DIR, 'purchases.json');
+const PAYMENTS_FILE = path.join(DATA_DIR, 'payments.json');
 const AUDIT_FILE = path.join(DATA_DIR, 'audit.json');
 const AUDIT_MAX_RECORDS = 50000;
 
@@ -858,7 +859,7 @@ function ensureStorage() {
   // Primera ejecución con disco vacío: copia los datos que viajan con el código.
   // Nunca sobrescribe un archivo que ya exista en el almacenamiento persistente.
   if (process.env.YHORS_STORAGE_DIR) {
-    const seedFiles = ['products.json', 'storefront.json', 'classifications.json', 'orders.json', 'sales.json', 'users.json', 'security.json', 'expenses.json', 'customers.json', 'purchases.json'];
+    const seedFiles = ['products.json', 'storefront.json', 'classifications.json', 'orders.json', 'sales.json', 'users.json', 'security.json', 'expenses.json', 'customers.json', 'purchases.json', 'payments.json'];
     for (const fileName of seedFiles) {
       const source = path.join(__dirname, 'data', fileName);
       const target = path.join(DATA_DIR, fileName);
@@ -875,7 +876,7 @@ function ensureStorage() {
     }
   }
 
-  for (const fileName of ['products.json', 'storefront.json', 'classifications.json', 'orders.json', 'sales.json', 'customers.json', 'purchases.json']) {
+  for (const fileName of ['products.json', 'storefront.json', 'classifications.json', 'orders.json', 'sales.json', 'customers.json', 'purchases.json', 'payments.json']) {
     const target = path.join(DATA_DIR, fileName);
     if (!fs.existsSync(target)) fs.writeFileSync(target, ['orders.json','sales.json','customers.json','purchases.json'].includes(fileName) ? '[]\n' : fileName === 'products.json' ? '[]\n' : fileName === 'storefront.json' ? '{\n  "heroProductIds": [],\n  "featuredProductIds": []\n}\n' : '{\n  "brands": {},\n  "productTypes": {}\n}\n', 'utf8');
   }
@@ -2091,7 +2092,7 @@ function createBackup(reason = 'manual', options = {}) {
   fs.mkdirSync(backupDataDir, { recursive: true });
   fs.mkdirSync(backupUploadsDir, { recursive: true });
 
-  for (const fileName of ['products.json', 'storefront.json', 'classifications.json', 'orders.json', 'users.json', 'security.json', 'expenses.json', 'customers.json', 'purchases.json']) {
+  for (const fileName of ['products.json', 'storefront.json', 'classifications.json', 'orders.json', 'users.json', 'security.json', 'expenses.json', 'customers.json', 'purchases.json', 'payments.json']) {
     const source = path.join(DATA_DIR, fileName);
     if (fs.existsSync(source)) fs.copyFileSync(source, path.join(backupDataDir, fileName));
   }
@@ -2163,7 +2164,7 @@ function validateBackupDirectory(backupDir) {
     if (!fs.existsSync(file)) throw new Error(`Falta ${fileName} en el respaldo.`);
     JSON.parse(fs.readFileSync(file, 'utf8'));
   }
-  for (const fileName of ['users.json', 'security.json', 'expenses.json', 'customers.json', 'purchases.json']) {
+  for (const fileName of ['users.json', 'security.json', 'expenses.json', 'customers.json', 'purchases.json', 'payments.json']) {
     const file = path.join(dataDir, fileName);
     if (fs.existsSync(file)) JSON.parse(fs.readFileSync(file, 'utf8'));
   }
@@ -2225,7 +2226,7 @@ function applyBackupDirectory(backupDir) {
       fs.copyFileSync(source, temporaryFile);
       fs.renameSync(temporaryFile, target);
     }
-    for (const fileName of ['users.json', 'security.json', 'expenses.json', 'customers.json', 'purchases.json']) {
+    for (const fileName of ['users.json', 'security.json', 'expenses.json', 'customers.json', 'purchases.json', 'payments.json']) {
       const source = path.join(backupDataDir, fileName);
       if (!fs.existsSync(source)) continue;
       const target = path.join(DATA_DIR, fileName);
@@ -2502,6 +2503,58 @@ function writeSales(sales) {
   const temporaryFile = `${SALES_FILE}.tmp`;
   fs.writeFileSync(temporaryFile, `${JSON.stringify(sales.map(encryptOrder), null, 2)}\n`, 'utf8');
   fs.renameSync(temporaryFile, SALES_FILE);
+}
+
+function readPayments() {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(PAYMENTS_FILE, 'utf8'));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch { return []; }
+}
+function writePayments(payments) {
+  maybeAutoBackup(); fs.mkdirSync(DATA_DIR, { recursive: true });
+  const temporaryFile = `${PAYMENTS_FILE}.tmp`;
+  fs.writeFileSync(temporaryFile, `${JSON.stringify(payments, null, 2)}\n`, 'utf8');
+  fs.renameSync(temporaryFile, PAYMENTS_FILE);
+}
+function normalizeMoneyAmount(value) {
+  const amount = Number(value);
+  if (!Number.isFinite(amount) || amount <= 0 || amount > 100000000) return null;
+  return Math.round(amount * 100) / 100;
+}
+function localDateEc(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleDateString('en-CA', { timeZone: 'America/Guayaquil' });
+}
+function paymentMethodLabel(method) {
+  return method === 'cash' ? 'Efectivo' : method === 'transfer' ? 'Transferencia' : method === 'card' ? 'Tarjeta' : method;
+}
+function paymentAccessAllowed(session, sale) {
+  if (!session || !sale) return false;
+  if (isAdmin(session.role) || isStoreManager(session.role)) return true;
+  return isSellerRole(session.role) && String(sale.assignedSellerId || '') === String(session.accountId || '');
+}
+function paymentTotalsForSales(sales = [], payments = []) {
+  const saleMap = new Map(sales.map(s => [String(s.id), s]));
+  const totals = new Map();
+  for (const payment of payments) {
+    if (!saleMap.has(String(payment.saleId))) continue;
+    totals.set(String(payment.saleId), (totals.get(String(payment.saleId)) || 0) + Number(payment.amount || 0));
+  }
+  return totals;
+}
+function decoratePayment(payment, sales = null) {
+  const sale = (sales || readSales()).find(s => String(s.id) === String(payment.saleId));
+  return { ...payment,
+    methodLabel: paymentMethodLabel(payment.method),
+    saleNumber: sale?.orderNumber || payment.saleNumber || '—',
+    customerName: sale?.customer?.name || payment.customerName || 'Cliente',
+    customerCedula: sale?.customer?.cedula || payment.customerCedula || '',
+    sellerName: sale?.assignedSellerName || payment.sellerName || 'Sin vendedor',
+    totalSale: Number(sale?.total ?? payment.totalSale ?? 0),
+    saleStatus: sale?.status || payment.saleStatus || '—'
+  };
 }
 function getSalesHistoryRecord(order, req) {
   const now = new Date().toISOString();
@@ -3699,13 +3752,19 @@ app.get('/api/admin/resumen-financiero', requireAdmin, (req, res) => {
   const totalExpensesRounded = round(totalExpenses);
   const profit = round(totalSales - totalPurchases - totalExpensesRounded);
   const margin = totalSales > 0 ? round((profit / totalSales) * 100) : 0;
+  const financialSales = readSales().filter(sale => { const date=localDate(sale.notifiedAt||sale.createdAt); return date && (!from||date>=from) && (!to||date<=to); });
+  const financialSaleIds = new Set(financialSales.map(s=>String(s.id)));
+  const financialPayments = readPayments().filter(payment => financialSaleIds.has(String(payment.saleId)));
+  const moneyIn = financialPayments.reduce((acc,p)=>{ const method=String(p.method||''); const amount=Number(p.amount||0); acc.total+=amount; if(method==='cash')acc.cash+=amount; if(method==='transfer')acc.transfer+=amount; if(method==='card')acc.card+=amount; return acc; },{total:0,cash:0,transfer:0,card:0});
+  const paymentTotals = paymentTotalsForSales(financialSales, financialPayments);
+  const receivable = financialSales.reduce((sum,sale)=>sum+Math.max(0,Number(sale.total||0)-Number(paymentTotals.get(String(sale.id))||0)),0);
   const expenseRows = filteredExpenses
     .map(expense => ({ ...expense, amount: round(expense.amount) }))
     .sort((a, b) => String(b.date).localeCompare(String(a.date)) || String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
 
   return res.json({
     filters: { from, to },
-    totals: { sales: totalSales, purchases: totalPurchases, shipping: totalShipping, manualExpenses: totalManualExpenses, expenses: totalExpensesRounded, profit, margin, orderCount: filteredOrders.length },
+    totals: { sales: totalSales, purchases: totalPurchases, shipping: totalShipping, manualExpenses: totalManualExpenses, expenses: totalExpensesRounded, profit, margin, orderCount: filteredOrders.length, moneyIn: { total: round(moneyIn.total), cash: round(moneyIn.cash), transfer: round(moneyIn.transfer), card: round(moneyIn.card) }, receivable: round(receivable) },
     expenses: expenseRows,
     salesBySeller: [...salesBySeller.values()].sort((a, b) => b.total - a.total).map(row => ({ ...row, total: round(row.total) }))
   });
@@ -4309,7 +4368,7 @@ app.get('/api/admin/historial-ventas', requireOrdersAccess, (req, res) => {
   const sellerId=String(req.query.sellerId||'').trim(); const q=String(req.query.q||'').trim().toLowerCase();
   const localDate=v=>{const d=new Date(v);return Number.isNaN(d.getTime())?'':d.toLocaleDateString('en-CA',{timeZone:'America/Guayaquil'});};
   sales=sales.filter(s=>{const date=localDate(s.notifiedAt||s.createdAt); if(!date||(from&&date<from)||(to&&date>to))return false; if(sellerId&&String(s.assignedSellerId||'')!==sellerId)return false; if(q){const hay=`${s.orderNumber||''} ${s.customer?.name||''} ${s.customer?.cedula||''} ${s.customer?.phone||''} ${s.customer?.email||''} ${s.assignedSellerName||''} ${(s.items||[]).map(i=>`${i.name||''} ${i.sku||''}`).join(' ')}`.toLowerCase();if(!hay.includes(q))return false;}return true;});
-  sales.sort((a,b)=>String(b.notifiedAt||b.createdAt||'').localeCompare(String(a.notifiedAt||a.createdAt||''))); return res.json(sales.map(decorateOrderAssignment));
+  sales.sort((a,b)=>String(b.notifiedAt||b.createdAt||'').localeCompare(String(a.notifiedAt||a.createdAt||''))); const payments=readPayments(); const paidBySale=paymentTotalsForSales(sales,payments); return res.json(sales.map(s=>({...decorateOrderAssignment(s),paid:Math.round(Number(paidBySale.get(String(s.id))||0)*100)/100,balance:Math.max(0,Math.round((Number(s.total||0)-Number(paidBySale.get(String(s.id))||0))*100)/100),paymentStatus:(Number(paidBySale.get(String(s.id))||0)>=Number(s.total||0)-0.001?'PAGADO':Number(paidBySale.get(String(s.id))||0)>0?'ABONO':'PENDIENTE')})));
 });
 app.post('/api/admin/orders/:id/notificar-venta', requireOrdersAccess, (req,res)=>{
   const session=getSession(req), orders=readOrders(), index=orders.findIndex(o=>o.id===req.params.id);
@@ -4368,7 +4427,7 @@ app.patch('/api/admin/historial-ventas/:id/nota', requireAdmin, (req,res)=>{
 });
 app.delete('/api/admin/historial-ventas/:id', requireAdmin, (req,res)=>{
   const sales=readSales(), sale=sales.find(s=>s.id===req.params.id); if(!sale)return res.status(404).json({error:'Venta no encontrada en Historial de ventas.'}); const orders=readOrders(), index=orders.findIndex(o=>String(o.id)===String(sale.orderId));
-  if(index>=0){const order=orders[index];delete order.salesNotifiedAt;delete order.salesHistoryId;order.updatedAt=new Date().toISOString();orders[index]=order;writeOrders(orders);} writeSales(sales.filter(s=>s.id!==req.params.id)); auditLog(req,'Venta eliminada del historial','Historial de ventas',{salesId:sale.id,orderId:sale.orderId,orderNumber:sale.orderNumber,total:sale.total}); return res.status(204).end();
+  if(index>=0){const order=orders[index];delete order.salesNotifiedAt;delete order.salesHistoryId;order.updatedAt=new Date().toISOString();orders[index]=order;writeOrders(orders);} writeSales(sales.filter(s=>s.id!==req.params.id)); const payments=readPayments(); const relatedPayments=payments.filter(p=>String(p.saleId)===String(sale.id)); if(relatedPayments.length) writePayments(payments.filter(p=>String(p.saleId)!==String(sale.id))); auditLog(req,'Venta eliminada del historial','Historial de ventas',{salesId:sale.id,orderId:sale.orderId,orderNumber:sale.orderNumber,total:sale.total,deletedPayments:relatedPayments.length}); return res.status(204).end();
 });
 app.get('/api/admin/historial-ventas/:id/pdf', requireOrdersAccess, (req,res)=>{
   const sale=readSales().find(s=>s.id===req.params.id); if(!sale)return res.status(404).json({error:'Venta no encontrada.'}); const session=getSession(req); if(isSellerRole(session.role)&&String(sale.assignedSellerId||'')!==String(session.accountId||''))return res.status(403).json({error:'Esta venta no está asignada a tu usuario.'}); const pdf=buildOrderPdf(decorateOrderAssignment(sale)); const safeName=String(sale.orderNumber||sale.id||'venta').replace(/[^a-zA-Z0-9_-]/g,'_'); res.setHeader('Content-Type','application/pdf');res.setHeader('Content-Disposition',`inline; filename="YHORS-VENTA-${safeName}.pdf"`);res.setHeader('Content-Length',pdf.length);res.setHeader('Cache-Control','no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');res.end(pdf);
@@ -5070,10 +5129,25 @@ app.get('/api/admin/clientes', requireOrdersAccess, (req, res) => {
 });
 
 app.get('/api/admin/clientes/:id', requireOrdersAccess, (req, res) => {
+  const session = getSession(req);
   const customer = readCustomers().find(item => String(item.id) === String(req.params.id));
   if (!customer) return res.status(404).json({ error: 'Cliente no encontrado.' });
-  const tx = customerTransactions(customer);
-  return res.json({ customer, transactions: tx, totals: { orders: tx.filter(item=>item.type==='pedido').length, sales: tx.filter(item=>item.type==='venta').length, salesTotal: tx.filter(item=>item.type==='venta').reduce((sum,item)=>sum+Number(item.total||0),0) } });
+  const allOrders = readOrders();
+  const allSales = readSales();
+  const tx = customerTransactions(customer, allOrders, allSales);
+  const customerSales = allSales.filter(s => customerIdentity(s.customer || {}) === customer.identity);
+  const saleIds = new Set(customerSales.map(s => String(s.id)));
+  let payments = readPayments().filter(p => saleIds.has(String(p.saleId)));
+  if (isSellerRole(session.role)) payments = payments.filter(p => customerSales.some(s => String(s.id) === String(p.saleId) && String(s.assignedSellerId || '') === String(session.accountId || '')));
+  const paidTotal = payments.reduce((sum,p) => sum + Number(p.amount || 0), 0);
+  const salesTotal = customerSales.reduce((sum,s) => sum + Number(s.total || 0), 0);
+  const statement = [
+    ...customerSales.map(s => ({ id:`sale:${s.id}`, kind:'cargo', type:'venta', number:s.orderNumber, date:s.notifiedAt || s.createdAt, source:'Venta', status:s.status || 'Entregado', total:Number(s.total || 0), debit:Number(s.total || 0), credit:0 })),
+    ...payments.map(p => ({ id:`payment:${p.id}`, kind:'abono', type:'pago', number:p.saleNumber || customerSales.find(s=>String(s.id)===String(p.saleId))?.orderNumber, date:p.date || p.createdAt, source:`${paymentMethodLabel(p.method)}${p.bank ? ` · ${p.bank}` : ''}`, status:'Abono', total:Number(p.amount || 0), debit:0, credit:Number(p.amount || 0), payment:p }))
+  ].sort((a,b)=>new Date(a.date||0)-new Date(b.date||0));
+  let running=0;
+  const statementWithBalance=statement.map(row=>{ running += Number(row.debit||0)-Number(row.credit||0); return {...row,balance:Math.round(running*100)/100}; }).reverse();
+  return res.json({ customer, transactions: tx, statement: statementWithBalance, payments: payments.map(p=>decoratePayment(p,customerSales)), totals: { orders: tx.filter(item=>item.type==='pedido').length, sales: customerSales.length, salesTotal: Math.round(salesTotal*100)/100, paidTotal: Math.round(paidTotal*100)/100, balance: Math.round(Math.max(0,salesTotal-paidTotal)*100)/100 } });
 });
 
 app.post('/api/admin/clientes', requireOrdersAccess, (req, res) => {
@@ -5106,6 +5180,61 @@ app.put('/api/admin/clientes/:id', requireOrdersAccess, (req, res) => {
   return res.json(updated);
 });
 
+
+
+app.get('/api/admin/dinero/resumen', requireOrdersAccess, (req, res) => {
+  const session = getSession(req);
+  const salesAll = readSales();
+  const paymentsAll = readPayments();
+  const from = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.from || '')) ? String(req.query.from) : '';
+  const to = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.to || '')) ? String(req.query.to) : '';
+  const q = cleanText(req.query.q, 160).toLocaleLowerCase('es-EC');
+  const sellerId = cleanText(req.query.sellerId, 120);
+  const visibleSales = salesAll.filter(s => paymentAccessAllowed(session, s));
+  const saleIds = new Set(visibleSales.map(s => String(s.id)));
+  const payments = paymentsAll.filter(p => saleIds.has(String(p.saleId)));
+  const paymentRows = payments.map(p => decoratePayment(p, visibleSales));
+  const filteredPayments = paymentRows.filter(p => {
+    const day = String(p.date || '').slice(0,10) || localDateEc(p.createdAt);
+    if (from && day < from) return false; if (to && day > to) return false;
+    if (sellerId && String(p.sellerId || '') !== sellerId) return false;
+    if (q) { const hay = `${p.saleNumber} ${p.customerName} ${p.customerCedula} ${p.methodLabel} ${p.bank||''} ${p.transactionNumber||''} ${p.batch||''} ${p.sellerName}`.toLocaleLowerCase('es-EC'); if (!hay.includes(q)) return false; }
+    return true;
+  }).sort((a,b)=>String(b.date||b.createdAt).localeCompare(String(a.date||a.createdAt)));
+  const totals = { cash:0, transfer:0, card:0, total:0 };
+  filteredPayments.forEach(p=>{ totals[p.method] = (totals[p.method] || 0) + Number(p.amount || 0); totals.total += Number(p.amount || 0); });
+  const paymentBySale = paymentTotalsForSales(visibleSales, payments);
+  const receivables = visibleSales.map(s => { const total=Number(s.total||0); const paid=Number(paymentBySale.get(String(s.id))||0); const balance=Math.max(0,Math.round((total-paid)*100)/100); return { ...decoratePayment({saleId:s.id,amount:0,sellerId:s.assignedSellerId,sellerName:s.assignedSellerName},visibleSales), saleId:s.id, saleNumber:s.orderNumber, date:s.notifiedAt||s.createdAt, totalSale:total, paid:Math.round(paid*100)/100, balance, status:balance<=0?'PAGADO':paid>0?'ABONO':'PENDIENTE' }; }).filter(r=>r.balance>0 || String(req.query.showPaid||'')==='true');
+  const receivableRows = receivables.filter(r => { const day=localDateEc(r.date); if(from&&day<from)return false;if(to&&day>to)return false;if(sellerId&&String(r.sellerId||'')!==sellerId)return false;if(q){const hay=`${r.saleNumber} ${r.customerName} ${r.customerCedula} ${r.sellerName}`.toLocaleLowerCase('es-EC');if(!hay.includes(q))return false;}return true; }).sort((a,b)=>Number(b.balance)-Number(a.balance));
+  const receivableTotals = { sales:0, paid:0, balance:0 }; receivableRows.forEach(r=>{receivableTotals.sales+=r.totalSale;receivableTotals.paid+=r.paid;receivableTotals.balance+=r.balance;});
+  return res.json({ filters:{from,to,q,sellerId}, payments:filteredPayments, receivables:receivableRows.map(r=>({...r,totalSale:Math.round(r.totalSale*100)/100,paid:Math.round(r.paid*100)/100,balance:Math.round(r.balance*100)/100})), totals:{...totals,total:Math.round(totals.total*100)/100}, receivableTotals:{sales:Math.round(receivableTotals.sales*100)/100,paid:Math.round(receivableTotals.paid*100)/100,balance:Math.round(receivableTotals.balance*100)/100} });
+});
+
+app.post('/api/admin/dinero/pagos', requireOrdersAccess, (req, res) => {
+  const session=getSession(req); const body=req.body||{}; const saleId=cleanText(body.saleId,120); const sales=readSales(); const sale=sales.find(s=>String(s.id)===saleId);
+  if(!sale) return res.status(404).json({error:'Venta no encontrada.'});
+  if(!paymentAccessAllowed(session,sale)) return res.status(403).json({error:'No tienes permiso para registrar un pago de esta venta.'});
+  const method=cleanText(body.method,20); if(!['cash','transfer','card'].includes(method))return res.status(400).json({error:'Selecciona una forma de pago válida.'});
+  const amount=normalizeMoneyAmount(body.amount); if(amount===null)return res.status(400).json({error:'El valor del pago no es válido.'});
+  const date=/^\d{4}-\d{2}-\d{2}$/.test(String(body.date||''))?String(body.date):localDateEc(new Date());
+  const bank=cleanText(body.bank,100); if(!bank)return res.status(400).json({error:'Indica el banco o caja donde ingresó el dinero.'});
+  const batch=cleanText(body.batch,100); const transactionNumber=cleanText(body.transactionNumber,120);
+  if((method==='transfer'||method==='card')&&!transactionNumber)return res.status(400).json({error:'El número de transacción es obligatorio para transferencias y tarjetas.'});
+  const payments=readPayments(); const already=payments.filter(p=>String(p.saleId)===saleId).reduce((sum,p)=>sum+Number(p.amount||0),0); const remaining=Math.max(0,Math.round((Number(sale.total||0)-already)*100)/100);
+  if(amount>remaining+0.001)return res.status(400).json({error:`El pago supera el saldo pendiente de ${remaining.toFixed(2)}.`});
+  const now=new Date().toISOString(); const payment={id:crypto.randomUUID(),saleId:sale.id,saleNumber:sale.orderNumber,customerId:sale.customer?.id||null,customerName:sale.customer?.name||'',customerCedula:sale.customer?.cedula||'',sellerId:sale.assignedSellerId||null,sellerName:sale.assignedSellerName||'',method,date,batch:batch||null,transactionNumber:transactionNumber||null,bank,amount,totalSale:Number(sale.total||0),createdAt:now,createdBy:session.accountId||null}; payments.unshift(payment); writePayments(payments);
+  const newPaid=already+amount; const status=newPaid>=Number(sale.total||0)-0.001?'PAGADO':'ABONO'; auditLog(req,'Pago registrado','Dinero',{paymentId:payment.id,saleId:sale.id,orderNumber:sale.orderNumber,method,amount,date,bank,batch,transactionNumber,status,balance:Math.max(0,Number(sale.total||0)-newPaid)});
+  return res.status(201).json({...decoratePayment(payment,sales),paid:Math.round(newPaid*100)/100,balance:Math.max(0,Math.round((Number(sale.total||0)-newPaid)*100)/100),status});
+});
+
+app.put('/api/admin/dinero/pagos/:id', requireAdmin, (req,res) => {
+  const payments=readPayments(); const index=payments.findIndex(p=>String(p.id)===String(req.params.id)); if(index<0)return res.status(404).json({error:'Pago no encontrado.'});
+  const current=payments[index]; const sales=readSales(); const sale=sales.find(s=>String(s.id)===String(current.saleId)); if(!sale)return res.status(404).json({error:'La venta asociada ya no existe.'}); const body=req.body||{}; const method=cleanText(body.method??current.method,20); if(!['cash','transfer','card'].includes(method))return res.status(400).json({error:'Forma de pago no válida.'}); const amount=normalizeMoneyAmount(body.amount??current.amount); if(amount===null)return res.status(400).json({error:'El valor no es válido.'}); const date=/^\d{4}-\d{2}-\d{2}$/.test(String(body.date??current.date))?String(body.date??current.date):current.date; const bank=cleanText(body.bank??current.bank,100); if(!bank)return res.status(400).json({error:'Indica el banco o caja.'}); const transactionNumber=cleanText(body.transactionNumber??current.transactionNumber,120); if((method==='transfer'||method==='card')&&!transactionNumber)return res.status(400).json({error:'El número de transacción es obligatorio.'}); const otherPaid=payments.filter((p,i)=>i!==index&&String(p.saleId)===String(current.saleId)).reduce((sum,p)=>sum+Number(p.amount||0),0); if(amount+otherPaid>Number(sale.total||0)+0.001)return res.status(400).json({error:'El nuevo valor supera el total de la venta.'}); const updated={...current,method,amount,date,bank,batch:cleanText(body.batch??current.batch,100)||null,transactionNumber:transactionNumber||null,updatedAt:new Date().toISOString(),editedBy:getSession(req)?.accountId||null}; payments[index]=updated; writePayments(payments); auditLog(req,'Pago actualizado','Dinero',{paymentId:updated.id,before:auditValue(current),after:auditValue(updated)}); return res.json({...decoratePayment(updated,sales),paid:otherPaid+amount,balance:Math.max(0,Number(sale.total||0)-otherPaid-amount),status:otherPaid+amount>=Number(sale.total||0)-0.001?'PAGADO':otherPaid+amount>0?'ABONO':'PENDIENTE'});
+});
+
+app.delete('/api/admin/dinero/pagos/:id', requireAdmin, (req,res) => {
+  const payments=readPayments(); const payment=payments.find(p=>String(p.id)===String(req.params.id)); if(!payment)return res.status(404).json({error:'Pago no encontrado.'}); writePayments(payments.filter(p=>String(p.id)!==String(req.params.id))); auditLog(req,'Pago eliminado','Dinero',{paymentId:payment.id,saleId:payment.saleId,amount:payment.amount,method:payment.method}); return res.status(204).end();
+});
 
 app.get('/api/admin/compras', requireAdmin, (req,res)=>{
   return res.json(readPurchases().sort((a,b)=>new Date(b.createdAt||0)-new Date(a.createdAt||0)));
