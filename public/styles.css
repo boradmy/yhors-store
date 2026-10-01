@@ -5319,3 +5319,43 @@ body.login-loading-active{overflow:hidden}
   .inventory-page-heading-actions p{text-align:left}
   .inventory-add-product{width:100%;justify-content:center}
 }
+
+/* YHORS · divisores visuales por tipo de producto en los catálogos */
+.product-type-group{
+  width:100%;
+  margin:0 0 38px;
+}
+.product-type-group:last-child{margin-bottom:0}
+.product-type-divider{
+  display:flex;
+  align-items:center;
+  gap:18px;
+  margin:2px 0 18px;
+  min-width:0;
+}
+.product-type-divider h2{
+  margin:0;
+  flex:0 0 auto;
+  font-size:1.05rem;
+  line-height:1.2;
+  font-weight:700;
+  letter-spacing:-.01em;
+  color:var(--ink);
+}
+.product-type-rule{
+  height:1px;
+  flex:1 1 auto;
+  min-width:20px;
+  background:linear-gradient(90deg,#d7d0c6 0%,#e9e4dc 70%,transparent 100%);
+}
+.product-type-grid{width:100%}
+@media(max-width:760px){
+  .product-type-group{margin-bottom:30px}
+  .product-type-divider{gap:12px;margin-bottom:13px}
+  .product-type-divider h2{font-size:.9rem}
+}
+
+/* El contenedor de grupos ocupa todo el ancho; solo las tarjetas internas forman la cuadrícula. */
+.catalog-results > .product-type-container{
+  display:block;
+}
