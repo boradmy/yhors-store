@@ -865,7 +865,7 @@ function catalogFilters(classifications = {}, currentCategory = 'all', active = 
       <div><span class="eyebrow">Filtrar</span><h2>${scoped ? escapeHTML(categories[currentCategory]) : 'Encuentra lo tuyo'}</h2></div>
       <button type="button" class="clear-filters" id="clearCatalogFilters">Restablecer</button>
     </div>
-    ${categoriesBlock}${brandsBlock}${typesBlock}
+    ${categoriesBlock}${typesBlock}${brandsBlock}
   </aside>`;
 }
 function applyCatalogFilters(products, active = {}) {
@@ -1274,7 +1274,12 @@ function ordersListMarkup(orders = [], options = {}) {
 function adminSectionNav(session = {}, active = '') {
   const role = String(session?.role || '').toLowerCase();
   const limitedOperations = role === 'vendedor' || role === 'orders' || role === 'store_manager';
-  const link = (key, href, label) => `<a href="${href}" class="admin-section-link${active === key ? ' active' : ''}" data-smooth-route>${label}</a>`;
+  const navIcons = { web:'🌐', 'buscar-productos':'⌕', inventario:'▣', compras:'▤', pedidos:'▤', 'generar-orden':'＋', 'historial-ventas':'✓', usuarios:'♙', 'series-imeis':'◉', auditoria:'◌', clientes:'♙', movimientos:'↕', reportes:'▥', 'resumen-financiero':'◒', dinero:'$', 'ventas-generales':'◔', multas:'!', 'calculo-comision':'%', };
+  const link = (key, href, label) => {
+    const icon = navIcons[key];
+    const iconMarkup = icon ? `<span class="admin-nav-icon" aria-hidden="true">${icon}</span>` : '';
+    return `<a href="${href}" class="admin-section-link${active === key ? ' active' : ''}" data-smooth-route>${iconMarkup}<span class="admin-nav-label">${label}</span></a>`;
+  };
   if (limitedOperations) {
     // Vendedores y jefes tienen dos áreas claras: primero agendar la venta
     // y luego las herramientas para darle seguimiento/gestión.
@@ -3828,7 +3833,7 @@ function inventoryPageMarkup(products = [], options = {}) {
     <div class="admin-top"><div><a class="brand admin-brand" href="${ADMIN_PATH}/inteligente" data-smooth-route aria-label="YHORS · Panel Administrativo · Ir a YHORS Inteligente"><span class="admin-brand-mark" aria-hidden="true"><img src="/favicon.svg" alt=""></span><span class="admin-brand-word">YHORS</span><span class="admin-brand-divider" aria-hidden="true"></span><small>Panel Administrativo</small></a><h1 class="admin-title">Inventario</h1><p class="admin-subtitle">Control de costos, precios, existencias y clasificación</p></div><div class="admin-top-actions">${accountMenu(window.__yhorsSession || {})}</div></div>
     ${adminSectionNav({ role }, 'inventario')}
     <section class="admin-panel inventory-page-panel">
-      <div class="section-heading"><div><span class="eyebrow">Control de existencias</span><h2>Inventario de productos</h2></div><p>Desde aquí puedes completar la ficha comercial y dejar las imágenes para después.</p></div>
+      <div class="section-heading inventory-page-heading"><div><span class="eyebrow">Control de existencias</span><h2>Inventario de productos</h2></div><div class="inventory-page-heading-actions"><p>Desde aquí puedes completar la ficha comercial y dejar las imágenes para después.</p><a class="button primary small inventory-add-product" href="${ADMIN_PATH}/web?nuevo=1" data-smooth-route>+ Agregar nuevo producto</a></div></div>
       <div class="inventory-toolbar inventory-toolbar-extended">
         <label class="inventory-search"><span aria-hidden="true">⌕</span><input id="inventoryPageSearch" type="search" placeholder="Buscar por nombre, SKU, marca, tipo o etiqueta…" autocomplete="off"><button id="clearInventoryPageSearch" type="button" aria-label="Limpiar búsqueda">×</button></label>
         <label class="inventory-filter"><span>Categoría</span><select id="inventoryPageCategoryFilter"><option value="">Todas las categorías</option>${categoryOptions.map(([key,label])=>`<option value="${escapeHTML(key)}">${escapeHTML(label)}</option>`).join('')}</select></label>
@@ -5003,6 +5008,12 @@ async function renderAdmin() {
   wireAccountMenu();
   bindBackupEvents();
   drawList(); renderClassifications(); bindClassificationEvents(); drawForm(); bindSelectionEvents();
+  if (new URLSearchParams(location.search).get('nuevo') === '1') {
+    setTimeout(() => {
+      document.querySelector('#productEditorPanel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      document.querySelector('#category')?.focus();
+    }, 80);
+  }
   const quickTargets = [...document.querySelectorAll('[data-admin-scroll]')].map(button => ({ button, target: document.getElementById(button.dataset.adminScroll) })).filter(item => item.target);
   if ('IntersectionObserver' in window && quickTargets.length) {
     const observer = new IntersectionObserver(entries => {
