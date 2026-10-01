@@ -5019,3 +5019,192 @@ body.login-loading-active{overflow:hidden}
     grid-template-columns:1fr!important;
   }
 }
+
+/* YHORS 16.1.6 · Navegación limitada: tarjetas gemelas y desplegables flotantes
+   para Vendedores y Jefes. Cada menú ocupa exactamente su mitad y no empuja
+   el contenido inferior al abrirse. */
+.admin-section-nav--limited{
+  display:grid!important;
+  grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  gap:8px!important;
+  align-items:stretch!important;
+  width:100%!important;
+  max-width:none!important;
+  overflow:visible!important;
+}
+.admin-section-nav--limited > .admin-nav-group--limited{
+  position:relative!important;
+  width:100%!important;
+  min-width:0!important;
+  margin:0!important;
+}
+.admin-section-nav--limited .admin-nav-group--limited > summary{
+  width:100%!important;
+  min-height:48px!important;
+  box-sizing:border-box!important;
+  padding:0 17px!important;
+  justify-content:space-between!important;
+  border-radius:11px!important;
+  background:#fff!important;
+  border:1px solid var(--line,#ded8cc)!important;
+  color:#6e6a63!important;
+  font-size:.69rem!important;
+  font-weight:900!important;
+  letter-spacing:.09em!important;
+  transition:background .16s ease,border-color .16s ease,box-shadow .16s ease!important;
+}
+.admin-section-nav--limited .admin-nav-group--limited > summary:hover{
+  background:#faf8f4!important;
+  border-color:#cdbf9f!important;
+}
+.admin-section-nav--limited .admin-nav-group--limited.has-active > summary{
+  color:#171513!important;
+  box-shadow:inset 0 -2px 0 #b88a3e!important;
+}
+.admin-section-nav--limited .admin-nav-group--limited[open] > summary{
+  background:#f7f3eb!important;
+  border-color:#cdbf9f!important;
+  color:#171513!important;
+}
+.admin-section-nav--limited .admin-nav-group--limited .admin-nav-group-links--limited{
+  position:absolute!important;
+  top:calc(100% + 7px)!important;
+  left:0!important;
+  right:0!important;
+  width:100%!important;
+  min-width:100%!important;
+  max-width:none!important;
+  box-sizing:border-box!important;
+  display:grid!important;
+  grid-template-columns:1fr!important;
+  gap:3px!important;
+  margin:0!important;
+  padding:8px!important;
+  transform:none!important;
+  background:#fff!important;
+  border:1px solid var(--line,#ded8cc)!important;
+  border-radius:13px!important;
+  box-shadow:0 18px 42px rgba(30,25,18,.16)!important;
+  z-index:5000!important;
+}
+.admin-section-nav--limited .admin-nav-group--limited .admin-nav-group-links--limited .admin-section-link{
+  width:100%!important;
+  min-width:0!important;
+  min-height:40px!important;
+  box-sizing:border-box!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:flex-start!important;
+  padding:9px 12px!important;
+  border:1px solid transparent!important;
+  border-radius:9px!important;
+  background:transparent!important;
+  color:#68635c!important;
+  font-size:.66rem!important;
+  font-weight:750!important;
+  letter-spacing:.025em!important;
+  white-space:nowrap!important;
+  box-shadow:none!important;
+}
+.admin-section-nav--limited .admin-nav-group--limited .admin-nav-group-links--limited .admin-section-link:hover{
+  background:#f2eee6!important;
+  color:#171513!important;
+}
+.admin-section-nav--limited .admin-nav-group--limited .admin-nav-group-links--limited .admin-section-link.active{
+  background:#171918!important;
+  border-color:#171918!important;
+  color:#fff!important;
+}
+
+/* Inventario · clasificación completa sin crear otro módulo. */
+.inventory-toolbar-extended{
+  display:grid!important;
+  grid-template-columns:minmax(240px,2fr) repeat(3,minmax(150px,1fr)) auto!important;
+  gap:10px!important;
+  align-items:end!important;
+}
+.inventory-toolbar-extended .inventory-filter{min-width:0}
+.inventory-toolbar-extended .inventory-filter select{width:100%;min-width:0}
+.inventory-edit-fields{
+  grid-template-columns:repeat(4,minmax(150px,1fr))!important;
+}
+.inventory-edit-fields label:nth-child(5),
+.inventory-edit-fields label:nth-child(6),
+.inventory-edit-fields label:nth-child(7){grid-column:span 1}
+.inventory-tags-field{grid-column:span 2!important}
+.inventory-tags-field input{min-width:0}
+.inventory-edit-options{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px 18px;
+  margin-top:10px;
+  padding:10px 12px;
+  border:1px solid #ece7de;
+  border-radius:9px;
+  background:#faf9f6;
+}
+.inventory-edit-options label{display:inline-flex;align-items:center;gap:7px;color:#68635c;font-size:.69rem;font-weight:750}
+.inventory-edit-options input{accent-color:#b58a43}
+.inventory-image-status{
+  display:flex;
+  align-items:center;
+  gap:7px;
+  margin-top:10px;
+  padding:8px 10px;
+  border-radius:9px;
+  border:1px solid #e7e1d7;
+  background:#faf9f6;
+  color:#68635c;
+  font-size:.68rem;
+}
+.inventory-image-status span{font-weight:900}
+.inventory-image-status small{color:#8b857b}
+.inventory-image-status.missing-images{border-color:#e2c88f;background:#fff9eb;color:#9b6a1b}
+.inventory-image-status.has-images{border-color:#cfe3d3;background:#f5fbf6;color:#2f7546}
+.inventory-no-image{
+  width:100%;
+  min-height:145px;
+  display:grid;
+  place-items:center;
+  align-content:center;
+  gap:5px;
+  border:1px dashed #d7c28f;
+  border-radius:9px;
+  background:#fffaf0;
+  color:#9b6a1b;
+  text-align:center;
+}
+.inventory-no-image span{font-size:1.25rem}
+.inventory-no-image strong{font-size:.7rem;letter-spacing:.1em}
+.inventory-no-image small{font-size:.62rem;color:#9a907e}
+.inventory-record.is-editing .inventory-edit-fields select,
+.inventory-record.is-editing .inventory-edit-fields input{background:#fff}
+@media(max-width:1050px){
+  .inventory-toolbar-extended{grid-template-columns:2fr 1fr 1fr!important}
+  .inventory-toolbar-extended .inventory-count{grid-column:1/-1}
+  .inventory-edit-fields{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  .inventory-tags-field{grid-column:1/-1!important}
+}
+@media(max-width:760px){
+  .admin-section-nav--limited{grid-template-columns:1fr!important}
+  .admin-section-nav--limited .admin-nav-group--limited .admin-nav-group-links--limited{
+    position:absolute!important;
+    top:calc(100% + 6px)!important;
+  }
+  .inventory-toolbar-extended{grid-template-columns:1fr!important}
+  .inventory-toolbar-extended .inventory-count{grid-column:auto}
+  .inventory-edit-fields{grid-template-columns:1fr!important}
+  .inventory-tags-field{grid-column:auto!important}
+  .inventory-edit-options{display:grid;grid-template-columns:1fr}
+}
+
+/* YHORS 16.1.7 · Desplegables administrativos del mismo ancho que su tarjeta */
+.admin-section-nav:not(.admin-section-nav--limited) .admin-nav-group-links{
+  left:0!important;
+  right:0!important;
+  width:100%!important;
+  min-width:100%!important;
+  max-width:none!important;
+  box-sizing:border-box!important;
+  grid-template-columns:1fr!important;
+}

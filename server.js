@@ -3109,6 +3109,10 @@ function normalizeProduct(product) {
     salePrice: Number.isFinite(Number(product.salePrice ?? product.price)) && Number(product.salePrice ?? product.price) >= 0 ? Math.round(Number(product.salePrice ?? product.price) * 100) / 100 : 0,
     price: Number.isFinite(Number(product.salePrice ?? product.price)) && Number(product.salePrice ?? product.price) >= 0 ? Math.round(Number(product.salePrice ?? product.price) * 100) / 100 : 0,
     stock: Number.isInteger(stock) && stock >= 0 ? stock : 0,
+    stockMin: Number.isInteger(Number(product.stockMin)) && Number(product.stockMin) >= 0 ? Number(product.stockMin) : 0,
+    tags: Array.isArray(product.tags) ? [...new Set(product.tags.map(value => String(value || '').trim()).filter(Boolean))].slice(0, 30) : [],
+    isRental: String(product.category || '').toLowerCase() === 'cosplay' ? (product.isRental === true || (product.rentalPrice !== null && product.rentalPrice !== undefined && product.rentalPrice !== '')) : false,
+    rentalDays: String(product.category || '').toLowerCase() === 'cosplay' ? Math.max(1, Math.min(10, Number(product.rentalDays || 1))) : null,
     // Para productos TEC existentes conservamos el comportamiento anterior: solicitar identificación.
     // El Gestor de Series/IMEIS puede desactivarlo individualmente.
     requiresDeviceIdentifier: isTechProduct(product)
@@ -5381,8 +5385,34 @@ app.put('/api/admin/inventory/:id', requireAdmin, (req, res) => {
     return res.status(400).json({ error: 'El precio de venta no es válido.' });
   }
 
+  const validCategories = ['elegant','sports','tech','cosplay','pets','details','collectibles'];
+  const category = body.category === undefined || body.category === null || body.category === '' ? previous.category : String(body.category).trim().toLowerCase();
+  const brand = body.brand === undefined ? (previous.brand || '') : cleanText(body.brand, 80);
+  const productType = body.productType === undefined ? (previous.productType || '') : cleanText(body.productType, 80);
+  const tags = Array.isArray(body.tags)
+    ? [...new Set(body.tags.map(value => cleanText(value, 50)).filter(Boolean))].slice(0, 30)
+    : (Array.isArray(previous.tags) ? previous.tags.slice(0, 30) : []);
+  const stockMin = body.stockMin === undefined || body.stockMin === '' ? Number(previous.stockMin || 0) : Number(body.stockMin);
+  const published = body.published === undefined ? previous.published !== false : Boolean(body.published);
+  const requiresDeviceIdentifier = category === 'tech' ? (body.requiresDeviceIdentifier === undefined ? previous.requiresDeviceIdentifier !== false : Boolean(body.requiresDeviceIdentifier)) : false;
+  const isRental = category === 'cosplay' ? Boolean(body.isRental === undefined ? (previous.isRental === true || previous.rentalPrice !== null && previous.rentalPrice !== undefined && previous.rentalPrice !== '') : body.isRental) : false;
+  const rentalDays = category === 'cosplay' ? Math.max(1, Math.min(10, Number(body.rentalDays || previous.rentalDays || 1))) : null;
+
+  if (!validCategories.includes(category)) return res.status(400).json({ error: 'La categoría seleccionada no es válida.' });
+  if (!Number.isInteger(stockMin) || stockMin < 0 || stockMin > 100000000) return res.status(400).json({ error: 'El stock mínimo debe ser un número entero igual o mayor que 0.' });
+  if (category === 'cosplay' && isRental && !Number.isInteger(rentalDays)) return res.status(400).json({ error: 'Los días de alquiler no son válidos.' });
+
   const updated = {
     ...previous,
+    category,
+    brand,
+    productType,
+    tags,
+    stockMin,
+    published,
+    requiresDeviceIdentifier,
+    isRental,
+    rentalDays,
     purchasePrice: Math.round(purchasePrice * 100) / 100,
     salePrice: Math.round(salePrice * 100) / 100,
     price: Math.round(salePrice * 100) / 100,
@@ -5390,13 +5420,16 @@ app.put('/api/admin/inventory/:id', requireAdmin, (req, res) => {
     updatedAt: new Date().toISOString()
   };
 
-  if (previous.category === 'cosplay') {
+  if (category === 'cosplay' && isRental) {
     if (body.rentalPrice !== undefined && body.rentalPrice !== null && body.rentalPrice !== '') {
       const rentalPrice = Number(body.rentalPrice);
       if (!Number.isFinite(rentalPrice) || rentalPrice < 0 || rentalPrice > 100000000) {
         return res.status(400).json({ error: 'El precio de alquiler no es válido.' });
       }
       updated.rentalPrice = Math.round(rentalPrice * 100) / 100;
+    } else {
+      const currentRental = Number(previous.rentalPrice);
+      updated.rentalPrice = Number.isFinite(currentRental) && currentRental >= 0 ? Math.round(currentRental * 100) / 100 : 0;
     }
   } else {
     updated.rentalPrice = null;
