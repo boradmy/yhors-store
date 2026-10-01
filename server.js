@@ -949,8 +949,23 @@ function findProductBySlug(products, slug) {
   return products.find(product => productSlug(product).toLowerCase() === target);
 }
 function esc(value = '') { return String(value).replace(/[&<>'"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', "'":'&#39;', '"':'&quot;' }[c])); }
-function stripText(value = '') { return String(value).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim(); }
-function renderDescriptionHtml(value = '') { return sanitizeDescriptionHtml(value, 2000); }
+function decodeHtmlEntities(value = '') {
+  let text = String(value ?? '');
+  const entities = { '&lt;':'<', '&gt;':'>', '&amp;':'&', '&quot;':'"', '&#39;':"'", '&nbsp;':' ' };
+  for (let i = 0; i < 3; i += 1) {
+    const decoded = text.replace(/&(?:lt|gt|amp|quot|#39|nbsp);/gi, token => entities[token.toLowerCase()] ?? token)
+      .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Math.min(0x10ffff, Number(n))))
+      .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(Math.min(0x10ffff, parseInt(n, 16))));
+    if (decoded === text) break;
+    text = decoded;
+  }
+  return text;
+}
+function stripText(value = '') {
+  const decoded = decodeHtmlEntities(value);
+  return decoded.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+}
+function renderDescriptionHtml(value = '') { return sanitizeDescriptionHtml(decodeHtmlEntities(value), 2000); }
 function absoluteImage(value = '') {
   if (!value) return `${SITE_URL}/favicon.svg`;
   return value.startsWith('http') ? value : `${SITE_URL}${value.startsWith('/') ? '' : '/'}${value}`;

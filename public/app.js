@@ -20,19 +20,26 @@ const publicCategories = Object.entries(categories);
 const placeholder = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="800" height="800"%3E%3Crect width="100%25" height="100%25" fill="%23e8e5de"/%3E%3Ctext x="50%25" y="50%25" dominant-baseline="middle" text-anchor="middle" fill="%23706d66" font-family="Arial" font-size="32"%3EYHORS%3C/text%3E%3C/svg%3E';
 
 function escapeHTML(value = '') { return String(value).replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char])); }
-function compactProductDescription(value = '', maxLength = 145) {
-  let text = String(value ?? '').replace(/\r/g, '');
-  if (!text) return '';
-
-  // Algunas fichas antiguas guardaron etiquetas HTML como texto escapado
-  // (por ejemplo &lt;b&gt;...&lt;/b&gt;). Decodificamos dos veces como máximo
-  // para que nunca aparezcan etiquetas dentro de la tarjeta pública.
-  for (let i = 0; i < 2; i += 1) {
+function decodeHtmlEntities(value = '') {
+  let text = String(value ?? '');
+  for (let i = 0; i < 3; i += 1) {
     const doc = new DOMParser().parseFromString(text, 'text/html');
     const decoded = String(doc.body?.textContent || text);
     if (decoded === text) break;
     text = decoded;
   }
+  return text;
+}
+function compactProductDescription(value = '', maxLength = 145) {
+  let text = String(value ?? '').replace(/\r/g, '');
+  if (!text) return '';
+
+  // Las fichas antiguas pueden contener HTML real o HTML guardado como texto
+  // (&lt;b&gt;...&lt;/b&gt;). Primero decodificamos entidades y luego eliminamos
+  // cualquier etiqueta para que jamás aparezca código en las tarjetas.
+  text = decodeHtmlEntities(text);
+  const doc = new DOMParser().parseFromString(text, 'text/html');
+  text = String(doc.body?.textContent || text);
 
   text = text.replace(/\s+/g, ' ').trim();
   if (!text) return '';
@@ -41,8 +48,9 @@ function compactProductDescription(value = '', maxLength = 145) {
   return `${cut}…`;
 }
 function richDescriptionHTML(value = '') {
-  const raw = String(value ?? '').replace(/\r/g, '');
+  let raw = String(value ?? '').replace(/\r/g, '');
   if (!raw) return '';
+  raw = decodeHtmlEntities(raw);
   if (!/[<>]/.test(raw)) return escapeHTML(raw).replace(/\n/g, '<br>');
   const parser = new DOMParser();
   const doc = parser.parseFromString(raw, 'text/html');
@@ -1050,8 +1058,8 @@ function productImagePickerModal(slot, current = '') {
     <div class="product-image-picker" role="dialog" aria-modal="true" aria-labelledby="productImagePickerTitle">
       <div class="product-image-picker-head"><div><span class="eyebrow">FOTOS DEL PRODUCTO</span><h3 id="productImagePickerTitle">${escapeHTML(title)}</h3><small>Agrega la imagen desde tu equipo o pega un enlace.</small></div><button type="button" class="product-image-picker-close" data-image-picker-close aria-label="Cerrar">×</button></div>
       <div class="product-image-picker-options">
-        <section class="product-image-picker-option"><div class="image-picker-icon">↑</div><div><strong>Agregar por archivo</strong><small>JPG, PNG, WEBP o GIF · máximo 5 MB</small></div><label class="button secondary small image-picker-file-label">Seleccionar archivo<input id="productImagePickerFile" type="file" accept="image/jpeg,image/png,image/webp,image/gif" hidden></label></section>
-        <section class="product-image-picker-option"><div class="image-picker-icon">↗</div><div><strong>Agregar por link</strong><small>Usa una URL directa de la imagen.</small></div><input id="productImagePickerUrl" type="url" placeholder="https://..." value="${escapeHTML(current)}"></section>
+        <section class="product-image-picker-option"><div class="image-picker-icon">↑</div><div><strong>Agregar por archivo</strong><small>JPG, PNG, WEBP o GIF · máximo 5 MB</small></div><button type="button" class="button secondary small" id="productImagePickerFileButton">Seleccionar archivo</button><input id="productImagePickerFile" type="file" accept="image/jpeg,image/png,image/webp,image/gif" hidden></section>
+        <section class="product-image-picker-option"><div class="image-picker-icon">↗</div><div><strong>Agregar por URL</strong><small>Pega el enlace directo de la imagen y comprueba la vista previa.</small></div><input id="productImagePickerUrl" type="url" placeholder="https://ejemplo.com/imagen.jpg" value="${escapeHTML(current)}"></section>
       </div>
       <div class="product-image-picker-preview"><span>Vista previa</span><div><img id="productImagePickerPreview" data-fallback src="${escapeHTML(current || placeholder)}" alt="Vista previa"></div></div>
       <div class="product-image-picker-foot"><button type="button" class="button secondary" data-image-picker-close>Cancelar</button><button type="button" class="button primary" id="productImagePickerApply">Usar esta imagen</button></div>
@@ -1065,13 +1073,23 @@ function openProductImagePicker(slot, current = '', onApply) {
   const modal = document.querySelector('#productImagePickerModal');
   if (modal) { modal.hidden = false; modal.setAttribute('aria-hidden', 'false'); document.body.classList.add('generate-modal-open'); }
   const file = document.querySelector('#productImagePickerFile');
+  const fileButton = document.querySelector('#productImagePickerFileButton');
   const url = document.querySelector('#productImagePickerUrl');
   const preview = document.querySelector('#productImagePickerPreview');
   let selectedFile = null;
+  let selectedFilePreviewUrl = '';
   const updatePreview = src => { if (preview) preview.src = src || placeholder; };
-  file?.addEventListener('change', () => { selectedFile = file.files?.[0] || null; if (selectedFile) updatePreview(URL.createObjectURL(selectedFile)); });
+  fileButton?.addEventListener('click', event => { event.preventDefault(); event.stopPropagation(); file?.click(); });
+  file?.addEventListener('change', () => {
+    selectedFile = file.files?.[0] || null;
+    if (selectedFile) {
+      if (selectedFilePreviewUrl) URL.revokeObjectURL(selectedFilePreviewUrl);
+      selectedFilePreviewUrl = URL.createObjectURL(selectedFile);
+      updatePreview(selectedFilePreviewUrl);
+    }
+  });
   url?.addEventListener('input', () => { if (!selectedFile) updatePreview(url.value.trim()); });
-  const close = () => { document.body.classList.remove('generate-modal-open'); modal?.remove(); };
+  const close = () => { document.body.classList.remove('generate-modal-open'); if (selectedFilePreviewUrl) URL.revokeObjectURL(selectedFilePreviewUrl); modal?.remove(); };
   modal?.querySelectorAll('[data-image-picker-close]').forEach(btn => btn.addEventListener('click', close));
   modal?.addEventListener('click', e => { if (e.target === modal) close(); });
   modal?.querySelector('#productImagePickerApply')?.addEventListener('click', () => {
@@ -1112,7 +1130,7 @@ function productForm(product = {}, classifications = {}) {
     <div class="field full"><span class="eyebrow image-section-label">Fotos del producto</span><small class="field-help">Haz clic en cada imagen para abrir el selector y elegir archivo o enlace.</small></div>
     ${[0,1,2,3].map((index) => { const slot=index+1, current=images[index] || (index===0 ? product.image || '' : ''); return `<div class="field full product-image-slot"><div class="product-image-slot-head"><div><strong>${index===0?'Imagen principal':`Imagen ${slot}`}</strong><small>${current ? 'Imagen cargada' : 'Sin imagen · puedes agregarla después'}</small></div><button type="button" class="button secondary small" data-open-image-picker="${slot}" ${lock}>${current ? 'Cambiar imagen' : '+ Agregar imagen'}</button></div><input type="hidden" id="image${index===0?'':slot}" name="image${index===0?'':slot}" value="${escapeHTML(current)}"><div class="product-image-slot-preview ${current?'has-image':''}"><img id="productImagePreview${slot}" data-fallback src="${escapeHTML(current || placeholder)}" alt="Imagen ${slot}"><span>${current ? '' : 'SIN IMAGEN'}</span></div></div>`; }).join('')}
     <div class="field full rich-description-field"><label for="descriptionEditor">Descripción completa</label><div class="rich-editor" data-rich-editor ${locked ? 'aria-disabled="true"' : ''}><div class="rich-editor-toolbar" role="toolbar" aria-label="Formato de descripción"><button type="button" class="rich-tool rich-tool-heading" data-rich-command="formatBlock" data-rich-value="h2" title="Título (H2) · activar/desactivar" aria-label="Título" ${locked ? 'disabled' : ''}><strong>Título</strong></button><span class="rich-tool-separator" aria-hidden="true"></span><button type="button" class="rich-tool" data-rich-command="bold" title="Negrita" aria-label="Negrita" ${locked ? 'disabled' : ''}><strong>B</strong></button><button type="button" class="rich-tool" data-rich-command="italic" title="Cursiva" aria-label="Cursiva" ${locked ? 'disabled' : ''}><em>I</em></button><button type="button" class="rich-tool" data-rich-command="underline" title="Subrayado" aria-label="Subrayado" ${locked ? 'disabled' : ''}><u>U</u></button><span class="rich-tool-separator" aria-hidden="true"></span><button type="button" class="rich-tool rich-tool-list" data-rich-command="insertUnorderedList" title="Lista con viñetas" aria-label="Lista con viñetas" ${locked ? 'disabled' : ''}>• Lista</button><button type="button" class="rich-tool rich-tool-list" data-rich-command="insertOrderedList" title="Lista numerada" aria-label="Lista numerada" ${locked ? 'disabled' : ''}>1. Lista</button><span class="rich-tool-separator" aria-hidden="true"></span><button type="button" class="rich-tool rich-tool-wide" data-rich-command="removeFormat" title="Quitar formato" ${locked ? 'disabled' : ''}>Limpiar</button></div><div id="descriptionEditor" class="rich-editor-content" contenteditable="${locked ? 'false' : 'true'}" role="textbox" aria-multiline="true" aria-label="Descripción completa">${richDescriptionHTML(product.description || '')}</div></div><textarea id="description" name="description" required maxlength="2000" rows="9" ${lock} hidden>${escapeHTML(product.description || '')}</textarea><small class="field-help">Escribe como en Word: <strong>negrita</strong>, <em>cursiva</em>, subrayado, títulos, viñetas y saltos de línea.</small></div>
-    <div class="field featured-field"><label><input id="published" name="published" type="checkbox" ${lock} ${product.published !== false ? 'checked' : ''}> Publicado en la tienda</label><label><input id="hero" name="hero" type="checkbox" ${lock} ${product.hero ? 'checked' : ''}> Usar en slider de portada</label><label><input id="featured" name="featured" type="checkbox" ${lock} ${product.featured ? 'checked' : ''}> Mostrar como destacado</label></div>
+    <div class="field featured-field"><label><input id="hero" name="hero" type="checkbox" ${lock} ${product.hero ? 'checked' : ''}> Usar en slider de portada</label><label><input id="featured" name="featured" type="checkbox" ${lock} ${product.featured ? 'checked' : ''}> Mostrar como destacado</label></div>
   </div><div class="form-actions"><button class="button" type="submit" ${lock}>${product.id ? 'Guardar cambios' : 'Crear producto'}</button><button class="button secondary ${product.id ? '' : 'hidden'}" type="button" id="cancelEdit">Cancelar</button><span class="message" id="formMessage"></span></div></form>`;
 }
 
