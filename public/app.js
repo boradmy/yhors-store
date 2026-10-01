@@ -1120,7 +1120,7 @@ function productForm(product = {}, classifications = {}) {
     <div class="field"><label for="purchasePrice">Precio de compra (USD)</label><input id="purchasePrice" name="purchasePrice" min="0" step="0.01" type="number" ${lock} value="${escapeHTML(product.purchasePrice ?? '')}"></div>
     <div class="field"><label for="stock">Stock disponible</label><input id="stock" name="stock" min="0" step="1" type="number" ${lock} value="${escapeHTML(product.stock ?? 0)}"></div>
     <div class="field"><label for="stockMin">Stock mínimo</label><input id="stockMin" name="stockMin" min="0" step="1" type="number" ${lock} value="${escapeHTML(product.stockMin ?? 0)}"></div>
-    <div class="field full"><label for="tags">Etiquetas <small>(separadas por coma)</small></label><input id="tags" name="tags" ${lock} value="${escapeHTML(Array.isArray(product.tags) ? product.tags.join(', ') : '')}" placeholder="Gaming, Xiaomi, 512GB..."></div>
+    <div class="field full"><label for="tags">Etiquetas / palabras clave <small>(opcional)</small></label><input id="tags" name="tags" ${lock} value="${escapeHTML(Array.isArray(product.tags) ? product.tags.join(', ') : '')}" placeholder="Gaming, Xiaomi, 512GB..."><small class="field-help">Sirven para buscar y encontrar el producto rápidamente. Ej.: Gaming, 512GB, Ryzen 7.</small></div>
     <div class="field full product-form-options">
       <label><input type="checkbox" id="published" name="published" ${product.published !== false ? 'checked' : ''} ${lock}> Publicado en web</label>
       ${selectedCategory === 'tech' ? `<label><input type="checkbox" id="requiresDeviceIdentifier" name="requiresDeviceIdentifier" ${product.requiresDeviceIdentifier !== false ? 'checked' : ''} ${lock}> Requiere Serie / IMEI</label>` : ''}
@@ -3901,7 +3901,7 @@ function inventoryPageMarkup(products = [], options = {}) {
           <label><span>Categoría</span><select data-field="category" disabled>${categoryOptions.map(([key,label])=>`<option value="${escapeHTML(key)}" ${product.category===key?'selected':''}>${escapeHTML(label)}</option>`).join('')}</select></label>
           <label><span>Marca</span><select data-field="brand" disabled><option value="">Sin marca</option>${brands.map(v=>`<option value="${escapeHTML(v)}" ${product.brand===v?'selected':''}>${escapeHTML(v)}</option>`).join('')}${product.brand && !brands.includes(product.brand) ? `<option value="${escapeHTML(product.brand)}" selected>${escapeHTML(product.brand)}</option>` : ''}</select></label>
           <label><span>Tipo de producto</span><select data-field="productType" disabled><option value="">Sin clasificación</option>${types.map(v=>`<option value="${escapeHTML(v)}" ${product.productType===v?'selected':''}>${escapeHTML(v)}</option>`).join('')}${product.productType && !types.includes(product.productType) ? `<option value="${escapeHTML(product.productType)}" selected>${escapeHTML(product.productType)}</option>` : ''}</select></label>
-          <label class="inventory-tags-field"><span>Etiquetas <small>(separadas por coma)</small></span><input type="text" value="${escapeHTML(tagText)}" data-field="tags" placeholder="Gaming, Xiaomi, 512GB…" disabled></label>
+          <label class="inventory-tags-field"><span>Etiquetas / palabras clave <small>(opcional)</small></span><input type="text" value="${escapeHTML(tagText)}" data-field="tags" placeholder="Gaming, Xiaomi, 512GB…" disabled><small class="field-help">Sirven para encontrar el producto rápidamente con el buscador. Sepáralas con comas.</small></label>
           ${isCosplay ? `<label><span>Precio alquiler / día</span><div class="inventory-input-wrap"><span>$</span><input type="number" min="0" step="0.01" value="${escapeHTML(rentalValue)}" data-field="rentalPrice" disabled></div></label>` : ''}
           ${isCosplay ? `<label><span>Días de alquiler</span><input type="number" min="1" max="10" step="1" value="${escapeHTML(product.rentalDays ?? 1)}" data-field="rentalDays" disabled></label>` : ''}
         </div>
@@ -3923,17 +3923,33 @@ function inventoryPageMarkup(products = [], options = {}) {
     <div class="admin-top"><div><a class="brand admin-brand" href="${ADMIN_PATH}/inteligente" data-smooth-route aria-label="YHORS · Panel Administrativo · Ir a YHORS Inteligente"><span class="admin-brand-mark" aria-hidden="true"><img src="/favicon.svg" alt=""></span><span class="admin-brand-word">YHORS</span><span class="admin-brand-divider" aria-hidden="true"></span><small>Panel Administrativo</small></a><h1 class="admin-title">Inventario</h1><p class="admin-subtitle">Control de costos, precios, existencias y clasificación</p></div><div class="admin-top-actions">${accountMenu(window.__yhorsSession || {})}</div></div>
     ${adminSectionNav({ role }, 'inventario')}
     <section class="admin-panel inventory-page-panel">
-      <div class="section-heading inventory-page-heading"><div><span class="eyebrow">Control de existencias</span><h2>Inventario de productos</h2></div><div class="inventory-page-heading-actions"><p>Desde aquí puedes completar la ficha comercial y dejar las imágenes para después.</p><button class="button primary small inventory-add-product" type="button" id="inventoryAddProduct">+ Agregar nuevo producto</button></div></div>
-      <div class="inventory-toolbar inventory-toolbar-extended">
-        <label class="inventory-search"><span aria-hidden="true">⌕</span><input id="inventoryPageSearch" type="search" placeholder="Buscar por nombre, SKU, marca, tipo o etiqueta…" autocomplete="off"><button id="clearInventoryPageSearch" type="button" aria-label="Limpiar búsqueda">×</button></label>
-        <label class="inventory-filter"><span>Categoría</span><select id="inventoryPageCategoryFilter"><option value="">Todas las categorías</option>${categoryOptions.map(([key,label])=>`<option value="${escapeHTML(key)}">${escapeHTML(label)}</option>`).join('')}</select></label>
-        <label class="inventory-filter"><span>Tipo</span><select id="inventoryPageTypeFilter"><option value="">Todos los tipos</option>${allValues('productTypes').map(v=>`<option value="${escapeHTML(v)}">${escapeHTML(v)}</option>`).join('')}</select></label>
-        <label class="inventory-filter"><span>Marca</span><select id="inventoryPageBrandFilter"><option value="">Todas las marcas</option>${allValues('brands').map(v=>`<option value="${escapeHTML(v)}">${escapeHTML(v)}</option>`).join('')}</select></label>
-        <span class="inventory-count" id="inventoryPageCount">${products.length} productos</span>
+      <div class="inventory-workflow-card inventory-classifications-card">
+        <div><span class="eyebrow">01 · Organización</span><h2>Clasificaciones</h2><p>Administra marcas y tipos de producto sin llenar la pantalla principal de Inventario.</p></div>
+        <button class="button secondary small" type="button" id="openInventoryClassifications">Abrir clasificaciones →</button>
       </div>
-      ${classificationPanel(classifications)}
-      <div id="inventoryPageList">${rows}</div>
+
+      <section class="inventory-workflow-card inventory-registration-card">
+        <div class="section-heading inventory-page-heading"><div><span class="eyebrow">02 · Inventario</span><h2>Inventario de productos</h2></div><div class="inventory-page-heading-actions"><p>Completa costos, precios, stock y clasificación. Las imágenes pueden agregarse después.</p><button class="button primary small inventory-add-product" type="button" id="inventoryAddProduct">+ Agregar nuevo producto</button></div></div>
+      </section>
+
+      <section class="inventory-workflow-card inventory-products-card">
+        <div class="inventory-products-heading"><div><span class="eyebrow">03 · Registro</span><h2>Productos ya registrados</h2></div><span class="inventory-count inventory-count-large" id="inventoryPageCount">${products.length} productos</span></div>
+        <div class="inventory-toolbar inventory-toolbar-extended">
+          <label class="inventory-search"><span aria-hidden="true">⌕</span><input id="inventoryPageSearch" type="search" placeholder="Buscar por nombre, SKU, marca, tipo o etiqueta…" autocomplete="off"><button id="clearInventoryPageSearch" type="button" aria-label="Limpiar búsqueda">×</button></label>
+          <label class="inventory-filter"><span>Tipo de producto</span><select id="inventoryPageTypeFilter"><option value="">Todos los tipos</option>${allValues('productTypes').map(v=>`<option value="${escapeHTML(v)}">${escapeHTML(v)}</option>`).join('')}</select></label>
+          <label class="inventory-filter"><span>Marca</span><select id="inventoryPageBrandFilter"><option value="">Todas las marcas</option>${allValues('brands').map(v=>`<option value="${escapeHTML(v)}">${escapeHTML(v)}</option>`).join('')}</select></label>
+          <label class="inventory-filter"><span>Categoría</span><select id="inventoryPageCategoryFilter"><option value="">Todas las categorías</option>${categoryOptions.map(([key,label])=>`<option value="${escapeHTML(key)}">${escapeHTML(label)}</option>`).join('')}</select></label>
+        </div>
+        <div id="inventoryPageList">${rows}</div>
+      </section>
     </section>
+    <div class="inventory-classification-modal" id="inventoryClassificationModal" hidden>
+      <div class="inventory-classification-backdrop" data-close-inventory-classifications></div>
+      <div class="inventory-classification-dialog" role="dialog" aria-modal="true" aria-labelledby="inventoryClassificationTitle">
+        <div class="inventory-classification-dialog-head"><div><span class="eyebrow">01 · Organización</span><h2 id="inventoryClassificationTitle">Clasificaciones</h2><p>Marcas y tipos de producto, organizados por universo.</p></div><button type="button" class="product-image-picker-close" data-close-inventory-classifications aria-label="Cerrar">×</button></div>
+        ${classificationPanel(classifications).replace('<section class="admin-panel classification-panel" id="classificationPanel">','<section class="classification-modal-content" id="classificationPanel">')}
+      </div>
+    </div>
   </div></main>`;
 }
 
@@ -4512,6 +4528,10 @@ async function renderAdminInventory() {
   };
   renderInventoryClassifications();
   bindInventoryClassificationEvents();
+  const classificationModal = document.querySelector('#inventoryClassificationModal');
+  const closeClassificationModal = () => { if (!classificationModal) return; classificationModal.classList.remove('is-open'); document.body.classList.remove('generate-modal-open'); setTimeout(() => { classificationModal.hidden = true; }, 180); };
+  document.querySelector('#openInventoryClassifications')?.addEventListener('click', () => { if (!classificationModal) return; classificationModal.hidden = false; requestAnimationFrame(() => classificationModal.classList.add('is-open')); document.body.classList.add('generate-modal-open'); });
+  classificationModal?.querySelectorAll('[data-close-inventory-classifications]').forEach(btn => btn.addEventListener('click', closeClassificationModal));
   document.querySelector('#inventoryAddProduct')?.addEventListener('click', () => openInventoryNewProductModal({ classifications, onSaved: async created => { products = [created, ...products]; draw(); } }));
   draw();
   document.querySelector('#inventoryPageSearch')?.addEventListener('input', draw);
