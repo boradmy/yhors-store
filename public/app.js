@@ -1168,6 +1168,7 @@ function ordersListMarkup(orders = [], options = {}) {
   const sellers = Array.isArray(options.sellers) ? options.sellers : [];
   const products = Array.isArray(options.products) ? options.products : [];
   const currentRole = options.role || '';
+  const paymentByOrder = options.paymentByOrder instanceof Map ? options.paymentByOrder : new Map();
   const date = value => { const d = new Date(value); return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString('es-EC', { dateStyle: 'medium', timeStyle: 'short' }); };
   const shortDate = value => { const d = new Date(value); return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString('es-EC', { day:'2-digit', month:'short', year:'numeric' }); };
   const statuses = ['Pendiente', 'Confirmado', 'Preparado', 'Enviado', 'Entregado', 'Cancelado'];
@@ -1196,7 +1197,15 @@ function ordersListMarkup(orders = [], options = {}) {
     </div>`;
   };
   if (!orders.length) return '<div class="empty">No hay pedidos que coincidan con los filtros.</div>';
-  const renderOrder = order => `<article class="admin-order admin-order-compact${order.assignedSellerId ? '' : ' admin-order-unassigned'}" data-order-id="${escapeHTML(order.id)}" data-order-search="${escapeHTML(`${order.orderNumber} ${order.customer?.name || ''} ${order.customer?.cedula || ''} ${order.customer?.phone || ''} ${order.customer?.email || ''} ${(order.items || []).map(i => `${i.sku} ${i.name}`).join(' ')}`.toLowerCase())}" data-order-status="${escapeHTML(order.status || '')}" data-order-date="${escapeHTML(String(order.createdAt || '').slice(0,10))}">
+  const renderOrder = order => {
+    const payment = paymentByOrder.get(String(order.id)) || {};
+    const totalDue = Number(order.total || 0);
+    const paid = Number(payment.paid || 0);
+    const balance = Math.max(0, Number(payment.balance ?? Math.max(0, totalDue - paid)));
+    const paymentState = balance <= 0.001 ? 'paid' : paid > 0 ? 'partial' : 'pending';
+    const paymentLabel = paymentState === 'paid' ? 'PAGADO 100%' : paymentState === 'partial' ? 'ABONO · SALDO PENDIENTE' : 'PENDIENTE DE PAGO';
+    const responsible = order.assignedSellerName || sellerName(order) || 'Sin vendedor';
+    return `<article class="admin-order admin-order-compact${order.assignedSellerId ? '' : ' admin-order-unassigned'}" data-order-id="${escapeHTML(order.id)}" data-order-search="${escapeHTML(`${order.orderNumber} ${order.customer?.name || ''} ${order.customer?.cedula || ''} ${order.customer?.phone || ''} ${order.customer?.email || ''} ${(order.items || []).map(i => `${i.sku} ${i.name}`).join(' ')}`.toLowerCase())}" data-order-status="${escapeHTML(order.status || '')}" data-order-date="${escapeHTML(String(order.createdAt || '').slice(0,10))}">
     <button type="button" class="admin-order-summary" data-order-toggle="${escapeHTML(order.id)}" aria-expanded="false">
       <span class="order-summary-date">${escapeHTML(shortDate(order.createdAt))}</span>
       <span class="order-summary-main"><strong>#${escapeHTML(order.orderNumber)}</strong><b>${escapeHTML(order.customer?.name || 'Cliente')}</b><small class="order-summary-item">${escapeHTML((order.items?.[0]?.quantity || 1) + '× ' + (order.items?.[0]?.name || 'Sin productos'))}${(order.items?.length || 0) > 1 ? ` · +${order.items.length - 1} más` : ''}</small></span>
@@ -1207,6 +1216,7 @@ function ordersListMarkup(orders = [], options = {}) {
     <div class="admin-order-details" id="orderDetails-${escapeHTML(order.id)}" hidden>
       <div class="admin-order-head"><div><span class="eyebrow">${escapeHTML(date(order.createdAt))}</span><h3>#${escapeHTML(order.orderNumber)}</h3><strong>${escapeHTML(order.customer?.name || 'Cliente')}</strong></div><div class="order-status-wrap"><label>Estado</label><select class="status-select-${statusClass(order.status || 'Pendiente')}" data-order-status="${escapeHTML(order.id)}" disabled>${statuses.map(s => `<option ${s === order.status ? 'selected' : ''} value="${escapeHTML(s)}">${escapeHTML(s)}</option>`).join('')}</select></div></div>
       <div class="admin-order-grid"><div><span class="order-label">Contacto</span><p>${escapeHTML(order.customer?.phone || '—')}${order.customer?.email ? `<br>${escapeHTML(order.customer.email)}` : ''}<br><strong>Cédula / RUC:</strong> ${escapeHTML(order.customer?.cedula || '—')}</p></div><div><span class="order-label">Entrega</span><p><strong>${escapeHTML(order.delivery?.label || '—')}</strong><br>${escapeHTML(order.customer?.city || '—')}${order.customer?.address ? ` · ${escapeHTML(order.customer.address)}` : ''}${order.customer?.mapsUrl ? `<br><a href="${escapeHTML(order.customer.mapsUrl)}" target="_blank" rel="noopener">📍 Abrir ubicación en Google Maps</a>` : ''}</p></div><div><span class="order-label">Total</span><p class="order-total">${money(order.total)}</p><small>Subtotal ${money(order.subtotal ?? order.total)} · Envío ${money(order.shippingCost ?? 0)}</small></div></div>
+      <div class="order-payment-card ${paymentState}"><div class="order-payment-main"><div><span class="order-label">CONTROL DE PAGO</span><strong>${paymentLabel}</strong><small>Responsable: ${escapeHTML(responsible)}</small></div><span class="order-payment-badge">${paymentState === 'paid' ? '✓' : paymentState === 'partial' ? '!' : '$'}</span></div><div class="order-payment-numbers"><div><span>FACTURA</span><strong>${money(totalDue)}</strong></div><div><span>PAGADO</span><strong>${money(paid)}</strong></div><div class="order-payment-balance"><span>SALDO</span><strong>${money(balance)}</strong></div></div><div class="order-payment-footer"><small>${balance > 0.001 ? 'No se debe entregar hasta completar el pago.' : 'Pago completo registrado · entrega habilitada.'}</small><a href="${ADMIN_PATH}/dinero" data-smooth-route>Ver / registrar dinero →</a></div></div>
       <div class="admin-order-items" data-order-items-view="${escapeHTML(order.id)}">${(order.items || []).map(item => { const isRental=item.purchaseMode==='rental'; const days=Number(item.rentalDays||1); const ids=(item.deviceIdentifiers||[]).map(entry => `${entry.type==='imei'?'IMEI':'Serie'} ${entry.unit}: ${entry.primary}${entry.secondary?` / ${entry.secondary}`:''}`).join(' · '); return `<div class="admin-order-item"><span><strong>${escapeHTML(item.quantity)}×</strong> ${escapeHTML(item.name)} <small>SKU: ${escapeHTML(item.sku || '—')} · ${isRental ? `Alquiler · ${days} día${days===1?'':'s'} · ${money(item.unitPrice)}/día` : 'Compra'}${ids ? `<br><b class="order-device-id">${escapeHTML(ids)}</b>` : ''}</small></span><strong>${money(item.subtotal)}</strong></div>`; }).join('')}</div>
       <div class="admin-order-items-actions">
         <button class="button edit-note small" type="button" data-order-items-edit="${escapeHTML(order.id)}" disabled>Editar productos</button>
@@ -1251,6 +1261,7 @@ function ordersListMarkup(orders = [], options = {}) {
       </div>
     </div>
   </article>`;
+  };
   const unassigned = orders.filter(order => !order.assignedSellerId);
   const assigned = orders.filter(order => Boolean(order.assignedSellerId));
   const renderSection = (title, description, items, extraClass = '') => items.length
@@ -2516,6 +2527,8 @@ async function renderAdminOrders() {
   if (!session.authenticated) return renderLogin();
   let orders = await request('/api/admin/orders').catch(() => []);
   let orderProducts = await request('/api/admin/order-products').catch(() => []);
+  const moneyOverview = await request('/api/admin/dinero/resumen?from=&to=&showPaid=true').catch(() => ({ receivables: [] }));
+  const paymentByOrder = new Map((Array.isArray(moneyOverview.receivables) ? moneyOverview.receivables : []).filter(row => row.orderId).map(row => [String(row.orderId), row]));
   const canAssign = session.role === 'store_manager' || session.role === 'admin';
   const canDelete = session.role === 'store_manager' || session.role === 'admin';
   let sellers = [];
@@ -2621,7 +2634,7 @@ async function renderAdminOrders() {
       const inRange=(!dateFrom||orderDate>=dateFrom)&&(!dateTo||orderDate<=dateTo);
       return inRange&&(!status||order.status===status)&&(!query||`${order.orderNumber} ${order.customer?.name||''} ${order.customer?.cedula||''} ${order.customer?.phone||''} ${order.customer?.email||''} ${(order.items||[]).map(i=>`${i.sku} ${i.name}`).join(' ')}`.toLowerCase().includes(query));
     });
-    list.innerHTML=ordersListMarkup(filtered, { canDelete, canAssign, sellers, role: session.role, products: orderProducts });
+    list.innerHTML=ordersListMarkup(filtered, { canDelete, canAssign, sellers, role: session.role, products: orderProducts, paymentByOrder });
 
     let updateOrderAssignmentDisplay = () => {};
     // Selector elegante de vendedor para "Pedidos → Asignado a".
@@ -4382,11 +4395,12 @@ async function renderYhorsInteligente() {
   if (!['admin', 'store_manager', 'vendedor', 'orders'].includes(role)) return renderAdmin();
 
   const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Guayaquil' });
-  const [orders, sales, products, customers] = await Promise.all([
+  const [orders, sales, products, customers, moneyOverview] = await Promise.all([
     request('/api/admin/orders').catch(() => []),
     request(`/api/admin/historial-ventas?from=${today}&to=${today}`).catch(() => []),
     request('/api/admin/catalog-products').catch(() => []),
-    request(`/api/admin/clientes?_=${Date.now()}`).catch(() => [])
+    request(`/api/admin/clientes?_=${Date.now()}`).catch(() => []),
+    request('/api/admin/dinero/resumen?from=&to=&showPaid=true').catch(() => ({ payments: [], receivables: [], receivableTotals: {} }))
   ]);
 
   const activeOrders = Array.isArray(orders) ? orders : [];
@@ -4400,6 +4414,11 @@ async function renderYhorsInteligente() {
   const lowStock = catalog.filter(product => product.published !== false && Number(product.stock || 0) <= 3);
   const salesTotal = confirmedSales.reduce((sum, sale) => sum + Number(sale.total || 0), 0);
   const commissionEligible = confirmedSales.filter(sale => ['Enviado', 'Entregado'].includes(String(sale.status || ''))).length;
+  const receivables = Array.isArray(moneyOverview?.receivables) ? moneyOverview.receivables.filter(row => Number(row.balance || 0) > 0) : [];
+  const receivableBalance = receivables.reduce((sum, row) => sum + Number(row.balance || 0), 0);
+  const todayPayments = (Array.isArray(moneyOverview?.payments) ? moneyOverview.payments : []).filter(row => String(row.date || '').slice(0,10) === today);
+  const todayMoneyIn = todayPayments.reduce((sum, row) => sum + Number(row.amount || 0), 0);
+  const urgentReceivables = receivables.filter(row => Number(row.ageDays || 0) >= 1).length;
   const recentActivity = [
     ...confirmedSales.slice(0, 4).map(sale => ({ date: sale.notifiedAt || sale.createdAt, type: 'sale', text: `Venta #${sale.orderNumber || '—'} · ${sale.status || 'Confirmada'}`, amount: sale.total })),
     ...activeOrders.slice(0, 5).map(order => ({ date: order.updatedAt || order.createdAt, type: 'order', text: `Orden #${order.orderNumber || '—'} · ${order.status || 'Pendiente'}` }))
@@ -4425,6 +4444,8 @@ async function renderYhorsInteligente() {
       ${cardLink(`${ADMIN_PATH}/inventario`, 'Stock bajo', 'INVENTARIO', lowStock.length, lowStock.length ? 'Productos con 3 o menos unidades' : 'Sin alertas de stock', lowStock.length ? 'is-alert' : 'is-ok')}
       ${cardLink(`${ADMIN_PATH}/pedidos`, 'En preparación', 'BODEGA', preparing.length, 'Órdenes con estado Preparado', 'is-prep')}
       ${cardLink(`${ADMIN_PATH}/clientes`, 'Clientes', 'EMPRESA', customerList.length, 'Fichero comercial de YHORS', 'is-customers')}
+      ${cardLink(`${ADMIN_PATH}/dinero`, 'Cobros pendientes', 'DINERO · ATENCIÓN', money(receivableBalance), `${receivables.length} cuenta${receivables.length === 1 ? '' : 's'} con saldo${urgentReceivables ? ` · ${urgentReceivables} con antigüedad` : ''}`, receivables.length ? 'is-alert is-receivable' : 'is-ok is-receivable')}
+      ${cardLink(`${ADMIN_PATH}/dinero`, 'Dinero ingresado hoy', 'DINERO · HOY', money(todayMoneyIn), `${todayPayments.length} ingreso${todayPayments.length === 1 ? '' : 's'} registrado${todayPayments.length === 1 ? '' : 's'}`, 'is-money-in')}
     </section>
     <section class="yh-intelligent-lower">
       <article class="yh-intel-panel yh-intel-activity"><div class="yh-intel-panel-title"><div><span class="eyebrow">SEGUIMIENTO</span><h2>Actividad reciente</h2></div><a href="${ADMIN_PATH}/pedidos" data-smooth-route>Ver pedidos →</a></div>
@@ -4436,6 +4457,7 @@ async function renderYhorsInteligente() {
         <a href="${ADMIN_PATH}/inventario" data-smooth-route><span>⌂</span><strong>Inventario</strong><small>Consultar stock</small></a>
         <a href="${ADMIN_PATH}/historial-ventas" data-smooth-route><span>✓</span><strong>Historial de ventas</strong><small>Ventas notificadas</small></a>
         <a href="${ADMIN_PATH}/clientes" data-smooth-route><span>♙</span><strong>Clientes</strong><small>Fichero y estado de cuenta</small></a>
+        <a href="${ADMIN_PATH}/dinero" data-smooth-route><span>$</span><strong>Registrar dinero</strong><small>Registrar cobros y revisar saldos</small></a>
       </div></article>
     </section>
     <section class="yh-intel-note"><span>💡</span><div><strong>El estado manda</strong><p>Las órdenes pasan a Historial de Ventas cuando se notifican estando <b>Enviado</b> o <b>Entregado</b>. El Dashboard solo resume ese flujo; no modifica tus pedidos.</p></div></section>
