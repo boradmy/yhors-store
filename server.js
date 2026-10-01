@@ -3088,17 +3088,52 @@ function validateProduct(input, current = {}, allProducts = []) {
     if (!(/^\/uploads\/[a-zA-Z0-9._-]+$/.test(imageUrl) || /^https:\/\/[a-zA-Z0-9./?&=_:%#-]+$/.test(imageUrl))) return { error: 'Una de las URL de las imágenes no es válida.' };
   }
   const finalImages = images.length ? images : (current.images?.length ? current.images : (current.image ? [current.image] : []));
+  const purchasePriceRaw = input.purchasePrice === '' || input.purchasePrice === undefined || input.purchasePrice === null
+    ? Number(current.purchasePrice || 0) : Number(input.purchasePrice);
+  const stockRaw = input.stock === '' || input.stock === undefined || input.stock === null
+    ? Number(current.stock || 0) : Number(input.stock);
+  const stockMinRaw = input.stockMin === '' || input.stockMin === undefined || input.stockMin === null
+    ? Number(current.stockMin || 0) : Number(input.stockMin);
+  const tags = Array.isArray(input.tags)
+    ? [...new Set(input.tags.map(value => cleanText(value, 50)).filter(Boolean))].slice(0, 30)
+    : (typeof input.tags === 'string' ? [...new Set(input.tags.split(',').map(value => cleanText(value, 50)).filter(Boolean))].slice(0, 30) : (Array.isArray(current.tags) ? current.tags.slice(0, 30) : []));
+  const requiresDeviceIdentifier = category === 'tech'
+    ? (input.requiresDeviceIdentifier === undefined ? current.requiresDeviceIdentifier !== false : (input.requiresDeviceIdentifier === true || input.requiresDeviceIdentifier === 'true'))
+    : false;
+  const isRental = category === 'cosplay'
+    ? (input.isRental === undefined ? current.isRental === true : (input.isRental === true || input.isRental === 'true'))
+    : false;
+  const rentalDaysRaw = category === 'cosplay' ? Number(input.rentalDays ?? current.rentalDays ?? 1) : null;
+
+  if (!Number.isFinite(purchasePriceRaw) || purchasePriceRaw < 0 || purchasePriceRaw > 100000000) {
+    return { error: 'El precio de compra no es válido.' };
+  }
+  if (!Number.isInteger(stockRaw) || stockRaw < 0 || stockRaw > 100000000) {
+    return { error: 'El stock debe ser un número entero igual o mayor que 0.' };
+  }
+  if (!Number.isInteger(stockMinRaw) || stockMinRaw < 0 || stockMinRaw > 100000000) {
+    return { error: 'El stock mínimo debe ser un número entero igual o mayor que 0.' };
+  }
+  if (category === 'cosplay' && (!Number.isInteger(rentalDaysRaw) || rentalDaysRaw < 1 || rentalDaysRaw > 10)) {
+    return { error: 'Los días de alquiler deben estar entre 1 y 10.' };
+  }
+
   return { product: {
     ...current, name, description, category, brand, productType, sku,
     salePrice: Math.round(salePrice * 100) / 100,
-    purchasePrice: Number.isFinite(Number(current.purchasePrice)) ? Math.max(0, Math.round(Number(current.purchasePrice) * 100) / 100) : 0,
-    stock: Number.isInteger(Number(current.stock)) && Number(current.stock) >= 0 ? Number(current.stock) : 0,
+    purchasePrice: Math.round(purchasePriceRaw * 100) / 100,
+    stock: stockRaw,
+    stockMin: stockMinRaw,
+    tags,
+    requiresDeviceIdentifier,
+    isRental,
+    rentalDays: category === 'cosplay' ? rentalDaysRaw : null,
     rentalPrice: category === 'cosplay' ? Math.round(rentalPrice * 100) / 100 : null,
     price: Math.round(salePrice * 100) / 100,
     image: finalImages[0] || '', images: finalImages,
     published: input.published === undefined ? (current.published !== false) : (input.published === true || input.published === 'true'),
-    featured: input.featured === true || input.featured === 'true',
-    hero: input.hero === true || input.hero === 'true',
+    featured: input.featured === undefined ? Boolean(current.featured) : (input.featured === true || input.featured === 'true'),
+    hero: input.hero === undefined ? Boolean(current.hero) : (input.hero === true || input.hero === 'true'),
     heroOrder: Number.isFinite(Number(input.heroOrder)) ? Math.max(0, Math.min(999, Number(input.heroOrder))) : (Number(current.heroOrder) || 0)
   }};
 }
