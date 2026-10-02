@@ -5675,3 +5675,18 @@ html:has(.admin-web-shell),body:has(.admin-web-shell),#app:has(.admin-web-shell)
   .money-customer-picker-modal .generate-customer-searchbar .button{grid-column:1/-1;width:100%}
   .money-customer-picker-modal .generate-customer-picker-list{max-height:58vh}
 }
+
+/* YHORS · Bonos: incentivo positivo sobre la comisión */
+.commission-bonus-amount{color:#26753a}
+.commission-table th:nth-child(6),.commission-table td:nth-child(6){min-width:90px}
+
+/* YHORS · Portada: más espacio y control para títulos largos */
+.hero-content h1{
+  max-width:780px;
+  font-size:clamp(2.65rem,4.35vw,4.7rem);
+  line-height:.98;
+  -webkit-line-clamp:4;
+  line-clamp:4;
+}
+@media(max-width:760px){.hero-content h1{font-size:clamp(1.22rem,5.7vw,1.72rem);max-width:94%;-webkit-line-clamp:3;line-clamp:3;line-height:1.07}}
+@media(max-width:440px){.hero-content h1{font-size:clamp(1.16rem,5.25vw,1.5rem);max-width:96%;-webkit-line-clamp:3;line-clamp:3}}

@@ -159,6 +159,7 @@ function auditOrderSnapshot(order) {
 
 const EXPENSES_FILE = path.join(DATA_DIR, 'expenses.json');
 const FINES_FILE = path.join(DATA_DIR, 'fines.json');
+const BONUSES_FILE = path.join(DATA_DIR, 'bonuses.json');
 const UPLOADS_DIR = process.env.YHORS_STORAGE_DIR ? path.join(STORAGE_ROOT, 'uploads') : path.join(__dirname, 'uploads');
 const BACKUPS_DIR = process.env.YHORS_STORAGE_DIR ? path.join(STORAGE_ROOT, 'backups') : path.join(__dirname, 'data', 'backups');
 const BACKUP_RETENTION = Math.max(3, Math.min(100, Number.parseInt(process.env.YHORS_BACKUP_RETENTION || '30', 10) || 30));
@@ -909,7 +910,7 @@ function ensureStorage() {
   // Primera ejecución con disco vacío: copia los datos que viajan con el código.
   // Nunca sobrescribe un archivo que ya exista en el almacenamiento persistente.
   if (process.env.YHORS_STORAGE_DIR) {
-    const seedFiles = ['products.json', 'storefront.json', 'classifications.json', 'orders.json', 'sales.json', 'users.json', 'security.json', 'expenses.json', 'customers.json', 'purchases.json', 'payments.json'];
+    const seedFiles = ['products.json', 'storefront.json', 'classifications.json', 'orders.json', 'sales.json', 'users.json', 'security.json', 'expenses.json', 'customers.json', 'purchases.json', 'payments.json', 'bonuses.json'];
     for (const fileName of seedFiles) {
       const source = path.join(__dirname, 'data', fileName);
       const target = path.join(DATA_DIR, fileName);
@@ -931,6 +932,7 @@ function ensureStorage() {
     if (!fs.existsSync(target)) fs.writeFileSync(target, ['orders.json','sales.json','customers.json','purchases.json'].includes(fileName) ? '[]\n' : fileName === 'products.json' ? '[]\n' : fileName === 'storefront.json' ? '{\n  "heroProductIds": [],\n  "featuredProductIds": []\n}\n' : '{\n  "brands": {},\n  "productTypes": {}\n}\n', 'utf8');
   }
   if (!fs.existsSync(EXPENSES_FILE)) fs.writeFileSync(EXPENSES_FILE, '[]\n', 'utf8');
+  if (!fs.existsSync(BONUSES_FILE)) fs.writeFileSync(BONUSES_FILE, '[]\n', 'utf8');
   if (!fs.existsSync(SALES_FILE)) fs.writeFileSync(SALES_FILE, '[]\n', 'utf8');
 }
 ensureStorage();
@@ -2195,7 +2197,7 @@ function createBackup(reason = 'manual', options = {}) {
   fs.mkdirSync(backupDataDir, { recursive: true });
   fs.mkdirSync(backupUploadsDir, { recursive: true });
 
-  for (const fileName of ['products.json', 'storefront.json', 'classifications.json', 'orders.json', 'users.json', 'security.json', 'expenses.json', 'customers.json', 'purchases.json', 'payments.json']) {
+  for (const fileName of ['products.json', 'storefront.json', 'classifications.json', 'orders.json', 'users.json', 'security.json', 'expenses.json', 'customers.json', 'purchases.json', 'payments.json', 'bonuses.json']) {
     const source = path.join(DATA_DIR, fileName);
     if (fs.existsSync(source)) fs.copyFileSync(source, path.join(backupDataDir, fileName));
   }
@@ -2267,7 +2269,7 @@ function validateBackupDirectory(backupDir) {
     if (!fs.existsSync(file)) throw new Error(`Falta ${fileName} en el respaldo.`);
     JSON.parse(fs.readFileSync(file, 'utf8'));
   }
-  for (const fileName of ['users.json', 'security.json', 'expenses.json', 'customers.json', 'purchases.json', 'payments.json']) {
+  for (const fileName of ['users.json', 'security.json', 'expenses.json', 'customers.json', 'purchases.json', 'payments.json', 'bonuses.json']) {
     const file = path.join(dataDir, fileName);
     if (fs.existsSync(file)) JSON.parse(fs.readFileSync(file, 'utf8'));
   }
@@ -2329,7 +2331,7 @@ function applyBackupDirectory(backupDir) {
       fs.copyFileSync(source, temporaryFile);
       fs.renameSync(temporaryFile, target);
     }
-    for (const fileName of ['users.json', 'security.json', 'expenses.json', 'customers.json', 'purchases.json', 'payments.json']) {
+    for (const fileName of ['users.json', 'security.json', 'expenses.json', 'customers.json', 'purchases.json', 'payments.json', 'bonuses.json']) {
       const source = path.join(backupDataDir, fileName);
       if (!fs.existsSync(source)) continue;
       const target = path.join(DATA_DIR, fileName);
@@ -2716,6 +2718,23 @@ function readFines() {
   } catch {
     return [];
   }
+}
+
+function readBonuses() {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(BONUSES_FILE, 'utf8'));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeBonuses(bonuses) {
+  maybeAutoBackup();
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  const temporaryFile = `${BONUSES_FILE}.tmp`;
+  fs.writeFileSync(temporaryFile, `${JSON.stringify(bonuses, null, 2)}\n`, 'utf8');
+  fs.renameSync(temporaryFile, BONUSES_FILE);
 }
 
 function writeFines(fines) {
@@ -3196,6 +3215,8 @@ function makeUniqueSku(inputSku, product, products, currentId = '') {
 function validateProduct(input, current = {}, allProducts = []) {
   const name = cleanText(input.name, 90);
   const description = sanitizeDescriptionHtml(input.description, 2000);
+  const heroTitle = cleanText(input.heroTitle, 140);
+  const heroDescription = sanitizeDescriptionHtml(input.heroDescription, 500);
   const category = cleanText(input.category, 30).toLowerCase();
   const brand = cleanText(input.brand, 50);
   const productType = cleanText(input.productType, 50);
@@ -3250,7 +3271,7 @@ function validateProduct(input, current = {}, allProducts = []) {
   }
 
   return { product: {
-    ...current, name, description, category, brand, productType, sku,
+    ...current, name, description, heroTitle, heroDescription, category, brand, productType, sku,
     salePrice: Math.round(salePrice * 100) / 100,
     purchasePrice: Math.round(purchasePriceRaw * 100) / 100,
     stock: stockRaw,
@@ -4420,11 +4441,86 @@ app.delete('/api/admin/multas/:id', requireAdmin, (req, res) => {
   return res.status(204).end();
 });
 
+app.get('/api/admin/bonos', requireAdmin, (req, res) => {
+  const bonuses = readBonuses();
+  const users = readUsers();
+  const userMap = new Map(users.map(user => [String(user.id), user]));
+  const from = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.from || '')) ? String(req.query.from) : '';
+  const to = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.to || '')) ? String(req.query.to) : '';
+  const rows = bonuses
+    .filter(bonus => (!from || String(bonus.date || '') >= from) && (!to || String(bonus.date || '') <= to))
+    .map(bonus => {
+      const user = userMap.get(String(bonus.userId));
+      return {
+        ...bonus,
+        userName: bonus.userName || user?.name || 'Usuario',
+        userRole: bonus.userRole || (isStoreManager(user?.role) ? 'store_manager' : 'vendedor')
+      };
+    })
+    .sort((a, b) => String(b.date || b.createdAt || '').localeCompare(String(a.date || a.createdAt || '')));
+  const total = rows.reduce((sum, bonus) => sum + Number(bonus.amount || 0), 0);
+  return res.json({ bonuses: rows, total: Math.round(total * 100) / 100, filters: { from, to } });
+});
+
+app.post('/api/admin/bonos', requireAdmin, (req, res) => {
+  const userId = cleanText(req.body?.userId, 100);
+  const reason = cleanText(req.body?.reason, 500);
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(String(req.body?.date || '')) ? String(req.body.date) : '';
+  const amount = Number(req.body?.amount);
+  if (!userId) return res.status(400).json({ error: 'Selecciona un vendedor o Jefe de Tienda.' });
+  if (!reason) return res.status(400).json({ error: 'Escribe el motivo del bono.' });
+  if (!date) return res.status(400).json({ error: 'Selecciona una fecha válida.' });
+  if (!Number.isFinite(amount) || amount <= 0 || amount > 100000000) return res.status(400).json({ error: 'Ingresa un valor de bono válido.' });
+  const users = readUsers();
+  const user = users.find(item => String(item.id) === userId && item.active !== false && (isSellerRole(item.role) || isStoreManager(item.role)));
+  if (!user) return res.status(404).json({ error: 'El usuario seleccionado no es un vendedor o Jefe de Tienda activo.' });
+  const bonus = {
+    id: crypto.randomUUID(), date, userId: user.id, userName: user.name || user.username || 'Usuario',
+    username: user.username || '', userRole: isStoreManager(user.role) ? 'store_manager' : 'vendedor',
+    amount: Math.round(amount * 100) / 100, reason, createdAt: new Date().toISOString(), createdBy: getSession(req)?.accountId || null
+  };
+  const bonuses = readBonuses(); bonuses.push(bonus); writeBonuses(bonuses);
+  auditLog(req, 'Bono registrado', 'Finanzas', { bonusId: bonus.id, userId: bonus.userId, username: bonus.username, role: bonus.userRole, amount: bonus.amount, reason: bonus.reason, date: bonus.date });
+  return res.status(201).json(bonus);
+});
+
+app.put('/api/admin/bonos/:id', requireAdmin, (req, res) => {
+  const bonuses = readBonuses();
+  const index = bonuses.findIndex(item => String(item.id) === String(req.params.id));
+  if (index < 0) return res.status(404).json({ error: 'Bono no encontrado.' });
+  const current = bonuses[index];
+  const userId = cleanText(req.body?.userId, 100);
+  const reason = cleanText(req.body?.reason, 500);
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(String(req.body?.date || '')) ? String(req.body.date) : '';
+  const amount = Number(req.body?.amount);
+  if (!userId) return res.status(400).json({ error: 'Selecciona un vendedor o Jefe de Tienda.' });
+  if (!reason) return res.status(400).json({ error: 'Escribe el motivo del bono.' });
+  if (!date) return res.status(400).json({ error: 'Selecciona una fecha válida.' });
+  if (!Number.isFinite(amount) || amount <= 0 || amount > 100000000) return res.status(400).json({ error: 'Ingresa un valor de bono válido.' });
+  const users = readUsers();
+  const user = users.find(item => String(item.id) === userId && item.active !== false && (isSellerRole(item.role) || isStoreManager(item.role)));
+  if (!user) return res.status(404).json({ error: 'El usuario seleccionado no es un vendedor o Jefe de Tienda activo.' });
+  const updated = { ...current, date, userId: user.id, userName: user.name || user.username || 'Usuario', username: user.username || '', userRole: isStoreManager(user.role) ? 'store_manager' : 'vendedor', amount: Math.round(amount * 100) / 100, reason, updatedAt: new Date().toISOString(), updatedBy: getSession(req)?.accountId || null };
+  bonuses[index] = updated; writeBonuses(bonuses);
+  auditLog(req, 'Bono modificado', 'Finanzas', { bonusId: updated.id, userId: updated.userId, username: updated.username, role: updated.userRole, amount: updated.amount, reason: updated.reason, date: updated.date, previous: { userId: current.userId, amount: current.amount, reason: current.reason, date: current.date } });
+  return res.json(updated);
+});
+
+app.delete('/api/admin/bonos/:id', requireAdmin, (req, res) => {
+  const bonuses = readBonuses();
+  const bonus = bonuses.find(item => String(item.id) === String(req.params.id));
+  if (!bonus) return res.status(404).json({ error: 'Bono no encontrado.' });
+  writeBonuses(bonuses.filter(item => String(item.id) !== String(req.params.id)));
+  auditLog(req, 'Bono eliminado', 'Finanzas', { bonusId: bonus.id, userId: bonus.userId, username: bonus.username, amount: bonus.amount, reason: bonus.reason, date: bonus.date });
+  return res.status(204).end();
+});
+
 app.get('/api/admin/calculo-comision', requireAdmin, (req, res) => {
   const sales = readSales();
   const users = readUsers();
   const expenses = readExpenses();
   const fines = readFines();
+  const bonuses = readBonuses();
   const from = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.from || '')) ? String(req.query.from) : '';
   const to = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.to || '')) ? String(req.query.to) : '';
   const localDate = value => {
@@ -4470,6 +4566,13 @@ app.get('/api/admin/calculo-comision', requireAdmin, (req, res) => {
 
   const round = value => Math.round(Number(value || 0) * 100) / 100;
   const finesByUser = new Map();
+  const bonusesByUser = new Map();
+  for (const bonus of bonuses) {
+    const bonusDate = String(bonus.date || '');
+    if (!bonusDate || (from && bonusDate < from) || (to && bonusDate > to)) continue;
+    const key = String(bonus.userId || '');
+    bonusesByUser.set(key, round((bonusesByUser.get(key) || 0) + Number(bonus.amount || 0)));
+  }
   for (const fine of fines) {
     const fineDate = String(fine.date || '');
     if (!fineDate || (from && fineDate < from) || (to && fineDate > to)) continue;
@@ -4480,16 +4583,19 @@ app.get('/api/admin/calculo-comision', requireAdmin, (req, res) => {
   const normalized = [...rows.values(), managerRow].map(row => {
     const paid = paidFor(row.userId);
     const finesAmount = round(finesByUser.get(String(row.userId)) || 0);
+    const bonusesAmount = round(bonusesByUser.get(String(row.userId)) || 0);
     return {
       ...row,
       sales: round(row.sales),
       fines: finesAmount,
+      bonuses: bonusesAmount,
       paid: Boolean(paid),
       paidExpenseId: paid?.id || null,
       paidAmount: round(paid?.amount || 0),
       paidRate: Number(paid?.commissionRate || 0),
       paidGrossAmount: round(paid?.commissionGrossAmount || 0),
-      paidFines: round(paid?.commissionFines || 0)
+      paidFines: round(paid?.commissionFines || 0),
+      paidBonuses: round(paid?.commissionBonuses || 0)
     };
   });
   const totalSales = round(normalized.reduce((sum, row) => sum + row.sales, 0) - managerRow.sales);
@@ -4526,6 +4632,7 @@ app.post('/api/admin/calculo-comision/pagar', requireAdmin, (req, res) => {
 
   const historySales = readSales();
   const fines = readFines();
+  const bonuses = readBonuses();
   const qualifyingStatuses = new Set(['Enviado', 'Entregado']);
   const localDate = value => {
     const date = new Date(value);
@@ -4545,10 +4652,15 @@ app.post('/api/admin/calculo-comision/pagar', requireAdmin, (req, res) => {
       && String(fine.date || '') >= from
       && String(fine.date || '') <= to)
     .reduce((sum, fine) => sum + Number(fine.amount || 0), 0) * 100) / 100;
-  const amount = Math.max(0, Math.round((grossAmount - fineAmount) * 100) / 100);
+  const bonusAmount = Math.round(bonuses
+    .filter(bonus => String(bonus.userId || '') === String(user?.id || userId)
+      && String(bonus.date || '') >= from
+      && String(bonus.date || '') <= to)
+    .reduce((sum, bonus) => sum + Number(bonus.amount || 0), 0) * 100) / 100;
+  const amount = Math.max(0, Math.round((grossAmount + bonusAmount - fineAmount) * 100) / 100);
   if (sales <= 0) return res.status(400).json({ error: 'No hay ventas Enviado o Entregado para calcular esta comisión en el período.' });
   if (grossAmount <= 0) return res.status(400).json({ error: 'La comisión bruta calculada es $0,00.' });
-  if (amount <= 0) return res.status(400).json({ error: 'Las multas consumen toda la comisión de este período. No hay saldo de comisión para pagar.' });
+  if (amount <= 0) return res.status(400).json({ error: 'Las multas consumen toda la comisión disponible de este período. No hay saldo de comisión para pagar.' });
 
   const expenses = readExpenses();
   const existing = expenses.find(expense => expense.type === 'commission'
@@ -4565,10 +4677,11 @@ app.post('/api/admin/calculo-comision/pagar', requireAdmin, (req, res) => {
     date: to,
     description: `Comisión — ${recipientName}`,
     amount,
-    note: `Comisión ${rate}% sobre ${sales.toFixed(2)} de ventas Enviado + Entregado · bruta ${grossAmount.toFixed(2)} · multas ${fineAmount.toFixed(2)} · neta ${amount.toFixed(2)} · período ${from} → ${to}.`,
+    note: `Comisión ${rate}% sobre ${sales.toFixed(2)} de ventas Enviado + Entregado · bruta ${grossAmount.toFixed(2)} · bonos ${bonusAmount.toFixed(2)} · multas ${fineAmount.toFixed(2)} · neta ${amount.toFixed(2)} · período ${from} → ${to}.`,
     type: 'commission',
     commissionGrossAmount: grossAmount,
     commissionFines: fineAmount,
+    commissionBonuses: bonusAmount,
     commissionUserId: user?.id || 'store_manager',
     commissionRole: isManager ? 'store_manager' : 'vendedor',
     commissionFrom: from,

@@ -755,6 +755,7 @@ async function renderCurrentRoute() {
   if (path === `${ADMIN_PATH}/dinero` || path === `${ADMIN_PATH}/dinero/`) return renderAdminMoney();
   if (path === `${ADMIN_PATH}/calculo-comision` || path === `${ADMIN_PATH}/calculo-comision/`) return renderAdminCommission();
   if (path === `${ADMIN_PATH}/multas` || path === `${ADMIN_PATH}/multas/`) return renderAdminFines();
+  if (path === `${ADMIN_PATH}/bonos` || path === `${ADMIN_PATH}/bonos/`) return renderAdminBonuses();
   if (path === `${ADMIN_PATH}/pedidos` || path === `${ADMIN_PATH}/pedidos/`) return renderAdminOrders();
   if (path === `${ADMIN_PATH}/generar-orden` || path === `${ADMIN_PATH}/generar-orden/`) return renderAdminGenerateOrder();
   if (path === `${ADMIN_PATH}/historial-ventas` || path === `${ADMIN_PATH}/historial-ventas/`) return renderAdminSalesHistory();
@@ -1056,7 +1057,7 @@ async function renderCategoryPage(categoryKey) {
     return;
   }
   const categoryProducts = products.filter(product => categoryKey === 'all' || product.category === categoryKey);
-  const slides = categoryProducts.slice(0, 4).map(product => ({ ...product, image: productImages(product)[0], heroTitle: product.name, heroDescription: product.description }));
+  const slides = categoryProducts.slice(0, 4).map(product => ({ ...product, image: productImages(product)[0], heroTitle: product.heroTitle || product.name, heroDescription: product.heroDescription || product.description }));
   app.innerHTML = `${renderHeader(categoryKey)}<main>${heroMarkup(slides, true, categoryKey)}<section class="section category-page-section" id="productos-categoria"><div class="category-intro"><div><span class="eyebrow">Colección independiente</span><h1>${escapeHTML(categories[categoryKey])}</h1></div><p>${escapeHTML(categoryDescriptions[categoryKey])}</p></div><div class="catalog-layout">${catalogFilters(classifications, categoryKey, { category: categoryKey })}<div class="catalog-results"><div class="results-count" id="resultsCount"></div><div class="products product-type-container" id="categoryProducts"></div></div></div></section></main>${renderFooter()}${cartMarkup()}`;
   wireCategoryNavigation(); wireMobileMenu(); wireSearch(); wireHero(slides); markPageEnter(); const cart = wireCart(products, storefront); const area = document.querySelector('#categoryProducts');
   const renderCategoryResults = (items) => { renderProductsInto(area, items, id => openProduct(id, products), (product, button) => cart.addToCart(product, button), { groupByType: true, groupOrder: storefront.categorySectionOrder?.[categoryKey] || [] }); const count = document.querySelector('#resultsCount'); if (count) count.textContent = `${items.length} producto${items.length === 1 ? '' : 's'} en ${escapeHTML(categories[categoryKey])}`; if (!items.length) area.innerHTML = '<div class="empty">No hay productos que coincidan con estos filtros.</div>'; };
@@ -1174,6 +1175,8 @@ function productForm(product = {}, classifications = {}) {
     <div class="field"><label for="stock">Stock disponible</label><input id="stock" name="stock" min="0" step="1" type="number" ${lock} value="${escapeHTML(product.stock ?? 0)}"></div>
     <div class="field"><label for="stockMin">Stock mínimo</label><input id="stockMin" name="stockMin" min="0" step="1" type="number" ${lock} value="${escapeHTML(product.stockMin ?? 0)}"></div>
     <div class="field full"><label for="tags">Etiquetas / palabras clave <small>(opcional)</small></label><input id="tags" name="tags" ${lock} value="${escapeHTML(Array.isArray(product.tags) ? product.tags.join(', ') : '')}" placeholder="Gaming, Xiaomi, 512GB..."><small class="field-help">Sirven para buscar y encontrar el producto rápidamente. Ej.: Gaming, 512GB, Ryzen 7.</small></div>
+    <div class="field"><label for="heroTitle">Título de portada <small>(opcional)</small></label><input id="heroTitle" name="heroTitle" maxlength="140" ${lock} value="${escapeHTML(product.heroTitle || '')}" placeholder="Título que quieres mostrar en la portada"><small class="field-help">Si lo dejas vacío, YHORS usa el nombre del producto.</small></div>
+    <div class="field"><label for="heroDescription">Texto de portada <small>(opcional)</small></label><input id="heroDescription" name="heroDescription" maxlength="500" ${lock} value="${escapeHTML(product.heroDescription || '')}" placeholder="Texto breve para acompañar el título"><small class="field-help">Solo afecta el slider/portada.</small></div>
     <div class="field full product-form-options">
       <label><input type="checkbox" id="published" name="published" ${product.published !== false ? 'checked' : ''} ${lock}> Publicado en web</label>
       ${selectedCategory === 'tech' ? `<label><input type="checkbox" id="requiresDeviceIdentifier" name="requiresDeviceIdentifier" ${product.requiresDeviceIdentifier !== false ? 'checked' : ''} ${lock}> Requiere Serie / IMEI</label>` : ''}
@@ -1449,7 +1452,7 @@ function ordersListMarkup(orders = [], options = {}) {
 function adminSectionNav(session = {}, active = '') {
   const role = String(session?.role || '').toLowerCase();
   const limitedOperations = role === 'vendedor' || role === 'orders' || role === 'store_manager';
-  const navIcons = { web:'🌐', 'buscar-productos':'⌕', inventario:'▣', compras:'▤', pedidos:'▤', 'generar-orden':'＋', 'historial-ventas':'✓', usuarios:'♙', 'series-imeis':'◉', auditoria:'◌', clientes:'♙', movimientos:'↕', reportes:'▥', backups:'◫', 'resumen-financiero':'◒', dinero:'$', 'ventas-generales':'◔', multas:'!', 'calculo-comision':'%', };
+  const navIcons = { web:'🌐', 'buscar-productos':'⌕', inventario:'▣', compras:'▤', pedidos:'▤', 'generar-orden':'＋', 'historial-ventas':'✓', usuarios:'♙', 'series-imeis':'◉', auditoria:'◌', clientes:'♙', movimientos:'↕', reportes:'▥', backups:'◫', 'resumen-financiero':'◒', dinero:'$', 'ventas-generales':'◔', multas:'!', bonos:'+', 'calculo-comision':'%', };
   const link = (key, href, label) => {
     const icon = navIcons[key];
     const iconMarkup = icon ? `<span class="admin-nav-icon" aria-hidden="true">${icon}</span>` : '';
@@ -1471,7 +1474,7 @@ function adminSectionNav(session = {}, active = '') {
       ${group('Operación', ['web','inventario','buscar-productos','pedidos','generar-orden','historial-ventas','compras'], `${link('web', `${ADMIN_PATH}/web`, 'PÁGINA WEB')}${link('buscar-productos', `${ADMIN_PATH}/buscar-productos`, 'BUSCAR PRODUCTOS')}${link('inventario', `${ADMIN_PATH}/inventario`, 'INVENTARIO')}${link('compras', `${ADMIN_PATH}/compras`, 'COMPRAS / PROVEEDORES')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('generar-orden', `${ADMIN_PATH}/generar-orden`, 'GENERAR ORDEN')}${link('historial-ventas', `${ADMIN_PATH}/historial-ventas`, 'HISTORIAL DE VENTAS')}`)}
       ${group('Gestión', ['usuarios','series-imeis','auditoria','backups'], `${link('usuarios', `${ADMIN_PATH}/usuarios`, 'USUARIOS')}${link('series-imeis', `${ADMIN_PATH}/series-imeis`, 'SERIES/IMEIS')}${link('auditoria', `${ADMIN_PATH}/auditoria`, 'AUDITORÍA')}${link('backups', `${ADMIN_PATH}/backups`, 'BACKUPS')}`)}
       ${group('Empresa', ['clientes','movimientos','reportes'], `${link('clientes', `${ADMIN_PATH}/clientes`, 'CLIENTES · FICHERO')}${link('movimientos', `${ADMIN_PATH}/movimientos`, 'MOVIMIENTOS DE INVENTARIO')}${link('reportes', `${ADMIN_PATH}/reportes`, 'REPORTES')}`)}
-      ${group('Finanzas', ['resumen-financiero','ventas-generales','dinero','multas','calculo-comision'], `${link('resumen-financiero', `${ADMIN_PATH}/resumen-financiero`, 'RESUMEN FINANCIERO')}${link('dinero', `${ADMIN_PATH}/dinero`, 'DINERO · COBROS')}${link('ventas-generales', `${ADMIN_PATH}/ventas-generales`, 'VENTAS GENERALES')}${link('multas', `${ADMIN_PATH}/multas`, 'MULTAS')}${link('calculo-comision', `${ADMIN_PATH}/calculo-comision`, 'CÁLCULO DE COMISIÓN')}`)}
+      ${group('Finanzas', ['resumen-financiero','ventas-generales','dinero','multas','bonos','calculo-comision'], `${link('resumen-financiero', `${ADMIN_PATH}/resumen-financiero`, 'RESUMEN FINANCIERO')}${link('dinero', `${ADMIN_PATH}/dinero`, 'DINERO · COBROS')}${link('ventas-generales', `${ADMIN_PATH}/ventas-generales`, 'VENTAS GENERALES')}${link('multas', `${ADMIN_PATH}/multas`, 'MULTAS')}${link('bonos', `${ADMIN_PATH}/bonos`, 'BONOS')}${link('calculo-comision', `${ADMIN_PATH}/calculo-comision`, 'CÁLCULO DE COMISIÓN')}`)}
     </nav>
   </div>`;
 }
@@ -2304,6 +2307,320 @@ async function renderAdminFines() {
   wireAccountMenu();
 }
 
+async function renderAdminBonuses() {
+  const session = await request('/api/admin/session').catch(() => ({ authenticated: false }));
+  if (!session.authenticated) return renderLogin();
+  if (String(session.role || '').toLowerCase() !== 'admin') return renderAdminOrders();
+
+  const localToday = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Guayaquil' });
+  const today = localToday();
+  const monthStart = `${today.slice(0, 7)}-01`;
+  const nav = adminSectionNav(session, 'bonos');
+
+  app.innerHTML = `<main class="admin-shell fines-shell"><div class="admin-wrap">
+    <div class="admin-top"><div><a class="brand admin-brand" href="${ADMIN_PATH}/inteligente" data-smooth-route aria-label="YHORS · Panel Administrativo · Ir a YHORS Inteligente"><span class="admin-brand-mark" aria-hidden="true"><img src="/favicon.svg" alt=""></span><span class="admin-brand-word">YHORS</span><span class="admin-brand-divider" aria-hidden="true"></span><small>Panel Administrativo</small></a><h1 class="admin-title">Bonos</h1><p class="admin-subtitle">Incentivos que se suman directamente a la comisión del vendedor o Jefe de Tienda.</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>
+    ${nav}
+    <section class="admin-panel fines-panel">
+      <div class="section-heading"><div><span class="eyebrow" id="fineFormEyebrow">Finanzas · Control</span><h2 id="fineFormTitle">Registrar bono</h2></div><p id="fineFormHelp">El bono se suma automáticamente a la comisión del período en el que esté registrado.</p></div>
+      <input type="hidden" id="fineEditId" value="">
+      <div class="fines-form-grid">
+        <div class="fine-person-field">
+          <span>Vendedor / Jefe de Tienda</span>
+          <input type="hidden" id="fineUser" value="">
+          <button type="button" class="fine-person-picker-trigger" id="finePersonPickerOpen" aria-haspopup="dialog">
+            <span class="fine-person-picker-avatar" id="finePersonAvatar">?</span>
+            <span class="fine-person-picker-copy"><strong id="finePersonName">Selecciona una persona</strong><small id="finePersonRole">Vendedor o Jefe de Tienda</small></span>
+            <span class="fine-person-picker-chevron">⌄</span>
+          </button>
+        </div>
+        <label><span>Valor</span><input id="fineAmount" type="number" min="0.01" step="0.01" placeholder="0,00"></label>
+        <label><span>Fecha</span><input id="fineDate" type="date" value="${today}"></label>
+        <label class="fines-reason"><span>Motivo</span><textarea id="fineReason" rows="3" maxlength="500" placeholder="¿Por qué se otorga el bono?"></textarea></label>
+      </div>
+      <div class="fines-actions"><button type="button" class="button primary small" id="saveFine">Guardar bono</button><button type="button" class="button small" id="cancelFineEdit" hidden>Cancelar edición</button><span class="message" id="fineMessage" hidden></span></div>
+    </section>
+
+    <section class="admin-panel fines-panel">
+      <div class="section-heading"><div><span class="eyebrow">Historial</span><h2>Bonos registrados</h2></div><p>Estos bonos son los que se toman en cuenta para calcular las comisiones.</p></div>
+      <div class="commission-toolbar fines-toolbar">
+        <div class="commission-date-range"><label class="commission-date-filter"><span>Desde</span><input id="fineFrom" type="date" value="${monthStart}"></label><label class="commission-date-filter"><span>Hasta</span><input id="fineTo" type="date" value="${today}"></label></div>
+        <div class="fines-history-filters">
+          <label><span>Persona</span><select id="fineFilterUser"><option value="">Todos</option></select></label>
+          <label class="fines-search"><span>Buscar</span><input id="fineSearch" type="search" placeholder="Nombre, usuario o motivo…"></label>
+        </div>
+        <button type="button" class="button small" id="fineRefresh">Actualizar</button>
+      </div>
+      <div class="fines-summary" id="finesSummary"></div>
+      <div class="fines-list" id="finesList"><div class="commission-loading">Cargando bonos…</div></div>
+    </section>
+
+    <div class="generate-modal fine-person-modal" id="finePersonPickerModal" hidden>
+      <div class="generate-modal-backdrop" data-close-fine-person-picker></div>
+      <div class="generate-modal-dialog fine-person-picker-dialog" role="dialog" aria-modal="true" aria-labelledby="finePersonPickerTitle">
+        <div class="generate-modal-head">
+          <div><span class="eyebrow">Finanzas · Personal</span><h2 id="finePersonPickerTitle">Seleccionar persona</h2><p class="fine-person-picker-subtitle">Busca a quién se otorgará el bono.</p></div>
+          <button type="button" class="generate-modal-close" data-close-fine-person-picker aria-label="Cerrar">×</button>
+        </div>
+        <div class="fine-person-picker-toolbar">
+          <input id="finePersonSearch" type="search" placeholder="Buscar por nombre o usuario…" autocomplete="off">
+          <div class="fine-person-picker-tabs" role="tablist" aria-label="Tipo de persona">
+            <button type="button" class="fine-person-tab is-active" data-person-role="all">Todos</button>
+            <button type="button" class="fine-person-tab" data-person-role="vendedor">Vendedores</button>
+            <button type="button" class="fine-person-tab" data-person-role="store_manager">Jefes de Tienda</button>
+          </div>
+        </div>
+        <div class="fine-person-picker-count" id="finePersonPickerCount"></div>
+        <div class="fine-person-picker-list" id="finePersonPickerList"></div>
+      </div>
+    </div>
+  </div></main>`;
+
+  const message = document.querySelector('#fineMessage');
+  let eligibleUsers = [];
+  try {
+    const users = await request('/api/admin/users');
+    const list = Array.isArray(users?.users) ? users.users : (Array.isArray(users) ? users : []);
+    eligibleUsers = list.filter(user => user.active !== false && ['vendedor','store_manager'].includes(String(user.role || '').toLowerCase()));
+  } catch (error) {
+    try {
+      const users = await request('/api/admin/usuarios');
+      const list = Array.isArray(users?.users) ? users.users : (Array.isArray(users) ? users : []);
+      eligibleUsers = list.filter(user => user.active !== false && ['vendedor','store_manager'].includes(String(user.role || '').toLowerCase()));
+    } catch (fallbackError) {
+      eligibleUsers = [];
+    }
+  }
+
+  const finePersonModal = document.querySelector('#finePersonPickerModal');
+  const finePersonSearch = document.querySelector('#finePersonSearch');
+  const finePersonList = document.querySelector('#finePersonPickerList');
+  const finePersonCount = document.querySelector('#finePersonPickerCount');
+  const finePersonInput = document.querySelector('#fineUser');
+  const finePersonName = document.querySelector('#finePersonName');
+  const finePersonRole = document.querySelector('#finePersonRole');
+  const finePersonAvatar = document.querySelector('#finePersonAvatar');
+  let finePersonRoleFilter = 'all';
+
+  const roleLabel = user => String(user?.role || '').toLowerCase() === 'store_manager' ? 'Jefe de Tienda' : 'Vendedor';
+  const userDisplayName = user => user?.name || user?.username || 'Usuario';
+  const initials = name => (String(name || 'U').trim().split(/\s+/).slice(0,2).map(part => part[0]).join('') || 'U').toUpperCase();
+
+  const renderFinePersonPicker = () => {
+    if (!finePersonList) return;
+    const query = (finePersonSearch?.value || '').trim().toLowerCase();
+    const filtered = eligibleUsers.filter(user => {
+      const role = String(user.role || '').toLowerCase();
+      if (finePersonRoleFilter !== 'all' && role !== finePersonRoleFilter) return false;
+      const hay = `${userDisplayName(user)} ${user.username || ''}`.toLowerCase();
+      return !query || hay.includes(query);
+    });
+    if (finePersonCount) finePersonCount.textContent = `${filtered.length} persona${filtered.length === 1 ? '' : 's'} disponible${filtered.length === 1 ? '' : 's'}`;
+    finePersonList.innerHTML = filtered.length ? filtered.map(user => {
+      const role = roleLabel(user);
+      const selected = String(finePersonInput?.value || '') === String(user.id);
+      return `<button type="button" class="fine-person-option${selected ? ' is-selected' : ''}" data-select-fine-person="${escapeHTML(user.id)}">
+        <span class="fine-person-option-avatar">${escapeHTML(initials(userDisplayName(user)))}</span>
+        <span class="fine-person-option-copy"><strong>${escapeHTML(userDisplayName(user))}</strong><small>@${escapeHTML(user.username || 'usuario')} · ${role}</small></span>
+        <span class="fine-person-option-check">${selected ? '✓' : '›'}</span>
+      </button>`;
+    }).join('') : `<div class="fine-person-empty"><span>⌕</span><strong>No encontramos a esa persona</strong><small>Prueba con otro nombre, usuario o cambia el tipo de persona.</small></div>`;
+  };
+
+  const openFinePersonPicker = () => {
+    if (!finePersonModal) return;
+    finePersonModal.hidden = false;
+    document.body.classList.add('generate-modal-open');
+    requestAnimationFrame(() => { finePersonModal.classList.add('is-open'); finePersonSearch?.focus(); });
+    renderFinePersonPicker();
+  };
+  const closeFinePersonPicker = () => {
+    if (!finePersonModal) return;
+    finePersonModal.classList.remove('is-open');
+    setTimeout(() => { if (finePersonModal) finePersonModal.hidden = true; if (!document.querySelector('.generate-modal.is-open')) document.body.classList.remove('generate-modal-open'); }, 180);
+  };
+  const updateFinePersonDisplay = () => {
+    const selected = eligibleUsers.find(user => String(user.id) === String(finePersonInput?.value || ''));
+    if (!selected) {
+      if (finePersonName) finePersonName.textContent = 'Selecciona una persona';
+      if (finePersonRole) finePersonRole.textContent = 'Vendedor o Jefe de Tienda';
+      if (finePersonAvatar) finePersonAvatar.textContent = '?';
+      return;
+    }
+    if (finePersonName) finePersonName.textContent = userDisplayName(selected);
+    if (finePersonRole) finePersonRole.textContent = `${roleLabel(selected)} · @${selected.username || 'usuario'}`;
+    if (finePersonAvatar) finePersonAvatar.textContent = initials(userDisplayName(selected));
+  };
+  document.querySelector('#finePersonPickerOpen')?.addEventListener('click', openFinePersonPicker);
+  finePersonModal?.querySelectorAll('[data-close-fine-person-picker]').forEach(el => el.addEventListener('click', closeFinePersonPicker));
+  finePersonSearch?.addEventListener('input', renderFinePersonPicker);
+  finePersonModal?.addEventListener('click', event => {
+    const tab = event.target.closest('[data-person-role]');
+    if (tab) {
+      finePersonRoleFilter = tab.dataset.personRole || 'all';
+      finePersonModal.querySelectorAll('[data-person-role]').forEach(button => button.classList.toggle('is-active', button === tab));
+      renderFinePersonPicker();
+      return;
+    }
+    const option = event.target.closest('[data-select-fine-person]');
+    if (option) {
+      if (finePersonInput) finePersonInput.value = option.dataset.selectFinePerson;
+      updateFinePersonDisplay();
+      closeFinePersonPicker();
+    }
+  });
+  const finePersonEscapeHandler = event => { if (event.key === 'Escape' && finePersonModal?.classList.contains('is-open')) closeFinePersonPicker(); };
+  document.addEventListener('keydown', finePersonEscapeHandler);
+
+  const filterUser = document.querySelector('#fineFilterUser');
+
+  if (filterUser) {
+    filterUser.innerHTML = '<option value="">Todos</option>' + eligibleUsers.map(user => {
+      const role = roleLabel(user);
+      return `<option value="${escapeHTML(user.id)}">${escapeHTML(userDisplayName(user))} · ${role}</option>`;
+    }).join('');
+  }
+  updateFinePersonDisplay();
+
+  const renderFines = async () => {
+    const from = document.querySelector('#fineFrom')?.value || '';
+    const to = document.querySelector('#fineTo')?.value || '';
+    const filterUserId = document.querySelector('#fineFilterUser')?.value || '';
+    const search = (document.querySelector('#fineSearch')?.value || '').trim().toLowerCase();
+    const list = document.querySelector('#finesList');
+    const summary = document.querySelector('#finesSummary');
+    if (!list) return;
+    if (from && to && from > to) {
+      list.innerHTML = '<div class="commission-empty">La fecha inicial no puede ser posterior a la fecha final.</div>';
+      if (summary) summary.innerHTML = '';
+      return;
+    }
+    list.innerHTML = '<div class="commission-loading">Cargando bonos…</div>';
+    try {
+      const result = await request(`/api/admin/bonos?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
+      const allFines = Array.isArray(result.bonuses) ? result.bonuses : [];
+      const fines = allFines.filter(fine => {
+        if (filterUserId && String(fine.userId) !== String(filterUserId)) return false;
+        if (search) {
+          const haystack = `${fine.userName || ''} ${fine.username || ''} ${fine.reason || ''} ${fine.userRole || ''}`.toLowerCase();
+          if (!haystack.includes(search)) return false;
+        }
+        return true;
+      });
+      const filteredTotal = fines.reduce((sum, fine) => sum + Number(fine.amount || 0), 0);
+      if (summary) summary.innerHTML = `<div><span>PERÍODO</span><strong>${escapeHTML(from || 'Todo')} → ${escapeHTML(to || 'Todo')}</strong></div><div><span>BONOS</span><strong>${fines.length}${fines.length !== allFines.length ? ` <small class="fines-count-note">de ${allFines.length}</small>` : ''}</strong></div><div><span>TOTAL EN BONOS</span><strong>${money(filteredTotal)}</strong></div>`;
+      list.innerHTML = fines.length ? fines.map(fine => {
+        const role = fine.userRole === 'store_manager' ? 'Jefe de Tienda' : 'Vendedor';
+        return `<article class="fine-row">
+          <div class="fine-row-main"><div><strong>${escapeHTML(fine.userName || 'Usuario')}</strong><small>@${escapeHTML(fine.username || '')} · ${role}</small></div><time>${escapeHTML(fine.date || '')}</time></div>
+          <p>${escapeHTML(fine.reason || 'Sin motivo')}</p>
+          <div class="fine-row-footer"><strong>${money(fine.amount || 0)}</strong><div class="fine-row-actions"><button type="button" class="button secondary small" data-edit-fine="${escapeHTML(fine.id)}">Editar</button><button type="button" class="button danger small" data-delete-fine="${escapeHTML(fine.id)}">Eliminar</button></div></div>
+        </article>`;
+      }).join('') : '<div class="commission-empty">No hay bonos registrados en este período.</div>';
+    } catch (error) {
+      list.innerHTML = `<div class="commission-empty">${escapeHTML(error.message || 'No se pudieron cargar los bonos.')}</div>`;
+    }
+  };
+
+  document.querySelector('#fineRefresh')?.addEventListener('click', renderFines);
+  document.querySelector('#fineFrom')?.addEventListener('change', renderFines);
+  document.querySelector('#fineTo')?.addEventListener('change', renderFines);
+  document.querySelector('#fineFilterUser')?.addEventListener('change', renderFines);
+  document.querySelector('#fineSearch')?.addEventListener('input', renderFines);
+
+  const fineEditId = document.querySelector('#fineEditId');
+  const fineFormTitle = document.querySelector('#fineFormTitle');
+  const fineFormEyebrow = document.querySelector('#fineFormEyebrow');
+  const fineFormHelp = document.querySelector('#fineFormHelp');
+  const cancelFineEdit = document.querySelector('#cancelFineEdit');
+  const resetFineForm = () => {
+    if (fineEditId) fineEditId.value = '';
+    if (fineFormTitle) fineFormTitle.textContent = 'Registrar bono';
+    if (fineFormEyebrow) fineFormEyebrow.textContent = 'Finanzas · Control';
+    if (fineFormHelp) fineFormHelp.textContent = 'El bono se suma automáticamente a la comisión del período en el que esté registrado.';
+    if (document.querySelector('#saveFine')) document.querySelector('#saveFine').textContent = 'Guardar bono';
+    if (cancelFineEdit) cancelFineEdit.hidden = true;
+    if (finePersonInput) finePersonInput.value = '';
+    updateFinePersonDisplay();
+    if (document.querySelector('#fineAmount')) document.querySelector('#fineAmount').value = '';
+    if (document.querySelector('#fineDate')) document.querySelector('#fineDate').value = today;
+    if (document.querySelector('#fineReason')) document.querySelector('#fineReason').value = '';
+  };
+  cancelFineEdit?.addEventListener('click', resetFineForm);
+
+  document.querySelector('#saveFine')?.addEventListener('click', async () => {
+    const button = document.querySelector('#saveFine');
+    const editId = fineEditId?.value || '';
+    const userId = finePersonInput?.value || '';
+    const amount = Number(document.querySelector('#fineAmount')?.value || 0);
+    const date = document.querySelector('#fineDate')?.value || '';
+    const reason = document.querySelector('#fineReason')?.value?.trim() || '';
+    if (!userId || !amount || amount <= 0 || !date || !reason) {
+      if (message) { message.hidden = false; message.className = 'message error'; message.textContent = 'Completa la persona, valor, fecha y motivo.'; }
+      return;
+    }
+    const selectedUser = eligibleUsers.find(user => String(user.id) === String(userId));
+    const userLabel = selectedUser ? `${userDisplayName(selectedUser)} · ${roleLabel(selectedUser)}` : 'usuario';
+    const confirmed = await showYhorsConfirm(editId ? '¿Guardar cambios de este bono?' : '¿Seguro que quieres guardar este bono?', editId ? `Se actualizará el bono de ${escapeHTML(userLabel)} a ${money(amount)}.` : `Se registrará ${money(amount)} a ${escapeHTML(userLabel)} y se sumará a su comisión.`);
+    if (!confirmed) return;
+    button.disabled = true;
+    try {
+      const endpoint = editId ? `/api/admin/bonos/${encodeURIComponent(editId)}` : '/api/admin/bonos';
+      await request(endpoint, { method: editId ? 'PUT' : 'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ userId, amount, date, reason }) });
+      resetFineForm();
+      if (message) { message.hidden = false; message.className = 'message success'; message.textContent = editId ? 'Bono actualizado correctamente.' : 'Bono registrado correctamente.'; }
+      await renderFines();
+    } catch (error) {
+      if (message) { message.hidden = false; message.className = 'message error'; message.textContent = error.message || (editId ? 'No se pudo actualizar el bono.' : 'No se pudo registrar el bono.'); }
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  document.querySelector('#finesList')?.addEventListener('click', async event => {
+    const editButton = event.target.closest('[data-edit-fine]');
+    if (editButton) {
+      try {
+        const result = await request(`/api/admin/bonos?from=&to=`);
+        const fine = (result.bonuses || []).find(item => String(item.id) === String(editButton.dataset.editFine));
+        if (!fine) throw new Error('No se encontró el bono para editar.');
+        if (fineEditId) fineEditId.value = fine.id;
+        if (fineFormTitle) fineFormTitle.textContent = 'Editar bono';
+        if (fineFormEyebrow) fineFormEyebrow.textContent = 'Finanzas · Edición';
+        if (fineFormHelp) fineFormHelp.textContent = 'Puedes cambiar la persona, monto, fecha o motivo. El cambio se reflejará sumando el bono a su comisión.';
+        if (document.querySelector('#fineAmount')) document.querySelector('#fineAmount').value = Number(fine.amount || 0).toFixed(2);
+        if (document.querySelector('#fineDate')) document.querySelector('#fineDate').value = fine.date || today;
+        if (document.querySelector('#fineReason')) document.querySelector('#fineReason').value = fine.reason || '';
+        if (finePersonInput) finePersonInput.value = fine.userId || '';
+        updateFinePersonDisplay();
+        if (document.querySelector('#saveFine')) document.querySelector('#saveFine').textContent = 'Guardar cambios';
+        if (cancelFineEdit) cancelFineEdit.hidden = false;
+        document.querySelector('#fineAmount')?.focus();
+        document.querySelector('.fines-shell')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } catch (error) {
+        alert(error.message || 'No se pudo abrir el bono.');
+      }
+      return;
+    }
+
+    const button = event.target.closest('[data-delete-fine]');
+    if (!button) return;
+    const confirmed = await showYhorsConfirm('¿Eliminar este bono?', 'Al eliminarlo dejará de sumarse a la comisión del período correspondiente.');
+    if (!confirmed) return;
+    button.disabled = true;
+    try {
+      await request(`/api/admin/bonos/${encodeURIComponent(button.dataset.deleteFine)}`, { method:'DELETE' });
+      if (fineEditId?.value === button.dataset.deleteFine) resetFineForm();
+      await renderFines();
+    } catch (error) {
+      button.disabled = false;
+      alert(error.message || 'No se pudo eliminar el bono.');
+    }
+  });
+
+  await renderFines();
+  wireAccountMenu();
+}
+
 async function renderAdminCommission() {
   const session = await request('/api/admin/session').catch(() => ({ authenticated: false }));
   if (!session.authenticated) return renderLogin();
@@ -2323,7 +2640,7 @@ async function renderAdminCommission() {
       </div>
       <div class="commission-message" id="commissionMessage" hidden></div>
       <div class="commission-summary" id="commissionSummary"></div>
-      <div class="commission-table-wrap"><table class="commission-table"><thead><tr><th>USUARIO</th><th>ROL</th><th>PEDIDOS</th><th>VENTAS COMISIONABLES</th><th>% COMISIÓN</th><th>MULTAS</th><th>COMISIÓN NETA</th><th>ACCIÓN</th></tr></thead><tbody id="commissionTableBody"><tr><td colspan="8" class="commission-loading">Calculando…</td></tr></tbody></table></div>
+      <div class="commission-table-wrap"><table class="commission-table"><thead><tr><th>USUARIO</th><th>ROL</th><th>PEDIDOS</th><th>VENTAS COMISIONABLES</th><th>% COMISIÓN</th><th>BONOS</th><th>MULTAS</th><th>COMISIÓN NETA</th><th>ACCIÓN</th></tr></thead><tbody id="commissionTableBody"><tr><td colspan="9" class="commission-loading">Calculando…</td></tr></tbody></table></div>
       <div class="commission-note"><strong>Importante:</strong> al pulsar <strong>Pagar comisión</strong>, el valor se registra automáticamente en <strong>Resumen Financiero → Gastos</strong> como un gasto normal, con su concepto, fecha y detalle.</div>
     </section>
   </div></main>`;
@@ -2338,12 +2655,12 @@ async function renderAdminCommission() {
     const summary = document.querySelector('#commissionSummary');
     if (!body) return;
     if (from && to && from > to) {
-      body.innerHTML = '<tr><td colspan="8" class="commission-empty">La fecha inicial no puede ser posterior a la fecha final.</td></tr>';
+      body.innerHTML = '<tr><td colspan="9" class="commission-empty">La fecha inicial no puede ser posterior a la fecha final.</td></tr>';
       if (summary) summary.innerHTML = '';
       return;
     }
     if (message) message.hidden = true;
-    body.innerHTML = '<tr><td colspan="8" class="commission-loading">Calculando comisiones…</td></tr>';
+    body.innerHTML = '<tr><td colspan="9" class="commission-loading">Calculando comisiones…</td></tr>';
     try {
       const result = await request(`/api/admin/calculo-comision?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
       const rows = Array.isArray(result.rows) ? result.rows : [];
@@ -2356,19 +2673,21 @@ async function renderAdminCommission() {
         const amount = row.paid ? Number(row.paidAmount || 0) : 0;
         const gross = row.paid ? Number(row.paidGrossAmount || 0) : 0;
         const fines = Number(row.fines || 0);
+        const bonuses = Number(row.bonuses || 0);
         return `<tr class="${row.role === 'store_manager' ? 'commission-manager-row' : ''}">
           <td><strong>${escapeHTML(row.name || 'Sin nombre')}</strong><small>${escapeHTML(row.username ? '@' + row.username : '')}</small></td>
           <td>${escapeHTML(roleLabel)}</td>
           <td>${Number(row.orderCount || 0)}</td>
           <td><strong>${moneyCell(row.sales)}</strong></td>
           <td><div class="commission-rate-wrap"><input type="number" min="0.01" max="100" step="0.01" value="${defaultRate || ''}" data-commission-rate="${escapeHTML(String(row.userId))}" ${row.paid ? 'disabled' : ''}><span>%</span></div></td>
+          <td><strong class="${bonuses > 0 ? 'commission-bonus-amount' : ''}" data-commission-bonuses="${escapeHTML(String(row.userId))}">${moneyCell(bonuses)}</strong></td>
           <td><strong class="${fines > 0 ? 'commission-fine-amount' : ''}" data-commission-fines="${escapeHTML(String(row.userId))}">${moneyCell(fines)}</strong></td>
-          <td><strong data-commission-amount="${escapeHTML(String(row.userId))}">${row.paid ? moneyCell(amount) : moneyCell(0)}</strong>${row.paid ? `<small class="commission-gross-detail">Bruta ${moneyCell(gross)} · multas ${moneyCell(fines)}</small>` : ''}</td>
+          <td><strong data-commission-amount="${escapeHTML(String(row.userId))}">${row.paid ? moneyCell(amount) : moneyCell(0)}</strong>${row.paid ? `<small class="commission-gross-detail">Bruta ${moneyCell(gross)} · bonos ${moneyCell(row.paidBonuses || bonuses)} · multas ${moneyCell(row.paidFines || fines)}</small>` : ''}</td>
           <td>${row.paid
             ? `<span class="commission-paid">Pagada · ${Number(row.paidRate || 0).toFixed(2)}%</span>`
             : `<button type="button" class="button primary small commission-pay-button" data-pay-commission="${escapeHTML(String(row.userId))}" ${Number(row.sales || 0) <= 0 ? 'disabled' : ''}>Pagar comisión</button>`}</td>
         </tr>`;
-      }).join('') : '<tr><td colspan="8" class="commission-empty">No hay vendedores o Jefe de Tienda disponibles.</td></tr>';
+      }).join('') : '<tr><td colspan="9" class="commission-empty">No hay vendedores o Jefe de Tienda disponibles.</td></tr>';
 
       body.querySelectorAll('[data-commission-rate]').forEach(input => {
         const update = () => {
@@ -2376,7 +2695,8 @@ async function renderAdminCommission() {
           const row = rows.find(item => String(item.userId) === String(input.dataset.commissionRate));
           const gross = row ? Number(row.sales || 0) * Math.max(0, Math.min(100, rate)) / 100 : 0;
           const fineAmount = row ? Number(row.fines || 0) : 0;
-          const amount = Math.max(0, gross - fineAmount);
+          const bonusAmount = row ? Number(row.bonuses || 0) : 0;
+          const amount = Math.max(0, gross + bonusAmount - fineAmount);
           const target = body.querySelector(`[data-commission-amount="${CSS.escape(String(input.dataset.commissionRate))}"]`);
           if (target) target.textContent = moneyCell(amount);
         };
@@ -2385,7 +2705,7 @@ async function renderAdminCommission() {
       });
     } catch (error) {
       if (message) { message.hidden = false; message.className = 'commission-message error'; message.textContent = error.message || 'No se pudo calcular las comisiones.'; }
-      body.innerHTML = '<tr><td colspan="8" class="commission-empty">No se pudo cargar la información.</td></tr>';
+      body.innerHTML = '<tr><td colspan="9" class="commission-empty">No se pudo cargar la información.</td></tr>';
     }
   };
 
@@ -4557,7 +4877,7 @@ function openInventoryNewProductModal({ classifications, product = null, onSaved
             : (editor?.innerHTML?.trim() || hidden.value || '');
         }
         const data=Object.fromEntries(new FormData(form).entries());
-        data.published=form.elements.published?form.elements.published.checked:true; data.requiresDeviceIdentifier=form.elements.requiresDeviceIdentifier?form.elements.requiresDeviceIdentifier.checked:false; data.isRental=form.elements.isRental?form.elements.isRental.checked:false; data.featured=Boolean(product?.featured); data.hero=Boolean(product?.hero); data.price=data.salePrice; data.purchasePrice=purchasePrice; data.stock=stock; data.stockMin=stockMin; data.tags=String(form.elements.tags?.value||'').split(',').map(v=>v.trim()).filter(Boolean).slice(0,30); data.images=[data.image,data.image2,data.image3,data.image4].filter(Boolean);
+        data.heroTitle=String(form.elements.heroTitle?.value || '').trim(); data.heroDescription=String(form.elements.heroDescription?.value || '').trim(); data.published=form.elements.published?form.elements.published.checked:true; data.requiresDeviceIdentifier=form.elements.requiresDeviceIdentifier?form.elements.requiresDeviceIdentifier.checked:false; data.isRental=form.elements.isRental?form.elements.isRental.checked:false; data.featured=Boolean(product?.featured); data.hero=Boolean(product?.hero); data.price=data.salePrice; data.purchasePrice=purchasePrice; data.stock=stock; data.stockMin=stockMin; data.tags=String(form.elements.tags?.value||'').split(',').map(v=>v.trim()).filter(Boolean).slice(0,30); data.images=[data.image,data.image2,data.image3,data.image4].filter(Boolean);
         const pending=window.__yhorsPendingImageFiles||{};
         for(let slot=1;slot<=4;slot++){const file=pending[slot];if(!file)continue;const fd=new FormData();fd.append('image',file);const uploaded=await request('/api/admin/upload',{method:'POST',body:fd});const key=slot===1?'image':`image${slot}`;data[key]=uploaded.image;data.images[slot-1]=uploaded.image;}
         data.images=data.images.filter(Boolean); data.image=data.images[0]||'';
