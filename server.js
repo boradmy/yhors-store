@@ -5847,9 +5847,41 @@ app.put('/api/admin/compras/:id', requireAdmin, (req,res)=>{
   const purchase=purchases[index]; const nextStatus=cleanText(req.body?.status,30); if(!['Borrador','Ordenada','Recibida','Cancelada'].includes(nextStatus))return res.status(400).json({error:'Estado de compra no válido.'});
   if(purchase.status==='Recibida' && !['Recibida','Cancelada'].includes(nextStatus))return res.status(409).json({error:'Una compra recibida solo puede mantenerse recibida o anularse.'});
   if(nextStatus==='Cancelada' && purchase.stockApplied){
-    const products=readProducts().map(normalizeProduct); const byId=new Map(purchase.items.map(item=>[String(item.productId),item])); const before=products.map(p=>({...p}));
-    const updated=products.map(product=>{const item=byId.get(String(product.id));if(!item)return product;const nextStock=Math.max(0,Number(product.stock||0)-Number(item.quantity||0));return normalizeProduct({...product,stock:nextStock,updatedAt:new Date().toISOString()});});
-    writeProducts(updated); purchase.stockApplied=false; purchase.cancelledAt=new Date().toISOString(); auditLog(req,'Compra anulada','Compras',{purchaseId:purchase.id,number:purchase.number,supplier:purchase.supplier,inventory:{synchronized:true,movements:auditStockMovementDiff(before,updated,`Anulación de compra ${purchase.number}`)}});
+    const products=readProducts().map(normalizeProduct);
+    const byId=new Map(purchase.items.map(item=>[String(item.productId),item]));
+    // Una compra recibida solo puede anularse si las unidades compradas
+    // siguen físicamente disponibles. Si parte de ellas ya fue vendida,
+    // restarlas otra vez falsearía el inventario.
+    for (const product of products) {
+      const item=byId.get(String(product.id));
+      if (!item) continue;
+      const currentStock=Number(product.stock||0);
+      const purchasedQuantity=Number(item.quantity||0);
+      if (!Number.isInteger(currentStock) || currentStock < purchasedQuantity) {
+        return res.status(409).json({
+          error:`No se puede anular la compra porque ya no existen en inventario todas las unidades recibidas de “${product.name}”.`
+        });
+      }
+    }
+    const before=products.map(p=>({...p}));
+    const updated=products.map(product=>{
+      const item=byId.get(String(product.id));
+      if(!item)return product;
+      const nextStock=Number(product.stock||0)-Number(item.quantity||0);
+      return normalizeProduct({...product,stock:nextStock,updatedAt:new Date().toISOString()});
+    });
+    writeProducts(updated);
+    purchase.stockApplied=false;
+    purchase.cancelledAt=new Date().toISOString();
+    auditLog(req,'Compra anulada','Compras',{
+      purchaseId:purchase.id,
+      number:purchase.number,
+      supplier:purchase.supplier,
+      inventory:{
+        synchronized:true,
+        movements:auditStockMovementDiff(before,updated,`Anulación de compra ${purchase.number}`)
+      }
+    });
   }
   if(nextStatus==='Recibida' && !purchase.stockApplied){
     const products=readProducts().map(normalizeProduct); const byId=new Map(purchase.items.map(item=>[String(item.productId),item])); const before=products.map(p=>({...p}));
