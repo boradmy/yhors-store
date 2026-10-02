@@ -4468,9 +4468,30 @@ function openInventoryNewProductModal({ classifications, product = null, onSaved
       });
     });
     area.querySelector('#category')?.addEventListener('change', e => { draft = { ...draft, category: e.target.value }; draw(); });
-    const editor = area.querySelector('#descriptionEditor'); const hidden = area.querySelector('#description');
-    editor?.addEventListener('input', () => { if (hidden) hidden.value = editor.innerHTML.trim(); });
-    area.querySelectorAll('[data-rich-command]').forEach(button => button.addEventListener('click', () => { editor?.focus(); document.execCommand(button.dataset.richCommand, false, button.dataset.richValue || null); if(hidden) hidden.value=editor?.innerHTML?.trim() || ''; }));
+    const editor = area.querySelector('#descriptionEditor');
+    const hidden = area.querySelector('#description');
+    // En edición, NO volvemos a serializar la descripción solo por guardar
+    // precio, stock, imágenes, etc. Eso era lo que convertía las listas y
+    // saltos de línea en texto corrido al volver a cargar el producto.
+    const originalDescription = String(product?.description || '');
+    let descriptionDirty = false;
+    const markDescriptionDirty = () => {
+      descriptionDirty = true;
+      if (hidden && editor) hidden.value = editor.innerHTML.trim();
+    };
+    editor?.addEventListener('input', markDescriptionDirty);
+    area.querySelectorAll('[data-rich-command]').forEach(button => button.addEventListener('click', () => {
+      if (!editor || editor.getAttribute('contenteditable') !== 'true') return;
+      editor.focus();
+      document.execCommand(button.dataset.richCommand, false, button.dataset.richValue || null);
+      markDescriptionDirty();
+    }));
+    // Cancelar en "Editar ficha" debe cerrar el modal, no volver a abrirlo
+    // ni dejar la pantalla bloqueada.
+    area.querySelector('#cancelEdit')?.addEventListener('click', event => {
+      event.preventDefault();
+      close();
+    });
     area.querySelector('#productForm')?.addEventListener('submit', async e => {
       e.preventDefault(); const form=e.currentTarget; const msg=area.querySelector('#formMessage'); const submit=form.querySelector('[type="submit"]');
       if (!form.elements.category.value) { msg.className='message error'; msg.textContent='Selecciona una categoría antes de guardar.'; return; }
@@ -4480,7 +4501,14 @@ function openInventoryNewProductModal({ classifications, product = null, onSaved
       const confirmed=await showYhorsConfirm(editingProduct?'¿Guardar los cambios?':'¿Crear este producto?',editingProduct?`Se actualizará <strong>${escapeHTML(product.name)}</strong> con la nueva ficha e imágenes.`:'Se registrará el producto en YHORS con la ficha que acabas de completar.'); if(!confirmed)return;
       submit.disabled=true; msg.textContent='Guardando…';
       try {
-        if(hidden) hidden.value=editor?.innerHTML?.trim() || hidden.value || '';
+        // Si la descripción existente no fue tocada, conserva exactamente
+        // el HTML original guardado. Solo usamos el contenido del editor cuando
+        // el usuario realmente modificó la descripción.
+        if (hidden) {
+          hidden.value = editingProduct && !descriptionDirty
+            ? originalDescription
+            : (editor?.innerHTML?.trim() || hidden.value || '');
+        }
         const data=Object.fromEntries(new FormData(form).entries());
         data.published=form.elements.published?form.elements.published.checked:true; data.requiresDeviceIdentifier=form.elements.requiresDeviceIdentifier?form.elements.requiresDeviceIdentifier.checked:false; data.isRental=form.elements.isRental?form.elements.isRental.checked:false; data.featured=Boolean(product?.featured); data.hero=Boolean(product?.hero); data.price=data.salePrice; data.purchasePrice=purchasePrice; data.stock=stock; data.stockMin=stockMin; data.tags=String(form.elements.tags?.value||'').split(',').map(v=>v.trim()).filter(Boolean).slice(0,30); data.images=[data.image,data.image2,data.image3,data.image4].filter(Boolean);
         const pending=window.__yhorsPendingImageFiles||{};
