@@ -4600,10 +4600,6 @@ async function renderAdminClientes() {
         const table=document.querySelector('#customerStatementTable');
         if(from&&to&&from>to){table.innerHTML='<div class="message error">La fecha inicial no puede ser posterior a la fecha final.</div>';return;}
         const rows=statement.filter(row=>{const day=row.date?new Intl.DateTimeFormat('en-CA',{timeZone:'America/Guayaquil'}).format(new Date(row.date)):'';return (!from||day>=from)&&(!to||day<=to);});
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> fc4ea7003a4db67708a3292c8cddc6ed1c1b6208
         const formatDateTime=value=>{if(!value)return 'Fecha no registrada'; const d=new Date(value); if(Number.isNaN(d.getTime()))return 'Fecha no registrada'; return escapeHTML(d.toLocaleString('es-EC',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit',hour12:false,timeZone:'America/Guayaquil'}));};
         const renderedCustomerRows=rows.map(row=>{
           const isPayment=row.kind==='abono';
@@ -4618,21 +4614,6 @@ async function renderAdminClientes() {
           }
           const productDetail=row.source||'Producto no registrado';
           return `<article class="customer-ledger-card is-purchase"><div class="customer-ledger-icon">✓</div><div class="customer-ledger-main"><span class="customer-ledger-eyebrow">YHORS · COMPRA</span><strong>YHORS compra ${escapeHTML(productDetail)}</strong><small>Factura ${escapeHTML(row.number||'—')} · ${dateLabel}</small></div><div class="customer-ledger-amount"><span>CARGO</span><strong>${money(row.debit)}</strong><small>Saldo después: ${money(row.balance)}</small></div></article>`;
-<<<<<<< HEAD
-=======
-=======
-        const renderedCustomerRows=rows.map(row=>{
-          const isPayment=row.kind==='abono';
-          const dateLabel=row.date?escapeHTML(new Date(row.date).toLocaleDateString('es-EC',{day:'2-digit',month:'short',year:'numeric',timeZone:'America/Guayaquil'})):'—';
-          if(isPayment){
-            const method=escapeHTML(row.source||'Ingreso de dinero');
-            const transaction=row.payment?.transactionNumber ? ` · TRX ${escapeHTML(row.payment.transactionNumber)}` : '';
-            const note=row.detail && row.detail!=='Abono registrado' ? escapeHTML(row.detail) : 'Pago registrado';
-            return `<article class="customer-ledger-card is-payment"><div class="customer-ledger-icon">$</div><div class="customer-ledger-main"><span class="customer-ledger-eyebrow">INGRESO DE DINERO</span><strong>${method}</strong><small>${dateLabel}${transaction} · ${note}</small></div><div class="customer-ledger-amount"><span>INGRESÓ</span><strong>${money(row.credit)}</strong><small>Saldo: ${money(row.balance)}</small></div></article>`;
-          }
-          return `<article class="customer-ledger-card is-purchase"><div class="customer-ledger-icon">✓</div><div class="customer-ledger-main"><span class="customer-ledger-eyebrow">COMPRA</span><strong>Factura ${escapeHTML(row.number||'—')}</strong><small>${escapeHTML(row.source||'Sin productos')} · ${dateLabel}</small></div><div class="customer-ledger-amount"><span>TOTAL</span><strong>${money(row.debit)}</strong><small>Saldo: ${money(row.balance)}</small></div></article>`;
->>>>>>> b25300966d7578a176483f77589180751dc1ee34
->>>>>>> fc4ea7003a4db67708a3292c8cddc6ed1c1b6208
         }).join('');
         table.innerHTML=rows.length?`<div class="customer-ledger-list">${renderedCustomerRows}</div>`:'<div class="empty">No hay movimientos en este período.</div>';
       };
