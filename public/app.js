@@ -4743,6 +4743,9 @@ async function renderAdminClientes() {
             const methodMap={cash:'Efectivo',transfer:'Transferencia',card:'Tarjeta'}; const methodLabel=methodMap[String(row.payment?.method||'').toLowerCase()]||'Devolución';
             return `<article class="customer-ledger-card is-purchase"><div class="customer-ledger-icon">↩</div><div class="customer-ledger-main"><span class="customer-ledger-eyebrow">DEVOLUCIÓN · ADMINISTRACIÓN</span><strong>Devolución ${methodLabel.toLowerCase()}</strong><small>${dateLabel} · ${escapeHTML(row.detail||'Devolución de dinero')}</small></div><div class="customer-ledger-amount"><span>SALIDA</span><strong>${money(row.debit)}</strong><small>${Number(row.balance||0)<-0.001?`Saldo a favor: ${money(Math.abs(row.balance))}`:`Saldo después: ${money(row.balance)}`}</small></div></article>`;
           }
+          if(row.kind==='anulacion'){
+            return `<article class="customer-ledger-card is-purchase"><div class="customer-ledger-icon">×</div><div class="customer-ledger-main"><span class="customer-ledger-eyebrow">ANULACIÓN · ${escapeHTML(row.source || 'ORDEN')}</span><strong>Orden anulada ${escapeHTML(row.number || '')}</strong><small>${dateLabel} · ${escapeHTML(row.detail || 'Anulación de la orden')}</small></div><div class="customer-ledger-amount"><span>SIN MOVIMIENTO DE DINERO</span><strong>—</strong><small>El saldo no cambia · Inventario según el estado de la orden</small></div></article>`;
+          }
           if(isPayment){
             const methodMap={cash:'Efectivo',transfer:'Transferencia',card:'Tarjeta'}; const methodLabel=methodMap[String(row.payment?.method||'').toLowerCase()]||'Ingreso de dinero';
             const method=escapeHTML(methodLabel);
@@ -5102,6 +5105,7 @@ async function renderAdmin() {
           featured: featuredProductIds.includes(p.id)
         }));
         showSaveSuccess(message, 'Portada y destacados guardados con el orden indicado.');
+        drawList();
       } catch (e) { message.className = 'message error'; message.textContent = e.message; }
     });
   }

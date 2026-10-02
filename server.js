@@ -4912,6 +4912,13 @@ app.put('/api/admin/orders/:id', requireOrdersAccess, (req, res) => {
     updated.delivery = { ...(currentOrder.delivery || {}), cost: updated.shippingCost };
   }
   if (hasStatus) updated.status = normalizedStatus;
+  // Registrar el momento exacto de la anulación para que el Estado de Cuenta
+  // muestre la acción aunque la orden no tenga ningún movimiento de dinero.
+  if (statusChanged && String(nextStatus).toLocaleLowerCase('es-EC') === 'cancelado') {
+    updated.cancelledAt = new Date().toISOString();
+  } else if (String(nextStatus).toLocaleLowerCase('es-EC') !== 'cancelado') {
+    delete updated.cancelledAt;
+  }
   if (orderStatusUsesStock(normalizedStatus)) {
     updated.stockReservedAt = currentOrder.stockReservedAt || new Date().toISOString();
     delete updated.stockRestoredAt;
@@ -5414,6 +5421,29 @@ app.get('/api/admin/clientes/:id', requireOrdersAccess, (req, res) => {
   payments.forEach(p => { const obligation=resolvePaymentObligation(p); if(obligation) paidByKey.set(obligation.id,(paidByKey.get(obligation.id)||0)+Number(p.amount||0)); });
   const ledger=[];
   obligations.forEach(o=>{const paid=Math.round((paidByKey.get(o.id)||0)*100)/100; ledger.push({id:o.id,kind:'cargo',type:o.sourceType,number:o.number,date:o.date,timestamp:o.date,source:o.detail,detail:`${o.sourceType==='venta'?'Compra':'Orden'} · ${o.status}`,status:o.status,total:o.total,debit:o.total,credit:0,paid,balance:Math.max(0,Math.round((o.total-paid)*100)/100),orderId:o.orderId,sourceId:o.sourceId,sourceType:o.sourceType});});
+  // La anulación es un movimiento de trazabilidad, no un movimiento de dinero:
+  // no suma ni resta del saldo, pero queda visible en el Estado de Cuenta.
+  customerOrders.filter(order => String(order.status || '').toLowerCase() === 'cancelado').forEach(order => {
+    ledger.push({
+      id:`anulacion:${order.id}`,
+      kind:'anulacion',
+      type:'anulacion',
+      number:order.orderNumber || '—',
+      date:order.cancelledAt || order.updatedAt || order.createdAt,
+      timestamp:order.cancelledAt || order.updatedAt || order.createdAt,
+      source:order.source === 'admin_generated' ? 'Orden interna' : 'Pedido WEB',
+      detail:`Anulación de ${order.orderNumber || 'orden'} · ${Array.isArray(order.items) && order.items.length ? order.items.map(i => `${Number(i.quantity || 1)}× ${i.name || 'Producto'}`).join(' · ') : 'Orden sin productos'}`,
+      status:'Cancelado',
+      total:Number(order.total || 0),
+      debit:0,
+      credit:0,
+      paid:0,
+      balance:0,
+      orderId:order.id,
+      sourceId:order.id,
+      sourceType:'anulacion'
+    });
+  });
   payments.forEach(p=>{
     const obligation=resolvePaymentObligation(p);
     const isRefund = String(p.sourceType || '').toLowerCase() === 'refund';
@@ -5847,41 +5877,9 @@ app.put('/api/admin/compras/:id', requireAdmin, (req,res)=>{
   const purchase=purchases[index]; const nextStatus=cleanText(req.body?.status,30); if(!['Borrador','Ordenada','Recibida','Cancelada'].includes(nextStatus))return res.status(400).json({error:'Estado de compra no válido.'});
   if(purchase.status==='Recibida' && !['Recibida','Cancelada'].includes(nextStatus))return res.status(409).json({error:'Una compra recibida solo puede mantenerse recibida o anularse.'});
   if(nextStatus==='Cancelada' && purchase.stockApplied){
-    const products=readProducts().map(normalizeProduct);
-    const byId=new Map(purchase.items.map(item=>[String(item.productId),item]));
-    // Una compra recibida solo puede anularse si las unidades compradas
-    // siguen físicamente disponibles. Si parte de ellas ya fue vendida,
-    // restarlas otra vez falsearía el inventario.
-    for (const product of products) {
-      const item=byId.get(String(product.id));
-      if (!item) continue;
-      const currentStock=Number(product.stock||0);
-      const purchasedQuantity=Number(item.quantity||0);
-      if (!Number.isInteger(currentStock) || currentStock < purchasedQuantity) {
-        return res.status(409).json({
-          error:`No se puede anular la compra porque ya no existen en inventario todas las unidades recibidas de “${product.name}”.`
-        });
-      }
-    }
-    const before=products.map(p=>({...p}));
-    const updated=products.map(product=>{
-      const item=byId.get(String(product.id));
-      if(!item)return product;
-      const nextStock=Number(product.stock||0)-Number(item.quantity||0);
-      return normalizeProduct({...product,stock:nextStock,updatedAt:new Date().toISOString()});
-    });
-    writeProducts(updated);
-    purchase.stockApplied=false;
-    purchase.cancelledAt=new Date().toISOString();
-    auditLog(req,'Compra anulada','Compras',{
-      purchaseId:purchase.id,
-      number:purchase.number,
-      supplier:purchase.supplier,
-      inventory:{
-        synchronized:true,
-        movements:auditStockMovementDiff(before,updated,`Anulación de compra ${purchase.number}`)
-      }
-    });
+    const products=readProducts().map(normalizeProduct); const byId=new Map(purchase.items.map(item=>[String(item.productId),item])); const before=products.map(p=>({...p}));
+    const updated=products.map(product=>{const item=byId.get(String(product.id));if(!item)return product;const nextStock=Math.max(0,Number(product.stock||0)-Number(item.quantity||0));return normalizeProduct({...product,stock:nextStock,updatedAt:new Date().toISOString()});});
+    writeProducts(updated); purchase.stockApplied=false; purchase.cancelledAt=new Date().toISOString(); auditLog(req,'Compra anulada','Compras',{purchaseId:purchase.id,number:purchase.number,supplier:purchase.supplier,inventory:{synchronized:true,movements:auditStockMovementDiff(before,updated,`Anulación de compra ${purchase.number}`)}});
   }
   if(nextStatus==='Recibida' && !purchase.stockApplied){
     const products=readProducts().map(normalizeProduct); const byId=new Map(purchase.items.map(item=>[String(item.productId),item])); const before=products.map(p=>({...p}));
@@ -6004,24 +6002,21 @@ app.put('/api/admin/classifications', requireAdmin, (req, res) => res.json(write
 app.put('/api/admin/storefront', requireAdmin, (req, res) => {
   const products = readProducts();
   const ids = new Set(products.map(product => product.id));
-  // La interfaz permite 6 elementos de portada y 8 destacados; el servidor
-  // aplica el mismo límite para que una petición manual no pueda desalinear la UI.
-  const heroProductIds = Array.isArray(req.body?.heroProductIds) ? req.body.heroProductIds.filter(id => ids.has(id)).slice(0, 6) : [];
-  const featuredProductIds = Array.isArray(req.body?.featuredProductIds) ? req.body.featuredProductIds.filter(id => ids.has(id)).slice(0, 8) : [];
+  const heroProductIds = Array.isArray(req.body?.heroProductIds) ? req.body.heroProductIds.filter(id => ids.has(id)).slice(0, 8) : [];
+  const featuredProductIds = Array.isArray(req.body?.featuredProductIds) ? req.body.featuredProductIds.filter(id => ids.has(id)).slice(0, 12) : [];
   const heroOrders = (req.body && req.body.heroOrders && typeof req.body.heroOrders === 'object') ? req.body.heroOrders : {};
   const settings = { heroProductIds, featuredProductIds };
   writeStorefront(settings);
   const heroSet = new Set(heroProductIds);
   const featuredSet = new Set(featuredProductIds);
-  // Guardar la portada no es una edición del producto: no debemos cambiar
-  // updatedAt de todo el catálogo ni provocar lastmod falsos en el sitemap.
   const updated = products.map(product => ({
     ...product,
     hero: heroSet.has(product.id),
     featured: featuredSet.has(product.id),
     heroOrder: heroSet.has(product.id)
       ? Math.max(1, Math.min(999, Number(heroOrders[product.id]) || (heroProductIds.indexOf(product.id) + 1)))
-      : 0
+      : 0,
+    updatedAt: new Date().toISOString()
   }));
   writeProducts(updated);
   return res.json(settings);
