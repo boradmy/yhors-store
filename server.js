@@ -760,6 +760,36 @@ function customerTransactions(customer, orders = null, sales = null) {
 }
 
 
+function customerFinancialSummary(customer, orders = [], sales = [], payments = null) {
+  const identity = customerIdentity(customer);
+  const customerOrders = orders.filter(o => customerIdentity(o.customer || {}) === identity);
+  const customerSales = sales.filter(s => customerIdentity(s.customer || {}) === identity);
+  const saleByOrder = new Map(customerSales.filter(s => s.orderId).map(s => [String(s.orderId), s]));
+  const obligations = [
+    ...customerSales.map(s => ({ key:`venta:${s.id}`, saleId:String(s.id), orderId:s.orderId ? String(s.orderId) : null, total:Number(s.total || 0), date:s.notifiedAt || s.createdAt })),
+    ...customerOrders.filter(o => !saleByOrder.has(String(o.id))).map(o => ({ key:`orden:${o.id}`, saleId:null, orderId:String(o.id), total:Number(o.total || 0), date:o.createdAt }))
+  ];
+  const allPayments = Array.isArray(payments) ? payments : readPayments();
+  const saleIds = new Set(customerSales.map(s => String(s.id)));
+  const orderIds = new Set(customerOrders.map(o => String(o.id)));
+  const relatedPayments = allPayments.filter(p => (p.saleId && saleIds.has(String(p.saleId))) || (p.orderId && orderIds.has(String(p.orderId))));
+  const paymentByKey = new Map();
+  const resolveKey = payment => {
+    if (payment.saleId && saleIds.has(String(payment.saleId))) return `venta:${payment.saleId}`;
+    if (payment.orderId && saleByOrder.has(String(payment.orderId))) return `venta:${saleByOrder.get(String(payment.orderId)).id}`;
+    if (payment.orderId && orderIds.has(String(payment.orderId))) return `orden:${payment.orderId}`;
+    return null;
+  };
+  for (const payment of relatedPayments) {
+    const key=resolveKey(payment);
+    if (key) paymentByKey.set(key, (paymentByKey.get(key)||0) + Number(payment.amount||0));
+  }
+  const total = Math.round(obligations.reduce((sum,o)=>sum+o.total,0)*100)/100;
+  const paid = Math.round(relatedPayments.reduce((sum,p)=>sum+Number(p.amount||0),0)*100)/100;
+  return { customerOrders, customerSales, obligations, relatedPayments, paymentByKey, resolveKey, total, paid, balance:Math.max(0,Math.round((total-paid)*100)/100) };
+}
+
+
 function readPurchases() {
   try {
     if (!fs.existsSync(PURCHASES_FILE)) return [];
@@ -5210,13 +5240,21 @@ app.get('/api/admin/clientes', requireOrdersAccess, (req, res) => {
     if (customers.length > current.length) writeCustomers(customers);
   } catch {}
   const allOrders = readOrders();
-  const q = cleanText(req.query?.q, 120).toLocaleLowerCase('es-EC');
   const allSales = readSales();
+  const allPayments = readPayments();
+  const q = cleanText(req.query?.q, 120).toLocaleLowerCase('es-EC');
   const rows = customers.map(customer => {
-    const tx = customerTransactions(customer, allOrders, allSales);
+    const visibleCustomerOrders = String(session.role || '').toLowerCase() === 'vendedor'
+      ? allOrders.filter(order => String(order.assignedSellerId || '') === String(session.accountId || ''))
+      : allOrders;
+    const visibleCustomerSales = String(session.role || '').toLowerCase() === 'vendedor'
+      ? allSales.filter(sale => String(sale.assignedSellerId || '') === String(session.accountId || ''))
+      : allSales;
+    const tx = customerTransactions(customer, visibleCustomerOrders, visibleCustomerSales);
     const activeOrders = tx.filter(item => item.type === 'pedido' && item.status !== 'Cancelado').length;
     const customerSales = tx.filter(item => item.type === 'venta');
-    return { ...customer, orderCount: tx.filter(item => item.type === 'pedido').length, activeOrderCount: activeOrders, salesCount: customerSales.length, salesTotal: customerSales.reduce((sum,item)=>sum+Number(item.total||0),0), lastActivityAt: tx[0]?.date || customer.updatedAt || customer.createdAt };
+    const finances = customerFinancialSummary(customer, visibleCustomerOrders, visibleCustomerSales, allPayments);
+    return { ...customer, orderCount: tx.filter(item => item.type === 'pedido').length, activeOrderCount: activeOrders, salesCount: customerSales.length, salesTotal: Math.round(finances.total*100)/100, paidTotal: finances.paid, balance: finances.balance, lastActivityAt: tx[0]?.date || customer.updatedAt || customer.createdAt };
   }).filter(customer => !q || `${customer.name} ${customer.cedula} ${customer.phone} ${customer.email} ${customer.city}`.toLocaleLowerCase('es-EC').includes(q));
   if (String(session.role || '').toLowerCase() === 'vendedor') {
     // El vendedor solo consulta clientes que tengan pedidos asignados a su usuario.
@@ -5236,6 +5274,7 @@ app.get('/api/admin/clientes/:id', requireOrdersAccess, (req, res) => {
   const customerSales = allSales.filter(s => customerIdentity(s.customer || {}) === identity);
   const visibleOrders = isSellerRole(session.role) ? customerOrders.filter(o => String(o.assignedSellerId || '') === String(session.accountId || '')) : customerOrders;
   const visibleSales = isSellerRole(session.role) ? customerSales.filter(s => String(s.assignedSellerId || '') === String(session.accountId || '')) : customerSales;
+  const finance = customerFinancialSummary(customer, visibleOrders, visibleSales, readPayments());
   const saleByOrder = new Map(visibleSales.filter(s => s.orderId).map(s => [String(s.orderId), s]));
   const obligations = [];
   for (const sale of visibleSales) {
@@ -5247,14 +5286,22 @@ app.get('/api/admin/clientes/:id', requireOrdersAccess, (req, res) => {
     const detail = Array.isArray(order.items) && order.items.length ? order.items.map(i => `${Number(i.quantity || 1)}× ${i.name || 'Producto'}`).join(' · ') : 'Orden sin productos';
     obligations.push({ id:`orden:${order.id}`, sourceType:'orden', sourceId:order.id, orderId:order.id, number:order.orderNumber || '—', date:order.createdAt, total:Number(order.total || 0), detail, status:order.status || 'Pendiente' });
   }
-  const obligationIds = new Set(obligations.map(o => o.id));
-  let payments = readPayments().filter(p => obligationIds.has(p.saleId ? `venta:${p.saleId}` : p.orderId ? `orden:${p.orderId}` : ''));
+  const payments = finance.relatedPayments;
+  const resolvePaymentObligation = p => {
+    const key = finance.resolveKey(p);
+    return obligations.find(o => o.id === key) || null;
+  };
   const paidByKey = new Map();
-  payments.forEach(p => { const key=p.saleId?`venta:${p.saleId}`:`orden:${p.orderId}`; paidByKey.set(key,(paidByKey.get(key)||0)+Number(p.amount||0)); });
+  payments.forEach(p => { const obligation=resolvePaymentObligation(p); if(obligation) paidByKey.set(obligation.id,(paidByKey.get(obligation.id)||0)+Number(p.amount||0)); });
   const ledger=[];
-  obligations.forEach(o=>{const paid=Math.round((paidByKey.get(o.id)||0)*100)/100; const balance=Math.max(0,Math.round((o.total-paid)*100)/100); ledger.push({id:o.id,kind:'cargo',type:o.sourceType,number:o.number,date:o.date,timestamp:o.date,source:o.detail,detail:`${o.sourceType==='venta'?'Compra':'Orden'} · ${o.status}`,status:o.status,total:o.total,debit:o.total,credit:0,paid,balance,orderId:o.orderId,sourceId:o.sourceId,sourceType:o.sourceType});});
-  payments.forEach(p=>{const key=p.saleId?`venta:${p.saleId}`:`orden:${p.orderId}`; const obligation=obligations.find(o=>o.id===key); ledger.push({id:`payment:${p.id}`,kind:'abono',type:'pago',number:p.saleNumber||obligation?.number||'—',date:p.date||p.createdAt,timestamp:p.createdAt||p.date,source:`${paymentMethodLabel(p.method)}${p.bank?` · ${p.bank}`:''}${p.transactionNumber?` · TRX ${p.transactionNumber}`:''}`,detail:p.note||'Abono registrado',status:'Abono',total:Number(p.amount||0),debit:0,credit:Number(p.amount||0),payment:p,orderId:p.orderId||obligation?.orderId||null,sourceId:p.saleId||p.orderId||null,sourceType:p.saleId?'venta':'orden'});});
-  ledger.sort((a,b)=>new Date(a.date||0)-new Date(b.date||0)); let running=0; const statement=ledger.map(row=>{running=Math.round((running+Number(row.debit||0)-Number(row.credit||0))*100)/100;return {...row,balance:Math.max(0,running)};}).reverse();
+  obligations.forEach(o=>{const paid=Math.round((paidByKey.get(o.id)||0)*100)/100; ledger.push({id:o.id,kind:'cargo',type:o.sourceType,number:o.number,date:o.date,timestamp:o.date,source:o.detail,detail:`${o.sourceType==='venta'?'Compra':'Orden'} · ${o.status}`,status:o.status,total:o.total,debit:o.total,credit:0,paid,balance:Math.max(0,Math.round((o.total-paid)*100)/100),orderId:o.orderId,sourceId:o.sourceId,sourceType:o.sourceType});});
+  payments.forEach(p=>{const obligation=resolvePaymentObligation(p); ledger.push({id:`payment:${p.id}`,kind:'abono',type:'pago',number:p.saleNumber||obligation?.number||'—',date:p.date||p.createdAt,timestamp:p.createdAt||p.date,source:`${paymentMethodLabel(p.method)}${p.bank?` · ${p.bank}`:''}${p.transactionNumber?` · TRX ${p.transactionNumber}`:''}`,detail:p.note||'Abono registrado',status:'Abono',total:Number(p.amount||0),debit:0,credit:Number(p.amount||0),payment:p,orderId:p.orderId||obligation?.orderId||null,sourceId:p.saleId||p.orderId||null,sourceType:p.saleId?'venta':'orden'});});
+  // La cronología se ordena por fecha + hora real de creación del movimiento.
+  // Así el último pago/compra siempre queda arriba y los abonos no se mezclan por usar una fecha sin hora.
+  ledger.sort((a,b)=>new Date(a.timestamp||a.date||0)-new Date(b.timestamp||b.date||0));
+  let running=0;
+  const statementChronological=ledger.map(row=>{running=Math.round((running+Number(row.debit||0)-Number(row.credit||0))*100)/100;return {...row,balance:Math.max(0,running)};});
+  const statement=statementChronological.reverse();
   const totalBought=obligations.reduce((sum,o)=>sum+o.total,0); const paidTotal=payments.reduce((sum,p)=>sum+Number(p.amount||0),0);
   const tx=[...visibleOrders.map(o=>({type:'pedido',id:o.id,number:o.orderNumber,date:o.createdAt,status:o.status,total:Number(o.total||0),source:o.source==='admin_generated'?'Orden interna':'Pedido WEB'})),...visibleSales.map(s=>({type:'venta',id:s.id,number:s.orderNumber,date:s.notifiedAt||s.createdAt,status:s.status||'Vendida',total:Number(s.total||0),source:'Historial de ventas'}))];
   const uniqueTx=new Map(); tx.forEach(row=>uniqueTx.set(`${row.type}:${row.id}`,row));
@@ -5292,6 +5339,27 @@ app.put('/api/admin/clientes/:id', requireOrdersAccess, (req, res) => {
 });
 
 
+
+app.delete('/api/admin/clientes/:id', requireAdmin, (req, res) => {
+  const customers = readCustomers();
+  const index = customers.findIndex(item => String(item.id) === String(req.params.id));
+  if (index < 0) return res.status(404).json({ error: 'Cliente no encontrado.' });
+  const customer = customers[index];
+  const identity = customer.identity || customerIdentity(customer);
+  const orders = readOrders().filter(o => customerIdentity(o.customer || {}) === identity);
+  const sales = readSales().filter(s => customerIdentity(s.customer || {}) === identity);
+  const payments = readPayments().filter(p => {
+    const sale = sales.some(s => String(s.id) === String(p.saleId));
+    const order = orders.some(o => String(o.id) === String(p.orderId));
+    return sale || order;
+  });
+  if (orders.length || sales.length || payments.length) {
+    return res.status(409).json({ error: 'No se puede eliminar este cliente porque ya tiene historial de pedidos, ventas o pagos. Puedes corregir sus datos desde “Editar ficha” para conservar la trazabilidad.' });
+  }
+  writeCustomers(customers.filter((_, i) => i !== index));
+  auditLog(req, 'Cliente eliminado', 'Clientes', { customerId: customer.id, identity });
+  return res.status(204).end();
+});
 
 app.get('/api/admin/dinero/resumen', requireOrdersAccess, (req, res) => {
   const session = getSession(req);
