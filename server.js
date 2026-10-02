@@ -2709,6 +2709,27 @@ function validateDeviceIdentifiersAcrossOrder(items) {
   }
 }
 
+function financialPurchaseCost(item, fallbackProduct) {
+  // Los alquileres NO representan una venta del producto: el ingreso del alquiler
+  // es la venta y no se descuenta el precio de compra del inventario.
+  if (String(item?.purchaseMode || 'purchase') !== 'purchase') return 0;
+
+  const snapshot = Number(item?.purchaseCost);
+  // Las órdenes nuevas marcan explícitamente que el costo quedó congelado al
+  // momento de la venta. Así, cambiar luego el inventario no altera el histórico.
+  if (item?.purchaseCostRecorded === true && Number.isFinite(snapshot) && snapshot >= 0) {
+    return snapshot;
+  }
+
+  // Compatibilidad con órdenes antiguas: si ya tenían un costo > 0, conservarlo.
+  if (Number.isFinite(snapshot) && snapshot > 0) return snapshot;
+
+  // Si la orden antigua no guardó el costo, usar el precio de compra actual del
+  // producto como respaldo para que esas ventas no aparezcan con costo $0.
+  const fallback = Number(fallbackProduct?.purchasePrice);
+  return Number.isFinite(fallback) && fallback >= 0 ? fallback : 0;
+}
+
 function validateOrder(input, options = {}) {
   const requireDeviceIdentifiers = options.requireDeviceIdentifiers === true;
   const customer = input?.customer || {};
@@ -2792,6 +2813,7 @@ function validateOrder(input, options = {}) {
       deviceIdentifiers,
       unitPrice: Math.round(price * 100) / 100,
       purchaseCost: purchaseMode === 'purchase' ? Math.round(Math.max(0, Number(product.purchasePrice) || 0) * 100) / 100 : 0,
+      purchaseCostRecorded: purchaseMode === 'purchase',
       subtotal: Math.round(price * quantity * durationMultiplier * 100) / 100
     });
   }
@@ -3799,7 +3821,7 @@ app.get('/api/admin/resumen-financiero', requireAdmin, (req, res) => {
     for (const item of Array.isArray(order.items) ? order.items : []) {
       if (item.purchaseMode !== 'purchase') continue;
       const fallbackProduct = productMap.get(String(item.productId || ''));
-      const purchaseCost = Number.isFinite(Number(item.purchaseCost)) ? Number(item.purchaseCost) : Number(fallbackProduct?.purchasePrice || 0);
+      const purchaseCost = financialPurchaseCost(item, fallbackProduct);
       purchases += Math.max(0, purchaseCost) * Math.max(0, Number(item.quantity || 0));
     }
     const sellerId = order.assignedSellerId || 'unassigned';
@@ -4039,7 +4061,7 @@ app.get('/api/admin/resumen-financiero/pdf', requireAdmin, (req, res) => {
     for (const item of Array.isArray(order.items) ? order.items : []) {
       if (item.purchaseMode !== 'purchase') continue;
       const fallback = productMap.get(String(item.productId || ''));
-      const cost = Number.isFinite(Number(item.purchaseCost)) ? Number(item.purchaseCost) : Number(fallback?.purchasePrice || 0);
+      const cost = financialPurchaseCost(item, fallback);
       purchases += Math.max(0,cost) * Math.max(0,Number(item.quantity || 0));
     }
     const sellerId=order.assignedSellerId || 'unassigned';
@@ -4618,6 +4640,7 @@ function buildEditedOrderItems(requestedItems, products) {
       deviceIdentifiers,
       unitPrice: Math.round(price * 100) / 100,
       purchaseCost: purchaseMode === 'purchase' ? Math.round(Math.max(0, Number(product.purchasePrice) || 0) * 100) / 100 : 0,
+      purchaseCostRecorded: purchaseMode === 'purchase',
       subtotal: Math.round(price * quantity * durationMultiplier * 100) / 100
     });
   }
