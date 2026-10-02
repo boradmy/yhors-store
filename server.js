@@ -1062,10 +1062,25 @@ function productSeoBody(product) {
   const rental = product.category === 'cosplay' && Number.isFinite(Number(product.rentalPrice)) ? `<p class="price-secondary">Alquiler: $${Number(product.rentalPrice).toFixed(2)}</p>` : '';
   return `<main class="product-detail-page"><div class="breadcrumbs"><a href="/categoria/${encodeURIComponent(product.category)}">${esc(category)}</a><span>/</span><strong>${esc(product.name)}</strong></div><section class="detail-layout"><div class="detail-gallery"><div class="detail-main-image"><img src="${esc(absoluteImage(image))}" alt="${esc(product.name)}" width="800" height="800"></div>${images.length > 1 ? `<div class="thumbnail-row">${images.slice(1,4).map((url,i)=>`<img src="${esc(absoluteImage(url))}" alt="${esc(product.name)} - imagen ${i+2}" width="200" height="200">`).join('')}</div>`:''}</div><div class="detail-copy"><span class="eyebrow">${esc(category)}</span><h1>${esc(product.name)}</h1><div class="detail-price">$${price.toFixed(2)}</div>${rental}<div class="detail-sku"><span>SKU: <strong>${esc(product.sku || '—')}</strong></span></div><div class="detail-divider"></div><h2>Descripción</h2><div class="detail-description">${renderDescriptionHtml(product.description)}</div><div class="detail-buy"><a class="button" href="/categoria/${encodeURIComponent(product.category)}">Ver más productos <span>→</span></a></div></div></section></main>`;
 }
-function categorySeoBody(categoryKey, products) {
+function categorySeoBody(categoryKey, products, storefront = {}) {
   const label = CATEGORY_LABELS[categoryKey];
   const list = products.filter(p => categoryKey === 'principal' || p.category === categoryKey);
-  return `<main><section class="section category-page-section"><div class="category-intro"><div><span class="eyebrow">YHORS-STORE</span><h1>${esc(label)}</h1></div><p>${esc(CATEGORY_DESCRIPTIONS[categoryKey])}</p></div><section class="section"><div class="products">${list.map(p => `<article class="product"><a class="product-open" href="${esc(productUrl(p))}"><div class="product-image"><img src="${esc(absoluteImage((p.images||[])[0]||p.image))}" alt="${esc(p.name)}" width="800" height="800"></div><div class="product-info"><span class="product-category">${esc(CATEGORY_LABELS[p.category] || p.category)}</span><h2>${esc(p.name)}</h2><p>${esc(seoDescription(p.description, p.name))}</p><span class="detail-link">Ver detalles →</span></div></a></article>`).join('')}</div></section></section></main>`;
+  const configured = Array.isArray(storefront.categorySectionOrder?.[categoryKey]) ? storefront.categorySectionOrder[categoryKey] : [];
+  const groups = [];
+  const map = new Map();
+  list.forEach(product => {
+    const key = String(product.productType || 'Otros productos').trim() || 'Otros productos';
+    if (!map.has(key)) { const group = { key, items: [] }; map.set(key, group); groups.push(group); }
+    map.get(key).items.push(product);
+  });
+  const rank = new Map(configured.map((key, index) => [key, index]));
+  groups.sort((a,b) => {
+    const ar = rank.has(a.key) ? rank.get(a.key) : Number.MAX_SAFE_INTEGER;
+    const br = rank.has(b.key) ? rank.get(b.key) : Number.MAX_SAFE_INTEGER;
+    return ar === br ? 0 : ar - br;
+  });
+  const grouped = groups.map(group => `<section class="product-type-group"><div class="product-type-divider"><h2>${esc(group.key)}</h2><span class="product-type-rule"></span></div><div class="products product-type-grid">${group.items.map(p => `<article class="product"><a class="product-open" href="${esc(productUrl(p))}"><div class="product-image"><img src="${esc(absoluteImage((p.images||[])[0]||p.image))}" alt="${esc(p.name)}" width="800" height="800"></div><div class="product-info"><span class="product-category">${esc(CATEGORY_LABELS[p.category] || p.category)}</span><h2>${esc(p.name)}</h2><p>${esc(seoDescription(p.description, p.name))}</p><span class="detail-link">Ver detalles →</span></div></a></article>`).join('')}</div></section>`).join('');
+  return `<main><section class="section category-page-section"><div class="category-intro"><div><span class="eyebrow">YHORS-STORE</span><h1>${esc(label)}</h1></div><p>${esc(CATEGORY_DESCRIPTIONS[categoryKey])}</p></div><section class="section">${grouped || '<div class="products"></div>'}</section></section></main>`;
 }
 function homeSeoBody(products) {
   const featured = products.filter(p => p.featured).slice(0, 12);
@@ -2039,7 +2054,7 @@ app.get('/categoria/:category', (req, res, next) => {
     { '@type':'ListItem', position:2, name:label, item:canonical }
   ]};
   const listJson = { '@context':'https://schema.org', '@type':'ItemList', name:`Productos ${label} | YHORS-STORE`, itemListElement:itemList };
-  return res.send(layout({ title:`${label} | YHORS-STORE`, description, canonical, json:[breadcrumb,listJson], body:categorySeoBody(key,products) }));
+  return res.send(layout({ title:`${label} | YHORS-STORE`, description, canonical, json:[breadcrumb,listJson], body:categorySeoBody(key,products,readStorefront()) }));
 });
 
 app.get('/categoria/todo', (_, res) => res.redirect(301, '/categoria/principal'));
@@ -2450,12 +2465,19 @@ function readProducts() {
 function readStorefront() {
   try {
     const parsed = JSON.parse(fs.readFileSync(STOREFRONT_FILE, 'utf8'));
+    const categorySectionOrder = parsed.categorySectionOrder && typeof parsed.categorySectionOrder === 'object' ? parsed.categorySectionOrder : {};
+    const normalizedOrder = {};
+    Object.entries(categorySectionOrder).forEach(([category, values]) => {
+      if (!Array.isArray(values)) return;
+      normalizedOrder[category] = [...new Set(values.map(value => String(value || '').trim()).filter(Boolean))].slice(0, 100);
+    });
     return {
       heroProductIds: Array.isArray(parsed.heroProductIds) ? parsed.heroProductIds.filter(Boolean).slice(0, 8) : [],
-      featuredProductIds: Array.isArray(parsed.featuredProductIds) ? parsed.featuredProductIds.filter(Boolean).slice(0, 12) : []
+      featuredProductIds: Array.isArray(parsed.featuredProductIds) ? parsed.featuredProductIds.filter(Boolean).slice(0, 12) : [],
+      categorySectionOrder: normalizedOrder
     };
   } catch {
-    return { heroProductIds: [], featuredProductIds: [] };
+    return { heroProductIds: [], featuredProductIds: [], categorySectionOrder: {} };
   }
 }
 
@@ -5975,7 +5997,14 @@ app.put('/api/admin/storefront', requireAdmin, (req, res) => {
   const heroProductIds = Array.isArray(req.body?.heroProductIds) ? req.body.heroProductIds.filter(id => ids.has(id)).slice(0, 8) : [];
   const featuredProductIds = Array.isArray(req.body?.featuredProductIds) ? req.body.featuredProductIds.filter(id => ids.has(id)).slice(0, 12) : [];
   const heroOrders = (req.body && req.body.heroOrders && typeof req.body.heroOrders === 'object') ? req.body.heroOrders : {};
-  const settings = { heroProductIds, featuredProductIds };
+  const incomingCategoryOrder = req.body?.categorySectionOrder && typeof req.body.categorySectionOrder === 'object' ? req.body.categorySectionOrder : {};
+  const currentCategoryOrder = readStorefront().categorySectionOrder || {};
+  const categorySectionOrder = { ...currentCategoryOrder };
+  Object.entries(incomingCategoryOrder).forEach(([category, values]) => {
+    if (!Array.isArray(values)) return;
+    categorySectionOrder[category] = [...new Set(values.map(value => String(value || '').trim()).filter(Boolean))].slice(0, 100);
+  });
+  const settings = { heroProductIds, featuredProductIds, categorySectionOrder };
   writeStorefront(settings);
   const heroSet = new Set(heroProductIds);
   const featuredSet = new Set(featuredProductIds);

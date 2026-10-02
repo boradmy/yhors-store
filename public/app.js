@@ -522,6 +522,7 @@ function productCard(product) {
 function renderProductsInto(area, products, onOpen, onAdd, options = {}) {
   const groupByType = options.groupByType === true;
   const groupLabel = value => String(value || 'Otros productos').trim() || 'Otros productos';
+  const groupOrder = Array.isArray(options.groupOrder) ? options.groupOrder : [];
   const groupedMarkup = () => {
     const groups = [];
     const groupMap = new Map();
@@ -534,6 +535,14 @@ function renderProductsInto(area, products, onOpen, onAdd, options = {}) {
       }
       groupMap.get(key).items.push(product);
     });
+    if (groupOrder.length) {
+      const rank = new Map(groupOrder.map((key, index) => [String(key), index]));
+      groups.sort((a, b) => {
+        const ar = rank.has(a.key) ? rank.get(a.key) : Number.MAX_SAFE_INTEGER;
+        const br = rank.has(b.key) ? rank.get(b.key) : Number.MAX_SAFE_INTEGER;
+        return ar === br ? 0 : ar - br;
+      });
+    }
     return groups.map(group => `
       <section class="product-type-group" data-product-type-group="${escapeHTML(group.key)}">
         <div class="product-type-divider" aria-label="${escapeHTML(group.key)}">
@@ -864,7 +873,7 @@ async function loadStoreData() {
   }
   return {
     products: productsResult.value,
-    storefront: results[1].status === 'fulfilled' && results[1].value ? results[1].value : { heroProductIds: [], featuredProductIds: [], whatsappNumber: '' },
+    storefront: results[1].status === 'fulfilled' && results[1].value ? results[1].value : { heroProductIds: [], featuredProductIds: [], categorySectionOrder: {}, whatsappNumber: '' },
     classifications: results[2].status === 'fulfilled' && results[2].value ? results[2].value : { brands: {}, productTypes: {} }
   };
 }
@@ -1040,7 +1049,7 @@ async function renderHome() {
 async function renderCategoryPage(categoryKey) {
   const label = categories[categoryKey] || 'YHORS';
   updateSeoMeta({ title: `${label} | YHORS-STORE`, description: categoryDescriptions[categoryKey] || 'Productos seleccionados en YHORS-STORE.', canonical: `${location.origin}/categoria/${encodeURIComponent(categoryKey === 'all' ? 'principal' : categoryKey)}` });
-  let products = [], storefront = { whatsappNumber: '' }, classifications = {};
+  let products = [], storefront = { whatsappNumber: '', categorySectionOrder: {} }, classifications = {};
   try { ({ products, storefront, classifications } = await loadStoreData()); }
   catch (error) {
     console.warn('[YHORS SEO] Se conserva el HTML SSR de categoría:', error?.message || error);
@@ -1050,7 +1059,7 @@ async function renderCategoryPage(categoryKey) {
   const slides = categoryProducts.slice(0, 4).map(product => ({ ...product, image: productImages(product)[0], heroTitle: product.name, heroDescription: product.description }));
   app.innerHTML = `${renderHeader(categoryKey)}<main>${heroMarkup(slides, true, categoryKey)}<section class="section category-page-section" id="productos-categoria"><div class="category-intro"><div><span class="eyebrow">Colección independiente</span><h1>${escapeHTML(categories[categoryKey])}</h1></div><p>${escapeHTML(categoryDescriptions[categoryKey])}</p></div><div class="catalog-layout">${catalogFilters(classifications, categoryKey, { category: categoryKey })}<div class="catalog-results"><div class="results-count" id="resultsCount"></div><div class="products product-type-container" id="categoryProducts"></div></div></div></section></main>${renderFooter()}${cartMarkup()}`;
   wireCategoryNavigation(); wireMobileMenu(); wireSearch(); wireHero(slides); markPageEnter(); const cart = wireCart(products, storefront); const area = document.querySelector('#categoryProducts');
-  const renderCategoryResults = (items) => { renderProductsInto(area, items, id => openProduct(id, products), (product, button) => cart.addToCart(product, button), { groupByType: true }); const count = document.querySelector('#resultsCount'); if (count) count.textContent = `${items.length} producto${items.length === 1 ? '' : 's'} en ${escapeHTML(categories[categoryKey])}`; if (!items.length) area.innerHTML = '<div class="empty">No hay productos que coincidan con estos filtros.</div>'; };
+  const renderCategoryResults = (items) => { renderProductsInto(area, items, id => openProduct(id, products), (product, button) => cart.addToCart(product, button), { groupByType: true, groupOrder: storefront.categorySectionOrder?.[categoryKey] || [] }); const count = document.querySelector('#resultsCount'); if (count) count.textContent = `${items.length} producto${items.length === 1 ? '' : 's'} en ${escapeHTML(categories[categoryKey])}`; if (!items.length) area.innerHTML = '<div class="empty">No hay productos que coincidan con estos filtros.</div>'; };
   wireCatalogFilters(categoryProducts, classifications, { category: categoryKey }, renderCategoryResults);
 }
 
@@ -1230,6 +1239,35 @@ function selectionPanel(products, settings) {
       </div>
     </div>
     <div class="form-actions"><button class="button" id="saveSelections">Guardar portada y destacados</button><span class="message" id="selectionMessage"></span></div>
+  </section>`;
+}
+
+
+function categorySectionOrderPanel(products, settings) {
+  const configured = settings.categorySectionOrder && typeof settings.categorySectionOrder === 'object' ? settings.categorySectionOrder : {};
+  const categoryGroups = Object.entries(categories)
+    .filter(([key]) => key !== 'all')
+    .map(([key, label]) => {
+      const types = [...new Set(products.filter(p => p.category === key).map(p => String(p.productType || 'Otros productos').trim() || 'Otros productos'))];
+      const saved = Array.isArray(configured[key]) ? configured[key] : [];
+      const rank = new Map(saved.map((value, index) => [String(value), index]));
+      types.sort((a, b) => {
+        const ar = rank.has(a) ? rank.get(a) : Number.MAX_SAFE_INTEGER;
+        const br = rank.has(b) ? rank.get(b) : Number.MAX_SAFE_INTEGER;
+        return ar === br ? 0 : ar - br;
+      });
+      if (!types.length) return '';
+      return `<div class="category-section-order-card" data-category-order-card="${escapeHTML(key)}">
+        <div class="category-section-order-head"><div><span class="eyebrow">${escapeHTML(label)}</span><h3>Orden de separaciones</h3></div><small>Arrastra para ordenar</small></div>
+        <div class="category-section-order-list" data-category-section-list="${escapeHTML(key)}">
+          ${types.map((type, index) => `<div class="category-section-order-row" draggable="true" data-section-type="${escapeHTML(type)}"><span class="category-section-drag">↕</span><span class="category-section-number">${index + 1}</span><strong>${escapeHTML(type)}</strong><span class="category-section-arrow">↕</span></div>`).join('')}
+        </div>
+      </div>`;
+    }).join('');
+  return `<section class="admin-panel category-section-order-panel" id="categorySectionOrderPanel">
+    <div class="section-heading"><div><span class="eyebrow">Catálogo público</span><h2>Orden de separaciones por categoría</h2></div><p>Define cómo aparecerán las separaciones de productos en Tech, Cosplay, Pets, Elegant y las demás categorías. Los productos se mantienen dentro de su separación.</p></div>
+    <div class="category-section-order-grid">${categoryGroups || '<div class="empty">Todavía no hay tipos de producto para ordenar.</div>'}</div>
+    <div class="form-actions"><button class="button" id="saveCategorySectionOrder">Guardar orden de categorías</button><span class="message" id="categorySectionOrderMessage"></span></div>
   </section>`;
 }
 
@@ -4944,7 +4982,7 @@ async function renderAdmin() {
   const session = await request('/api/admin/session').catch(() => ({ authenticated: false })); if (!session.authenticated) return renderLogin(); if (isSellerRole(session.role) || session.role === 'store_manager') return renderAdminOrders();
   let products = await request('/api/admin/products').catch(() => []); let classifications = await request('/api/admin/classifications').catch(() => ({ brands: {}, productTypes: {} })); let settings = await request('/api/admin/storefront').catch(() => ({ heroProductIds: [], featuredProductIds: [] })); let editing = null;
   document.documentElement.style.minHeight='0'; document.body.style.minHeight='0'; document.body.style.height='auto'; document.body.style.overflowY='auto'; app.style.minHeight='0'; app.style.height='auto';
-  app.innerHTML = `<main class="admin-shell admin-web-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand admin-brand" href="${ADMIN_PATH}/inteligente" data-smooth-route aria-label="YHORS · Panel Administrativo · Ir a YHORS Inteligente"><span class="admin-brand-mark" aria-hidden="true"><img src="/favicon.svg" alt=""></span><span class="admin-brand-word">YHORS</span><span class="admin-brand-divider" aria-hidden="true"></span><small>Panel Administrativo</small></a><h1 class="admin-title">Administración · Página Web</h1><p class="admin-subtitle">Gestiona la portada y productos destacados de la página pública de YHORS.</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>${adminSectionNav(session, 'web')}<div id="selectionPanelMount">${selectionPanel(products, settings)}</div></div></main>`;
+  app.innerHTML = `<main class="admin-shell admin-web-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand admin-brand" href="${ADMIN_PATH}/inteligente" data-smooth-route aria-label="YHORS · Panel Administrativo · Ir a YHORS Inteligente"><span class="admin-brand-mark" aria-hidden="true"><img src="/favicon.svg" alt=""></span><span class="admin-brand-word">YHORS</span><span class="admin-brand-divider" aria-hidden="true"></span><small>Panel Administrativo</small></a><h1 class="admin-title">Administración · Página Web</h1><p class="admin-subtitle">Gestiona la portada y productos destacados de la página pública de YHORS.</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>${adminSectionNav(session, 'web')}<div id="selectionPanelMount">${selectionPanel(products, settings)}</div><div id="categorySectionOrderMount">${categorySectionOrderPanel(products, settings)}</div></div></main>`;
   const formArea = document.querySelector('#formArea'); const listArea = document.querySelector('#adminProducts');
   function drawList() {
     const categoryKeys = Object.keys(categories).filter(k => k !== 'all');
@@ -4971,6 +5009,43 @@ async function renderAdmin() {
   document.querySelector('#inventoryCategoryFilter')?.addEventListener('change', drawList);
   document.querySelector('#clearInventorySearch')?.addEventListener('click', () => { const input = document.querySelector('#inventorySearch'); if (!input) return; input.value = ''; input.focus(); drawList(); });
   function drawSelectionPanel() { const mount = document.querySelector('#selectionPanelMount'); if (!mount) return; mount.innerHTML = selectionPanel(products, settings); bindSelectionEvents(); }
+  function drawCategorySectionOrderPanel() { const mount = document.querySelector('#categorySectionOrderMount'); if (!mount) return; mount.innerHTML = categorySectionOrderPanel(products, settings); bindCategorySectionOrderEvents(); }
+  function bindCategorySectionOrderEvents() {
+    const panel = document.querySelector('#categorySectionOrderPanel');
+    if (!panel) return;
+    panel.querySelectorAll('[data-category-section-list]').forEach(list => {
+      let dragged = null;
+      const renumber = () => [...list.querySelectorAll('.category-section-order-row')].forEach((row, index) => { const badge = row.querySelector('.category-section-number'); if (badge) badge.textContent = String(index + 1); });
+      list.querySelectorAll('.category-section-order-row').forEach(row => {
+        row.addEventListener('dragstart', event => { dragged = row; row.classList.add('dragging'); event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', row.dataset.sectionType || ''); });
+        row.addEventListener('dragend', () => { dragged = null; row.classList.remove('dragging'); list.querySelectorAll('.drag-over').forEach(item => item.classList.remove('drag-over')); renumber(); });
+        row.addEventListener('dragover', event => {
+          if (!dragged || dragged === row) return;
+          event.preventDefault();
+          const rect = row.getBoundingClientRect();
+          const before = event.clientY < rect.top + rect.height / 2;
+          list.querySelectorAll('.drag-over').forEach(item => item.classList.remove('drag-over'));
+          row.classList.add('drag-over');
+          if (before) list.insertBefore(dragged, row); else list.insertBefore(dragged, row.nextSibling);
+          renumber();
+        });
+        row.addEventListener('drop', event => { if (!dragged) return; event.preventDefault(); row.classList.remove('drag-over'); renumber(); });
+      });
+      renumber();
+    });
+    panel.querySelector('#saveCategorySectionOrder')?.addEventListener('click', async () => {
+      const message = panel.querySelector('#categorySectionOrderMessage');
+      const categorySectionOrder = {};
+      panel.querySelectorAll('[data-category-section-list]').forEach(list => { categorySectionOrder[list.dataset.categorySectionList] = [...list.querySelectorAll('.category-section-order-row')].map(row => row.dataset.sectionType).filter(Boolean); });
+      const confirmed = await showYhorsConfirm('¿Guardar el orden de las separaciones?', 'Las categorías públicas mostrarán sus bloques de productos en el nuevo orden.');
+      if (!confirmed) return;
+      try {
+        const response = await request('/api/admin/storefront', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ categorySectionOrder }) });
+        settings = { ...settings, ...response, categorySectionOrder: response.categorySectionOrder || categorySectionOrder };
+        showSaveSuccess(message, 'Orden de separaciones guardado correctamente.');
+      } catch (e) { message.className = 'message error'; message.textContent = e.message; }
+    });
+  }
   function bindSelectionEvents() {
     const panel = document.querySelector('.selection-panel');
     if (!panel) return;
@@ -5132,7 +5207,7 @@ async function renderAdmin() {
       if (!confirmed) return;
       try {
         await request('/api/admin/storefront', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ heroProductIds, featuredProductIds }) });
-        settings = { heroProductIds, featuredProductIds };
+        settings = { ...settings, heroProductIds, featuredProductIds };
         products = products.map(p => ({
           ...p,
           hero: heroProductIds.includes(p.id),
@@ -5143,6 +5218,7 @@ async function renderAdmin() {
       } catch (e) { message.className = 'message error'; message.textContent = e.message; }
     });
   }
+  bindCategorySectionOrderEvents();
   function renderClassifications() {
     const render = (target, values, type) => {
       const container = document.querySelector(target);
