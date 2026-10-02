@@ -779,7 +779,7 @@ function customerFinancialSummary(customer, orders = [], sales = [], payments = 
   const saleByOrder = new Map(customerSales.filter(s => s.orderId).map(s => [String(s.orderId), s]));
   const obligations = [
     ...customerSales.map(s => ({ key:`venta:${s.id}`, saleId:String(s.id), orderId:s.orderId ? String(s.orderId) : null, total:Number(s.total || 0), date:s.notifiedAt || s.createdAt })),
-    ...customerOrders.filter(o => !saleByOrder.has(String(o.id))).map(o => ({ key:`orden:${o.id}`, saleId:null, orderId:String(o.id), total:Number(o.total || 0), date:o.createdAt }))
+    ...customerOrders.filter(o => !saleByOrder.has(String(o.id)) && String(o.status || '').toLowerCase() !== 'cancelado').map(o => ({ key:`orden:${o.id}`, saleId:null, orderId:String(o.id), total:Number(o.total || 0), date:o.createdAt }))
   ];
   const allPayments = Array.isArray(payments) ? payments : readPayments();
   const saleIds = new Set(customerSales.map(s => String(s.id)));
@@ -2852,6 +2852,11 @@ function validateOrder(input, options = {}) {
     const purchaseMode = requested.purchaseMode === 'rental' ? 'rental' : 'purchase';
     const rentalDays = purchaseMode === 'rental' ? Number.parseInt(requested.rentalDays, 10) : null;
 
+    // Regla YHORS: el alquiler existe únicamente para COSPLAY y solo cuando
+    // el producto fue marcado explícitamente como disponible para alquiler.
+    if (purchaseMode === 'rental' && (String(product.category || '').toLowerCase() !== 'cosplay' || product.isRental !== true)) {
+      return { error: `El producto “${product.name}” no está disponible para alquiler.` };
+    }
     if (purchaseMode === 'rental' && (!Number.isInteger(rentalDays) || rentalDays < 1 || rentalDays > 10)) {
       return { error: `Selecciona entre 1 y 10 días de alquiler para “${product.name}”.` };
     }
@@ -4701,6 +4706,9 @@ function buildEditedOrderItems(requestedItems, products) {
 
     const purchaseMode = requested?.purchaseMode === 'rental' ? 'rental' : 'purchase';
     const rentalDays = purchaseMode === 'rental' ? Number.parseInt(requested?.rentalDays, 10) : null;
+    if (purchaseMode === 'rental' && (String(product.category || '').toLowerCase() !== 'cosplay' || product.isRental !== true)) {
+      throw new Error(`El producto “${product.name}” no está disponible para alquiler.`);
+    }
     if (purchaseMode === 'rental' && (!Number.isInteger(rentalDays) || rentalDays < 1 || rentalDays > 10)) {
       throw new Error(`El alquiler de “${product.name}” debe tener entre 1 y 10 días.`);
     }
@@ -5387,6 +5395,7 @@ app.get('/api/admin/clientes/:id', requireOrdersAccess, (req, res) => {
   }
   for (const order of visibleOrders) {
     if (saleByOrder.has(String(order.id))) continue;
+    if (String(order.status || '').toLowerCase() === 'cancelado') continue;
     const detail = Array.isArray(order.items) && order.items.length ? order.items.map(i => `${Number(i.quantity || 1)}× ${i.name || 'Producto'}`).join(' · ') : 'Orden sin productos';
     obligations.push({ id:`orden:${order.id}`, sourceType:'orden', sourceId:order.id, orderId:order.id, number:order.orderNumber || '—', date:order.createdAt, total:Number(order.total || 0), detail, status:order.status || 'Pendiente' });
   }
@@ -5399,7 +5408,30 @@ app.get('/api/admin/clientes/:id', requireOrdersAccess, (req, res) => {
   payments.forEach(p => { const obligation=resolvePaymentObligation(p); if(obligation) paidByKey.set(obligation.id,(paidByKey.get(obligation.id)||0)+Number(p.amount||0)); });
   const ledger=[];
   obligations.forEach(o=>{const paid=Math.round((paidByKey.get(o.id)||0)*100)/100; ledger.push({id:o.id,kind:'cargo',type:o.sourceType,number:o.number,date:o.date,timestamp:o.date,source:o.detail,detail:`${o.sourceType==='venta'?'Compra':'Orden'} · ${o.status}`,status:o.status,total:o.total,debit:o.total,credit:0,paid,balance:Math.max(0,Math.round((o.total-paid)*100)/100),orderId:o.orderId,sourceId:o.sourceId,sourceType:o.sourceType});});
-  payments.forEach(p=>{const obligation=resolvePaymentObligation(p); ledger.push({id:`payment:${p.id}`,kind:'abono',type:'pago',number:p.saleNumber||obligation?.number||'—',date:p.date||p.createdAt,timestamp:p.createdAt||p.date,source:`${paymentMethodLabel(p.method)}${p.bank?` · ${p.bank}`:''}${p.transactionNumber?` · TRX ${p.transactionNumber}`:''}`,detail:p.note||((p.sourceType==='cliente')?'Saldo a favor / anticipo':'Abono registrado'),status:'Abono',total:Number(p.amount||0),debit:0,credit:Number(p.amount||0),payment:p,orderId:p.orderId||obligation?.orderId||null,sourceId:p.saleId||p.orderId||null,sourceType:p.saleId?'venta':p.orderId?'orden':'cliente',paymentDate:p.date||null});});
+  payments.forEach(p=>{
+    const obligation=resolvePaymentObligation(p);
+    const isRefund = String(p.sourceType || '').toLowerCase() === 'refund';
+    const amount = Math.abs(Number(p.amount || 0));
+    ledger.push({
+      id:`payment:${p.id}`,
+      kind:isRefund ? 'devolucion' : 'abono',
+      type:isRefund ? 'devolucion' : 'pago',
+      number:p.saleNumber||obligation?.number||'—',
+      date:p.date||p.createdAt,
+      timestamp:p.createdAt||p.date,
+      source:`${paymentMethodLabel(p.method)}${p.bank?` · ${p.bank}`:''}${p.transactionNumber?` · TRX ${p.transactionNumber}`:''}`,
+      detail:isRefund ? (p.note || 'Devolución de dinero') : (p.note||((p.sourceType==='cliente')?'Saldo a favor / anticipo':'Abono registrado')),
+      status:isRefund ? 'Devolución' : 'Abono',
+      total:amount,
+      debit:isRefund ? amount : 0,
+      credit:isRefund ? 0 : amount,
+      payment:p,
+      orderId:p.orderId||obligation?.orderId||null,
+      sourceId:p.saleId||p.orderId||null,
+      sourceType:isRefund ? 'refund' : (p.saleId?'venta':p.orderId?'orden':'cliente'),
+      paymentDate:p.date||null
+    });
+  });
   // La cronología se ordena por fecha + hora real de creación del movimiento.
   // El saldo puede quedar negativo: eso representa dinero a favor del cliente.
   ledger.sort((a,b)=>new Date(a.timestamp||a.date||0)-new Date(b.timestamp||b.date||0));
@@ -5657,6 +5689,134 @@ app.put('/api/admin/dinero/pagos/:id', requireAdmin, (req,res) => {
   const customer = buildCustomerDirectory().find(c => (current.customerId && String(c.id) === String(current.customerId)) || paymentBelongsToCustomer(current, c));
   if(!source && !customer)return res.status(404).json({error:'No se encontró la venta, orden o cliente asociado al ingreso.'});
   const body=req.body||{}; const method=cleanText(body.method??current.method,20); if(!['cash','transfer','card'].includes(method))return res.status(400).json({error:'Forma de pago no válida.'}); const amount=normalizeMoneyAmount(body.amount??current.amount); if(amount===null)return res.status(400).json({error:'El valor no es válido.'}); const date=/^\d{4}-\d{2}-\d{2}$/.test(String(body.date??current.date))?String(body.date??current.date):current.date; const bank=cleanText(body.bank??current.bank,100); if(!bank)return res.status(400).json({error:'Indica el banco o caja.'}); const transactionNumber=cleanText(body.transactionNumber??current.transactionNumber,120); const note=cleanText(body.note??current.note,500); if((method==='transfer'||method==='card')&&!transactionNumber)return res.status(400).json({error:'El número de transacción es obligatorio.'}); const otherPaid=payments.filter((p,i)=>i!==index&&String(p.saleId||'')===String(current.saleId||'')&&String(p.orderId||'')===String(current.orderId||'')).reduce((sum,p)=>sum+Number(p.amount||0),0); if(source && amount+otherPaid>Number(source.total||0)+0.001)return res.status(400).json({error:'El nuevo valor supera el total pendiente de la operación.'}); const updated={...current,method,amount,date,bank,batch:cleanText(body.batch??current.batch,100)||null,transactionNumber:transactionNumber||null,note:note||'',updatedAt:new Date().toISOString(),editedBy:getSession(req)?.accountId||null}; payments[index]=updated; writePayments(payments); const totalPaid=otherPaid+amount; auditLog(req,'Pago actualizado','Dinero',{paymentId:updated.id,before:auditValue(current),after:auditValue(updated)}); return res.json({...decoratePayment(updated,sales,orders),paid:totalPaid,balance:source?Math.max(0,Number(source.total||0)-totalPaid):0,status:source?(totalPaid>=Number(source.total||0)-0.001?'PAGADO':totalPaid>0?'ABONO':'PENDIENTE'):'A FAVOR'});
+});
+
+app.post('/api/admin/dinero/devoluciones-orden', requireAdmin, (req, res) => {
+  const orderId = cleanText(req.body?.orderId, 120);
+  const order = readOrders().find(item => String(item.id) === String(orderId));
+  if (!order) return res.status(404).json({ error: 'Orden no encontrada.' });
+  if (String(order.status || '').toLowerCase() !== 'cancelado') return res.status(400).json({ error: 'La orden debe estar cancelada para realizar una devolución.' });
+  const hasRental = (order.items || []).some(item => String(item.purchaseMode || '').toLowerCase() === 'rental');
+  if (!hasRental) return res.status(400).json({ error: 'Esta devolución está disponible para órdenes con alquiler.' });
+
+  const payments = readPayments();
+  const originals = payments.filter(p =>
+    String(p.orderId || '') === String(order.id) &&
+    String(p.sourceType || '').toLowerCase() !== 'refund' &&
+    Number(p.amount || 0) > 0
+  );
+  if (!originals.length) return res.status(400).json({ error: 'Esta orden no tiene dinero ingresado para devolver.' });
+
+  const refundedByPayment = new Map();
+  payments.filter(p => String(p.sourceType || '').toLowerCase() === 'refund' && p.refundOfPaymentId)
+    .forEach(p => refundedByPayment.set(String(p.refundOfPaymentId), (refundedByPayment.get(String(p.refundOfPaymentId)) || 0) + Math.abs(Number(p.amount || 0))));
+
+  const now = new Date().toISOString();
+  const refunds = [];
+  for (const original of originals) {
+    const originalAmount = Math.abs(Number(original.amount || 0));
+    const already = refundedByPayment.get(String(original.id)) || 0;
+    const remaining = Math.round((originalAmount - already) * 100) / 100;
+    if (remaining <= 0.001) continue;
+    refunds.push({
+      id: crypto.randomUUID(),
+      sourceType: 'refund',
+      refundOfPaymentId: original.id,
+      orderId: original.orderId || order.id,
+      saleId: original.saleId || null,
+      saleNumber: original.saleNumber || order.orderNumber || null,
+      customerId: original.customerId || order.customerId || order.customer?.id || null,
+      customerName: original.customerName || order.customer?.name || '',
+      customerCedula: original.customerCedula || order.customer?.cedula || '',
+      customerEmail: original.customerEmail || order.customer?.email || '',
+      customerPhone: original.customerPhone || order.customer?.phone || '',
+      customerIdentity: original.customerIdentity || customerIdentity(order.customer || {}),
+      sellerId: original.sellerId || order.assignedSellerId || null,
+      sellerName: original.sellerName || order.assignedSellerName || '',
+      method: original.method || 'cash',
+      date: localDate(now),
+      batch: original.batch || null,
+      transactionNumber: original.transactionNumber || null,
+      bank: original.bank || '',
+      note: `Devolución administrativa del alquiler cancelado #${order.orderNumber}`,
+      amount: remaining,
+      totalSale: Number(original.totalSale || order.total || 0),
+      createdAt: now,
+      createdBy: getSession(req)?.accountId || null
+    });
+  }
+  if (!refunds.length) return res.status(409).json({ error: 'El dinero de esta orden ya fue devuelto.' });
+  payments.unshift(...refunds);
+  writePayments(payments);
+  const totalRefunded = Math.round(refunds.reduce((sum, item) => sum + Number(item.amount || 0), 0) * 100) / 100;
+  auditLog(req, 'Devolución de alquiler cancelado', 'Dinero', {
+    orderId: order.id,
+    orderNumber: order.orderNumber,
+    customerId: order.customerId || order.customer?.id || null,
+    customerName: order.customer?.name || '',
+    amount: totalRefunded,
+    refundIds: refunds.map(item => item.id)
+  });
+  return res.status(201).json({ amount: totalRefunded, refunds });
+});
+
+app.post('/api/admin/dinero/devoluciones', requireAdmin, (req, res) => {
+  const body = req.body || {};
+  const paymentId = cleanText(body.paymentId, 120);
+  const payments = readPayments();
+  const original = payments.find(p => String(p.id) === String(paymentId));
+  if (!original) return res.status(404).json({ error: 'Pago no encontrado.' });
+  if (String(original.sourceType || '').toLowerCase() === 'refund') return res.status(400).json({ error: 'Este movimiento ya es una devolución.' });
+
+  const amount = Math.round(Math.abs(Number(original.amount || 0)) * 100) / 100;
+  if (!Number.isFinite(amount) || amount <= 0) return res.status(400).json({ error: 'El pago no tiene un valor válido para devolver.' });
+
+  const alreadyRefunded = payments
+    .filter(p => String(p.sourceType || '').toLowerCase() === 'refund' && String(p.refundOfPaymentId || '') === String(original.id))
+    .reduce((sum, p) => sum + Math.abs(Number(p.amount || 0)), 0);
+  const remaining = Math.round((amount - alreadyRefunded) * 100) / 100;
+  if (remaining <= 0.001) return res.status(409).json({ error: 'Este pago ya fue devuelto.' });
+
+  const now = new Date().toISOString();
+  const refund = {
+    id: crypto.randomUUID(),
+    sourceType: 'refund',
+    refundOfPaymentId: original.id,
+    orderId: original.orderId || null,
+    saleId: original.saleId || null,
+    saleNumber: original.saleNumber || null,
+    customerId: original.customerId || null,
+    customerName: original.customerName || '',
+    customerCedula: original.customerCedula || '',
+    customerEmail: original.customerEmail || '',
+    customerPhone: original.customerPhone || '',
+    customerIdentity: original.customerIdentity || customerIdentity({ name: original.customerName || '', cedula: original.customerCedula || '', email: original.customerEmail || '', phone: original.customerPhone || '' }),
+    sellerId: original.sellerId || null,
+    sellerName: original.sellerName || '',
+    method: original.method || 'cash',
+    date: cleanText(body.date, 20) || localDate(now),
+    batch: original.batch || null,
+    transactionNumber: original.transactionNumber || null,
+    bank: original.bank || '',
+    note: cleanText(body.note, 500) || `Devolución administrativa de ${original.saleNumber || 'pago'} · ${original.customerName || 'cliente'}`,
+    amount: remaining,
+    totalSale: Number(original.totalSale || 0),
+    createdAt: now,
+    createdBy: getSession(req)?.accountId || null
+  };
+  payments.unshift(refund);
+  writePayments(payments);
+  auditLog(req, 'Devolución de dinero', 'Dinero', {
+    refundId: refund.id,
+    refundOfPaymentId: original.id,
+    customerId: refund.customerId,
+    customerName: refund.customerName,
+    amount: refund.amount,
+    method: refund.method,
+    orderId: refund.orderId,
+    saleId: refund.saleId
+  });
+  return res.status(201).json(refund);
 });
 
 app.delete('/api/admin/dinero/pagos/:id', requireAdmin, (req,res) => {

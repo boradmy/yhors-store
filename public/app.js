@@ -503,7 +503,7 @@ function productCard(product) {
   const meta = productMeta(product);
   const inStock = product.inStock === true;
   const availability = inStock ? `` : ``;
-  const isCosplayRental = product.category === 'cosplay' && product.rentalPrice !== null && product.rentalPrice !== undefined && product.rentalPrice !== '';
+  const isCosplayRental = product.category === 'cosplay' && product.isRental === true && Number.isFinite(Number(product.rentalPrice));
   const rental = isCosplayRental ? `<small class="price-secondary">Alquiler: ${money(product.rentalPrice)}</small>` : '';
   const action = isCosplayRental
     ? `<button class="add cosplay-options" data-open-option="${escapeHTML(product.id)}"><span>Ver opciones</span><span>→</span></button>`
@@ -1314,7 +1314,7 @@ function ordersListMarkup(orders = [], options = {}) {
       <select class="order-item-product" aria-label="Producto">${productOptionList(productId, selectedProduct ? null : item)}</select>
       <select class="order-item-mode" aria-label="Modalidad">
         <option value="purchase" ${mode === 'purchase' ? 'selected' : ''}>Compra</option>
-        <option value="rental" ${mode === 'rental' ? 'selected' : ''}>Alquiler</option>
+        ${(selectedProduct?.category === 'cosplay' && selectedProduct?.isRental === true) || mode === 'rental' ? `<option value="rental" ${mode === 'rental' ? 'selected' : ''}>Alquiler</option>` : ''}
       </select>
       <input class="order-item-quantity" type="number" min="1" max="99" step="1" value="${escapeHTML(item.quantity || 1)}" aria-label="Cantidad">
       <input class="order-item-days" type="number" min="1" max="10" step="1" value="${escapeHTML(days)}" aria-label="Días de alquiler" ${mode === 'rental' ? '' : 'disabled'}>
@@ -1329,6 +1329,8 @@ function ordersListMarkup(orders = [], options = {}) {
     const balance = Math.max(0, Number(payment.balance ?? Math.max(0, totalDue - paid)));
     const paymentState = balance <= 0.001 ? 'paid' : paid > 0 ? 'partial' : 'pending';
     const paymentLabel = paymentState === 'paid' ? 'PAGADO 100%' : paymentState === 'partial' ? 'ABONO · SALDO PENDIENTE' : 'PENDIENTE DE PAGO';
+    const isRentalOrder = (order.items || []).some(item => String(item.purchaseMode || '').toLowerCase() === 'rental');
+    const canRefundCancelledRental = role === 'admin' && String(order.status || '').toLowerCase() === 'cancelado' && isRentalOrder && paid > 0.001;
     const responsible = order.assignedSellerName || sellerName(order) || 'Sin vendedor';
     return `<article class="admin-order admin-order-compact${order.assignedSellerId ? '' : ' admin-order-unassigned'}" data-order-id="${escapeHTML(order.id)}" data-order-search="${escapeHTML(`${order.orderNumber} ${order.customer?.name || ''} ${order.customer?.cedula || ''} ${order.customer?.phone || ''} ${order.customer?.email || ''} ${(order.items || []).map(i => `${i.sku} ${i.name}`).join(' ')}`.toLowerCase())}" data-order-status="${escapeHTML(order.status || '')}" data-order-date="${escapeHTML(String(order.createdAt || '').slice(0,10))}">
     <button type="button" class="admin-order-summary" data-order-toggle="${escapeHTML(order.id)}" aria-expanded="false">
@@ -1379,6 +1381,7 @@ function ordersListMarkup(orders = [], options = {}) {
       <div class="admin-order-footer">
         <button class="button pdf-order small" type="button" data-order-pdf="${escapeHTML(order.id)}" title="Generar PDF de esta orden">PDF ORDEN</button>
         ${['Enviado','Entregado'].includes(String(order.status || '')) ? `<button class="button primary small" type="button" data-order-notify-sale="${escapeHTML(order.id)}">NOTIFICAR VENTA</button>` : ''}
+        ${canRefundCancelledRental ? `<button class="button secondary small" type="button" data-order-rental-refund="${escapeHTML(order.id)}">DEVOLVER DINERO</button>` : ''}
         <button class="button success small" type="button" data-order-note-save="${escapeHTML(order.id)}" disabled>Guardar cambios</button>
         <button class="button edit-note small" type="button" data-order-note-edit="${escapeHTML(order.id)}">Editar pedido</button>
         <button class="button order-edit-cancel small" type="button" data-order-edit-cancel="${escapeHTML(order.id)}" hidden>Cancelar</button>
@@ -1711,8 +1714,8 @@ async function renderAdminGenerateOrder() {
   document.querySelector('#openCustomerModal')?.addEventListener('click', openCustomerPicker);
   function drawLines() { document.querySelector('#generateOrderLines').innerHTML = generateOrderProductRows(lines); wireImageFallback(document.querySelector('#generateOrderLines')); updateTotals(); }
   function updateTotals() { const subtotal = lines.reduce((sum, line) => sum + Number(line.price || 0) * Number(line.quantity || 0) * (line.purchaseMode === 'rental' ? Math.max(1, Number(line.rentalDays || 1)) : 1), 0); const delivery = document.querySelector('input[name="generateDelivery"]:checked')?.value || 'office'; const shipping = delivery === 'local' ? 3 : delivery === 'courier' ? 5 : 0; document.querySelector('#generateSubtotal').textContent = money(subtotal); document.querySelector('#generateShipping').textContent = money(shipping); document.querySelector('#generateTotal').textContent = money(subtotal + shipping); customer.deliveryMethod = delivery; document.querySelector('#customerSummary') && drawCustomer(); }
-  function addProduct(product, mode='purchase') { const rental = mode === 'rental'; if (rental && (product.rentalPrice === null || product.rentalPrice === undefined || product.rentalPrice === '')) return; const id = `${product.id}::${mode}`; const existing = lines.find(line => line.id === id); if (existing) existing.quantity = Math.min(99, Number(existing.quantity || 0) + 1); else lines.push({ ...product, id, productId: product.id, requiresDeviceIdentifier: product.requiresDeviceIdentifier !== false, price: Number(rental ? product.rentalPrice : (product.salePrice ?? product.price)), purchaseMode: mode, rentalDays: rental ? 1 : null, quantity: 1 }); drawLines(); }
-  function drawPicker() { const query = (document.querySelector('#generateProductSearch')?.value || '').trim().toLowerCase(); const category = document.querySelector('#generateProductCategory')?.value || ''; const filtered = products.filter(product => { const hay = `${product.name || ''} ${product.sku || ''} ${product.brand || ''} ${product.productType || ''}`.toLowerCase(); return (!query || hay.includes(query)) && (!category || product.category === category); }); const list = document.querySelector('#generatePickerList'); list.innerHTML = filtered.length ? filtered.map(product => { const stock = Number(product.stock || 0); const rental = product.category === 'cosplay' && product.rentalPrice !== null && product.rentalPrice !== undefined && product.rentalPrice !== ''; return `<article class="generate-picker-product"><img src="${escapeHTML(productImages(product)[0])}" data-fallback alt=""><div class="generate-picker-info"><strong>${escapeHTML(product.name)}</strong><small>SKU: ${escapeHTML(product.sku || '—')} · ${escapeHTML(categories[product.category] || product.category || 'Producto')}</small><b>${money(product.salePrice ?? product.price ?? 0)} · Stock ${stock}</b></div><div class="generate-picker-actions"><button type="button" class="button primary small" data-add-generate="${escapeHTML(product.id)}" data-mode="purchase">Agregar</button>${rental ? `<button type="button" class="button secondary small" data-add-generate="${escapeHTML(product.id)}" data-mode="rental">Alquiler</button>` : ''}</div></article>`; }).join('') : '<div class="generate-empty-state"><span>⌕</span><strong>No encontramos productos</strong><small>Prueba con otro nombre, SKU o categoría.</small></div>'; wireImageFallback(list); list.querySelectorAll('[data-add-generate]').forEach(button => button.addEventListener('click', () => { const product = products.find(item => item.id === button.dataset.addGenerate); if (product) addProduct(product, button.dataset.mode); })); }
+  function addProduct(product, mode='purchase') { const rental = mode === 'rental'; if (rental && !(product.category === 'cosplay' && product.isRental === true && Number.isFinite(Number(product.rentalPrice)))) return; const id = `${product.id}::${mode}`; const existing = lines.find(line => line.id === id); if (existing) existing.quantity = Math.min(99, Number(existing.quantity || 0) + 1); else lines.push({ ...product, id, productId: product.id, requiresDeviceIdentifier: product.requiresDeviceIdentifier !== false, price: Number(rental ? product.rentalPrice : (product.salePrice ?? product.price)), purchaseMode: mode, rentalDays: rental ? 1 : null, quantity: 1 }); drawLines(); }
+  function drawPicker() { const query = (document.querySelector('#generateProductSearch')?.value || '').trim().toLowerCase(); const category = document.querySelector('#generateProductCategory')?.value || ''; const filtered = products.filter(product => { const hay = `${product.name || ''} ${product.sku || ''} ${product.brand || ''} ${product.productType || ''}`.toLowerCase(); return (!query || hay.includes(query)) && (!category || product.category === category); }); const list = document.querySelector('#generatePickerList'); list.innerHTML = filtered.length ? filtered.map(product => { const stock = Number(product.stock || 0); const rental = product.category === 'cosplay' && product.isRental === true && Number.isFinite(Number(product.rentalPrice)); return `<article class="generate-picker-product"><img src="${escapeHTML(productImages(product)[0])}" data-fallback alt=""><div class="generate-picker-info"><strong>${escapeHTML(product.name)}</strong><small>SKU: ${escapeHTML(product.sku || '—')} · ${escapeHTML(categories[product.category] || product.category || 'Producto')}</small><b>${money(product.salePrice ?? product.price ?? 0)} · Stock ${stock}</b></div><div class="generate-picker-actions"><button type="button" class="button primary small" data-add-generate="${escapeHTML(product.id)}" data-mode="purchase">Agregar</button>${rental ? `<button type="button" class="button secondary small" data-add-generate="${escapeHTML(product.id)}" data-mode="rental">Alquiler</button>` : ''}</div></article>`; }).join('') : '<div class="generate-empty-state"><span>⌕</span><strong>No encontramos productos</strong><small>Prueba con otro nombre, SKU o categoría.</small></div>'; wireImageFallback(list); list.querySelectorAll('[data-add-generate]').forEach(button => button.addEventListener('click', () => { const product = products.find(item => item.id === button.dataset.addGenerate); if (product) addProduct(product, button.dataset.mode); })); }
   document.querySelector('#generateProductSearch')?.addEventListener('input', drawPicker); document.querySelector('#generateProductCategory')?.addEventListener('change', drawPicker);
   document.querySelector('#generateCustomerForm')?.addEventListener('submit', async event => {
     event.preventDefault();
@@ -2678,7 +2681,7 @@ async function renderAdminOrders() {
   let orders = await request('/api/admin/orders').catch(() => []);
   let orderProducts = await request('/api/admin/order-products').catch(() => []);
   const moneyOverview = await request('/api/admin/dinero/resumen?from=&to=&showPaid=true').catch(() => ({ receivables: [] }));
-  const paymentByOrder = new Map((Array.isArray(moneyOverview.receivables) ? moneyOverview.receivables : []).filter(row => row.orderId).map(row => [String(row.orderId), row]));
+  let paymentByOrder = new Map((Array.isArray(moneyOverview.receivables) ? moneyOverview.receivables : []).filter(row => row.orderId).map(row => [String(row.orderId), row]));
   const canAssign = session.role === 'store_manager' || session.role === 'admin';
   const canDelete = session.role === 'store_manager' || session.role === 'admin';
   let sellers = [];
@@ -3306,6 +3309,25 @@ async function renderAdminOrders() {
     }));
 
     list.querySelectorAll('[data-order-notify-sale]').forEach(wireNotifySaleButton);
+
+    list.querySelectorAll('[data-order-rental-refund]').forEach(button=>button.addEventListener('click',async()=>{
+      const order=orders.find(o=>o.id===button.dataset.orderRentalRefund); if(!order) return;
+      const payment=paymentByOrder.get(String(order.id)) || {};
+      const amount=Number(payment.paid || 0);
+      const ok=await showYhorsConfirm(
+        '¿Devolver el dinero del alquiler?',
+        `Esta acción es exclusiva de Administración. Se devolverán <strong>${money(amount)}</strong> al cliente y el movimiento quedará registrado. El inventario no cambia porque el alquiler nunca descontó stock.`,
+        {cancelText:'Cancelar',confirmText:'Devolver dinero'}
+      );
+      if(!ok)return;
+      button.disabled=true;
+      try{
+        await request('/api/admin/dinero/devoluciones-orden',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({orderId:order.id})});
+        const refreshedMoney=await request('/api/admin/dinero/resumen?from=&to=&showPaid=true').catch(()=>({receivables:[]}));
+        paymentByOrder=new Map((Array.isArray(refreshedMoney.receivables)?refreshedMoney.receivables:[]).filter(row=>row.orderId).map(row=>[String(row.orderId),row]));
+        drawOrders();
+      }catch(e){button.disabled=false;alert(e.message);}
+    }));
 
     list.querySelectorAll('[data-order-delete]').forEach(button=>button.addEventListener('click',async()=>{
       const order=orders.find(o=>o.id===button.dataset.orderDelete); if(!order) return;
@@ -4717,6 +4739,10 @@ async function renderAdminClientes() {
         const renderedCustomerRows=rows.map(row=>{
           const isPayment=row.kind==='abono';
           const dateLabel=formatDateTime(row.timestamp||row.date);
+          if(row.kind==='devolucion'){
+            const methodMap={cash:'Efectivo',transfer:'Transferencia',card:'Tarjeta'}; const methodLabel=methodMap[String(row.payment?.method||'').toLowerCase()]||'Devolución';
+            return `<article class="customer-ledger-card is-purchase"><div class="customer-ledger-icon">↩</div><div class="customer-ledger-main"><span class="customer-ledger-eyebrow">DEVOLUCIÓN · ADMINISTRACIÓN</span><strong>Devolución ${methodLabel.toLowerCase()}</strong><small>${dateLabel} · ${escapeHTML(row.detail||'Devolución de dinero')}</small></div><div class="customer-ledger-amount"><span>SALIDA</span><strong>${money(row.debit)}</strong><small>${Number(row.balance||0)<-0.001?`Saldo a favor: ${money(Math.abs(row.balance))}`:`Saldo después: ${money(row.balance)}`}</small></div></article>`;
+          }
           if(isPayment){
             const methodMap={cash:'Efectivo',transfer:'Transferencia',card:'Tarjeta'}; const methodLabel=methodMap[String(row.payment?.method||'').toLowerCase()]||'Ingreso de dinero';
             const method=escapeHTML(methodLabel);
