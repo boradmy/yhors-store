@@ -4916,7 +4916,13 @@ app.put('/api/admin/orders/:id', requireOrdersAccess, (req, res) => {
     updated.stockReservedAt = currentOrder.stockReservedAt || new Date().toISOString();
     delete updated.stockRestoredAt;
   } else {
-    updated.stockRestoredAt = currentOrder.stockRestoredAt || new Date().toISOString();
+    // Un alquiler no consume inventario: no debe marcarse como "stock restaurado"
+    // al cancelarse porque nunca hubo una salida de inventario.
+    if (stockMovements.length) {
+      updated.stockRestoredAt = currentOrder.stockRestoredAt || new Date().toISOString();
+    } else {
+      delete updated.stockRestoredAt;
+    }
     delete updated.stockReservedAt;
   }
 
@@ -5734,7 +5740,7 @@ app.post('/api/admin/dinero/devoluciones-orden', requireAdmin, (req, res) => {
       sellerId: original.sellerId || order.assignedSellerId || null,
       sellerName: original.sellerName || order.assignedSellerName || '',
       method: original.method || 'cash',
-      date: localDate(now),
+      date: localDateEc(now),
       batch: original.batch || null,
       transactionNumber: original.transactionNumber || null,
       bank: original.bank || '',
