@@ -4653,7 +4653,17 @@ async function renderAdminClientes() {
         const to=document.querySelector('#customerTxTo')?.value||'';
         const table=document.querySelector('#customerStatementTable');
         if(from&&to&&from>to){table.innerHTML='<div class="message error">La fecha inicial no puede ser posterior a la fecha final.</div>';return;}
-        const rows=statement.filter(row=>{const day=row.date?new Intl.DateTimeFormat('en-CA',{timeZone:'America/Guayaquil'}).format(new Date(row.date)):'';return (!from||day>=from)&&(!to||day<=to);});
+        const accountDay=value=>{
+          if(!value)return '';
+          const raw=String(value);
+          // Las fechas de pago se guardan como YYYY-MM-DD y NO deben pasar por
+          // new Date(), porque JavaScript las interpreta como UTC y en Ecuador
+          // pueden terminar mostrando el día anterior.
+          if(/^\d{4}-\d{2}-\d{2}$/.test(raw))return raw;
+          const d=new Date(value);
+          return Number.isNaN(d.getTime())?'':new Intl.DateTimeFormat('en-CA',{timeZone:'America/Guayaquil'}).format(d);
+        };
+        const rows=statement.filter(row=>{const day=accountDay(row.date||row.payment?.date||row.timestamp);return (!from||day>=from)&&(!to||day<=to);});
         const formatDateTime=value=>{if(!value)return 'Fecha no registrada'; const d=new Date(value); if(Number.isNaN(d.getTime()))return 'Fecha no registrada'; return escapeHTML(d.toLocaleString('es-EC',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit',hour12:false,timeZone:'America/Guayaquil'}));};
         const renderedCustomerRows=rows.map(row=>{
           const isPayment=row.kind==='abono';
