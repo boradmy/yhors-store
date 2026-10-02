@@ -20,19 +20,26 @@ const publicCategories = Object.entries(categories);
 const placeholder = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="800" height="800"%3E%3Crect width="100%25" height="100%25" fill="%23e8e5de"/%3E%3Ctext x="50%25" y="50%25" dominant-baseline="middle" text-anchor="middle" fill="%23706d66" font-family="Arial" font-size="32"%3EYHORS%3C/text%3E%3C/svg%3E';
 
 function escapeHTML(value = '') { return String(value).replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char])); }
-function compactProductDescription(value = '', maxLength = 145) {
-  let text = String(value ?? '').replace(/\r/g, '');
-  if (!text) return '';
-
-  // Algunas fichas antiguas guardaron etiquetas HTML como texto escapado
-  // (por ejemplo &lt;b&gt;...&lt;/b&gt;). Decodificamos dos veces como máximo
-  // para que nunca aparezcan etiquetas dentro de la tarjeta pública.
-  for (let i = 0; i < 2; i += 1) {
+function decodeHtmlEntities(value = '') {
+  let text = String(value ?? '');
+  for (let i = 0; i < 3; i += 1) {
     const doc = new DOMParser().parseFromString(text, 'text/html');
     const decoded = String(doc.body?.textContent || text);
     if (decoded === text) break;
     text = decoded;
   }
+  return text;
+}
+function compactProductDescription(value = '', maxLength = 145) {
+  let text = String(value ?? '').replace(/\r/g, '');
+  if (!text) return '';
+
+  // Las fichas antiguas pueden contener HTML real o HTML guardado como texto
+  // (&lt;b&gt;...&lt;/b&gt;). Primero decodificamos entidades y luego eliminamos
+  // cualquier etiqueta para que jamás aparezca código en las tarjetas.
+  text = decodeHtmlEntities(text);
+  const doc = new DOMParser().parseFromString(text, 'text/html');
+  text = String(doc.body?.textContent || text);
 
   text = text.replace(/\s+/g, ' ').trim();
   if (!text) return '';
@@ -41,8 +48,9 @@ function compactProductDescription(value = '', maxLength = 145) {
   return `${cut}…`;
 }
 function richDescriptionHTML(value = '') {
-  const raw = String(value ?? '').replace(/\r/g, '');
+  let raw = String(value ?? '').replace(/\r/g, '');
   if (!raw) return '';
+  raw = decodeHtmlEntities(raw);
   if (!/[<>]/.test(raw)) return escapeHTML(raw).replace(/\n/g, '<br>');
   const parser = new DOMParser();
   const doc = parser.parseFromString(raw, 'text/html');
@@ -502,8 +510,33 @@ function productCard(product) {
     : `<button class="add" data-id="${escapeHTML(product.id)}" ${!inStock ? 'disabled' : ''}><span>${inStock ? 'Añadir' : 'Sin stock'}</span><span>${inStock ? '+' : '—'}</span></button>`;
   return `<article class="product" data-product="${escapeHTML(product.id)}"><a class="product-open" data-open="${escapeHTML(product.id)}" href="${escapeHTML(productHref(product))}" aria-label="Ver ${escapeHTML(product.name)}"><div class="product-image"><img data-fallback src="${escapeHTML(image)}" alt="${escapeHTML(product.name)}" loading="lazy"></div><div class="product-info"><span class="product-category">${escapeHTML(categories[product.category] || product.category)}</span>${meta ? `<small class="product-meta">${escapeHTML(meta)}</small>` : ''}<h3>${escapeHTML(product.name)}</h3><div class="product-description">${escapeHTML(compactProductDescription(product.description, 112))}</div><span class="detail-link">Ver detalles <span>→</span></span></div></a><div class="product-bottom"><div><span class="price">${productPriceLabel(product)}</span>${rental}<span class="price-secondary">${availability}</span></div>${action}</div></article>`;
 }
-function renderProductsInto(area, products, onOpen, onAdd) {
-  area.innerHTML = products.length ? products.map(productCard).join('') : '<div class="empty">Aún no hay productos en esta colección.</div>';
+function renderProductsInto(area, products, onOpen, onAdd, options = {}) {
+  const groupByType = options.groupByType === true;
+  const groupLabel = value => String(value || 'Otros productos').trim() || 'Otros productos';
+  const groupedMarkup = () => {
+    const groups = [];
+    const groupMap = new Map();
+    products.forEach(product => {
+      const key = groupLabel(product.productType);
+      if (!groupMap.has(key)) {
+        const group = { key, items: [] };
+        groupMap.set(key, group);
+        groups.push(group);
+      }
+      groupMap.get(key).items.push(product);
+    });
+    return groups.map(group => `
+      <section class="product-type-group" data-product-type-group="${escapeHTML(group.key)}">
+        <div class="product-type-divider" aria-label="${escapeHTML(group.key)}">
+          <h2>${escapeHTML(group.key)}</h2>
+          <span class="product-type-rule" aria-hidden="true"></span>
+        </div>
+        <div class="products product-type-grid">${group.items.map(productCard).join('')}</div>
+      </section>`).join('');
+  };
+  area.innerHTML = products.length
+    ? (groupByType ? groupedMarkup() : products.map(productCard).join(''))
+    : '<div class="empty">Aún no hay productos en esta colección.</div>';
   wireImageFallback(area);
   area.querySelectorAll('[data-open]').forEach(button => button.addEventListener('click', e => { e.preventDefault(); onOpen(button.dataset.open); }));
   area.querySelectorAll('.add').forEach(button => button.addEventListener('click', e => { e.stopPropagation();
@@ -708,6 +741,7 @@ async function renderCurrentRoute() {
   if (path === `${ADMIN_PATH}/generar-orden` || path === `${ADMIN_PATH}/generar-orden/`) return renderAdminGenerateOrder();
   if (path === `${ADMIN_PATH}/historial-ventas` || path === `${ADMIN_PATH}/historial-ventas/`) return renderAdminSalesHistory();
     if (path === `${ADMIN_PATH}/auditoria` || path === `${ADMIN_PATH}/auditoria/`) return renderAdminAudit();
+    if (path === `${ADMIN_PATH}/backups` || path === `${ADMIN_PATH}/backups/`) return renderAdminBackups();
   if (path === `${ADMIN_PATH}/seguridad` || path === `${ADMIN_PATH}/seguridad/`) return renderAdminSecurity(true);
 if (path === `${ADMIN_PATH}/usuarios` || path === `${ADMIN_PATH}/usuarios/`) {
     const panel = new URLSearchParams(window.location.search).get('panel') || 'usuarios';
@@ -848,15 +882,15 @@ function catalogFilters(classifications = {}, currentCategory = 'all', active = 
       <button type="button" class="filter-title" aria-expanded="false"><span>Categorías</span><span>⌄</span></button>
       <div class="filter-options">${categoriesHtml}</div>
     </div>`;
-  const brandsBlock = brands.length ? `
-    <div class="filter-accordion">
-      <button type="button" class="filter-title" aria-expanded="false"><span>Marcas</span><span>⌄</span></button>
-      <div class="filter-options">${brandsHtml}</div>
-    </div>` : '';
   const typesBlock = types.length ? `
     <div class="filter-accordion">
       <button type="button" class="filter-title" aria-expanded="false"><span>Tipo de producto</span><span>⌄</span></button>
       <div class="filter-options">${typesHtml}</div>
+    </div>` : '';
+  const brandsBlock = brands.length ? `
+    <div class="filter-accordion">
+      <button type="button" class="filter-title" aria-expanded="false"><span>Marcas</span><span>⌄</span></button>
+      <div class="filter-options">${brandsHtml}</div>
     </div>` : '';
   const contextLabel = scoped ? `Filtros de ${escapeHTML(categories[currentCategory] || currentCategory)}` : 'Filtros del catálogo';
   return `<aside class="catalog-sidebar" aria-label="${contextLabel}">
@@ -865,7 +899,7 @@ function catalogFilters(classifications = {}, currentCategory = 'all', active = 
       <div><span class="eyebrow">Filtrar</span><h2>${scoped ? escapeHTML(categories[currentCategory]) : 'Encuentra lo tuyo'}</h2></div>
       <button type="button" class="clear-filters" id="clearCatalogFilters">Restablecer</button>
     </div>
-    ${categoriesBlock}${brandsBlock}${typesBlock}
+    ${categoriesBlock}${typesBlock}${brandsBlock}
   </aside>`;
 }
 function applyCatalogFilters(products, active = {}) {
@@ -977,9 +1011,9 @@ async function renderCategoryPage(categoryKey) {
   try { ({ products, storefront, classifications } = await loadStoreData()); } catch { /* empty */ }
   const categoryProducts = products.filter(product => categoryKey === 'all' || product.category === categoryKey);
   const slides = categoryProducts.slice(0, 4).map(product => ({ ...product, image: productImages(product)[0], heroTitle: product.name, heroDescription: product.description }));
-  app.innerHTML = `${renderHeader(categoryKey)}<main>${heroMarkup(slides, true, categoryKey)}<section class="section category-page-section" id="productos-categoria"><div class="category-intro"><div><span class="eyebrow">Colección independiente</span><h1>${escapeHTML(categories[categoryKey])}</h1></div><p>${escapeHTML(categoryDescriptions[categoryKey])}</p></div><div class="catalog-layout">${catalogFilters(classifications, categoryKey, { category: categoryKey })}<div class="catalog-results"><div class="results-count" id="resultsCount"></div><div class="products" id="categoryProducts"></div></div></div></section></main>${renderFooter()}${cartMarkup()}`;
+  app.innerHTML = `${renderHeader(categoryKey)}<main>${heroMarkup(slides, true, categoryKey)}<section class="section category-page-section" id="productos-categoria"><div class="category-intro"><div><span class="eyebrow">Colección independiente</span><h1>${escapeHTML(categories[categoryKey])}</h1></div><p>${escapeHTML(categoryDescriptions[categoryKey])}</p></div><div class="catalog-layout">${catalogFilters(classifications, categoryKey, { category: categoryKey })}<div class="catalog-results"><div class="results-count" id="resultsCount"></div><div class="products product-type-container" id="categoryProducts"></div></div></div></section></main>${renderFooter()}${cartMarkup()}`;
   wireCategoryNavigation(); wireMobileMenu(); wireSearch(); wireHero(slides); markPageEnter(); const cart = wireCart(products, storefront); const area = document.querySelector('#categoryProducts');
-  const renderCategoryResults = (items) => { renderProductsInto(area, items, id => openProduct(id, products), (product, button) => cart.addToCart(product, button)); const count = document.querySelector('#resultsCount'); if (count) count.textContent = `${items.length} producto${items.length === 1 ? '' : 's'} en ${escapeHTML(categories[categoryKey])}`; if (!items.length) area.innerHTML = '<div class="empty">No hay productos que coincidan con estos filtros.</div>'; };
+  const renderCategoryResults = (items) => { renderProductsInto(area, items, id => openProduct(id, products), (product, button) => cart.addToCart(product, button), { groupByType: true }); const count = document.querySelector('#resultsCount'); if (count) count.textContent = `${items.length} producto${items.length === 1 ? '' : 's'} en ${escapeHTML(categories[categoryKey])}`; if (!items.length) area.innerHTML = '<div class="empty">No hay productos que coincidan con estos filtros.</div>'; };
   wireCatalogFilters(categoryProducts, classifications, { category: categoryKey }, renderCategoryResults);
 }
 
@@ -1019,6 +1053,55 @@ async function renderStore() {
   return renderHome();
 }
 
+function productImagePickerModal(slot, current = '') {
+  const title = slot === 1 ? 'Imagen principal' : `Imagen ${slot}`;
+  return `<div class="product-image-picker-backdrop" id="productImagePickerModal" hidden>
+    <div class="product-image-picker" role="dialog" aria-modal="true" aria-labelledby="productImagePickerTitle">
+      <div class="product-image-picker-head"><div><span class="eyebrow">FOTOS DEL PRODUCTO</span><h3 id="productImagePickerTitle">${escapeHTML(title)}</h3><small>Agrega la imagen desde tu equipo o pega un enlace.</small></div><button type="button" class="product-image-picker-close" data-image-picker-close aria-label="Cerrar">×</button></div>
+      <div class="product-image-picker-options">
+        <section class="product-image-picker-option"><div class="image-picker-icon">↑</div><div><strong>Agregar por archivo</strong><small>JPG, PNG, WEBP o GIF · máximo 5 MB</small></div><button type="button" class="button secondary small" id="productImagePickerFileButton">Seleccionar archivo</button><input id="productImagePickerFile" type="file" accept="image/jpeg,image/png,image/webp,image/gif" hidden></section>
+        <section class="product-image-picker-option"><div class="image-picker-icon">↗</div><div><strong>Agregar por URL</strong><small>Pega el enlace directo de la imagen y comprueba la vista previa.</small></div><input id="productImagePickerUrl" type="url" placeholder="https://ejemplo.com/imagen.jpg" value="${escapeHTML(current)}"></section>
+      </div>
+      <div class="product-image-picker-preview"><span>Vista previa</span><div><img id="productImagePickerPreview" data-fallback src="${escapeHTML(current || placeholder)}" alt="Vista previa"></div></div>
+      <div class="product-image-picker-foot"><button type="button" class="button secondary" data-image-picker-close>Cancelar</button><button type="button" class="button primary" id="productImagePickerApply">Usar esta imagen</button></div>
+    </div>
+  </div>`;
+}
+
+function openProductImagePicker(slot, current = '', onApply) {
+  document.querySelector('#productImagePickerModal')?.remove();
+  document.body.insertAdjacentHTML('beforeend', productImagePickerModal(slot, current));
+  const modal = document.querySelector('#productImagePickerModal');
+  if (modal) { modal.hidden = false; modal.setAttribute('aria-hidden', 'false'); document.body.classList.add('generate-modal-open'); }
+  const file = document.querySelector('#productImagePickerFile');
+  const fileButton = document.querySelector('#productImagePickerFileButton');
+  const url = document.querySelector('#productImagePickerUrl');
+  const preview = document.querySelector('#productImagePickerPreview');
+  let selectedFile = null;
+  let selectedFilePreviewUrl = '';
+  const updatePreview = src => { if (preview) preview.src = src || placeholder; };
+  fileButton?.addEventListener('click', event => { event.preventDefault(); event.stopPropagation(); file?.click(); });
+  file?.addEventListener('change', () => {
+    selectedFile = file.files?.[0] || null;
+    if (selectedFile) {
+      if (selectedFilePreviewUrl) URL.revokeObjectURL(selectedFilePreviewUrl);
+      selectedFilePreviewUrl = URL.createObjectURL(selectedFile);
+      updatePreview(selectedFilePreviewUrl);
+    }
+  });
+  url?.addEventListener('input', () => { if (!selectedFile) updatePreview(url.value.trim()); });
+  const close = () => { document.body.classList.remove('generate-modal-open'); if (selectedFilePreviewUrl) URL.revokeObjectURL(selectedFilePreviewUrl); modal?.remove(); };
+  modal?.querySelectorAll('[data-image-picker-close]').forEach(btn => btn.addEventListener('click', close));
+  modal?.addEventListener('click', e => { if (e.target === modal) close(); });
+  modal?.querySelector('#productImagePickerApply')?.addEventListener('click', () => {
+    const link = String(url?.value || '').trim();
+    if (!selectedFile && !link) { url?.focus(); return; }
+    if (selectedFile && selectedFile.size > 5 * 1024 * 1024) { alert('La imagen no puede superar 5 MB.'); return; }
+    onApply?.({ file: selectedFile, url: link, preview: selectedFile ? URL.createObjectURL(selectedFile) : link });
+    close();
+  });
+}
+
 function productForm(product = {}, classifications = {}) {
   const images = Array.isArray(product.images) && product.images.length ? product.images : (product.image ? [product.image] : []);
   const selectedCategory = product.category || '';
@@ -1027,6 +1110,7 @@ function productForm(product = {}, classifications = {}) {
   const isCosplay = selectedCategory === 'cosplay';
   const locked = !selectedCategory;
   const lock = locked ? 'disabled' : '';
+  window.__yhorsPendingImageFiles = {};
   return `<form id="productForm"><div class="form-grid">
     <div class="field full"><label for="category">Categoría / universo</label><select id="category" name="category" required><option value="">Elegir Categoría</option>${Object.entries(categories).filter(([key]) => key !== 'all').map(([key, label]) => `<option value="${key}" ${selectedCategory === key ? 'selected' : ''}>${label}</option>`).join('')}</select><small class="field-help">Las clasificaciones se administran abajo. Elige una categoría para habilitar el resto del formulario.</small></div>
     <div class="field"><label for="name">Nombre del producto</label><input id="name" name="name" required maxlength="90" ${lock} value="${escapeHTML(product.name || '')}"></div>
@@ -1034,16 +1118,23 @@ function productForm(product = {}, classifications = {}) {
     <div class="field"><label for="brand">Marca</label><select id="brand" name="brand" ${lock}><option value="">Sin marca</option>${brands.map(v => `<option value="${escapeHTML(v)}" ${product.brand === v ? 'selected' : ''}>${escapeHTML(v)}</option>`).join('')}</select></div>
     <div class="field"><label for="productType">Tipo de producto</label><select id="productType" name="productType" ${lock}><option value="">Sin clasificación</option>${types.map(v => `<option value="${escapeHTML(v)}" ${product.productType === v ? 'selected' : ''}>${escapeHTML(v)}</option>`).join('')}</select></div>
     <div class="field"><label for="salePrice">Precio de venta (USD)</label><input id="salePrice" name="salePrice" required min="0" step="0.01" type="number" ${lock} value="${escapeHTML(product.salePrice ?? product.price ?? '')}"></div>
-    <div class="field ${isCosplay ? '' : 'hidden'}"><label for="rentalPrice">Precio de alquiler por día (USD)</label><input id="rentalPrice" name="rentalPrice" ${isCosplay ? 'required' : ''} ${lock} min="0" step="0.01" type="number" value="${escapeHTML(product.rentalPrice ?? '')}"><small class="field-help">Disponible para productos de Cosplay. Este valor se cobra por cada día de alquiler.</small></div>
-    <div class="field full"><span class="eyebrow image-section-label">Fotos del producto</span><small class="field-help">Puedes subir cada foto desde tu equipo o pegar directamente su URL.</small></div>
-    ${[0,1,2,3].map((index) => {
-      const num=index+1, id=index===0?'image':'image'+num, fileId=index===0?'imageFile':'imageFile'+num, label=index===0?'FOTO PRINCIPAL':'FOTO '+num, urlLabel=index===0?'URL de imagen principal':'Imagen adicional '+num+' · URL', currentImage=images[index] || (index===0 ? product.image || '' : ''), previewId=`productImagePreview${num}`;
-      return `<div class="image-upload-row field full"><div class="image-upload-layout"><div class="image-upload-preview"><span>Foto referencial</span><div class="image-reference-preview"><img id="${previewId}" data-fallback src="${escapeHTML(currentImage || placeholder)}" alt="Vista previa ${escapeHTML(label)}"></div></div><div class="image-upload-file"><label for="${fileId}">SUBIR ${label} <small>(máx. 5 MB)</small></label><input id="${fileId}" name="${fileId}" type="file" ${lock} accept="image/jpeg,image/png,image/webp,image/gif"></div><div class="image-upload-url"><label for="${id}">${urlLabel}</label><input id="${id}" name="${id}" type="url" ${lock} placeholder="https://..." value="${escapeHTML(currentImage)}"></div></div></div>`;
-    }).join('')}
+    <div class="field"><label for="purchasePrice">Precio de compra (USD)</label><input id="purchasePrice" name="purchasePrice" min="0" step="0.01" type="number" ${lock} value="${escapeHTML(product.purchasePrice ?? '')}"></div>
+    <div class="field"><label for="stock">Stock disponible</label><input id="stock" name="stock" min="0" step="1" type="number" ${lock} value="${escapeHTML(product.stock ?? 0)}"></div>
+    <div class="field"><label for="stockMin">Stock mínimo</label><input id="stockMin" name="stockMin" min="0" step="1" type="number" ${lock} value="${escapeHTML(product.stockMin ?? 0)}"></div>
+    <div class="field full"><label for="tags">Etiquetas / palabras clave <small>(opcional)</small></label><input id="tags" name="tags" ${lock} value="${escapeHTML(Array.isArray(product.tags) ? product.tags.join(', ') : '')}" placeholder="Gaming, Xiaomi, 512GB..."><small class="field-help">Sirven para buscar y encontrar el producto rápidamente. Ej.: Gaming, 512GB, Ryzen 7.</small></div>
+    <div class="field full product-form-options">
+      <label><input type="checkbox" id="published" name="published" ${product.published !== false ? 'checked' : ''} ${lock}> Publicado en web</label>
+      ${selectedCategory === 'tech' ? `<label><input type="checkbox" id="requiresDeviceIdentifier" name="requiresDeviceIdentifier" ${product.requiresDeviceIdentifier !== false ? 'checked' : ''} ${lock}> Requiere Serie / IMEI</label>` : ''}
+      ${isCosplay ? `<label><input type="checkbox" id="isRental" name="isRental" ${product.isRental ? 'checked' : ''} ${lock}> Disponible para alquiler</label>` : ''}
+    </div>
+    <div class="field ${isCosplay ? '' : 'hidden'}"><label for="rentalPrice">Precio de alquiler por día (USD)</label><input id="rentalPrice" name="rentalPrice" ${isCosplay ? 'required' : ''} ${lock} min="0" step="0.01" type="number" value="${escapeHTML(product.rentalPrice ?? '')}"><small class="field-help">Disponible para productos de Cosplay.</small></div>
+    <div class="field full"><span class="eyebrow image-section-label">Fotos del producto</span><small class="field-help">Haz clic en cada imagen para abrir el selector y elegir archivo o enlace.</small></div>
+    ${[0,1,2,3].map((index) => { const slot=index+1, current=images[index] || (index===0 ? product.image || '' : ''); return `<div class="field full product-image-slot"><div class="product-image-slot-head"><div><strong>${index===0?'Imagen principal':`Imagen ${slot}`}</strong><small>${current ? 'Imagen cargada' : 'Sin imagen · puedes agregarla después'}</small></div><button type="button" class="button secondary small" data-open-image-picker="${slot}" ${lock}>${current ? 'Cambiar imagen' : '+ Agregar imagen'}</button></div><input type="hidden" id="image${index===0?'':slot}" name="image${index===0?'':slot}" value="${escapeHTML(current)}"><div class="product-image-slot-preview ${current?'has-image':''}"><img id="productImagePreview${slot}" data-fallback src="${escapeHTML(current || placeholder)}" alt="Imagen ${slot}"><span>${current ? '' : 'SIN IMAGEN'}</span></div></div>`; }).join('')}
     <div class="field full rich-description-field"><label for="descriptionEditor">Descripción completa</label><div class="rich-editor" data-rich-editor ${locked ? 'aria-disabled="true"' : ''}><div class="rich-editor-toolbar" role="toolbar" aria-label="Formato de descripción"><button type="button" class="rich-tool rich-tool-heading" data-rich-command="formatBlock" data-rich-value="h2" title="Título (H2) · activar/desactivar" aria-label="Título" ${locked ? 'disabled' : ''}><strong>Título</strong></button><span class="rich-tool-separator" aria-hidden="true"></span><button type="button" class="rich-tool" data-rich-command="bold" title="Negrita" aria-label="Negrita" ${locked ? 'disabled' : ''}><strong>B</strong></button><button type="button" class="rich-tool" data-rich-command="italic" title="Cursiva" aria-label="Cursiva" ${locked ? 'disabled' : ''}><em>I</em></button><button type="button" class="rich-tool" data-rich-command="underline" title="Subrayado" aria-label="Subrayado" ${locked ? 'disabled' : ''}><u>U</u></button><span class="rich-tool-separator" aria-hidden="true"></span><button type="button" class="rich-tool rich-tool-list" data-rich-command="insertUnorderedList" title="Lista con viñetas" aria-label="Lista con viñetas" ${locked ? 'disabled' : ''}>• Lista</button><button type="button" class="rich-tool rich-tool-list" data-rich-command="insertOrderedList" title="Lista numerada" aria-label="Lista numerada" ${locked ? 'disabled' : ''}>1. Lista</button><span class="rich-tool-separator" aria-hidden="true"></span><button type="button" class="rich-tool rich-tool-wide" data-rich-command="removeFormat" title="Quitar formato" ${locked ? 'disabled' : ''}>Limpiar</button></div><div id="descriptionEditor" class="rich-editor-content" contenteditable="${locked ? 'false' : 'true'}" role="textbox" aria-multiline="true" aria-label="Descripción completa">${richDescriptionHTML(product.description || '')}</div></div><textarea id="description" name="description" required maxlength="2000" rows="9" ${lock} hidden>${escapeHTML(product.description || '')}</textarea><small class="field-help">Escribe como en Word: <strong>negrita</strong>, <em>cursiva</em>, subrayado, títulos, viñetas y saltos de línea.</small></div>
-    <div class="field featured-field"><label><input id="published" name="published" type="checkbox" ${lock} ${product.published !== false ? 'checked' : ''}> Publicado en la tienda</label><label><input id="hero" name="hero" type="checkbox" ${lock} ${product.hero ? 'checked' : ''}> Usar en slider de portada</label><label><input id="featured" name="featured" type="checkbox" ${lock} ${product.featured ? 'checked' : ''}> Mostrar como destacado</label></div>
+    <div class="field featured-field"><label><input id="hero" name="hero" type="checkbox" ${lock} ${product.hero ? 'checked' : ''}> Usar en slider de portada</label><label><input id="featured" name="featured" type="checkbox" ${lock} ${product.featured ? 'checked' : ''}> Mostrar como destacado</label></div>
   </div><div class="form-actions"><button class="button" type="submit" ${lock}>${product.id ? 'Guardar cambios' : 'Crear producto'}</button><button class="button secondary ${product.id ? '' : 'hidden'}" type="button" id="cancelEdit">Cancelar</button><span class="message" id="formMessage"></span></div></form>`;
 }
+
 function selectionPanel(products, settings) {
   const heroIds = settings.heroProductIds || [];
   const featuredIds = settings.featuredProductIds || [];
@@ -1274,7 +1365,12 @@ function ordersListMarkup(orders = [], options = {}) {
 function adminSectionNav(session = {}, active = '') {
   const role = String(session?.role || '').toLowerCase();
   const limitedOperations = role === 'vendedor' || role === 'orders' || role === 'store_manager';
-  const link = (key, href, label) => `<a href="${href}" class="admin-section-link${active === key ? ' active' : ''}" data-smooth-route>${label}</a>`;
+  const navIcons = { web:'🌐', 'buscar-productos':'⌕', inventario:'▣', compras:'▤', pedidos:'▤', 'generar-orden':'＋', 'historial-ventas':'✓', usuarios:'♙', 'series-imeis':'◉', auditoria:'◌', clientes:'♙', movimientos:'↕', reportes:'▥', backups:'◫', 'resumen-financiero':'◒', dinero:'$', 'ventas-generales':'◔', multas:'!', 'calculo-comision':'%', };
+  const link = (key, href, label) => {
+    const icon = navIcons[key];
+    const iconMarkup = icon ? `<span class="admin-nav-icon" aria-hidden="true">${icon}</span>` : '';
+    return `<a href="${href}" class="admin-section-link${active === key ? ' active' : ''}" data-smooth-route>${iconMarkup}<span class="admin-nav-label">${label}</span></a>`;
+  };
   if (limitedOperations) {
     // Vendedores y jefes tienen dos áreas claras: primero agendar la venta
     // y luego las herramientas para darle seguimiento/gestión.
@@ -1288,8 +1384,8 @@ function adminSectionNav(session = {}, active = '') {
   const group = (label, activeKeys, items, open = false) => `<details class="admin-nav-group${activeKeys.includes(active) ? ' has-active' : ''}"${open ? ' open' : ''}><summary><span>${label}</span>${activeKeys.includes(active) ? '<i aria-hidden="true"></i>' : ''}</summary><div class="admin-nav-group-links">${items}</div></details>`;
   return `<div class="admin-navigation-stack">
     <nav class="admin-section-nav" id="adminSectionNav" aria-label="Administración YHORS">
-      ${group('Operación', ['web','inventario','buscar-productos','pedidos','generar-orden','historial-ventas','compras'], `${link('web', `${ADMIN_PATH}/web`, '🌐 PÁGINA WEB')}${link('buscar-productos', `${ADMIN_PATH}/buscar-productos`, 'BUSCAR PRODUCTOS')}${link('inventario', `${ADMIN_PATH}/inventario`, 'INVENTARIO')}${link('compras', `${ADMIN_PATH}/compras`, 'COMPRAS / PROVEEDORES')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('generar-orden', `${ADMIN_PATH}/generar-orden`, 'GENERAR ORDEN')}${link('historial-ventas', `${ADMIN_PATH}/historial-ventas`, 'HISTORIAL DE VENTAS')}`)}
-      ${group('Gestión', ['usuarios','series-imeis','auditoria'], `${link('usuarios', `${ADMIN_PATH}/usuarios`, 'USUARIOS')}${link('series-imeis', `${ADMIN_PATH}/series-imeis`, 'SERIES/IMEIS')}${link('auditoria', `${ADMIN_PATH}/auditoria`, 'AUDITORÍA')}`)}
+      ${group('Operación', ['web','inventario','buscar-productos','pedidos','generar-orden','historial-ventas','compras'], `${link('web', `${ADMIN_PATH}/web`, 'PÁGINA WEB')}${link('buscar-productos', `${ADMIN_PATH}/buscar-productos`, 'BUSCAR PRODUCTOS')}${link('inventario', `${ADMIN_PATH}/inventario`, 'INVENTARIO')}${link('compras', `${ADMIN_PATH}/compras`, 'COMPRAS / PROVEEDORES')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('generar-orden', `${ADMIN_PATH}/generar-orden`, 'GENERAR ORDEN')}${link('historial-ventas', `${ADMIN_PATH}/historial-ventas`, 'HISTORIAL DE VENTAS')}`)}
+      ${group('Gestión', ['usuarios','series-imeis','auditoria','backups'], `${link('usuarios', `${ADMIN_PATH}/usuarios`, 'USUARIOS')}${link('series-imeis', `${ADMIN_PATH}/series-imeis`, 'SERIES/IMEIS')}${link('auditoria', `${ADMIN_PATH}/auditoria`, 'AUDITORÍA')}${link('backups', `${ADMIN_PATH}/backups`, 'BACKUPS')}`)}
       ${group('Empresa', ['clientes','movimientos','reportes'], `${link('clientes', `${ADMIN_PATH}/clientes`, 'CLIENTES · FICHERO')}${link('movimientos', `${ADMIN_PATH}/movimientos`, 'MOVIMIENTOS DE INVENTARIO')}${link('reportes', `${ADMIN_PATH}/reportes`, 'REPORTES')}`)}
       ${group('Finanzas', ['resumen-financiero','ventas-generales','dinero','multas','calculo-comision'], `${link('resumen-financiero', `${ADMIN_PATH}/resumen-financiero`, 'RESUMEN FINANCIERO')}${link('dinero', `${ADMIN_PATH}/dinero`, 'DINERO · COBROS')}${link('ventas-generales', `${ADMIN_PATH}/ventas-generales`, 'VENTAS GENERALES')}${link('multas', `${ADMIN_PATH}/multas`, 'MULTAS')}${link('calculo-comision', `${ADMIN_PATH}/calculo-comision`, 'CÁLCULO DE COMISIÓN')}`)}
     </nav>
@@ -2399,7 +2495,7 @@ async function renderAdminMoney() {
   const canEditPayment=role==='admin';
   const sellerFilter=canManageAll?`<label class="money-filter"><span>Vendedor</span><select id="moneySeller"><option value="">Todos los vendedores</option>${sellers.map(s=>`<option value="${escapeHTML(s.id)}">${escapeHTML(s.name)}</option>`).join('')}</select></label>`:`<div class="money-my-sales"><span class="money-dot"></span><div><small>${role==='store_manager'?'Jefe de tienda':'Vendedor'}</small><strong>${role==='store_manager'?'Todos los cobros':'Mis cobros'}</strong></div></div>`;
   const nav=adminSectionNav(session,'dinero');
-  app.innerHTML=`<main class="admin-shell money-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand admin-brand" href="${ADMIN_PATH}/inteligente" data-smooth-route aria-label="YHORS · Panel Administrativo"><span class="admin-brand-mark" aria-hidden="true"><img src="/favicon.svg" alt=""></span><span class="admin-brand-word">YHORS</span><span class="admin-brand-divider" aria-hidden="true"></span><small>Panel Administrativo</small></a><h1 class="admin-title">Dinero</h1><p class="admin-subtitle">Cobros, cuentas por cobrar y trazabilidad del dinero que realmente ingresó a YHORS.</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>${nav}<section class="admin-panel money-panel"><div class="section-heading"><div><span class="eyebrow">CONTROL DE DINERO</span><h2>Ingresos y cuentas por cobrar</h2></div><p>Cada pago queda ligado a una venta, fecha, banco y referencia.</p></div><div class="money-tabs" role="tablist"><button class="money-tab active" data-money-tab="cobros">COBROS</button><button class="money-tab" data-money-tab="cxc">CUENTAS POR COBRAR</button><button class="money-tab" data-money-tab="movimientos">MOVIMIENTOS</button></div><div class="money-filters"><div class="money-date-range"><label class="money-filter"><span>Desde</span><input id="moneyFrom" type="date" value="${today}"></label><label class="money-filter"><span>Hasta</span><input id="moneyTo" type="date" value="${today}"></label></div>${sellerFilter}<label class="money-filter money-search"><span>Buscar</span><div class="money-search-box"><span>⌕</span><input id="moneySearch" type="search" autocomplete="off" placeholder="Venta, cliente, transacción, banco…"><button type="button" id="moneySearchClear" hidden>×</button></div></label><button type="button" class="button primary small" id="moneyRefresh">Actualizar</button><button type="button" class="button secondary small" id="moneyClear">Limpiar</button></div><div id="moneySummary" class="money-summary"></div><div id="moneyContent"></div></section></div></main><div class="money-modal" id="paymentModal" hidden><div class="money-modal-backdrop" data-close-payment></div><div class="money-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="paymentModalTitle"><div class="money-modal-head"><div><span class="eyebrow">INGRESO DE DINERO</span><h2 id="paymentModalTitle">Registrar pago</h2><small id="paymentSaleContext"></small></div><button type="button" class="money-modal-close" data-close-payment>×</button></div><form id="paymentForm"><input type="hidden" id="paymentId"><input type="hidden" id="paymentSaleId"><input type="hidden" id="paymentOrderId"><div class="payment-sale-summary" id="paymentSaleSummary"></div><div class="form-grid"><div class="field"><label for="paymentMethod">Forma de pago</label><select id="paymentMethod" required><option value="cash">Efectivo</option><option value="transfer">Transferencia</option><option value="card">Tarjeta</option></select></div><div class="field"><label for="paymentAmount">Valor</label><input id="paymentAmount" type="number" min="0.01" step="0.01" required></div><div class="field"><label for="paymentDate">Fecha</label><input id="paymentDate" type="date" value="${today}" required></div><div class="field"><label for="paymentBank">Banco / caja</label><input id="paymentBank" maxlength="100" placeholder="Pichincha, Guayaquil, Caja principal…" required></div><div class="field payment-extra"><label for="paymentBatch">Lote <small>(opcional)</small></label><input id="paymentBatch" maxlength="100" placeholder="Lote de depósito / voucher"></div><div class="field payment-extra"><label for="paymentTransaction">N.º de transacción</label><input id="paymentTransaction" maxlength="120" placeholder="TRX-000000"></div></div><div class="message" id="paymentHelp">Para efectivo no necesitas número de transacción. Transferencias y tarjetas sí deben llevarlo.</div><div class="form-actions"><button type="button" class="button secondary" data-close-payment>Cancelar</button><button type="submit" class="button primary" id="savePayment">Registrar pago</button><span class="message" id="paymentMessage"></span></div></form></div></div></div>`;
+  app.innerHTML=`<main class="admin-shell money-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand admin-brand" href="${ADMIN_PATH}/inteligente" data-smooth-route aria-label="YHORS · Panel Administrativo"><span class="admin-brand-mark" aria-hidden="true"><img src="/favicon.svg" alt=""></span><span class="admin-brand-word">YHORS</span><span class="admin-brand-divider" aria-hidden="true"></span><small>Panel Administrativo</small></a><h1 class="admin-title">Dinero</h1><p class="admin-subtitle">Cobros, cuentas por cobrar y trazabilidad del dinero que realmente ingresó a YHORS.</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>${nav}<section class="admin-panel money-panel"><div class="section-heading"><div><span class="eyebrow">CONTROL DE DINERO</span><h2>Ingresos y cuentas por cobrar</h2></div><p>Cada pago queda ligado a una venta, fecha, banco y referencia.</p></div><div class="money-tabs" role="tablist"><button class="money-tab active" data-money-tab="cobros">COBROS</button><button class="money-tab" data-money-tab="cxc">CUENTAS POR COBRAR</button><button class="money-tab" data-money-tab="movimientos">MOVIMIENTOS</button></div><div class="money-filters"><div class="money-date-range"><label class="money-filter"><span>Desde</span><input id="moneyFrom" type="date" value="${today}"></label><label class="money-filter"><span>Hasta</span><input id="moneyTo" type="date" value="${today}"></label></div>${sellerFilter}<label class="money-filter money-search"><span>Buscar</span><div class="money-search-box"><span>⌕</span><input id="moneySearch" type="search" autocomplete="off" placeholder="Venta, cliente, transacción, banco…"><button type="button" id="moneySearchClear" hidden>×</button></div></label><button type="button" class="button primary small" id="moneyRefresh">Actualizar</button><button type="button" class="button secondary small" id="moneyClear">Limpiar</button></div><div id="moneySummary" class="money-summary"></div><div id="moneyContent"></div></section></div></main><div class="money-modal" id="paymentModal" hidden><div class="money-modal-backdrop" data-close-payment></div><div class="money-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="paymentModalTitle"><div class="money-modal-head"><div><span class="eyebrow">INGRESO DE DINERO</span><h2 id="paymentModalTitle">Registrar pago</h2><small id="paymentSaleContext"></small></div><button type="button" class="money-modal-close" data-close-payment>×</button></div><form id="paymentForm"><input type="hidden" id="paymentId"><input type="hidden" id="paymentSaleId"><input type="hidden" id="paymentOrderId"><div class="payment-sale-summary" id="paymentSaleSummary"></div><div class="form-grid"><div class="field"><label for="paymentMethod">Forma de pago</label><select id="paymentMethod" required><option value="cash">Efectivo</option><option value="transfer">Transferencia</option><option value="card">Tarjeta</option></select></div><div class="field"><label for="paymentAmount">Valor</label><input id="paymentAmount" type="number" min="0.01" step="0.01" required></div><div class="field"><label for="paymentDate">Fecha</label><input id="paymentDate" type="date" value="${today}" required></div><div class="field"><label for="paymentBank">Banco / caja</label><input id="paymentBank" maxlength="100" placeholder="Pichincha, Guayaquil, Caja principal…" required></div><div class="field payment-extra"><label for="paymentBatch">Lote <small>(opcional)</small></label><input id="paymentBatch" maxlength="100" placeholder="Lote de depósito / voucher"></div><div class="field payment-extra"><label for="paymentTransaction">N.º de transacción</label><input id="paymentTransaction" maxlength="120" placeholder="TRX-000000"></div><div class="field full"><label for="paymentNote">Detalle / nota del pago <small>(opcional)</small></label><input id="paymentNote" maxlength="500" placeholder="Ej. Abono final, anticipo, pago en efectivo…"></div></div><div class="message" id="paymentHelp">Para efectivo no necesitas número de transacción. Transferencias y tarjetas sí deben llevarlo.</div><div class="form-actions"><button type="button" class="button secondary" data-close-payment>Cancelar</button><button type="button" class="button secondary" id="registerAnotherPayment" hidden>+ Registrar otro pago</button><button type="submit" class="button primary" id="savePayment">Registrar pago</button><span class="message" id="paymentMessage"></span></div></form></div></div></div>`;
   wireAccountMenu();
   let currentRows=[]; let activeTab='cobros';
   const modal=document.querySelector('#paymentModal');
@@ -2409,13 +2505,13 @@ async function renderAdminMoney() {
   document.querySelectorAll('[data-close-payment]').forEach(b=>b.addEventListener('click',closePayment));
   const updateMethodFields=()=>{const method=document.querySelector('#paymentMethod')?.value;const transaction=document.querySelector('#paymentTransaction');const batch=document.querySelector('#paymentBatch');const batchField=batch?.closest('.field');const transactionField=transaction?.closest('.field');[batchField,transactionField].forEach(x=>x?.classList.toggle('is-cash',method==='cash'));if(batchField)batchField.hidden=method==='cash';if(transactionField)transactionField.hidden=method==='cash';if(transaction){transaction.required=method!=='cash';transaction.disabled=method==='cash';if(method==='cash')transaction.value='';}if(batch&&method==='cash')batch.value='';document.querySelector('#paymentHelp').textContent=method==='cash'?'Efectivo: fecha, banco/caja y valor. La fecha inicia automáticamente en hoy.':'Transferencia y tarjeta: fecha, banco, valor, número de transacción y lote opcional.';};
   document.querySelector('#paymentMethod')?.addEventListener('change',updateMethodFields); updateMethodFields();
-  const openPayment=async row=>{document.querySelector('#paymentForm')?.reset();document.querySelector('#paymentId').value=row.paymentId||'';document.querySelector('#paymentSaleId').value=row.saleId||'';document.querySelector('#paymentOrderId').value=row.orderId||'';document.querySelector('#paymentModalTitle').textContent=row.paymentId?'Editar pago':'Registrar pago';document.querySelector('#paymentSaleContext').textContent=`${row.saleNumber||'Venta'} · ${row.customerName||'Cliente'}`;document.querySelector('#paymentSaleSummary').innerHTML=`<div><span>TOTAL VENTA</span><strong>${money(row.totalSale||0)}</strong></div><div><span>PAGADO</span><strong>${money(row.paid||0)}</strong></div><div class="balance"><span>SALDO</span><strong>${money(row.balance||0)}</strong></div>`;document.querySelector('#paymentAmount').value=row.paymentId?Number(row.amount||0).toFixed(2):Number(row.balance||0).toFixed(2);document.querySelector('#paymentDate').value=row.paymentId?(row.date||today):today;document.querySelector('#paymentBank').value=row.paymentId?(row.bank||''):'';document.querySelector('#paymentBatch').value=row.paymentId?(row.batch||''):'';document.querySelector('#paymentTransaction').value=row.paymentId?(row.transactionNumber||''):'';document.querySelector('#paymentMethod').value=row.paymentId?(row.method||'cash'):'cash';updateMethodFields();modal.hidden=false;document.querySelector('#paymentAmount')?.focus();};
+  const openPayment=async row=>{const receivable=(currentRows.receivables||[]).find(r=>(row.saleId&&String(r.saleId)===String(row.saleId))||(row.orderId&&String(r.orderId)===String(row.orderId)));const base=receivable||row;const related=(currentRows.payments||[]).filter(p=>(row.saleId&&String(p.saleId)===String(row.saleId))||(!row.saleId&&row.orderId&&String(p.orderId)===String(row.orderId)));const totalPaid=Math.round(related.reduce((sum,p)=>sum+Number(p.amount||0),0)*100)/100;const totalDue=Number(base.totalSale||row.totalSale||0);const realBalance=Math.max(0,Math.round((totalDue-totalPaid)*100)/100);document.querySelector('#paymentForm')?.reset();document.querySelector('#paymentId').value=row.paymentId||'';document.querySelector('#paymentSaleId').value=row.saleId||'';document.querySelector('#paymentOrderId').value=row.orderId||'';document.querySelector('#paymentModalTitle').textContent=row.paymentId?'Editar pago':'Registrar pago';document.querySelector('#paymentSaleContext').textContent=`${base.saleNumber||row.saleNumber||'Venta'} · ${base.customerName||row.customerName||'Cliente'}`;document.querySelector('#paymentSaleSummary').innerHTML=`<div><span>TOTAL VENTA</span><strong>${money(totalDue)}</strong></div><div><span>PAGADO</span><strong>${money(totalPaid)}</strong></div><div class="balance"><span>SALDO REAL</span><strong>${money(realBalance)}</strong></div>`;document.querySelector('#paymentAmount').value=row.paymentId?Number(row.amount||0).toFixed(2):realBalance.toFixed(2);document.querySelector('#paymentDate').value=row.paymentId?(row.date||today):today;document.querySelector('#paymentBank').value=row.paymentId?(row.bank||''):'';document.querySelector('#paymentBatch').value=row.paymentId?(row.batch||''):'';document.querySelector('#paymentTransaction').value=row.paymentId?(row.transactionNumber||''):'';document.querySelector('#paymentNote').value=row.paymentId?(row.note||''):'';document.querySelector('#paymentMethod').value=row.paymentId?(row.method||'cash'):'cash';const another=document.querySelector('#registerAnotherPayment');if(another){another.hidden=realBalance<=0.001;another.onclick=()=>openPayment({...base,paymentId:'',amount:realBalance});}updateMethodFields();modal.hidden=false;document.querySelector('#paymentAmount')?.focus();};
   const load=async()=>{const from=document.querySelector('#moneyFrom')?.value||today,to=document.querySelector('#moneyTo')?.value||today,q=document.querySelector('#moneySearch')?.value||'',sellerId=document.querySelector('#moneySeller')?.value||''; if(from&&to&&from>to){moneySummary.innerHTML='<div class="money-empty">La fecha inicial no puede ser posterior a la fecha final.</div>';content.innerHTML='';return;} moneySummary.innerHTML='<div class="money-loading">Consultando movimientos de dinero…</div>';try{const params=new URLSearchParams({from,to,q,sellerId,showPaid:'true'});const result=await request(`/api/admin/dinero/resumen?${params}`);currentRows=result;const t=result.totals||{};const rt=result.receivableTotals||{};moneySummary.innerHTML=`<article class="money-metric money-total"><span>INGRESADO</span><strong>${money(t.total)}</strong><small>${fmtDate(from)} → ${fmtDate(to)}</small></article><article class="money-metric"><span>EFECTIVO</span><strong>${money(t.cash)}</strong><small>Caja / efectivo</small></article><article class="money-metric"><span>TRANSFERENCIAS</span><strong>${money(t.transfer)}</strong><small>Con banco y transacción</small></article><article class="money-metric"><span>TARJETAS</span><strong>${money(t.card)}</strong><small>Con banco y transacción</small></article><article class="money-metric money-due"><span>POR COBRAR</span><strong>${money(rt.balance)}</strong><small>${result.receivables?.filter(r=>r.balance>0).length||0} cuenta(s) pendiente(s)</small></article>`;renderTab(result); }catch(e){moneySummary.innerHTML=`<div class="money-empty error">${escapeHTML(e.message||'No se pudo cargar el dinero.')}</div>`;content.innerHTML='';}};
   const renderTab=result=>{if(activeTab==='cobros'){const rows=Array.isArray(result.payments)?result.payments:[];content.innerHTML=rows.length?`<div class="money-table-wrap"><table class="money-table"><thead><tr><th>FECHA</th><th>VENTA</th><th>CLIENTE</th><th>FORMA</th><th>BANCO / CAJA</th><th>LOTE</th><th>TRANSACCIÓN</th><th>VALOR</th><th></th></tr></thead><tbody>${rows.map(r=>`<tr><td>${fmtDate(r.date)}</td><td><strong>#${escapeHTML(r.saleNumber)}</strong></td><td>${escapeHTML(r.customerName)}<small>${escapeHTML(r.sellerName)}</small></td><td><span class="payment-method payment-${escapeHTML(r.method)}">${escapeHTML(r.methodLabel)}</span></td><td>${escapeHTML(r.bank||'—')}</td><td>${escapeHTML(r.batch||'—')}</td><td>${escapeHTML(r.transactionNumber||'—')}</td><td><strong>${money(r.amount)}</strong></td><td>${canEditPayment?`<div class="money-actions"><button class="button secondary small" data-edit-payment="${escapeHTML(r.id)}">Editar</button><button class="button danger small" data-delete-payment="${escapeHTML(r.id)}">Eliminar</button></div>`:''}</td></tr>`).join('')}</tbody></table></div>`:'<div class="money-empty">No hay ingresos registrados con estos filtros.</div>';}else if(activeTab==='cxc'){const rows=(result.receivables||[]).filter(r=>r.balance>0);content.innerHTML=rows.length?`<div class="money-table-wrap"><table class="money-table"><thead><tr><th>VENTA</th><th>CLIENTE</th><th>FECHA</th><th>RESPONSABLE</th><th>TOTAL</th><th>PAGADO</th><th>SALDO</th><th>ESTADO</th><th></th></tr></thead><tbody>${rows.map(r=>`<tr><td><strong>#${escapeHTML(r.saleNumber)}</strong><small>${r.sourceType==='orden'?'Orden pendiente':'Venta confirmada'}</small></td><td>${escapeHTML(r.customerName)}<small>${escapeHTML(r.sellerName)}</small></td><td>${fmtDate(r.date)}<small>${Number(r.ageDays||0)} día(s)</small></td><td>${escapeHTML(r.responsibleName||r.sellerName||'Sin vendedor')}</td><td>${money(r.totalSale)}</td><td>${money(r.paid)}</td><td><strong class="money-balance">${money(r.balance)}</strong></td><td><span class="receivable-status ${r.status==='ABONO'?'partial':''}">${r.status}</span></td><td><button class="button primary small" data-open-payment="${escapeHTML(r.saleId||r.orderId)}" data-open-payment-type="${r.sourceType||'venta'}">Registrar pago</button></td></tr>`).join('')}</tbody></table></div>`:'<div class="money-empty">No hay cuentas por cobrar pendientes con estos filtros.</div>';}else{const rows=Array.isArray(result.payments)?result.payments:[];content.innerHTML=rows.length?`<div class="money-ledger-head"><div><span class="eyebrow">LIBRO DE INGRESOS</span><h3>Movimientos de dinero</h3></div><p>Cada fila representa dinero efectivamente ingresado.</p></div><div class="money-table-wrap"><table class="money-table"><thead><tr><th>FECHA</th><th>VENTA</th><th>CLIENTE</th><th>FORMA</th><th>BANCO / CAJA</th><th>REFERENCIA</th><th>VALOR</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${fmtDate(r.date)}</td><td>#${escapeHTML(r.saleNumber)}</td><td>${escapeHTML(r.customerName)}</td><td>${escapeHTML(r.methodLabel)}</td><td>${escapeHTML(r.bank||'—')}</td><td>${escapeHTML([r.batch,r.transactionNumber].filter(Boolean).join(' · ')||'—')}</td><td><strong>${money(r.amount)}</strong></td></tr>`).join('')}</tbody></table></div>`:'<div class="money-empty">No hay movimientos de dinero en este período.</div>'}};
   document.querySelectorAll('[data-money-tab]').forEach(tab=>tab.addEventListener('click',()=>{activeTab=tab.dataset.moneyTab;document.querySelectorAll('[data-money-tab]').forEach(x=>x.classList.toggle('active',x===tab));load();}));
   document.querySelector('#moneyRefresh')?.addEventListener('click',load);document.querySelector('#moneyFrom')?.addEventListener('change',load);document.querySelector('#moneyTo')?.addEventListener('change',load);document.querySelector('#moneySeller')?.addEventListener('change',load);document.querySelector('#moneySearch')?.addEventListener('input',()=>{const v=document.querySelector('#moneySearch').value;document.querySelector('#moneySearchClear').hidden=!v;load();});document.querySelector('#moneySearchClear')?.addEventListener('click',()=>{document.querySelector('#moneySearch').value='';document.querySelector('#moneySearchClear').hidden=true;load();});document.querySelector('#moneyClear')?.addEventListener('click',()=>{document.querySelector('#moneyFrom').value=today;document.querySelector('#moneyTo').value=today;document.querySelector('#moneySearch').value='';if(document.querySelector('#moneySeller'))document.querySelector('#moneySeller').value='';document.querySelector('#moneySearchClear').hidden=true;load();});
-  content.addEventListener('click',async e=>{const open=e.target.closest('[data-open-payment]');if(open){const result=await request(`/api/admin/dinero/resumen?from=2000-01-01&to=2999-12-31&showPaid=true`);const row=(result.receivables||[]).find(r=>String((open.dataset.openPaymentType==='orden'?r.orderId:r.saleId))===String(open.dataset.openPayment));if(row)openPayment(row);return;}const edit=e.target.closest('[data-edit-payment]');if(edit){const row=(currentRows.payments||[]).find(r=>String(r.id)===String(edit.dataset.editPayment));if(row)openPayment({...row,paymentId:row.id});return;}const del=e.target.closest('[data-delete-payment]');if(del){const ok=await showYhorsConfirm('¿Eliminar este pago?','El ingreso se quitará del estado de cuenta y el saldo pendiente se recalculará.');if(!ok)return;try{await request(`/api/admin/dinero/pagos/${encodeURIComponent(del.dataset.deletePayment)}`,{method:'DELETE'});await load();}catch(err){alert(err.message);}}});
-  document.querySelector('#paymentForm')?.addEventListener('submit',async e=>{e.preventDefault();const msg=document.querySelector('#paymentMessage'),submit=document.querySelector('#savePayment');const payload={saleId:document.querySelector('#paymentSaleId').value||null,orderId:document.querySelector('#paymentOrderId').value||null,method:document.querySelector('#paymentMethod').value,amount:Number(document.querySelector('#paymentAmount').value),date:document.querySelector('#paymentDate').value,bank:document.querySelector('#paymentBank').value.trim(),batch:document.querySelector('#paymentBatch').value.trim(),transactionNumber:document.querySelector('#paymentTransaction').value.trim()};submit.disabled=true;submit.classList.add('is-loading');msg.textContent='Guardando…';try{const id=document.querySelector('#paymentId').value;const endpoint=id?`/api/admin/dinero/pagos/${encodeURIComponent(id)}`:(payload.orderId?'/api/admin/dinero/pagos-orden':'/api/admin/dinero/pagos');await request(endpoint,{method:id?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});closePayment();await load();}catch(err){msg.className='message error';msg.textContent=err.message||'No se pudo guardar el pago.';}finally{submit.disabled=false;submit.classList.remove('is-loading');}});
+  content.addEventListener('click',async e=>{const open=e.target.closest('[data-open-payment]');if(open){const result=await request(`/api/admin/dinero/resumen?from=2000-01-01&to=2999-12-31&showPaid=true`);const row=(result.receivables||[]).find(r=>String((open.dataset.openPaymentType==='orden'?r.orderId:r.saleId))===String(open.dataset.openPayment));if(row)openPayment(row);return;}const edit=e.target.closest('[data-edit-payment]');if(edit){const row=(currentRows.payments||[]).find(r=>String(r.id)===String(edit.dataset.editPayment));if(row){const receivable=(currentRows.receivables||[]).find(r=>(row.saleId&&String(r.saleId)===String(row.saleId))||(row.orderId&&String(r.orderId)===String(row.orderId)));openPayment({...row,...(receivable||{}),paymentId:row.id});}return;}const del=e.target.closest('[data-delete-payment]');if(del){const ok=await showYhorsConfirm('¿Eliminar este pago?','El ingreso se quitará del estado de cuenta y el saldo pendiente se recalculará.');if(!ok)return;try{await request(`/api/admin/dinero/pagos/${encodeURIComponent(del.dataset.deletePayment)}`,{method:'DELETE'});await load();}catch(err){alert(err.message);}}});
+  document.querySelector('#paymentForm')?.addEventListener('submit',async e=>{e.preventDefault();const msg=document.querySelector('#paymentMessage'),submit=document.querySelector('#savePayment');const payload={saleId:document.querySelector('#paymentSaleId').value||null,orderId:document.querySelector('#paymentOrderId').value||null,method:document.querySelector('#paymentMethod').value,amount:Number(document.querySelector('#paymentAmount').value),date:document.querySelector('#paymentDate').value,bank:document.querySelector('#paymentBank').value.trim(),batch:document.querySelector('#paymentBatch').value.trim(),transactionNumber:document.querySelector('#paymentTransaction').value.trim(),note:document.querySelector('#paymentNote').value.trim()};submit.disabled=true;submit.classList.add('is-loading');msg.textContent='Guardando…';try{const id=document.querySelector('#paymentId').value;const endpoint=id?`/api/admin/dinero/pagos/${encodeURIComponent(id)}`:(payload.orderId?'/api/admin/dinero/pagos-orden':'/api/admin/dinero/pagos');await request(endpoint,{method:id?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});closePayment();await load();}catch(err){msg.className='message error';msg.textContent=err.message||'No se pudo guardar el pago.';}finally{submit.disabled=false;submit.classList.remove('is-loading');}});
   await load();
   const saleQuery=new URLSearchParams(window.location.search).get('sale');
   if(saleQuery){try{const full=await request(`/api/admin/dinero/resumen?from=2000-01-01&to=2999-12-31&showPaid=true`);const row=(full.receivables||[]).find(r=>String(r.saleId)===String(saleQuery));if(row&&Number(row.balance||0)>0)openPayment(row);}catch{}}
@@ -3670,11 +3766,11 @@ async function renderAdminUsers(panel = 'usuarios') {
   });
 }
 
-function backupPanel(data = null) {
+function backupPanel(data = null, collapsed = true) {
   const persistent = data?.storageMode === 'persistent';
   const backups = Array.isArray(data?.backups) ? data.backups : [];
   const total = backups.length;
-  return `<section class="admin-panel backup-panel is-collapsed" id="backupPanel">
+  return `<section class="admin-panel backup-panel ${collapsed ? 'is-collapsed' : ''}" id="backupPanel">
     <div class="backup-panel-head">
       <button class="backup-collapse-toggle" type="button" id="backupCollapseToggle" aria-expanded="false">
         <span class="backup-title-wrap">
@@ -3752,17 +3848,33 @@ function showSaveSuccess(messageElement, text) {
 function inventoryPageMarkup(products = [], options = {}) {
   const inventoryReadOnly = Boolean(options.readOnly);
   const role = String(options.role || window.__yhorsSession?.role || '').toLowerCase();
+  const classifications = options.classifications || { brands: {}, productTypes: {} };
+  const categoryOptions = Object.entries(categories).filter(([key]) => key !== 'all');
+  const allValues = (key, category = '') => {
+    const source = category
+      ? (classifications[key]?.[category] || [])
+      : Object.values(classifications[key] || {}).flat();
+    return [...new Set(source.filter(Boolean))].sort((a,b) => String(a).localeCompare(String(b), 'es', { sensitivity:'base' }));
+  };
   const rows = products.length ? products.map(product => {
-    const images = productImages(product);
+    const images = productImages(product).filter(src => src !== placeholder);
+    const hasImages = images.length > 0;
     const profit = Number(product.salePrice ?? product.price ?? 0) - Number(product.purchasePrice ?? 0);
     const profitClass = profit >= 0 ? 'profit-positive' : 'profit-negative';
     const profitLabel = profit >= 0 ? 'Ganancia' : 'Pérdida';
     const isCosplay = product.category === 'cosplay';
+    const isRental = isCosplay && (product.isRental === true || product.rentalPrice !== null && product.rentalPrice !== undefined && product.rentalPrice !== '');
     const rentalValue = product.rentalPrice ?? '';
+    const brands = allValues('brands', product.category);
+    const types = allValues('productTypes', product.category);
+    const tags = Array.isArray(product.tags) ? product.tags : [];
+    const tagText = tags.join(', ');
+    const stockMin = Number.isFinite(Number(product.stockMin)) ? Number(product.stockMin) : 0;
+    const requiresIdentifier = product.requiresDeviceIdentifier !== false && product.category === 'tech';
     return `<article class="inventory-record inventory-record-compact" data-inventory-id="${escapeHTML(product.id)}">
       <div class="inventory-record-media">
-        <img class="inventory-main-image" src="${escapeHTML(images[0] || placeholder)}" alt="${escapeHTML(product.name)}" data-fallback>
-        <div class="inventory-thumbs">${images.slice(0,4).map((src,index)=>`<img src="${escapeHTML(src)}" alt="${escapeHTML(product.name)} imagen ${index+1}" data-fallback>`).join('')}</div>
+        ${hasImages ? `<img class="inventory-main-image" src="${escapeHTML(images[0])}" alt="${escapeHTML(product.name)}" data-fallback>` : `<div class="inventory-no-image" aria-label="Producto sin imagen"><span>⚠</span><strong>SIN IMAGEN</strong><small>Completar después</small></div>`}
+        ${hasImages ? `<div class="inventory-thumbs">${images.slice(0,4).map((src,index)=>`<img src="${escapeHTML(src)}" alt="${escapeHTML(product.name)} imagen ${index+1}" data-fallback>`).join('')}</div>` : ''}
       </div>
       <div class="inventory-record-info">
         <div class="inventory-record-title">
@@ -3778,37 +3890,69 @@ function inventoryPageMarkup(products = [], options = {}) {
 
         <div class="inventory-record-meta">
           <div><span>SKU</span><strong>${escapeHTML(product.sku || '—')}</strong></div>
-          <div><span>MARCA</span><strong>${escapeHTML(product.brand || '—')}</strong></div>
-          <div><span>TIPO</span><strong>${escapeHTML(product.productType || '—')}</strong></div>
+          <div><span>MARCA</span><strong data-inventory-display="brand">${escapeHTML(product.brand || '—')}</strong></div>
+          <div><span>TIPO</span><strong data-inventory-display="productType">${escapeHTML(product.productType || '—')}</strong></div>
         </div>
 
         <div class="inventory-edit-fields">
           <label><span>Precio de compra</span><div class="inventory-input-wrap"><span>$</span><input type="number" min="0" step="0.01" value="${escapeHTML(product.purchasePrice ?? 0)}" data-field="purchasePrice" disabled></div></label>
           <label><span>Precio de venta</span><div class="inventory-input-wrap"><span>$</span><input type="number" min="0" step="0.01" value="${escapeHTML(product.salePrice ?? product.price ?? 0)}" data-field="salePrice" disabled></div></label>
           <label><span>Stock disponible</span><input type="number" min="0" step="1" value="${escapeHTML(product.stock ?? 0)}" data-field="stock" disabled></label>
-          ${isCosplay ? `<label><span>Precio de alquiler / día</span><div class="inventory-input-wrap"><span>$</span><input type="number" min="0" step="0.01" value="${escapeHTML(rentalValue)}" data-field="rentalPrice" disabled></div></label>` : ''}
+          <label><span>Stock mínimo</span><input type="number" min="0" step="1" value="${escapeHTML(stockMin)}" data-field="stockMin" disabled></label>
+          <label><span>Categoría</span><select data-field="category" disabled>${categoryOptions.map(([key,label])=>`<option value="${escapeHTML(key)}" ${product.category===key?'selected':''}>${escapeHTML(label)}</option>`).join('')}</select></label>
+          <label><span>Marca</span><select data-field="brand" disabled><option value="">Sin marca</option>${brands.map(v=>`<option value="${escapeHTML(v)}" ${product.brand===v?'selected':''}>${escapeHTML(v)}</option>`).join('')}${product.brand && !brands.includes(product.brand) ? `<option value="${escapeHTML(product.brand)}" selected>${escapeHTML(product.brand)}</option>` : ''}</select></label>
+          <label><span>Tipo de producto</span><select data-field="productType" disabled><option value="">Sin clasificación</option>${types.map(v=>`<option value="${escapeHTML(v)}" ${product.productType===v?'selected':''}>${escapeHTML(v)}</option>`).join('')}${product.productType && !types.includes(product.productType) ? `<option value="${escapeHTML(product.productType)}" selected>${escapeHTML(product.productType)}</option>` : ''}</select></label>
+          <label class="inventory-tags-field"><span>Etiquetas / palabras clave <small>(opcional)</small></span><input type="text" value="${escapeHTML(tagText)}" data-field="tags" placeholder="Gaming, Xiaomi, 512GB…" disabled><small class="field-help">Sirven para encontrar el producto rápidamente con el buscador. Sepáralas con comas.</small></label>
+          ${isCosplay ? `<label><span>Precio alquiler / día</span><div class="inventory-input-wrap"><span>$</span><input type="number" min="0" step="0.01" value="${escapeHTML(rentalValue)}" data-field="rentalPrice" disabled></div></label>` : ''}
+          ${isCosplay ? `<label><span>Días de alquiler</span><input type="number" min="1" max="10" step="1" value="${escapeHTML(product.rentalDays ?? 1)}" data-field="rentalDays" disabled></label>` : ''}
         </div>
 
-        <div class="inventory-record-actions">${inventoryReadOnly ? '<span class="inventory-readonly-note">Solo consulta · stock disponible</span>' : '<button class="button secondary small" type="button" data-inventory-edit>Editar</button><button class="button primary small" type="button" data-inventory-save disabled>Guardar cambios</button><button class="button secondary small" type="button" data-inventory-cancel disabled>Cancelar</button><span class="message" data-inventory-message></span>'}</div>
+        <div class="inventory-edit-options">
+          <label><input type="checkbox" data-field="published" ${product.published !== false ? 'checked' : ''} disabled> Publicado en web</label>
+          ${product.category === 'tech' ? `<label><input type="checkbox" data-field="requiresDeviceIdentifier" ${requiresIdentifier ? 'checked' : ''} disabled> Requiere Serie / IMEI</label>` : ''}
+          ${isCosplay ? `<label><input type="checkbox" data-field="isRental" ${isRental ? 'checked' : ''} disabled> Disponible para alquiler</label>` : ''}
+        </div>
+
+        <div class="inventory-image-status ${hasImages ? 'has-images' : 'missing-images'}"><span>${hasImages ? '✓' : '⚠'}</span><strong>${hasImages ? `${images.length} imagen${images.length === 1 ? '' : 'es'} cargada${images.length === 1 ? '' : 's'}` : 'SIN IMAGEN'}</strong>${!hasImages ? '<small>Agrega las fotos desde la ficha del producto cuando tengas tiempo.</small>' : ''}</div>
+
+        <div class="inventory-record-actions">${inventoryReadOnly ? '<span class="inventory-readonly-note">Solo consulta · stock disponible</span>' : '<button class="button secondary small" type="button" data-inventory-edit>Editar ficha</button><button class="button primary small" type="button" data-inventory-save disabled>Guardar cambios</button><button class="button secondary small" type="button" data-inventory-cancel disabled>Cancelar</button><span class="message" data-inventory-message></span>'}</div>
       </div>
     </article>`;
   }).join('') : '<div class="empty">No hay productos registrados.</div>';
 
   return `<main class="admin-shell"><div class="admin-wrap">
-    <div class="admin-top"><div><a class="brand admin-brand" href="${ADMIN_PATH}/inteligente" data-smooth-route aria-label="YHORS · Panel Administrativo · Ir a YHORS Inteligente"><span class="admin-brand-mark" aria-hidden="true"><img src="/favicon.svg" alt=""></span><span class="admin-brand-word">YHORS</span><span class="admin-brand-divider" aria-hidden="true"></span><small>Panel Administrativo</small></a><h1 class="admin-title">Inventario</h1><p class="admin-subtitle">Control de costos, precios y existencias</p></div><div class="admin-top-actions">${accountMenu(window.__yhorsSession || {})}</div></div>
+    <div class="admin-top"><div><a class="brand admin-brand" href="${ADMIN_PATH}/inteligente" data-smooth-route aria-label="YHORS · Panel Administrativo · Ir a YHORS Inteligente"><span class="admin-brand-mark" aria-hidden="true"><img src="/favicon.svg" alt=""></span><span class="admin-brand-word">YHORS</span><span class="admin-brand-divider" aria-hidden="true"></span><small>Panel Administrativo</small></a><h1 class="admin-title">Inventario</h1><p class="admin-subtitle">Control de costos, precios, existencias y clasificación</p></div><div class="admin-top-actions">${accountMenu(window.__yhorsSession || {})}</div></div>
     ${adminSectionNav({ role }, 'inventario')}
     <section class="admin-panel inventory-page-panel">
-      <div class="section-heading"><div><span class="eyebrow">Control de existencias</span><h2>Inventario de productos</h2></div><p>La ficha del producto permanece limpia; aquí solo se editan los datos de inventario.</p></div>
-      <div class="inventory-toolbar">
-        <label class="inventory-search"><span aria-hidden="true">⌕</span><input id="inventoryPageSearch" type="search" placeholder="Buscar por nombre, SKU, marca o categoría…" autocomplete="off"><button id="clearInventoryPageSearch" type="button" aria-label="Limpiar búsqueda">×</button></label>
-        <label class="inventory-filter"><span>Categoría</span><select id="inventoryPageCategoryFilter"><option value="">Todas las categorías</option><option value="elegant">Elegante</option><option value="sports">Deportes</option><option value="tech">Tech</option><option value="cosplay">Cosplay</option><option value="pets">Mascotas</option><option value="details">Detalles</option><option value="collectibles">Coleccionables</option></select></label>
-        <span class="inventory-count" id="inventoryPageCount">${products.length} productos</span>
+      <div class="inventory-workflow-card inventory-classifications-card">
+        <div><span class="eyebrow">01 · Organización</span><h2>Clasificaciones</h2><p>Administra marcas y tipos de producto sin llenar la pantalla principal de Inventario.</p></div>
+        <button class="button secondary small" type="button" id="openInventoryClassifications">Abrir clasificaciones →</button>
       </div>
-      <div id="inventoryPageList">${rows}</div>
+
+      <section class="inventory-workflow-card inventory-registration-card">
+        <div class="section-heading inventory-page-heading"><div><span class="eyebrow">02 · Inventario</span><h2>Inventario de productos</h2></div><div class="inventory-page-heading-actions"><p>Completa costos, precios, stock y clasificación. Las imágenes pueden agregarse después.</p><button class="button primary small inventory-add-product" type="button" id="inventoryAddProduct">+ Agregar nuevo producto</button></div></div>
+      </section>
+
+      <section class="inventory-workflow-card inventory-products-card">
+        <div class="inventory-products-heading"><div><span class="eyebrow">03 · Registro</span><h2>Productos ya registrados</h2></div><span class="inventory-count inventory-count-large" id="inventoryPageCount">${products.length} productos</span></div>
+        <div class="inventory-toolbar inventory-toolbar-extended">
+          <label class="inventory-search"><span aria-hidden="true">⌕</span><input id="inventoryPageSearch" type="search" placeholder="Buscar por nombre, SKU, marca, tipo o etiqueta…" autocomplete="off"><button id="clearInventoryPageSearch" type="button" aria-label="Limpiar búsqueda">×</button></label>
+          <label class="inventory-filter"><span>Tipo de producto</span><select id="inventoryPageTypeFilter"><option value="">Todos los tipos</option>${allValues('productTypes').map(v=>`<option value="${escapeHTML(v)}">${escapeHTML(v)}</option>`).join('')}</select></label>
+          <label class="inventory-filter"><span>Marca</span><select id="inventoryPageBrandFilter"><option value="">Todas las marcas</option>${allValues('brands').map(v=>`<option value="${escapeHTML(v)}">${escapeHTML(v)}</option>`).join('')}</select></label>
+          <label class="inventory-filter"><span>Categoría</span><select id="inventoryPageCategoryFilter"><option value="">Todas las categorías</option>${categoryOptions.map(([key,label])=>`<option value="${escapeHTML(key)}">${escapeHTML(label)}</option>`).join('')}</select></label>
+        </div>
+        <div id="inventoryPageList">${rows}</div>
+      </section>
     </section>
+    <div class="inventory-classification-modal" id="inventoryClassificationModal" hidden>
+      <div class="inventory-classification-backdrop" data-close-inventory-classifications></div>
+      <div class="inventory-classification-dialog" role="dialog" aria-modal="true" aria-labelledby="inventoryClassificationTitle">
+        <div class="inventory-classification-dialog-head"><div><span class="eyebrow">01 · Organización</span><h2 id="inventoryClassificationTitle">Clasificaciones</h2><p>Marcas y tipos de producto, organizados por universo.</p></div><button type="button" class="product-image-picker-close" data-close-inventory-classifications aria-label="Cerrar">×</button></div>
+        ${classificationPanel(classifications).replace('<section class="admin-panel classification-panel" id="classificationPanel">','<section class="classification-modal-content" id="classificationPanel">')}
+      </div>
+    </div>
   </div></main>`;
 }
-
 
 function flyerDraftKey() {
   return `yhors_flyer_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
@@ -4179,6 +4323,69 @@ async function renderFlyerPreview() {
   wireImageFallback(document.querySelector('.flyer-page'));
 }
 
+function openInventoryNewProductModal({ classifications, product = null, onSaved }) {
+  document.querySelector('#inventoryNewProductModal')?.remove();
+  document.querySelector('#productImagePickerModal')?.remove();
+  const modal = document.createElement('div');
+  modal.id = 'inventoryNewProductModal';
+  modal.className = 'inventory-new-product-modal';
+  const editingProduct = Boolean(product?.id);
+  modal.innerHTML = `<div class="inventory-new-product-backdrop" data-inventory-new-close></div><div class="inventory-new-product-dialog" role="dialog" aria-modal="true" aria-labelledby="inventoryNewProductTitle"><div class="inventory-new-product-head"><div><span class="eyebrow">INVENTARIO · ${editingProduct ? 'EDITAR PRODUCTO' : 'NUEVO PRODUCTO'}</span><h2 id="inventoryNewProductTitle">${editingProduct ? 'Editar producto' : 'Agregar nuevo producto'}</h2><small>Completa la ficha comercial, existencias y las imágenes sin salir de Inventario.</small></div><button type="button" class="product-image-picker-close" data-inventory-new-close aria-label="Cerrar">×</button></div><div id="inventoryNewProductFormArea"></div></div>`;
+  document.body.appendChild(modal);
+  const area = modal.querySelector('#inventoryNewProductFormArea');
+  let draft = product ? { ...product } : {};
+  const close = () => { document.querySelector('#productImagePickerModal')?.remove(); modal.remove(); };
+  const draw = () => {
+    area.innerHTML = productForm(draft, classifications);
+    wireImageFallback(area);
+    area.querySelectorAll('[data-open-image-picker]').forEach(button => {
+      button.disabled = false;
+      button.addEventListener('click', event => {
+        event.preventDefault(); event.stopPropagation();
+        const slot = Number(button.dataset.openImagePicker || 1);
+        const fieldId = slot === 1 ? '#image' : `#image${slot}`;
+        const current = area.querySelector(fieldId)?.value || '';
+        openProductImagePicker(slot, current, ({ file, url, preview }) => {
+          const field = area.querySelector(fieldId); const imagePreview = area.querySelector(`#productImagePreview${slot}`);
+          if (field) field.value = url || '';
+          window.__yhorsPendingImageFiles ||= {};
+          if (file) window.__yhorsPendingImageFiles[slot] = file; else delete window.__yhorsPendingImageFiles[slot];
+          if (imagePreview) imagePreview.src = preview || placeholder;
+          const box = button.closest('.product-image-slot');
+          box?.querySelector('small')?.replaceChildren(document.createTextNode(file ? 'Archivo seleccionado · se subirá al guardar' : (url ? 'Imagen cargada por enlace' : 'Sin imagen · puedes agregarla después')));
+          box?.querySelector('.product-image-slot-preview')?.classList.toggle('has-image', Boolean(file || url));
+        });
+      });
+    });
+    area.querySelector('#category')?.addEventListener('change', e => { draft = { ...draft, category: e.target.value }; draw(); });
+    const editor = area.querySelector('#descriptionEditor'); const hidden = area.querySelector('#description');
+    editor?.addEventListener('input', () => { if (hidden) hidden.value = editor.innerHTML.trim(); });
+    area.querySelectorAll('[data-rich-command]').forEach(button => button.addEventListener('click', () => { editor?.focus(); document.execCommand(button.dataset.richCommand, false, button.dataset.richValue || null); if(hidden) hidden.value=editor?.innerHTML?.trim() || ''; }));
+    area.querySelector('#productForm')?.addEventListener('submit', async e => {
+      e.preventDefault(); const form=e.currentTarget; const msg=area.querySelector('#formMessage'); const submit=form.querySelector('[type="submit"]');
+      if (!form.elements.category.value) { msg.className='message error'; msg.textContent='Selecciona una categoría antes de guardar.'; return; }
+      if (!form.elements.name.value.trim() || !form.elements.sku.value.trim()) { msg.className='message error'; msg.textContent='Completa nombre y SKU.'; return; }
+      const salePrice=Number(form.elements.salePrice.value), purchasePrice=Number(form.elements.purchasePrice?.value||0), stock=Number(form.elements.stock?.value||0), stockMin=Number(form.elements.stockMin?.value||0);
+      if (!Number.isFinite(salePrice)||salePrice<0||!Number.isFinite(purchasePrice)||purchasePrice<0||!Number.isInteger(stock)||stock<0||!Number.isInteger(stockMin)||stockMin<0) { msg.className='message error'; msg.textContent='Revisa precios, stock y stock mínimo.'; return; }
+      const confirmed=await showYhorsConfirm(editingProduct?'¿Guardar los cambios?':'¿Crear este producto?',editingProduct?`Se actualizará <strong>${escapeHTML(product.name)}</strong> con la nueva ficha e imágenes.`:'Se registrará el producto en YHORS con la ficha que acabas de completar.'); if(!confirmed)return;
+      submit.disabled=true; msg.textContent='Guardando…';
+      try {
+        if(hidden) hidden.value=editor?.innerHTML?.trim() || hidden.value || '';
+        const data=Object.fromEntries(new FormData(form).entries());
+        data.published=form.elements.published?form.elements.published.checked:true; data.requiresDeviceIdentifier=form.elements.requiresDeviceIdentifier?form.elements.requiresDeviceIdentifier.checked:false; data.isRental=form.elements.isRental?form.elements.isRental.checked:false; data.featured=Boolean(product?.featured); data.hero=Boolean(product?.hero); data.price=data.salePrice; data.purchasePrice=purchasePrice; data.stock=stock; data.stockMin=stockMin; data.tags=String(form.elements.tags?.value||'').split(',').map(v=>v.trim()).filter(Boolean).slice(0,30); data.images=[data.image,data.image2,data.image3,data.image4].filter(Boolean);
+        const pending=window.__yhorsPendingImageFiles||{};
+        for(let slot=1;slot<=4;slot++){const file=pending[slot];if(!file)continue;const fd=new FormData();fd.append('image',file);const uploaded=await request('/api/admin/upload',{method:'POST',body:fd});const key=slot===1?'image':`image${slot}`;data[key]=uploaded.image;data.images[slot-1]=uploaded.image;}
+        data.images=data.images.filter(Boolean); data.image=data.images[0]||'';
+        const url=editingProduct?`/api/admin/products/${encodeURIComponent(product.id)}`:'/api/admin/products';
+        const saved=await request(url,{method:editingProduct?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+        window.__yhorsPendingImageFiles={}; await onSaved?.(saved); close();
+      } catch(err){submit.disabled=false;msg.className='message error';msg.textContent=err.message||'No se pudo guardar el producto.';}
+    });
+  };
+  modal.querySelectorAll('[data-inventory-new-close]').forEach(b=>b.addEventListener('click',close));
+  window.__yhorsPendingImageFiles={}; draw();
+}
+
 async function renderAdminInventory() {
   const session = await request('/api/admin/session').catch(() => ({ authenticated: false }));
   if (!session.authenticated) return renderLogin();
@@ -4186,21 +4393,27 @@ async function renderAdminInventory() {
   window.__yhorsSession = session;
   const inventoryReadOnly = false;
   let products = await request('/api/admin/products').catch(() => []);
+  const classifications = await request('/api/admin/classifications').catch(() => ({ brands: {}, productTypes: {} }));
   const fields = ['name','sku','brand','productType','category','purchasePrice','salePrice','rentalPrice','stock','image','description','featured','hero','heroOrder'];
   const draw = () => {
     const query = (document.querySelector('#inventoryPageSearch')?.value || '').trim().toLowerCase();
     const categoryFilter = document.querySelector('#inventoryPageCategoryFilter')?.value || '';
+    const typeFilter = document.querySelector('#inventoryPageTypeFilter')?.value || '';
+    const brandFilter = document.querySelector('#inventoryPageBrandFilter')?.value || '';
     const matches = products.filter(p => {
-      const matchesQuery = !query || [p.name, p.sku, p.brand, p.productType, p.category, categories[p.category]].filter(Boolean).some(v => String(v).toLowerCase().includes(query));
+      const haystack = [p.name, p.sku, p.brand, p.productType, p.category, categories[p.category], ...(Array.isArray(p.tags) ? p.tags : [])].filter(Boolean).join(' ').toLowerCase();
+      const matchesQuery = !query || haystack.includes(query);
       const matchesCategory = !categoryFilter || p.category === categoryFilter;
-      return matchesQuery && matchesCategory;
+      const matchesType = !typeFilter || p.productType === typeFilter;
+      const matchesBrand = !brandFilter || p.brand === brandFilter;
+      return matchesQuery && matchesCategory && matchesType && matchesBrand;
     });
     const count = document.querySelector('#inventoryPageCount');
-    const filtered = Boolean(query || categoryFilter);
+    const filtered = Boolean(query || categoryFilter || typeFilter || brandFilter);
     if (count) count.textContent = filtered ? `${matches.length} de ${products.length} productos` : `${products.length} productos`;
     const list = document.querySelector('#inventoryPageList');
     if (!list) return;
-    const inventoryMarkup = inventoryPageMarkup(matches, { readOnly: inventoryReadOnly, role: session.role });
+    const inventoryMarkup = inventoryPageMarkup(matches, { readOnly: inventoryReadOnly, role: session.role, classifications });
     const inventoryTemplate = document.createElement('template');
     inventoryTemplate.innerHTML = inventoryMarkup.trim();
     const inventoryList = inventoryTemplate.content.querySelector('#inventoryPageList');
@@ -4222,13 +4435,12 @@ async function renderAdminInventory() {
     list.querySelectorAll('.inventory-record').forEach(record => {
       record.querySelectorAll('[data-field="purchasePrice"],[data-field="salePrice"]').forEach(input => input.addEventListener('input', () => refreshProfit(record)));
       record.querySelector('[data-inventory-edit]')?.addEventListener('click', () => {
-        record.classList.add('is-editing');
-        record.querySelectorAll('[data-field]').forEach(input => input.disabled = false);
-        record.querySelectorAll('[data-image-index]').forEach(input => input.disabled = false);
-        record.querySelector('[data-inventory-edit]').disabled = true;
-        record.querySelector('[data-inventory-save]').disabled = false;
-        record.querySelector('[data-inventory-cancel]').disabled = false;
-        record.querySelector('[data-inventory-message]').textContent = '';
+        const product = products.find(p => p.id === record.dataset.inventoryId);
+        if (!product) return;
+        openInventoryNewProductModal({ classifications, product, onSaved: async updated => {
+          products = products.map(p => p.id === updated.id ? updated : p);
+          draw();
+        }});
       });
       record.querySelector('[data-inventory-cancel]')?.addEventListener('click', () => draw());
       record.querySelector('[data-inventory-save]')?.addEventListener('click', async () => {
@@ -4237,24 +4449,33 @@ async function renderAdminInventory() {
         const get = key => record.querySelector(`[data-field="${key}"]`);
         const purchasePrice = Number(get('purchasePrice')?.value);
         const salePrice = Number(get('salePrice')?.value);
+        const nextCategory = get('category')?.value || product.category;
+        const nextBrand = get('brand')?.value || '';
+        const nextProductType = get('productType')?.value || '';
         const rentalRaw = get('rentalPrice')?.value;
-        const rentalPrice = product.category === 'cosplay'
+        const rentalPrice = nextCategory === 'cosplay'
           ? (rentalRaw === '' || rentalRaw == null ? null : Number(rentalRaw))
           : null;
+        const rentalDays = nextCategory === 'cosplay' ? Math.max(1, Math.min(10, Number(get('rentalDays')?.value || 1))) : null;
         const stock = Number(get('stock')?.value);
-        const payload = { purchasePrice, salePrice, stock };
-        if (product.category === 'cosplay') payload.rentalPrice = rentalPrice;
+        const stockMin = Number(get('stockMin')?.value || 0);
+        const tags = String(get('tags')?.value || '').split(',').map(v => v.trim()).filter(Boolean).slice(0, 30);
+        const published = Boolean(get('published')?.checked);
+        const requiresDeviceIdentifier = nextCategory === 'tech' ? Boolean(get('requiresDeviceIdentifier')?.checked) : false;
+        const isRental = nextCategory === 'cosplay' ? Boolean(get('isRental')?.checked) : false;
+        const payload = { purchasePrice, salePrice, stock, stockMin, category: nextCategory, brand: nextBrand, productType: nextProductType, tags, published, requiresDeviceIdentifier, isRental, rentalDays };
+        if (nextCategory === 'cosplay') payload.rentalPrice = isRental ? rentalPrice : null;
 
         if (!Number.isFinite(salePrice) || salePrice < 0 ||
             !Number.isFinite(purchasePrice) || purchasePrice < 0 ||
-            !Number.isInteger(stock) || stock < 0 ||
-            (product.category === 'cosplay' && (rentalPrice === null || !Number.isFinite(rentalPrice) || rentalPrice < 0))) {
+            !Number.isInteger(stock) || stock < 0 || !Number.isInteger(stockMin) || stockMin < 0 ||
+            (nextCategory === 'cosplay' && isRental && (rentalPrice === null || !Number.isFinite(rentalPrice) || rentalPrice < 0))) {
           const msg=record.querySelector('[data-inventory-message]'); msg.className='message error'; msg.textContent='Revisa precio de compra, precio de venta y stock.'; return;
         }
 
         const confirmed = await showYhorsConfirm(
           '¿Seguro que quieres guardar este cambio?',
-          `Se actualizarán el precio de compra, precio de venta${product.category === 'cosplay' ? ' y alquiler' : ''} y el stock de <strong>${escapeHTML(product.name)}</strong>.`
+          `Se actualizarán inventario, clasificación, etiquetas y publicación de <strong>${escapeHTML(product.name)}</strong>.`
         );
         if (!confirmed) return;
         const button = record.querySelector('[data-inventory-save]'); button.disabled = true;
@@ -4270,10 +4491,54 @@ async function renderAdminInventory() {
       });
     });
   };
-  app.innerHTML = inventoryPageMarkup(products, { readOnly: inventoryReadOnly, role: session.role });
+  app.innerHTML = inventoryPageMarkup(products, { readOnly: inventoryReadOnly, role: session.role, classifications });
+
+  const renderInventoryClassifications = () => {
+    const render = (target, values, type) => {
+      const container = document.querySelector(target);
+      if (!container) return;
+      container.innerHTML = Object.entries(values || {}).filter(([, list]) => Array.isArray(list) && list.length).map(([cat, list]) => `<div class="classification-group"><strong>${escapeHTML(categories[cat])}</strong><div class="classification-chips">${list.map((v,i)=>`<span class="classification-chip"><span class="classification-chip-text">${escapeHTML(v)}</span><button type="button" class="classification-edit" data-edit-class="${type}" data-category="${escapeHTML(cat)}" data-index="${i}" title="Editar">✎</button><button type="button" class="classification-delete" data-remove-class="${type}" data-category="${escapeHTML(cat)}" data-index="${i}" title="Eliminar">×</button></span>`).join('')}</div></div>`).join('') || '<small class="field-help">Todavía no hay clasificaciones.</small>';
+      container.querySelectorAll('[data-remove-class]').forEach(btn => btn.addEventListener('click', async () => { classifications[btn.dataset.removeClass][btn.dataset.category].splice(Number(btn.dataset.index), 1); await saveInventoryClassifications(); }));
+      container.querySelectorAll('[data-edit-class]').forEach(btn => btn.addEventListener('click', async () => {
+        const key=btn.dataset.editClass, cat=btn.dataset.category, index=Number(btn.dataset.index), current=classifications[key]?.[cat]?.[index] || '';
+        const value=window.prompt('Editar clasificación:', current); if (value === null) return;
+        const clean=value.trim().slice(0,50); if (!clean) return;
+        if (classifications[key][cat].some((v,i)=>i!==index && v.toLowerCase()===clean.toLowerCase())) { alert('Ya existe una clasificación con ese nombre en esta categoría.'); return; }
+        classifications[key][cat][index]=clean; await saveInventoryClassifications();
+      }));
+    };
+    render('#brandLists', classifications.brands, 'brands'); render('#typeLists', classifications.productTypes, 'productTypes');
+  };
+  const saveInventoryClassifications = async () => {
+    const confirmed = await showYhorsConfirm('¿Seguro que quieres guardar este cambio?', 'Se actualizarán las clasificaciones del catálogo.');
+    if (!confirmed) { const fresh=await request('/api/admin/classifications').catch(()=>classifications); classifications.brands=fresh.brands||{}; classifications.productTypes=fresh.productTypes||{}; renderInventoryClassifications(); return false; }
+    try {
+      const saved=await request('/api/admin/classifications',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(classifications)});
+      classifications.brands=saved.brands||{}; classifications.productTypes=saved.productTypes||{}; renderInventoryClassifications(); draw();
+      const message=document.querySelector('#classificationMessage'); if(message){message.className='message success';message.textContent='✓ Clasificaciones guardadas.';}
+      return true;
+    } catch(e) { const message=document.querySelector('#classificationMessage'); if(message){message.className='message error';message.textContent=e.message;} return false; }
+  };
+  const bindInventoryClassificationEvents = () => {
+    const bind=(buttonId,inputId,selectId,key)=>document.querySelector(buttonId)?.addEventListener('click',async()=>{
+      const input=document.querySelector(inputId), cat=document.querySelector(selectId)?.value, value=input?.value.trim(); if(!value||!cat)return;
+      classifications[key][cat] ||= [];
+      if(!classifications[key][cat].some(v=>v.toLowerCase()===value.toLowerCase())) { classifications[key][cat].push(value); if(input) input.value=''; await saveInventoryClassifications(); }
+    });
+    bind('#addBrand','#newBrand','#classBrandCategory','brands'); bind('#addType','#newType','#classTypeCategory','productTypes');
+  };
+  renderInventoryClassifications();
+  bindInventoryClassificationEvents();
+  const classificationModal = document.querySelector('#inventoryClassificationModal');
+  const closeClassificationModal = () => { if (!classificationModal) return; classificationModal.classList.remove('is-open'); document.body.classList.remove('generate-modal-open'); setTimeout(() => { classificationModal.hidden = true; }, 180); };
+  document.querySelector('#openInventoryClassifications')?.addEventListener('click', () => { if (!classificationModal) return; classificationModal.hidden = false; requestAnimationFrame(() => classificationModal.classList.add('is-open')); document.body.classList.add('generate-modal-open'); });
+  classificationModal?.querySelectorAll('[data-close-inventory-classifications]').forEach(btn => btn.addEventListener('click', closeClassificationModal));
+  document.querySelector('#inventoryAddProduct')?.addEventListener('click', () => openInventoryNewProductModal({ classifications, onSaved: async created => { products = [created, ...products]; draw(); } }));
   draw();
   document.querySelector('#inventoryPageSearch')?.addEventListener('input', draw);
   document.querySelector('#inventoryPageCategoryFilter')?.addEventListener('change', draw);
+  document.querySelector('#inventoryPageTypeFilter')?.addEventListener('change', draw);
+  document.querySelector('#inventoryPageBrandFilter')?.addEventListener('change', draw);
   wireAccountMenu();
   document.querySelector('#clearInventoryPageSearch')?.addEventListener('click', () => { const input=document.querySelector('#inventoryPageSearch'); if(input){input.value='';input.focus();draw();} });
 }
@@ -4328,18 +4593,29 @@ async function renderAdminClientes() {
     try {
       const data=await request(`/api/admin/clientes/${encodeURIComponent(id)}`); const c=data.customer; const tx=data.transactions||[]; const statement=data.statement||[];
       const todayAccount=new Date().toLocaleDateString('en-CA',{timeZone:'America/Guayaquil'});
-      detail.innerHTML=`<div class="customer-detail-head"><div><span class="eyebrow">EXPEDIENTE DEL CLIENTE</span><h2>${escapeHTML(c.name||'Sin nombre')}</h2><p>${escapeHTML(c.cedula||'')} ${c.city?`· ${escapeHTML(c.city)}`:''}</p></div><div class="customer-detail-actions">${canEdit?'<button class="button small" id="editCustomer">Editar ficha</button>':''}</div></div><div class="customer-metrics"><article><span>PEDIDOS</span><strong>${data.totals.orders}</strong></article><article><span>VENTAS</span><strong>${data.totals.sales}</strong></article><article><span>TOTAL VENDIDO</span><strong>${money(data.totals.salesTotal)}</strong></article><article class="customer-balance-metric"><span>POR COBRAR</span><strong>${money(data.totals.balance)}</strong></article></div><div class="customer-info-grid"><div><span>CÉDULA / RUC</span><strong>${escapeHTML(c.cedula||'—')}</strong></div><div><span>CELULAR</span><strong>${escapeHTML(c.phone||'—')}</strong></div><div><span>CORREO</span><strong>${escapeHTML(c.email||'—')}</strong></div><div><span>CIUDAD</span><strong>${escapeHTML(c.city||'—')}</strong></div><div class="full"><span>DIRECCIÓN</span><strong>${escapeHTML(c.address||'—')}</strong></div><div class="full"><span>NOTAS</span><strong>${escapeHTML(c.notes||'—')}</strong></div></div><div class="customer-statement"><div class="customer-statement-head"><div><span class="eyebrow">ESTADO DE CUENTA</span><h3>Movimientos del cliente</h3></div><small>Ventas, abonos y saldo pendiente</small></div><div class="customer-statement-filters"><label><span>Desde</span><input id="customerTxFrom" type="date" value="${todayAccount}"></label><label><span>Hasta</span><input id="customerTxTo" type="date" value="${todayAccount}"></label><button type="button" class="button secondary small" id="clearCustomerTxFilters">Limpiar</button></div><div class="customer-statement-balance"><div><span>VENDIDO</span><strong>${money(data.totals.salesTotal)}</strong></div><div><span>ABONADO</span><strong>${money(data.totals.paidTotal)}</strong></div><div><span>SALDO</span><strong>${money(data.totals.balance)}</strong></div></div><div id="customerStatementTable" class="customer-statement-table"></div></div>`;
+      detail.innerHTML=`<div class="customer-detail-head"><div><span class="eyebrow">EXPEDIENTE DEL CLIENTE</span><h2>${escapeHTML(c.name||'Sin nombre')}</h2><p>${escapeHTML(c.cedula||'')} ${c.city?`· ${escapeHTML(c.city)}`:''}</p></div><div class="customer-detail-actions">${canEdit?'<button class="button small" id="editCustomer">Editar ficha</button>':''}</div></div><div class="customer-metrics"><article><span>PEDIDOS</span><strong>${data.totals.orders}</strong></article><article><span>VENTAS</span><strong>${data.totals.sales}</strong></article><article><span>TOTAL COMPRADO</span><strong>${money(data.totals.salesTotal)}</strong></article><article class="customer-balance-metric"><span>POR COBRAR</span><strong>${money(data.totals.balance)}</strong></article></div><div class="customer-info-grid"><div><span>CÉDULA / RUC</span><strong>${escapeHTML(c.cedula||'—')}</strong></div><div><span>CELULAR</span><strong>${escapeHTML(c.phone||'—')}</strong></div><div><span>CORREO</span><strong>${escapeHTML(c.email||'—')}</strong></div><div><span>CIUDAD</span><strong>${escapeHTML(c.city||'—')}</strong></div><div class="full"><span>DIRECCIÓN</span><strong>${escapeHTML(c.address||'—')}</strong></div><div class="full"><span>NOTAS</span><strong>${escapeHTML(c.notes||'—')}</strong></div></div><div class="customer-statement"><div class="customer-statement-head"><div><span class="eyebrow">ESTADO DE CUENTA</span><h3>Movimientos del cliente</h3></div><small>Ventas, abonos y saldo pendiente</small></div><div class="customer-statement-filters"><label><span>Desde</span><input id="customerTxFrom" type="date" value=""></label><label><span>Hasta</span><input id="customerTxTo" type="date" value=""></label><button type="button" class="button secondary small" id="clearCustomerTxFilters">Limpiar</button></div><div class="customer-statement-balance"><div><span>VENDIDO</span><strong>${money(data.totals.salesTotal)}</strong></div><div><span>ABONADO</span><strong>${money(data.totals.paidTotal)}</strong></div><div><span>SALDO</span><strong>${money(data.totals.balance)}</strong></div></div><div id="customerStatementTable" class="customer-statement-table"></div></div>`;
       const renderCustomerTransactions=()=>{
         const from=document.querySelector('#customerTxFrom')?.value||todayAccount;
         const to=document.querySelector('#customerTxTo')?.value||todayAccount;
         const table=document.querySelector('#customerStatementTable');
         if(from&&to&&from>to){table.innerHTML='<div class="message error">La fecha inicial no puede ser posterior a la fecha final.</div>';return;}
         const rows=statement.filter(row=>{const day=row.date?new Intl.DateTimeFormat('en-CA',{timeZone:'America/Guayaquil'}).format(new Date(row.date)):'';return (!from||day>=from)&&(!to||day<=to);});
-        table.innerHTML=rows.length?`<div class="customer-tx customer-tx-head"><span>MOVIMIENTO</span><span>DETALLE</span><span>FECHA</span><span>CARGO</span><span>ABONO</span><span>SALDO</span></div>`+rows.map(row=>`<div class="customer-tx ${row.kind==='abono'?'is-payment':''}"><span><strong>${row.kind==='abono'?'ABONO':'VENTA'}</strong><small>${escapeHTML(row.number||'—')}</small></span><span>${escapeHTML(row.source||row.type)}${row.payment?.transactionNumber?`<small>${escapeHTML(row.payment.transactionNumber)}</small>`:''}</span><span>${row.date?escapeHTML(new Date(row.date).toLocaleDateString('es-EC',{timeZone:'America/Guayaquil'})):'—'}</span><span>${row.debit?money(row.debit):'—'}</span><span>${row.credit?money(row.credit):'—'}</span><strong>${money(row.balance)}</strong></div>`).join(''):'<div class="empty">No hay movimientos en este período.</div>';
+        const renderedCustomerRows=rows.map(row=>{
+          const isPayment=row.kind==='abono';
+          const dateLabel=row.date?escapeHTML(new Date(row.date).toLocaleDateString('es-EC',{day:'2-digit',month:'short',year:'numeric',timeZone:'America/Guayaquil'})):'—';
+          if(isPayment){
+            const method=escapeHTML(row.source||'Ingreso de dinero');
+            const transaction=row.payment?.transactionNumber ? ` · TRX ${escapeHTML(row.payment.transactionNumber)}` : '';
+            const note=row.detail && row.detail!=='Abono registrado' ? escapeHTML(row.detail) : 'Pago registrado';
+            return `<article class="customer-ledger-card is-payment"><div class="customer-ledger-icon">$</div><div class="customer-ledger-main"><span class="customer-ledger-eyebrow">INGRESO DE DINERO</span><strong>${method}</strong><small>${dateLabel}${transaction} · ${note}</small></div><div class="customer-ledger-amount"><span>INGRESÓ</span><strong>${money(row.credit)}</strong><small>Saldo: ${money(row.balance)}</small></div></article>`;
+          }
+          return `<article class="customer-ledger-card is-purchase"><div class="customer-ledger-icon">✓</div><div class="customer-ledger-main"><span class="customer-ledger-eyebrow">COMPRA</span><strong>Factura ${escapeHTML(row.number||'—')}</strong><small>${escapeHTML(row.source||'Sin productos')} · ${dateLabel}</small></div><div class="customer-ledger-amount"><span>TOTAL</span><strong>${money(row.debit)}</strong><small>Saldo: ${money(row.balance)}</small></div></article>`;
+        }).join('');
+        table.innerHTML=rows.length?`<div class="customer-ledger-list">${renderedCustomerRows}</div>`:'<div class="empty">No hay movimientos en este período.</div>';
       };
       document.querySelector('#customerTxFrom')?.addEventListener('change',renderCustomerTransactions);
       document.querySelector('#customerTxTo')?.addEventListener('change',renderCustomerTransactions);
-      document.querySelector('#clearCustomerTxFilters')?.addEventListener('click',()=>{document.querySelector('#customerTxFrom').value=todayAccount;document.querySelector('#customerTxTo').value=todayAccount;renderCustomerTransactions();});
+      document.querySelector('#clearCustomerTxFilters')?.addEventListener('click',()=>{document.querySelector('#customerTxFrom').value='';document.querySelector('#customerTxTo').value='';renderCustomerTransactions();});
       renderCustomerTransactions();
       document.querySelectorAll('.customer-row').forEach(b=>b.classList.toggle('active',b.dataset.customerId===String(id)));
       document.querySelector('#editCustomer')?.addEventListener('click',()=>openEditCustomer(c));
@@ -4465,26 +4741,25 @@ async function renderYhorsInteligente() {
   wireAccountMenu();
 }
 
+async function renderAdminBackups() {
+  const session = await request('/api/admin/session').catch(() => ({ authenticated: false }));
+  if (!session.authenticated) return renderLogin();
+  if (session.role !== 'admin') return renderAdminOrders();
+  const backupState = await request('/api/admin/backups').catch(() => ({ storageMode: 'local', backups: [], retention: 30 }));
+  app.innerHTML = `<main class="admin-shell"><div class="admin-wrap">
+    <div class="admin-top"><div><a class="brand admin-brand" href="${ADMIN_PATH}/inteligente" data-smooth-route aria-label="YHORS · Panel Administrativo · Ir a YHORS Inteligente"><span class="admin-brand-mark" aria-hidden="true"><img src="/favicon.svg" alt=""></span><span class="admin-brand-word">YHORS</span><span class="admin-brand-divider" aria-hidden="true"></span><small>Panel Administrativo</small></a><h1 class="admin-title">Backups</h1><p class="admin-subtitle">Seguridad de datos y respaldos de YHORS.</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>
+    ${adminSectionNav(session, 'backups')}
+    ${backupPanel(backupState, false)}
+  </div></main>`;
+  bindBackupEvents();
+  wireAccountMenu();
+}
+
 async function renderAdmin() {
   const session = await request('/api/admin/session').catch(() => ({ authenticated: false })); if (!session.authenticated) return renderLogin(); if (isSellerRole(session.role) || session.role === 'store_manager') return renderAdminOrders();
   let products = await request('/api/admin/products').catch(() => []); let classifications = await request('/api/admin/classifications').catch(() => ({ brands: {}, productTypes: {} })); let settings = await request('/api/admin/storefront').catch(() => ({ heroProductIds: [], featuredProductIds: [] })); let editing = null;
-  const backupState = await request('/api/admin/backups').catch(() => ({ storageMode: 'local', backups: [], retention: 30 }));
-  app.innerHTML = `<main class="admin-shell admin-web-shell"><aside class="admin-quick-nav" aria-label="Navegación rápida">
-    <strong>YHORS</strong>
-    <button type="button" data-admin-scroll="backupPanel">Backup</button>
-    <button type="button" data-admin-scroll="selectionPanel">Portada</button>
-    <button type="button" data-admin-scroll="classificationPanel">Categorías</button>
-    <button type="button" data-admin-scroll="productEditorPanel">Producto</button>
-    <button type="button" data-admin-scroll="inventoryPanel">Inventario</button>
-  </aside><div class="admin-wrap"><div class="admin-top"><div><a class="brand admin-brand" href="${ADMIN_PATH}/inteligente" data-smooth-route aria-label="YHORS · Panel Administrativo · Ir a YHORS Inteligente"><span class="admin-brand-mark" aria-hidden="true"><img src="/favicon.svg" alt=""></span><span class="admin-brand-word">YHORS</span><span class="admin-brand-divider" aria-hidden="true"></span><small>Panel Administrativo</small></a><h1 class="admin-title">Administración · Página Web</h1><p class="admin-subtitle">Gestiona la portada, productos destacados y catálogo público de YHORS.</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>${adminSectionNav(session, 'web')}${backupPanel(backupState)}<div id="selectionPanelMount">${selectionPanel(products, settings)}</div>${classificationPanel(classifications)}<section class="admin-panel product-editor-panel" id="productEditorPanel"><span class="eyebrow">Catálogo</span><h2 id="formTitle">Agregar producto</h2><div id="formArea"></div></section><section class="admin-products" id="inventoryPanel"><div class="section-heading inventory-heading"><div><span class="eyebrow">Inventario</span><h2>Productos e inventario (${products.length})</h2></div><p>Edita datos, imágenes, portada y destacados.</p></div><div class="inventory-toolbar"><label class="inventory-search"><span aria-hidden="true">⌕</span><input id="inventorySearch" type="search" placeholder="Buscar por nombre, SKU, marca o categoría…" autocomplete="off"><button id="clearInventorySearch" type="button" aria-label="Limpiar búsqueda">×</button></label><label class="inventory-filter"><span>Categoría</span><select id="inventoryCategoryFilter"><option value="">Todas las categorías</option><option value="elegant">Elegante</option><option value="sports">Deportes</option><option value="tech">Tech</option><option value="cosplay">Cosplay</option><option value="pets">Mascotas</option><option value="details">Detalles</option><option value="collectibles">Coleccionables</option></select></label><span class="inventory-count" id="inventoryCount">${products.length} productos</span></div><div id="adminProducts"></div></section></div></main>`;
-  const quickNav = document.querySelector('.admin-quick-nav');
-  quickNav?.querySelectorAll('[data-admin-scroll]').forEach(button => button.addEventListener('click', () => {
-    const target = document.getElementById(button.dataset.adminScroll);
-    if (!target) return;
-    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    quickNav.querySelectorAll('[data-admin-scroll]').forEach(item => item.classList.remove('is-active'));
-    button.classList.add('is-active');
-  }));
+  document.documentElement.style.minHeight='0'; document.body.style.minHeight='0'; document.body.style.height='auto'; document.body.style.overflowY='auto'; app.style.minHeight='0'; app.style.height='auto';
+  app.innerHTML = `<main class="admin-shell admin-web-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand admin-brand" href="${ADMIN_PATH}/inteligente" data-smooth-route aria-label="YHORS · Panel Administrativo · Ir a YHORS Inteligente"><span class="admin-brand-mark" aria-hidden="true"><img src="/favicon.svg" alt=""></span><span class="admin-brand-word">YHORS</span><span class="admin-brand-divider" aria-hidden="true"></span><small>Panel Administrativo</small></a><h1 class="admin-title">Administración · Página Web</h1><p class="admin-subtitle">Gestiona la portada y productos destacados de la página pública de YHORS.</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>${adminSectionNav(session, 'web')}<div id="selectionPanelMount">${selectionPanel(products, settings)}</div></div></main>`;
   const formArea = document.querySelector('#formArea'); const listArea = document.querySelector('#adminProducts');
   function drawList() {
     const categoryKeys = Object.keys(categories).filter(k => k !== 'all');
@@ -4726,23 +5001,24 @@ async function renderAdmin() {
     formArea.innerHTML = productForm(draft, classifications);
     wireImageFallback(formArea);
     document.querySelector('#formTitle').textContent = editing ? `Editar: ${editing.name}` : 'Agregar producto';
-    const imageUrl = document.querySelector('#image');
-    const imageFile = document.querySelector('#imageFile');
-    const preview = document.querySelector('#productImagePreview');
     const previewName = document.querySelector('.product-editor-preview-copy strong');
-    const updatePreview = (src) => {
-      if (!preview) return;
-      preview.src = src || placeholder;
-      preview.alt = imageUrl?.value ? `Vista previa de ${draft.name || 'producto'}` : 'Vista previa del producto';
-    };
-    imageUrl?.addEventListener('input', () => updatePreview(imageUrl.value.trim()));
-    imageFile?.addEventListener('change', () => {
-      const file = imageFile.files?.[0];
-      if (!file) return;
-      const objectUrl = URL.createObjectURL(file);
-      updatePreview(objectUrl);
-      preview?.addEventListener('load', () => URL.revokeObjectURL(objectUrl), { once: true });
-    });
+    document.querySelectorAll('[data-open-image-picker]').forEach(button => button.addEventListener('click', () => {
+      const slot = Number(button.dataset.openImagePicker || 1);
+      const fieldId = slot === 1 ? '#image' : `#image${slot}`;
+      const current = document.querySelector(fieldId)?.value || '';
+      openProductImagePicker(slot, current, ({ file, url, preview }) => {
+        const field = document.querySelector(fieldId);
+        const imagePreview = document.querySelector(`#productImagePreview${slot}`);
+        if (field) field.value = url || '';
+        window.__yhorsPendingImageFiles ||= {};
+        if (file) window.__yhorsPendingImageFiles[slot] = file; else delete window.__yhorsPendingImageFiles[slot];
+        if (imagePreview) imagePreview.src = preview || placeholder;
+        const slotBox = button.closest('.product-image-slot');
+        slotBox?.querySelector('small')?.replaceChildren(document.createTextNode(file ? 'Archivo seleccionado · se subirá al guardar' : (url ? 'Imagen cargada por enlace' : 'Sin imagen · puedes agregarla después')));
+        slotBox?.querySelector('.product-image-slot-preview')?.classList.toggle('has-image', Boolean(file || url));
+      });
+    }));
+    document.querySelectorAll('[data-open-image-picker]').forEach(button => button.disabled = false);
     document.querySelector('#name')?.addEventListener('input', e => { if (previewName) previewName.textContent = e.target.value.trim() || 'Nuevo producto'; });
     document.querySelector('#cancelEdit')?.addEventListener('click', () => { editing = null; drawForm(); });
     document.querySelector('#category')?.addEventListener('change', event => drawForm({ ...(editing || {}), category: event.target.value }));
@@ -4849,16 +5125,16 @@ async function renderAdmin() {
       try {
         syncDescription();
         const data = Object.fromEntries(new FormData(form).entries()); delete data.heroOrder; data.published = form.elements.published ? form.elements.published.checked : true; data.featured = form.elements.featured.checked; data.hero = form.elements.hero.checked; data.price = data.salePrice; data.images = [data.image, data.image2, data.image3, data.image4].filter(Boolean);
-        const fileFields = ['imageFile','imageFile2','imageFile3','imageFile4'];
-         for (let index = 0; index < fileFields.length; index++) {
-           const file = form.elements[fileFields[index]]?.files?.[0];
-           if (!file) continue;
-           const uploadData = new FormData(); uploadData.append('image', file);
-           const uploaded = await request('/api/admin/upload', { method: 'POST', body: uploadData });
-           const urlField = index === 0 ? 'image' : `image${index+1}`;
-           data[urlField] = uploaded.image;
-           data.images[index] = uploaded.image;
-         }
+        const pendingImages = window.__yhorsPendingImageFiles || {};
+        for (let slot = 1; slot <= 4; slot++) {
+          const file = pendingImages[slot];
+          if (!file) continue;
+          const uploadData = new FormData(); uploadData.append('image', file);
+          const uploaded = await request('/api/admin/upload', { method: 'POST', body: uploadData });
+          const urlField = slot === 1 ? 'image' : `image${slot}`;
+          data[urlField] = uploaded.image;
+          data.images[slot - 1] = uploaded.image;
+        }
          data.images = data.images.filter(Boolean);
          data.image = data.images[0] || '';
         const url = editing ? `/api/admin/products/${editing.id}` : '/api/admin/products';
@@ -4954,7 +5230,13 @@ async function renderAdmin() {
 
   wireAccountMenu();
   bindBackupEvents();
-  drawList(); renderClassifications(); bindClassificationEvents(); drawForm(); bindSelectionEvents();
+  bindSelectionEvents();
+  if (new URLSearchParams(location.search).get('nuevo') === '1') {
+    setTimeout(() => {
+      document.querySelector('#productEditorPanel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      document.querySelector('#category')?.focus();
+    }, 80);
+  }
   const quickTargets = [...document.querySelectorAll('[data-admin-scroll]')].map(button => ({ button, target: document.getElementById(button.dataset.adminScroll) })).filter(item => item.target);
   if ('IntersectionObserver' in window && quickTargets.length) {
     const observer = new IntersectionObserver(entries => {
