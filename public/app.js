@@ -4985,6 +4985,10 @@ async function renderAdmin() {
   app.innerHTML = `<main class="admin-shell admin-web-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand admin-brand" href="${ADMIN_PATH}/inteligente" data-smooth-route aria-label="YHORS · Panel Administrativo · Ir a YHORS Inteligente"><span class="admin-brand-mark" aria-hidden="true"><img src="/favicon.svg" alt=""></span><span class="admin-brand-word">YHORS</span><span class="admin-brand-divider" aria-hidden="true"></span><small>Panel Administrativo</small></a><h1 class="admin-title">Administración · Página Web</h1><p class="admin-subtitle">Gestiona la portada y productos destacados de la página pública de YHORS.</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>${adminSectionNav(session, 'web')}<div id="selectionPanelMount">${selectionPanel(products, settings)}</div><div id="categorySectionOrderMount">${categorySectionOrderPanel(products, settings)}</div></div></main>`;
   const formArea = document.querySelector('#formArea'); const listArea = document.querySelector('#adminProducts');
   function drawList() {
+    // En Página Web ya no existe el listado de inventario dentro de esta vista.
+    // Algunas acciones de portada reutilizan este renderer después de guardar;
+    // si no hay #adminProducts, no hay nada que redibujar.
+    if (!listArea) return;
     const categoryKeys = Object.keys(categories).filter(k => k !== 'all');
     const query = (document.querySelector('#inventorySearch')?.value || '').trim().toLowerCase();
     const categoryFilter = document.querySelector('#inventoryCategoryFilter')?.value || '';
