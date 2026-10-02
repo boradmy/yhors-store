@@ -746,26 +746,6 @@ function upsertCustomerFromOrder(order, req = null) {
     return null;
   }
 }
-function customerFinancialSources(customer, orders = null, sales = null, payments = null) {
-  const identity = customerIdentity(customer);
-  const allOrders = orders || readOrders();
-  const allSales = sales || readSales();
-  const allPayments = payments || readPayments();
-  const customerSales = allSales.filter(sale => customerIdentity(sale.customer || {}) === identity);
-  const saleOrderIds = new Set(customerSales.map(sale => String(sale.orderId || '')).filter(Boolean));
-  const customerOrders = allOrders.filter(order => customerIdentity(order.customer || {}) === identity && String(order.status || '').toLowerCase() !== 'cancelado');
-  const pendingOrders = customerOrders.filter(order => !saleOrderIds.has(String(order.id)) && !order.salesNotifiedAt && !order.salesHistoryId);
-  const sourceSales = customerSales.map(sale => ({ ...sale, sourceType: 'venta' }));
-  const sourceOrders = pendingOrders.map(order => ({ ...order, sourceType: 'orden' }));
-  const sourceIds = new Set(sourceSales.map(s => `sale:${s.id}`));
-  sourceOrders.forEach(o => sourceIds.add(`order:${o.id}`));
-  const customerPayments = allPayments.filter(payment => Boolean((payment.saleId && sourceIds.has(`sale:${payment.saleId}`)) || (payment.orderId && sourceIds.has(`order:${payment.orderId}`))));
-  const salesTotal = sourceSales.reduce((sum, sale) => sum + Number(sale.total || 0), 0);
-  const ordersTotal = sourceOrders.reduce((sum, order) => sum + Number(order.total || 0), 0);
-  const paidTotal = customerPayments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
-  return { sales: sourceSales, orders: sourceOrders, payments: customerPayments, totals: { salesTotal:Math.round(salesTotal*100)/100, ordersTotal:Math.round(ordersTotal*100)/100, billedTotal:Math.round((salesTotal+ordersTotal)*100)/100, paidTotal:Math.round(paidTotal*100)/100, balance:Math.round(Math.max(0,salesTotal+ordersTotal-paidTotal)*100)/100 } };
-}
-
 function customerTransactions(customer, orders = null, sales = null) {
   const identity = customerIdentity(customer);
   const orderRows = (orders || readOrders()).filter(order => customerIdentity(order.customer || {}) === identity);
@@ -2600,7 +2580,8 @@ function decoratePayment(payment, sales = null, orders = null) {
     sellerName: source?.assignedSellerName || payment.sellerName || 'Sin vendedor',
     totalSale: Number(source?.total ?? payment.totalSale ?? 0),
     saleStatus: source?.status || payment.saleStatus || '—',
-    sourceType: sale ? 'venta' : order ? 'orden' : payment.sourceType || 'venta'
+    sourceType: sale ? 'venta' : order ? 'orden' : payment.sourceType || 'venta',
+    note: payment.note || ''
   };
 }
 function getSalesHistoryRecord(order, req) {
@@ -2970,9 +2951,6 @@ function cleanText(value, maxLength) {
 function sanitizeDescriptionHtml(value, maxLength = 2000) {
   if (typeof value !== 'string') return '';
   let html = value.replace(/\r/g, '').trim();
-  // Normaliza etiquetas antiguas mal formadas como b>Texto antes de sanitizar.
-  html = html.replace(/^((?:\/)?(?:b|strong|i|em|u|br|p|div|h2|h3|ul|ol|li))>/i, '<$1>');
-  html = html.replace(/([\s>])((?:\/)?(?:b|strong|i|em|u|br|p|div|h2|h3|ul|ol|li))>/gi, '$1<$2>');
   html = html.replace(/<\s*(script|style|iframe|object|embed|link|meta|svg|math)[^>]*>[\s\S]*?<\s*\/\s*\1\s*>/gi, '');
   html = html.replace(/<\s*(script|style|iframe|object|embed|link|meta|svg|math)[^>]*\/?>/gi, '');
   html = html.replace(/\s+on[a-z]+\s*=\s*(?:\"[^\"]*\"|'[^']*'|[^\s>]+)/gi, '');
@@ -5202,34 +5180,62 @@ app.put('/api/admin/series-imeis/registered', requireStoreManagerOrAdmin, (req, 
 app.get('/api/admin/clientes', requireOrdersAccess, (req, res) => {
   const session = getSession(req);
   let customers = buildCustomerDirectory();
-  try { const current = readCustomers(); if (customers.length > current.length) writeCustomers(customers); } catch {}
-  const allOrders = readOrders(), allSales = readSales(), allPayments = readPayments();
+  // Rehidrata customers.json si hubo clientes históricos o una migración que dejó
+  // el fichero vacío. Así el directorio y el selector usan la misma fuente.
+  try {
+    const current = readCustomers();
+    if (customers.length > current.length) writeCustomers(customers);
+  } catch {}
+  const allOrders = readOrders();
   const q = cleanText(req.query?.q, 120).toLocaleLowerCase('es-EC');
+  const allSales = readSales();
   const rows = customers.map(customer => {
     const tx = customerTransactions(customer, allOrders, allSales);
-    const financial = customerFinancialSources(customer, allOrders, allSales, allPayments);
-    return { ...customer, orderCount:tx.filter(item=>item.type==='pedido').length, activeOrderCount:tx.filter(item=>item.type==='pedido'&&item.status!=='Cancelado').length, salesCount:financial.sales.length, salesTotal:financial.totals.billedTotal, paidTotal:financial.totals.paidTotal, balance:financial.totals.balance, lastActivityAt:tx[0]?.date||customer.updatedAt||customer.createdAt };
+    const activeOrders = tx.filter(item => item.type === 'pedido' && item.status !== 'Cancelado').length;
+    const customerSales = tx.filter(item => item.type === 'venta');
+    return { ...customer, orderCount: tx.filter(item => item.type === 'pedido').length, activeOrderCount: activeOrders, salesCount: customerSales.length, salesTotal: customerSales.reduce((sum,item)=>sum+Number(item.total||0),0), lastActivityAt: tx[0]?.date || customer.updatedAt || customer.createdAt };
   }).filter(customer => !q || `${customer.name} ${customer.cedula} ${customer.phone} ${customer.email} ${customer.city}`.toLocaleLowerCase('es-EC').includes(q));
   if (String(session.role || '').toLowerCase() === 'vendedor') {
-    const assignedIds = new Set(allOrders.filter(order=>String(order.assignedSellerId||'')===String(session.accountId||'')).map(order=>customerIdentity(order.customer||{})));
-    return res.json(rows.filter(row=>assignedIds.has(row.identity)));
+    // El vendedor solo consulta clientes que tengan pedidos asignados a su usuario.
+    const assignedIds = new Set(allOrders.filter(order => String(order.assignedSellerId || '') === String(session.accountId || '')).map(order => customerIdentity(order.customer || {})));
+    return res.json(rows.filter(row => assignedIds.has(row.identity)));
   }
   return res.json(rows);
 });
 
 app.get('/api/admin/clientes/:id', requireOrdersAccess, (req, res) => {
   const session = getSession(req);
-  const customer = readCustomers().find(item => String(item.id) === String(req.params.id));
-  if (!customer) return res.status(404).json({ error:'Cliente no encontrado.' });
-  const allOrders=readOrders(), allSales=readSales(), allPayments=readPayments();
-  const tx=customerTransactions(customer,allOrders,allSales); const financial=customerFinancialSources(customer,allOrders,allSales,allPayments);
-  let payments=financial.payments;
-  if(isSellerRole(session.role)) payments=payments.filter(payment=>{const source=payment.saleId?financial.sales.find(s=>String(s.id)===String(payment.saleId)):financial.orders.find(o=>String(o.id)===String(payment.orderId));return String(source?.assignedSellerId||'')===String(session.accountId||'');});
-  const billed=financial.sales.concat(financial.orders);
-  const statement=[...billed.map(source=>({id:`${source.sourceType}:${source.id}`,kind:'cargo',type:source.sourceType==='venta'?'venta':'pedido',number:source.orderNumber,date:source.notifiedAt||source.createdAt,source:source.sourceType==='venta'?'Venta confirmada':(source.source==='admin_generated'?'Orden interna':'Pedido WEB'),status:source.status||'Pendiente',total:Number(source.total||0),debit:Number(source.total||0),credit:0})),...payments.map(payment=>({id:`payment:${payment.id}`,kind:'abono',type:'pago',number:payment.saleNumber||billed.find(source=>String(source.id)===String(payment.saleId||payment.orderId))?.orderNumber,date:payment.date||payment.createdAt,source:`${paymentMethodLabel(payment.method)}${payment.bank?` · ${payment.bank}`:''}`,status:'Abono',total:Number(payment.amount||0),debit:0,credit:Number(payment.amount||0),payment}))].sort((a,b)=>new Date(a.date||0)-new Date(b.date||0));
-  let running=0; const statementWithBalance=statement.map(row=>{running+=Number(row.debit||0)-Number(row.credit||0);return {...row,balance:Math.round(running*100)/100};}).reverse();
-  const paidTotal=payments.reduce((sum,p)=>sum+Number(p.amount||0),0);
-  return res.json({customer,transactions:tx,statement:statementWithBalance,payments:payments.map(p=>decoratePayment(p,financial.sales,financial.orders)),totals:{orders:tx.filter(item=>item.type==='pedido').length,sales:financial.sales.length,salesTotal:financial.totals.billedTotal,paidTotal:Math.round(paidTotal*100)/100,balance:Math.round(Math.max(0,financial.totals.billedTotal-paidTotal)*100)/100,confirmedSalesTotal:financial.totals.salesTotal,pendingOrdersTotal:financial.totals.ordersTotal}});
+  const customer = buildCustomerDirectory().find(item => String(item.id) === String(req.params.id)) || readCustomers().find(item => String(item.id) === String(req.params.id));
+  if (!customer) return res.status(404).json({ error: 'Cliente no encontrado.' });
+  const allOrders = readOrders(); const allSales = readSales();
+  const identity = customer.identity || customerIdentity(customer);
+  const customerOrders = allOrders.filter(o => customerIdentity(o.customer || {}) === identity);
+  const customerSales = allSales.filter(s => customerIdentity(s.customer || {}) === identity);
+  const visibleOrders = isSellerRole(session.role) ? customerOrders.filter(o => String(o.assignedSellerId || '') === String(session.accountId || '')) : customerOrders;
+  const visibleSales = isSellerRole(session.role) ? customerSales.filter(s => String(s.assignedSellerId || '') === String(session.accountId || '')) : customerSales;
+  const saleByOrder = new Map(visibleSales.filter(s => s.orderId).map(s => [String(s.orderId), s]));
+  const obligations = [];
+  for (const sale of visibleSales) {
+    const detail = Array.isArray(sale.items) && sale.items.length ? sale.items.map(i => `${Number(i.quantity || 1)}× ${i.name || 'Producto'}`).join(' · ') : 'Venta confirmada';
+    obligations.push({ id:`venta:${sale.id}`, sourceType:'venta', sourceId:sale.id, orderId:sale.orderId || null, number:sale.orderNumber || '—', date:sale.notifiedAt || sale.createdAt, total:Number(sale.total || 0), detail, status:sale.status || 'Vendida' });
+  }
+  for (const order of visibleOrders) {
+    if (saleByOrder.has(String(order.id))) continue;
+    const detail = Array.isArray(order.items) && order.items.length ? order.items.map(i => `${Number(i.quantity || 1)}× ${i.name || 'Producto'}`).join(' · ') : 'Orden sin productos';
+    obligations.push({ id:`orden:${order.id}`, sourceType:'orden', sourceId:order.id, orderId:order.id, number:order.orderNumber || '—', date:order.createdAt, total:Number(order.total || 0), detail, status:order.status || 'Pendiente' });
+  }
+  const obligationIds = new Set(obligations.map(o => o.id));
+  let payments = readPayments().filter(p => obligationIds.has(p.saleId ? `venta:${p.saleId}` : p.orderId ? `orden:${p.orderId}` : ''));
+  const paidByKey = new Map();
+  payments.forEach(p => { const key=p.saleId?`venta:${p.saleId}`:`orden:${p.orderId}`; paidByKey.set(key,(paidByKey.get(key)||0)+Number(p.amount||0)); });
+  const ledger=[];
+  obligations.forEach(o=>{const paid=Math.round((paidByKey.get(o.id)||0)*100)/100; const balance=Math.max(0,Math.round((o.total-paid)*100)/100); ledger.push({id:o.id,kind:'cargo',type:o.sourceType,number:o.number,date:o.date,source:o.detail,detail:`${o.sourceType==='venta'?'Compra / venta':'Orden'} · ${o.status}`,status:o.status,total:o.total,debit:o.total,credit:0,paid,balance,orderId:o.orderId,sourceId:o.sourceId,sourceType:o.sourceType});});
+  payments.forEach(p=>{const key=p.saleId?`venta:${p.saleId}`:`orden:${p.orderId}`; const obligation=obligations.find(o=>o.id===key); ledger.push({id:`payment:${p.id}`,kind:'abono',type:'pago',number:p.saleNumber||obligation?.number||'—',date:p.date||p.createdAt,source:`${paymentMethodLabel(p.method)}${p.bank?` · ${p.bank}`:''}${p.transactionNumber?` · TRX ${p.transactionNumber}`:''}`,detail:p.note||'Abono registrado',status:'Abono',total:Number(p.amount||0),debit:0,credit:Number(p.amount||0),payment:p,orderId:p.orderId||obligation?.orderId||null,sourceId:p.saleId||p.orderId||null,sourceType:p.saleId?'venta':'orden'});});
+  ledger.sort((a,b)=>new Date(a.date||0)-new Date(b.date||0)); let running=0; const statement=ledger.map(row=>{running=Math.round((running+Number(row.debit||0)-Number(row.credit||0))*100)/100;return {...row,balance:Math.max(0,running)};}).reverse();
+  const totalBought=obligations.reduce((sum,o)=>sum+o.total,0); const paidTotal=payments.reduce((sum,p)=>sum+Number(p.amount||0),0);
+  const tx=[...visibleOrders.map(o=>({type:'pedido',id:o.id,number:o.orderNumber,date:o.createdAt,status:o.status,total:Number(o.total||0),source:o.source==='admin_generated'?'Orden interna':'Pedido WEB'})),...visibleSales.map(s=>({type:'venta',id:s.id,number:s.orderNumber,date:s.notifiedAt||s.createdAt,status:s.status||'Vendida',total:Number(s.total||0),source:'Historial de ventas'}))];
+  const uniqueTx=new Map(); tx.forEach(row=>uniqueTx.set(`${row.type}:${row.id}`,row));
+  return res.json({customer,transactions:[...uniqueTx.values()].sort((a,b)=>new Date(b.date||0)-new Date(a.date||0)),statement,payments:payments.map(p=>decoratePayment(p,visibleSales,visibleOrders)),totals:{orders:visibleOrders.length,sales:visibleSales.length,salesTotal:Math.round(totalBought*100)/100,paidTotal:Math.round(paidTotal*100)/100,balance:Math.max(0,Math.round((totalBought-paidTotal)*100)/100),obligations:obligations.length}});
 });
 
 app.post('/api/admin/clientes', requireOrdersAccess, (req, res) => {
@@ -5263,17 +5269,6 @@ app.put('/api/admin/clientes/:id', requireOrdersAccess, (req, res) => {
 });
 
 
-
-app.delete('/api/admin/clientes/:id', requireAdmin, (req, res) => {
-  const customers=readCustomers(); const index=customers.findIndex(item=>String(item.id)===String(req.params.id));
-  if(index<0)return res.status(404).json({error:'Cliente no encontrado.'});
-  const customer=customers[index], orders=readOrders(), sales=readSales(), payments=readPayments();
-  const hasOrders=orders.some(order=>customerIdentity(order.customer||{})===customer.identity);
-  const hasSales=sales.some(sale=>customerIdentity(sale.customer||{})===customer.identity);
-  const hasPayments=payments.some(payment=>{const sale=payment.saleId&&sales.find(item=>String(item.id)===String(payment.saleId));const order=payment.orderId&&orders.find(item=>String(item.id)===String(payment.orderId));return customerIdentity(sale?.customer||order?.customer||{})===customer.identity;});
-  if(hasOrders||hasSales||hasPayments)return res.status(409).json({error:'Este cliente ya tiene pedidos, ventas o pagos asociados. Usa “Editar ficha” para corregir sus datos y conservar la trazabilidad.'});
-  customers.splice(index,1);writeCustomers(customers);auditLog(req,'Cliente eliminado','Clientes',{customerId:customer.id,identity:customer.identity});return res.status(204).end();
-});
 
 app.get('/api/admin/dinero/resumen', requireOrdersAccess, (req, res) => {
   const session = getSession(req);
@@ -5339,11 +5334,11 @@ app.post('/api/admin/dinero/pagos-orden', requireOrdersAccess, (req,res) => {
   const amount=normalizeMoneyAmount(body.amount); if(amount===null)return res.status(400).json({error:'El valor del pago no es válido.'});
   const date=/^\d{4}-\d{2}-\d{2}$/.test(String(body.date||''))?String(body.date):localDateEc(new Date());
   const bank=cleanText(body.bank,100); if(!bank)return res.status(400).json({error:'Indica el banco o caja donde ingresó el dinero.'});
-  const batch=cleanText(body.batch,100); const transactionNumber=cleanText(body.transactionNumber,120);
+  const batch=cleanText(body.batch,100); const transactionNumber=cleanText(body.transactionNumber,120); const note=cleanText(body.note,500);
   if((method==='transfer'||method==='card')&&!transactionNumber)return res.status(400).json({error:'El número de transacción es obligatorio para transferencias y tarjetas.'});
   const payments=readPayments(); const already=payments.filter(p=>String(p.orderId||'')===orderId).reduce((sum,p)=>sum+Number(p.amount||0),0); const remaining=Math.max(0,Math.round((Number(order.total||0)-already)*100)/100);
   if(amount>remaining+0.001)return res.status(400).json({error:`El pago supera el saldo pendiente de ${remaining.toFixed(2)}.`});
-  const now=new Date().toISOString(); const payment={id:crypto.randomUUID(),orderId:order.id,saleId:null,saleNumber:order.orderNumber,customerId:order.customerId||order.customer?.id||null,customerName:order.customer?.name||'',customerCedula:order.customer?.cedula||'',sellerId:order.assignedSellerId||null,sellerName:order.assignedSellerName||'',method,date,batch:batch||null,transactionNumber:transactionNumber||null,bank,amount,totalSale:Number(order.total||0),sourceType:'orden',createdAt:now,createdBy:session.accountId||null}; payments.unshift(payment); writePayments(payments);
+  const now=new Date().toISOString(); const payment={id:crypto.randomUUID(),orderId:order.id,saleId:null,saleNumber:order.orderNumber,customerId:order.customerId||order.customer?.id||null,customerName:order.customer?.name||'',customerCedula:order.customer?.cedula||'',sellerId:order.assignedSellerId||null,sellerName:order.assignedSellerName||'',method,date,batch:batch||null,transactionNumber:transactionNumber||null,bank,note:note||'',amount,totalSale:Number(order.total||0),sourceType:'orden',createdAt:now,createdBy:session.accountId||null}; payments.unshift(payment); writePayments(payments);
   const newPaid=already+amount; const status=newPaid>=Number(order.total||0)-0.001?'PAGADO':'ABONO'; auditLog(req,'Pago registrado en orden','Dinero',{paymentId:payment.id,orderId:order.id,orderNumber:order.orderNumber,method,amount,date,bank,batch,transactionNumber,status,balance:Math.max(0,Number(order.total||0)-newPaid)});
   return res.status(201).json({...decoratePayment(payment,[],orders),paid:Math.round(newPaid*100)/100,balance:Math.max(0,Math.round((Number(order.total||0)-newPaid)*100)/100),status});
 });
@@ -5356,47 +5351,20 @@ app.post('/api/admin/dinero/pagos', requireOrdersAccess, (req, res) => {
   const amount=normalizeMoneyAmount(body.amount); if(amount===null)return res.status(400).json({error:'El valor del pago no es válido.'});
   const date=/^\d{4}-\d{2}-\d{2}$/.test(String(body.date||''))?String(body.date):localDateEc(new Date());
   const bank=cleanText(body.bank,100); if(!bank)return res.status(400).json({error:'Indica el banco o caja donde ingresó el dinero.'});
-  const batch=cleanText(body.batch,100); const transactionNumber=cleanText(body.transactionNumber,120);
+  const batch=cleanText(body.batch,100); const transactionNumber=cleanText(body.transactionNumber,120); const note=cleanText(body.note,500);
   if((method==='transfer'||method==='card')&&!transactionNumber)return res.status(400).json({error:'El número de transacción es obligatorio para transferencias y tarjetas.'});
   const payments=readPayments(); const already=payments.filter(p=>String(p.saleId)===saleId).reduce((sum,p)=>sum+Number(p.amount||0),0); const remaining=Math.max(0,Math.round((Number(sale.total||0)-already)*100)/100);
   if(amount>remaining+0.001)return res.status(400).json({error:`El pago supera el saldo pendiente de ${remaining.toFixed(2)}.`});
-  const now=new Date().toISOString(); const payment={id:crypto.randomUUID(),saleId:sale.id,saleNumber:sale.orderNumber,customerId:sale.customer?.id||null,customerName:sale.customer?.name||'',customerCedula:sale.customer?.cedula||'',sellerId:sale.assignedSellerId||null,sellerName:sale.assignedSellerName||'',method,date,batch:batch||null,transactionNumber:transactionNumber||null,bank,amount,totalSale:Number(sale.total||0),createdAt:now,createdBy:session.accountId||null}; payments.unshift(payment); writePayments(payments);
+  const now=new Date().toISOString(); const payment={id:crypto.randomUUID(),saleId:sale.id,saleNumber:sale.orderNumber,customerId:sale.customer?.id||null,customerName:sale.customer?.name||'',customerCedula:sale.customer?.cedula||'',sellerId:sale.assignedSellerId||null,sellerName:sale.assignedSellerName||'',method,date,batch:batch||null,transactionNumber:transactionNumber||null,bank,note:note||'',amount,totalSale:Number(sale.total||0),createdAt:now,createdBy:session.accountId||null}; payments.unshift(payment); writePayments(payments);
   const newPaid=already+amount; const status=newPaid>=Number(sale.total||0)-0.001?'PAGADO':'ABONO'; auditLog(req,'Pago registrado','Dinero',{paymentId:payment.id,saleId:sale.id,orderNumber:sale.orderNumber,method,amount,date,bank,batch,transactionNumber,status,balance:Math.max(0,Number(sale.total||0)-newPaid)});
   return res.status(201).json({...decoratePayment(payment,sales),paid:Math.round(newPaid*100)/100,balance:Math.max(0,Math.round((Number(sale.total||0)-newPaid)*100)/100),status});
-});
-
-app.post('/api/admin/dinero/pagos-mixtos', requireOrdersAccess, (req,res) => {
-  const session=getSession(req); const body=req.body||{}; const saleId=cleanText(body.saleId,120); const orderId=cleanText(body.orderId,120);
-  const sales=readSales(), orders=readOrders(); const sale=saleId?sales.find(s=>String(s.id)===saleId):null; const order=!sale&&orderId?orders.find(o=>String(o.id)===orderId):null; const source=sale||order;
-  if(!source)return res.status(404).json({error:'Venta u orden no encontrada.'});
-  if(order&&String(order.status||'').toLowerCase()==='cancelado')return res.status(400).json({error:'No puedes registrar pagos en una orden cancelada.'});
-  if(sale&&!paymentAccessAllowed(session,sale))return res.status(403).json({error:'No tienes permiso para registrar un pago de esta venta.'});
-  if(order&&isSellerRole(session.role)&&String(order.assignedSellerId||'')!==String(session.accountId||''))return res.status(403).json({error:'No tienes permiso para registrar un pago de esta orden.'});
-  const components=Array.isArray(body.payments)?body.payments:[];
-  if(components.length<2||components.length>4)return res.status(400).json({error:'Un pago mixto debe tener entre 2 y 4 formas de pago.'});
-  const normalized=[];
-  for(const item of components){
-    const method=cleanText(item?.method,20); if(!['cash','transfer','card'].includes(method))return res.status(400).json({error:'Una de las formas de pago no es válida.'});
-    const amount=normalizeMoneyAmount(item?.amount); if(amount===null||amount<=0)return res.status(400).json({error:'Todos los valores del pago mixto deben ser mayores que cero.'});
-    const bank=cleanText(item?.bank,100); if(!bank)return res.status(400).json({error:'Indica el banco o caja de cada forma de pago.'});
-    const transactionNumber=cleanText(item?.transactionNumber,120); if((method==='transfer'||method==='card')&&!transactionNumber)return res.status(400).json({error:'Transferencias y tarjetas necesitan número de transacción.'});
-    normalized.push({method,amount,bank,batch:cleanText(item?.batch,100)||null,transactionNumber:transactionNumber||null});
-  }
-  const payments=readPayments(); const keySale=sale?String(sale.id):''; const keyOrder=order?String(order.id):'';
-  const already=payments.filter(p=>String(p.saleId||'')===keySale&&String(p.orderId||'')===keyOrder).reduce((sum,p)=>sum+Number(p.amount||0),0);
-  const remaining=Math.max(0,Math.round((Number(source.total||0)-already)*100)/100); const totalMixed=Math.round(normalized.reduce((sum,p)=>sum+p.amount,0)*100)/100;
-  if(totalMixed>remaining+0.001)return res.status(400).json({error:`El pago mixto supera el saldo pendiente de ${remaining.toFixed(2)}.`});
-  const date=/^\d{4}-\d{2}-\d{2}$/.test(String(body.date||''))?String(body.date):localDateEc(new Date()); const groupId=crypto.randomUUID(); const now=new Date().toISOString();
-  const created=normalized.map(item=>({id:crypto.randomUUID(),saleId:sale?sale.id:null,orderId:order?order.id:null,saleNumber:source.orderNumber,customerId:source.customerId||source.customer?.id||null,customerName:source.customer?.name||'',customerCedula:source.customer?.cedula||'',sellerId:source.assignedSellerId||null,sellerName:source.assignedSellerName||'',...item,date,totalSale:Number(source.total||0),sourceType:sale?'venta':'orden',paymentGroupId:groupId,createdAt:now,createdBy:session.accountId||null}));
-  writePayments([...created,...payments]); const newPaid=already+totalMixed; const status=newPaid>=Number(source.total||0)-0.001?'PAGADO':'ABONO'; auditLog(req,'Pago mixto registrado','Dinero',{paymentGroupId:groupId,saleId:sale?.id||null,orderId:order?.id||null,orderNumber:source.orderNumber,components:created.map(p=>({method:p.method,amount:p.amount,bank:p.bank})),status,balance:Math.max(0,Number(source.total||0)-newPaid)});
-  return res.status(201).json({paymentGroupId,created:created.map(p=>decoratePayment(p,sales,orders)),paid:Math.round(newPaid*100)/100,balance:Math.max(0,Math.round((Number(source.total||0)-newPaid)*100)/100),status});
 });
 
 app.put('/api/admin/dinero/pagos/:id', requireAdmin, (req,res) => {
   const payments=readPayments(); const index=payments.findIndex(p=>String(p.id)===String(req.params.id)); if(index<0)return res.status(404).json({error:'Pago no encontrado.'});
   const current=payments[index]; const sales=readSales(); const orders=readOrders(); const sale=current.saleId?sales.find(s=>String(s.id)===String(current.saleId)):null; const order=!sale&&current.orderId?orders.find(o=>String(o.id)===String(current.orderId)):null; const source=sale||order;
   if(!source)return res.status(404).json({error:'La venta u orden asociada ya no existe.'});
-  const body=req.body||{}; const method=cleanText(body.method??current.method,20); if(!['cash','transfer','card'].includes(method))return res.status(400).json({error:'Forma de pago no válida.'}); const amount=normalizeMoneyAmount(body.amount??current.amount); if(amount===null)return res.status(400).json({error:'El valor no es válido.'}); const date=/^\d{4}-\d{2}-\d{2}$/.test(String(body.date??current.date))?String(body.date??current.date):current.date; const bank=cleanText(body.bank??current.bank,100); if(!bank)return res.status(400).json({error:'Indica el banco o caja.'}); const transactionNumber=cleanText(body.transactionNumber??current.transactionNumber,120); if((method==='transfer'||method==='card')&&!transactionNumber)return res.status(400).json({error:'El número de transacción es obligatorio.'}); const otherPaid=payments.filter((p,i)=>i!==index&&String(p.saleId||'')===String(current.saleId||'')&&String(p.orderId||'')===String(current.orderId||'')).reduce((sum,p)=>sum+Number(p.amount||0),0); if(amount+otherPaid>Number(source.total||0)+0.001)return res.status(400).json({error:'El nuevo valor supera el total pendiente de la operación.'}); const updated={...current,method,amount,date,bank,batch:cleanText(body.batch??current.batch,100)||null,transactionNumber:transactionNumber||null,updatedAt:new Date().toISOString(),editedBy:getSession(req)?.accountId||null}; payments[index]=updated; writePayments(payments); const totalPaid=otherPaid+amount; auditLog(req,'Pago actualizado','Dinero',{paymentId:updated.id,before:auditValue(current),after:auditValue(updated)}); return res.json({...decoratePayment(updated,sales,orders),paid:totalPaid,balance:Math.max(0,Number(source.total||0)-totalPaid),status:totalPaid>=Number(source.total||0)-0.001?'PAGADO':totalPaid>0?'ABONO':'PENDIENTE'});
+  const body=req.body||{}; const method=cleanText(body.method??current.method,20); if(!['cash','transfer','card'].includes(method))return res.status(400).json({error:'Forma de pago no válida.'}); const amount=normalizeMoneyAmount(body.amount??current.amount); if(amount===null)return res.status(400).json({error:'El valor no es válido.'}); const date=/^\d{4}-\d{2}-\d{2}$/.test(String(body.date??current.date))?String(body.date??current.date):current.date; const bank=cleanText(body.bank??current.bank,100); if(!bank)return res.status(400).json({error:'Indica el banco o caja.'}); const transactionNumber=cleanText(body.transactionNumber??current.transactionNumber,120); const note=cleanText(body.note??current.note,500); if((method==='transfer'||method==='card')&&!transactionNumber)return res.status(400).json({error:'El número de transacción es obligatorio.'}); const otherPaid=payments.filter((p,i)=>i!==index&&String(p.saleId||'')===String(current.saleId||'')&&String(p.orderId||'')===String(current.orderId||'')).reduce((sum,p)=>sum+Number(p.amount||0),0); if(amount+otherPaid>Number(source.total||0)+0.001)return res.status(400).json({error:'El nuevo valor supera el total pendiente de la operación.'}); const updated={...current,method,amount,date,bank,batch:cleanText(body.batch??current.batch,100)||null,transactionNumber:transactionNumber||null,note:note||'',updatedAt:new Date().toISOString(),editedBy:getSession(req)?.accountId||null}; payments[index]=updated; writePayments(payments); const totalPaid=otherPaid+amount; auditLog(req,'Pago actualizado','Dinero',{paymentId:updated.id,before:auditValue(current),after:auditValue(updated)}); return res.json({...decoratePayment(updated,sales,orders),paid:totalPaid,balance:Math.max(0,Number(source.total||0)-totalPaid),status:totalPaid>=Number(source.total||0)-0.001?'PAGADO':totalPaid>0?'ABONO':'PENDIENTE'});
 });
 
 app.delete('/api/admin/dinero/pagos/:id', requireAdmin, (req,res) => {
