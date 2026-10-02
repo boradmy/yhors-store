@@ -4663,7 +4663,19 @@ async function renderAdminClientes() {
           const d=new Date(value);
           return Number.isNaN(d.getTime())?'':new Intl.DateTimeFormat('en-CA',{timeZone:'America/Guayaquil'}).format(d);
         };
-        const rows=statement.filter(row=>{const day=accountDay(row.date||row.payment?.date||row.timestamp);return (!from||day>=from)&&(!to||day<=to);});
+        const rows=statement.filter(row=>{const day=accountDay(row.date||row.payment?.date||row.timestamp);return (!from||day>=from)&&(!to||day<=to);}).sort((a,b)=>{
+          // El estado de cuenta se lee como un libro: del movimiento más antiguo
+          // al más reciente, dejando el último movimiento al final.
+          const movementKey=row=>{
+            const day=accountDay(row.date||row.payment?.date||row.timestamp)||'9999-12-31';
+            const raw=String(row.timestamp||row.date||'');
+            let time='00:00:00';
+            const match=raw.match(/T(\d{2}:\d{2}(?::\d{2})?)/);
+            if(match)time=match[1].length===5?`${match[1]}:00`:match[1];
+            return `${day}T${time}`;
+          };
+          return movementKey(a).localeCompare(movementKey(b));
+        });
         const formatDateTime=value=>{if(!value)return 'Fecha no registrada'; const d=new Date(value); if(Number.isNaN(d.getTime()))return 'Fecha no registrada'; return escapeHTML(d.toLocaleString('es-EC',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit',hour12:false,timeZone:'America/Guayaquil'}));};
         const renderedCustomerRows=rows.map(row=>{
           const isPayment=row.kind==='abono';
