@@ -966,7 +966,9 @@ app.use('/api/admin', (req, res, next) => {
 });
 
 
-const SITE_URL = String(process.env.PUBLIC_BASE_URL || 'https://yhors-store.onrender.com').replace(/\/$/, '');
+// URL canónica pública de YHORS-STORE. Mantener fija para que sitemap, canonical,
+// Open Graph y JSON-LD siempre apunten al dominio indexable de producción.
+const SITE_URL = 'https://yhors-store.onrender.com';
 const SITE_NAME = 'YHORS-STORE';
 const CORPORATE_NAME = 'YHORS-CORP';
 const CATEGORY_LABELS = {
