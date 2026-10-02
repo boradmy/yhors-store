@@ -5509,19 +5509,72 @@ app.post('/api/admin/dinero/pagos-cliente', requireOrdersAccess, (req, res) => {
   const note = cleanText(body.note, 500);
   if ((method === 'transfer' || method === 'card') && !transactionNumber) return res.status(400).json({ error: 'El número de transacción es obligatorio para transferencias y tarjetas.' });
   const now = new Date().toISOString();
-  const payment = {
-    id: crypto.randomUUID(), orderId: null, saleId: null, saleNumber: null,
-    customerId: customer.id, customerName: customer.name || '', customerCedula: customer.cedula || '',
-    customerEmail: customer.email || '', customerPhone: customer.phone || '', customerIdentity: customer.identity || customerIdentity(customer),
-    sellerId: session.accountId || null, sellerName: session.name || session.username || '',
-    method, date, batch: batch || null, transactionNumber: transactionNumber || null, bank,
-    note: note || '', amount, totalSale: 0, sourceType: 'cliente', createdAt: now, createdBy: session.accountId || null
-  };
   const payments = readPayments();
-  payments.unshift(payment);
+
+  // Un ingreso hecho desde “Ingresar dinero a cliente” sigue perteneciendo al
+  // cliente aunque exista una orden. Cuando hay una cuenta pendiente,
+  // aplicamos automáticamente el dinero a la deuda más antigua para que
+  // PEDIDOS → CONTROL DE PAGO refleje el abono inmediatamente. Si sobra
+  // dinero, el excedente queda como saldo a favor independiente.
+  const customerOrders = readOrders()
+    .filter(order => customerIdentity(order.customer || {}) === customer.identity)
+    .filter(order => String(order.status || '').toLowerCase() !== 'cancelado' && !order.salesNotifiedAt && !order.salesHistoryId)
+    .sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
+
+  const paymentRows = [];
+  let remainingAmount = amount;
+  for (const order of customerOrders) {
+    if (remainingAmount <= 0.001) break;
+    const alreadyPaid = payments
+      .filter(p => String(p.orderId || '') === String(order.id))
+      .reduce((sum, p) => sum + Number(p.amount || 0), 0);
+    const orderBalance = Math.max(0, Math.round((Number(order.total || 0) - alreadyPaid) * 100) / 100);
+    if (orderBalance <= 0.001) continue;
+
+    const applied = Math.min(remainingAmount, orderBalance);
+    const payment = {
+      id: crypto.randomUUID(), orderId: order.id, saleId: null, saleNumber: order.orderNumber || null,
+      customerId: customer.id, customerName: customer.name || '', customerCedula: customer.cedula || '',
+      customerEmail: customer.email || '', customerPhone: customer.phone || '', customerIdentity: customer.identity || customerIdentity(customer),
+      sellerId: order.assignedSellerId || session.accountId || null, sellerName: order.assignedSellerName || session.name || session.username || '',
+      method, date, batch: batch || null, transactionNumber: transactionNumber || null, bank,
+      note: note || '', amount: Math.round(applied * 100) / 100, totalSale: Number(order.total || 0),
+      sourceType: 'orden', createdAt: now, createdBy: session.accountId || null,
+      sourceNote: 'Ingreso de dinero aplicado automáticamente a la cuenta pendiente del cliente'
+    };
+    paymentRows.push(payment);
+    remainingAmount = Math.round((remainingAmount - applied) * 100) / 100;
+  }
+
+  // Si no había deuda pendiente o quedó un excedente, ese importe permanece
+  // como anticipo/saldo a favor del cliente y no depende de ninguna factura.
+  if (remainingAmount > 0.001) {
+    paymentRows.push({
+      id: crypto.randomUUID(), orderId: null, saleId: null, saleNumber: null,
+      customerId: customer.id, customerName: customer.name || '', customerCedula: customer.cedula || '',
+      customerEmail: customer.email || '', customerPhone: customer.phone || '', customerIdentity: customer.identity || customerIdentity(customer),
+      sellerId: session.accountId || null, sellerName: session.name || session.username || '',
+      method, date, batch: batch || null, transactionNumber: transactionNumber || null, bank,
+      note: note || '', amount: Math.round(remainingAmount * 100) / 100, totalSale: 0,
+      sourceType: 'cliente', createdAt: now, createdBy: session.accountId || null,
+      sourceNote: 'Saldo a favor / anticipo del cliente'
+    });
+  }
+
+  payments.unshift(...paymentRows.reverse());
   writePayments(payments);
-  auditLog(req, 'Ingreso de dinero a cliente', 'Dinero', { paymentId: payment.id, customerId: customer.id, customerName: customer.name, method, amount, date, bank, batch, transactionNumber });
-  return res.status(201).json({ ...decoratePayment(payment), credit: amount });
+  auditLog(req, 'Ingreso de dinero a cliente', 'Dinero', {
+    paymentIds: paymentRows.map(p => p.id), customerId: customer.id, customerName: customer.name,
+    method, amount, date, bank, batch, transactionNumber,
+    appliedToOrders: paymentRows.filter(p => p.orderId).map(p => ({ orderId: p.orderId, amount: p.amount })),
+    creditAmount: paymentRows.filter(p => !p.orderId).reduce((sum, p) => sum + Number(p.amount || 0), 0)
+  });
+  return res.status(201).json({
+    payments: paymentRows.map(payment => decoratePayment(payment, readSales(), readOrders())),
+    credit: amount,
+    applied: Math.round((amount - remainingAmount) * 100) / 100,
+    creditBalanceAdded: Math.round(remainingAmount * 100) / 100
+  });
 });
 
 app.post('/api/admin/dinero/pagos', requireOrdersAccess, (req, res) => {
