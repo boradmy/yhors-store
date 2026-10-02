@@ -519,6 +519,81 @@ function productCard(product) {
     : `<button class="add" data-id="${escapeHTML(product.id)}" ${!inStock ? 'disabled' : ''}><span>${inStock ? 'Añadir' : 'Sin stock'}</span><span>${inStock ? '+' : '—'}</span></button>`;
   return `<article class="product" data-product="${escapeHTML(product.id)}"><a class="product-open" data-open="${escapeHTML(product.id)}" href="${escapeHTML(productHref(product))}" aria-label="Ver ${escapeHTML(product.name)}"><div class="product-image"><img data-fallback src="${escapeHTML(image)}" alt="${escapeHTML(product.name)}" loading="lazy"></div><div class="product-info"><span class="product-category">${escapeHTML(categories[product.category] || product.category)}</span>${meta ? `<small class="product-meta">${escapeHTML(meta)}</small>` : ''}<h3>${escapeHTML(product.name)}</h3><div class="product-description">${escapeHTML(compactProductDescription(product.description, 112))}</div><span class="detail-link">Ver detalles <span>→</span></span></div></a><div class="product-bottom"><div><span class="price">${productPriceLabel(product)}</span>${rental}<span class="price-secondary">${availability}</span></div>${action}</div></article>`;
 }
+
+function relatedProductsFor(product, products) {
+  const currentId = String(product?.id || '');
+  const category = String(product?.category || '');
+  const type = String(product?.productType || '').trim().toLowerCase();
+  const brand = String(product?.brand || '').trim().toLowerCase();
+  const score = item => {
+    if (!item || String(item.id) === currentId || item.published === false) return -1;
+    let value = 0;
+    if (String(item.category || '') === category) value += 50;
+    if (type && String(item.productType || '').trim().toLowerCase() === type) value += 22;
+    if (brand && String(item.brand || '').trim().toLowerCase() === brand) value += 14;
+    if (item.featured) value += 2;
+    if (item.inStock) value += 1;
+    return value;
+  };
+  return products
+    .map(item => ({ item, score: score(item) }))
+    .filter(entry => entry.score >= 0)
+    .sort((a, b) => b.score - a.score || String(a.item.name || '').localeCompare(String(b.item.name || ''), 'es'))
+    .map(entry => entry.item)
+    .slice(0, 12);
+}
+
+function relatedProductCard(product) {
+  const image = productImages(product)[0] || placeholder;
+  const price = productPriceLabel(product);
+  const stockLabel = product.inStock ? 'DISPONIBLE' : 'SIN STOCK';
+  return `<article class="related-card"><a class="related-card-link" href="${escapeHTML(productHref(product))}" aria-label="Ver ${escapeHTML(product.name)}"><div class="related-card-image"><img data-fallback src="${escapeHTML(image)}" alt="${escapeHTML(product.name)}" loading="lazy"></div><div class="related-card-copy"><span class="related-card-category">${escapeHTML(categories[product.category] || product.category || 'YHORS')}</span><h3>${escapeHTML(product.name)}</h3><div class="related-card-price">${escapeHTML(price)}</div><span class="related-card-stock ${product.inStock ? '' : 'out'}">${stockLabel}</span><span class="related-card-action">Ver producto <span>→</span></span></div></a></article>`;
+}
+
+function renderRelatedProducts(product, products) {
+  const related = relatedProductsFor(product, products);
+  if (!related.length) return '';
+  const initial = related.slice(0, Math.min(4, related.length));
+  return `<section class="related-products-section section" id="productosRelacionados"><div class="related-heading"><div><span class="eyebrow">SELECCIÓN YHORS</span><h2>Productos relacionados</h2><p>Descubre otras opciones que pueden combinar con lo que estás viendo.</p></div><div class="related-controls" aria-label="Controles de productos relacionados"><button type="button" class="related-nav" data-related-prev aria-label="Productos anteriores">←</button><button type="button" class="related-nav" data-related-next aria-label="Productos siguientes">→</button></div></div><div class="related-viewport"><div class="related-track" data-related-track>${initial.map(relatedProductCard).join('')}</div></div>${related.length > 4 ? `<div class="related-dots" aria-label="Páginas de productos relacionados">${Array.from({length: Math.ceil(related.length / 4)}, (_,i)=>`<button type="button" class="related-dot ${i===0?'active':''}" data-related-dot="${i}" aria-label="Grupo ${i+1}"></button>`).join('')}</div>` : ''}</section>`;
+}
+
+function wireRelatedProducts(product, products) {
+  const section = document.querySelector('#productosRelacionados');
+  if (!section) return;
+  const related = relatedProductsFor(product, products);
+  if (!related.length) return;
+  const track = section.querySelector('[data-related-track]');
+  const dots = [...section.querySelectorAll('[data-related-dot]')];
+  const pageSize = 4;
+  const pageCount = Math.max(1, Math.ceil(related.length / pageSize));
+  let page = 0;
+  let timer = null;
+  const renderPage = nextPage => {
+    page = (nextPage + pageCount) % pageCount;
+    const start = page * pageSize;
+    const items = related.slice(start, start + pageSize);
+    track.classList.add('is-changing');
+    window.setTimeout(() => {
+      track.innerHTML = items.map(relatedProductCard).join('');
+      wireImageFallback(section);
+      requestAnimationFrame(() => track.classList.remove('is-changing'));
+    }, 120);
+    dots.forEach((dot, index) => dot.classList.toggle('active', index === page));
+  };
+  const restart = () => {
+    if (pageCount <= 1) return;
+    clearInterval(timer);
+    timer = window.setInterval(() => renderPage(page + 1), 4800);
+  };
+  section.querySelector('[data-related-prev]')?.addEventListener('click', () => { renderPage(page - 1); restart(); });
+  section.querySelector('[data-related-next]')?.addEventListener('click', () => { renderPage(page + 1); restart(); });
+  dots.forEach(dot => dot.addEventListener('click', () => { renderPage(Number(dot.dataset.relatedDot)); restart(); }));
+  section.addEventListener('mouseenter', () => clearInterval(timer));
+  section.addEventListener('mouseleave', restart);
+  wireImageFallback(section);
+  restart();
+}
+
 function renderProductsInto(area, products, onOpen, onAdd, options = {}) {
   const groupByType = options.groupByType === true;
   const groupLabel = value => String(value || 'Otros productos').trim() || 'Otros productos';
@@ -1067,8 +1142,8 @@ async function renderCategoryPage(categoryKey) {
 async function renderProductDetail(product, products, storefront) {
   const images = productImages(product); updateSeoMeta({ title: `${product.name} | YHORS-STORE`, description: compactProductDescription(product.description || `${product.name} disponible en YHORS-STORE.`, 155), canonical: `${location.origin}${productHref(product)}`, image: images[0] && (images[0].startsWith('http') ? images[0] : `${location.origin}${images[0]}`) }); let selected = 0; const isCosplay = product.category === 'cosplay'; const hasRental = isCosplay && Number.isFinite(Number(product.rentalPrice));
   const modeOptions = hasRental ? `<div class="purchase-choice"><span class="choice-label">¿Cómo quieres obtenerlo?</span><div class="purchase-options" role="radiogroup" aria-label="Modalidad"><button type="button" class="purchase-option active" data-purchase-mode="purchase"><strong>Comprar</strong><span>${productPriceLabel(product)}</span></button><button type="button" class="purchase-option" data-purchase-mode="rental"><strong>Alquilar</strong><span>Alquiler: ${money(product.rentalPrice)}</span></button></div><div class="rental-days-picker hidden" id="rentalDaysPicker"><label for="rentalDays">Días de alquiler</label><select id="rentalDays" name="rentalDays">${Array.from({length:10},(_,i)=>i+1).map(day=>`<option value="${day}" ${day===1?'selected':''}>${day} día${day===1?'':'s'}</option>`).join('')}</select><small class="field-help">Selecciona de 1 a 10 días.</small></div></div>` : '';
-  app.innerHTML = `${renderHeader(product.category)}<main class="product-detail-page"><div class="breadcrumbs"><a href="${categoryHref(product.category)}">${escapeHTML(categories[product.category])}</a><span>/</span><strong>${escapeHTML(product.name)}</strong></div><section class="detail-layout"><div class="detail-gallery"><div class="detail-main-image"><img id="detailMainImage" data-fallback src="${escapeHTML(images[0])}" alt="${escapeHTML(product.name)}"></div>${images.length > 1 ? `<div class="thumbnail-row">${images.map((image, index) => `<button class="thumb ${index === 0 ? 'active' : ''}" data-image-index="${index}"><img data-fallback src="${escapeHTML(image)}" alt="Imagen ${index + 1}"></button>`).join('')}</div>` : ''}</div><div class="detail-copy"><span class="eyebrow">${escapeHTML(categories[product.category])}</span><h1>${escapeHTML(product.name)}</h1><div class="detail-price" id="detailPrice">${productPriceLabel(product)}</div><div class="detail-sku" aria-label="SKU de YHORS"><span class="detail-sku-icon">⌑</span><span>SKU: <strong>${escapeHTML(product.sku || '—')}</strong></span></div><div class="detail-availability ${product.inStock ? '' : 'out'}">${product.inStock ? 'DISPONIBLE' : 'SIN STOCK'}</div>${modeOptions}<div class="detail-buy"><button class="add detail-add" id="detailAdd" ${!hasRental && !product.inStock ? 'disabled' : ''}><span>${!hasRental && !product.inStock ? 'Sin stock' : 'Añadir al carrito'}</span><span>${!hasRental && !product.inStock ? '—' : '+'}</span></button><a class="button secondary back-button" href="${categoryHref(product.category)}">← Volver a ${escapeHTML(categories[product.category])}</a></div><div class="detail-divider"></div><h3>Descripción</h3><div class="detail-description">${richDescriptionHTML(product.description)}</div><div class="detail-note"><span>✓</span>${hasRental ? 'Elige comprar o alquilar antes de añadirlo al carrito.' : 'Compra directa y atención personal.'}</div></div></section></main>${renderFooter()}${cartMarkup()}`;
-  wireCategoryNavigation(); wireMobileMenu(); wireSearch(); wireImageFallback(document.querySelector('.product-detail-page')); markPageEnter(); document.querySelectorAll('[data-image-index]').forEach(button => button.addEventListener('click', () => { selected = Number(button.dataset.imageIndex); document.querySelector('#detailMainImage').src = images[selected]; document.querySelectorAll('.thumb').forEach(item => item.classList.remove('active')); button.classList.add('active'); }));
+  app.innerHTML = `${renderHeader(product.category)}<main class="product-detail-page"><div class="breadcrumbs"><a href="${categoryHref(product.category)}">${escapeHTML(categories[product.category])}</a><span>/</span><strong>${escapeHTML(product.name)}</strong></div><section class="detail-layout"><div class="detail-gallery"><div class="detail-main-image"><img id="detailMainImage" data-fallback src="${escapeHTML(images[0])}" alt="${escapeHTML(product.name)}"></div>${images.length > 1 ? `<div class="thumbnail-row">${images.map((image, index) => `<button class="thumb ${index === 0 ? 'active' : ''}" data-image-index="${index}"><img data-fallback src="${escapeHTML(image)}" alt="Imagen ${index + 1}"></button>`).join('')}</div>` : ''}</div><div class="detail-copy"><span class="eyebrow">${escapeHTML(categories[product.category])}</span><h1>${escapeHTML(product.name)}</h1><div class="detail-price" id="detailPrice">${productPriceLabel(product)}</div><div class="detail-sku" aria-label="SKU de YHORS"><span class="detail-sku-icon">⌑</span><span>SKU: <strong>${escapeHTML(product.sku || '—')}</strong></span></div><div class="detail-availability ${product.inStock ? '' : 'out'}">${product.inStock ? 'DISPONIBLE' : 'SIN STOCK'}</div>${modeOptions}<div class="detail-buy"><button class="add detail-add" id="detailAdd" ${!hasRental && !product.inStock ? 'disabled' : ''}><span>${!hasRental && !product.inStock ? 'Sin stock' : 'Añadir al carrito'}</span><span>${!hasRental && !product.inStock ? '—' : '+'}</span></button><a class="button secondary back-button" href="${categoryHref(product.category)}">← Volver a ${escapeHTML(categories[product.category])}</a></div><div class="detail-divider"></div><h3>Descripción</h3><div class="detail-description">${richDescriptionHTML(product.description)}</div><div class="detail-note"><span>✓</span>${hasRental ? 'Elige comprar o alquilar antes de añadirlo al carrito.' : 'Compra directa y atención personal.'}</div></div></section></main>${renderRelatedProducts(product, products)}${renderFooter()}${cartMarkup()}`;
+  wireCategoryNavigation(); wireMobileMenu(); wireSearch(); wireImageFallback(document.querySelector('.product-detail-page')); markPageEnter(); wireRelatedProducts(product, products); document.querySelectorAll('[data-image-index]').forEach(button => button.addEventListener('click', () => { selected = Number(button.dataset.imageIndex); document.querySelector('#detailMainImage').src = images[selected]; document.querySelectorAll('.thumb').forEach(item => item.classList.remove('active')); button.classList.add('active'); }));
   const cart = wireCart(products, storefront); let purchaseMode = 'purchase';
   document.querySelectorAll('[data-purchase-mode]').forEach(button => button.addEventListener('click', () => {
     purchaseMode = button.dataset.purchaseMode;

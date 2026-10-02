@@ -1056,13 +1056,34 @@ function layout({ title, description, canonical, body, robots, image, json }) {
     .replace('<title>YHORS-STORE</title>', `<title>${esc(title)}</title>`)
     .replace('<div id="app"></div>', `<div id="app">${body}</div>`);
 }
+
+function relatedProductsSeo(product) {
+  const all = readProducts().map(normalizeProduct).filter(item => item.published !== false && String(item.id) !== String(product.id));
+  const category = String(product.category || '');
+  const type = String(product.productType || '').trim().toLowerCase();
+  const brand = String(product.brand || '').trim().toLowerCase();
+  const score = item => {
+    let value = 0;
+    if (String(item.category || '') === category) value += 50;
+    if (type && String(item.productType || '').trim().toLowerCase() === type) value += 22;
+    if (brand && String(item.brand || '').trim().toLowerCase() === brand) value += 14;
+    if (item.featured) value += 2;
+    if (item.stock > 0) value += 1;
+    return value;
+  };
+  const related = all.sort((a,b) => score(b)-score(a) || String(a.name||'').localeCompare(String(b.name||''), 'es')).slice(0,8);
+  if (!related.length) return '';
+  const cards = related.map(item => `<article class="related-card"><a class="related-card-link" href="${esc(productUrl(item))}"><div class="related-card-image"><img src="${esc(absoluteImage((item.images||[])[0]||item.image))}" alt="${esc(item.name)}" width="600" height="600"></div><div class="related-card-copy"><span class="related-card-category">${esc(CATEGORY_LABELS[item.category] || item.category || 'YHORS')}</span><h3>${esc(item.name)}</h3><div class="related-card-price">$${Number(item.salePrice ?? item.price ?? 0).toFixed(2)}</div><span class="related-card-stock ${Number(item.stock||0)>0?'':'out'}">${Number(item.stock||0)>0?'DISPONIBLE':'SIN STOCK'}</span><span class="related-card-action">Ver producto <span>→</span></span></div></a></article>`).join('');
+  return `<section class="related-products-section section"><div class="related-heading"><div><span class="eyebrow">SELECCIÓN YHORS</span><h2>Productos relacionados</h2><p>Descubre otras opciones que pueden combinar con lo que estás viendo.</p></div></div><div class="related-viewport"><div class="related-track">${cards}</div></div></section>`;
+}
+
 function productSeoBody(product) {
   const images = Array.isArray(product.images) && product.images.length ? product.images : (product.image ? [product.image] : []);
   const image = images[0] || '';
   const category = CATEGORY_LABELS[product.category] || product.category;
   const price = Number(product.salePrice ?? product.price);
   const rental = product.category === 'cosplay' && Number.isFinite(Number(product.rentalPrice)) ? `<p class="price-secondary">Alquiler: $${Number(product.rentalPrice).toFixed(2)}</p>` : '';
-  return `<main class="product-detail-page"><div class="breadcrumbs"><a href="/categoria/${encodeURIComponent(product.category)}">${esc(category)}</a><span>/</span><strong>${esc(product.name)}</strong></div><section class="detail-layout"><div class="detail-gallery"><div class="detail-main-image"><img src="${esc(absoluteImage(image))}" alt="${esc(product.name)}" width="800" height="800"></div>${images.length > 1 ? `<div class="thumbnail-row">${images.slice(1,4).map((url,i)=>`<img src="${esc(absoluteImage(url))}" alt="${esc(product.name)} - imagen ${i+2}" width="200" height="200">`).join('')}</div>`:''}</div><div class="detail-copy"><span class="eyebrow">${esc(category)}</span><h1>${esc(product.name)}</h1><div class="detail-price">$${price.toFixed(2)}</div>${rental}<div class="detail-sku"><span>SKU: <strong>${esc(product.sku || '—')}</strong></span></div><div class="detail-divider"></div><h2>Descripción</h2><div class="detail-description">${renderDescriptionHtml(product.description)}</div><div class="detail-buy"><a class="button" href="/categoria/${encodeURIComponent(product.category)}">Ver más productos <span>→</span></a></div></div></section></main>`;
+  return `<main class="product-detail-page"><div class="breadcrumbs"><a href="/categoria/${encodeURIComponent(product.category)}">${esc(category)}</a><span>/</span><strong>${esc(product.name)}</strong></div><section class="detail-layout"><div class="detail-gallery"><div class="detail-main-image"><img src="${esc(absoluteImage(image))}" alt="${esc(product.name)}" width="800" height="800"></div>${images.length > 1 ? `<div class="thumbnail-row">${images.slice(1,4).map((url,i)=>`<img src="${esc(absoluteImage(url))}" alt="${esc(product.name)} - imagen ${i+2}" width="200" height="200">`).join('')}</div>`:''}</div><div class="detail-copy"><span class="eyebrow">${esc(category)}</span><h1>${esc(product.name)}</h1><div class="detail-price">$${price.toFixed(2)}</div>${rental}<div class="detail-sku"><span>SKU: <strong>${esc(product.sku || '—')}</strong></span></div><div class="detail-divider"></div><h2>Descripción</h2><div class="detail-description">${renderDescriptionHtml(product.description)}</div><div class="detail-buy"><a class="button" href="/categoria/${encodeURIComponent(product.category)}">Ver más productos <span>→</span></a></div></div></section>${relatedProductsSeo(product)}</main>`;
 }
 function categorySeoBody(categoryKey, products, storefront = {}) {
   const label = CATEGORY_LABELS[categoryKey];
