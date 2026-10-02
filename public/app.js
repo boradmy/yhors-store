@@ -5105,7 +5105,6 @@ async function renderAdmin() {
           featured: featuredProductIds.includes(p.id)
         }));
         showSaveSuccess(message, 'Portada y destacados guardados con el orden indicado.');
-        drawList();
       } catch (e) { message.className = 'message error'; message.textContent = e.message; }
     });
   }
