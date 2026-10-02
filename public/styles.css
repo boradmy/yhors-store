@@ -5784,7 +5784,22 @@ html:has(.admin-web-shell),body:has(.admin-web-shell),#app:has(.admin-web-shell)
   color:#6f685f;
   font-size:.75rem;
 }
-.product-detail-page .detail-mini-note > span:first-child{color:#4d7657;font-weight:900}
+'.product-detail-page .detail-mini-note > span:first-child{color:#4d7657;font-weight:900}
+.product-detail-page .detail-basic-meta{
+  margin-top:24px;
+  padding-top:18px;
+  border-top:1px solid var(--line);
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  color:#5f5952;
+  font-size:.78rem;
+  line-height:1.5;
+}
+.product-detail-page .detail-basic-meta strong{
+  color:var(--ink);
+  font-weight:800;
+}
 .product-detail-page .detail-main-image{
   box-shadow:0 10px 32px rgba(30,25,18,.035);
 }
