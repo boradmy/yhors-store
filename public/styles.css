@@ -5692,7 +5692,7 @@ html:has(.admin-web-shell),body:has(.admin-web-shell),#app:has(.admin-web-shell)
 @media(max-width:440px){.hero-content h1{font-size:clamp(1.16rem,5.25vw,1.5rem);max-width:96%;-webkit-line-clamp:3;line-clamp:3}}
 
 
-/* YHORS · Productos relacionados en la ficha pública */
+/* YHORS · Productos relacionados · carrusel continuo */
 .related-products-section{max-width:1220px;margin:58px auto 0;padding:0 26px 70px;border-top:1px solid var(--line)}
 .related-heading{display:flex;justify-content:space-between;align-items:end;gap:25px;padding:42px 0 24px}
 .related-heading h2{font-size:clamp(1.55rem,2.7vw,2.35rem);line-height:1.05;letter-spacing:-.035em;margin:8px 0 8px}
@@ -5700,10 +5700,10 @@ html:has(.admin-web-shell),body:has(.admin-web-shell),#app:has(.admin-web-shell)
 .related-controls{display:flex;gap:8px;flex:0 0 auto}
 .related-nav{width:42px;height:42px;border:1px solid var(--line);border-radius:50%;background:#fff;color:var(--ink);font-size:1rem;font-weight:800;cursor:pointer;transition:.2s ease}
 .related-nav:hover{background:var(--ink);color:#fff;border-color:var(--ink);transform:translateY(-1px)}
-.related-viewport{overflow:hidden}
-.related-track{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;transition:opacity .16s ease,transform .16s ease}
-.related-track.is-changing{opacity:.15;transform:translateY(4px)}
-.related-card{min-width:0;border:1px solid var(--line);background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 8px 24px rgba(30,25,18,.045);transition:transform .2s ease,box-shadow .2s ease,border-color .2s ease}
+.related-viewport{overflow:hidden;width:100%}
+.related-track{display:flex;gap:16px;will-change:transform;transition:transform .58s cubic-bezier(.22,.61,.36,1)}
+.related-track.is-sliding{transition:transform .58s cubic-bezier(.22,.61,.36,1)}
+.related-card{flex:0 0 calc((100% - 48px)/4);min-width:0;border:1px solid var(--line);background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 8px 24px rgba(30,25,18,.045);transition:transform .2s ease,box-shadow .2s ease,border-color .2s ease}
 .related-card:hover{transform:translateY(-4px);box-shadow:0 14px 34px rgba(30,25,18,.09);border-color:#d8c39c}
 .related-card-link{display:block;color:inherit;text-decoration:none;height:100%}
 .related-card-image{aspect-ratio:1/1;background:#f3f0e9;display:grid;place-items:center;padding:12px;overflow:hidden}
@@ -5717,9 +5717,6 @@ html:has(.admin-web-shell),body:has(.admin-web-shell),#app:has(.admin-web-shell)
 .related-card-stock.out{color:#8c5a5a;border-color:#e2cfcf;background:#fbf3f3}
 .related-card-action{margin-top:auto;padding-top:13px;font-size:.68rem;font-weight:850;color:var(--ink)}
 .related-card-action span{color:var(--gold);margin-left:4px}
-.related-dots{display:flex;justify-content:center;gap:6px;padding-top:20px}
-.related-dot{width:28px;height:4px;border:0;border-radius:999px;background:#ded8cd;padding:0;cursor:pointer;transition:.2s ease}
-.related-dot.active{background:var(--gold);width:40px}
-@media(max-width:900px){.related-track{grid-template-columns:repeat(3,minmax(0,1fr))}.related-products-section{padding-left:18px;padding-right:18px}}
-@media(max-width:700px){.related-heading{align-items:start;flex-direction:column;gap:15px}.related-controls{align-self:flex-end}.related-track{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.related-card-copy{padding:12px;min-height:150px}.related-card-copy h3{font-size:.78rem}.related-card-price{font-size:.9rem}.related-products-section{margin-top:40px;padding-bottom:45px}}
-@media(max-width:440px){.related-track{grid-template-columns:1fr 1fr}.related-card-image{padding:8px}.related-card-copy{min-height:142px}.related-card-stock{font-size:.49rem}}
+@media(max-width:900px){.related-card{flex-basis:calc((100% - 32px)/3)}.related-products-section{padding-left:18px;padding-right:18px}}
+@media(max-width:700px){.related-heading{align-items:start;flex-direction:column;gap:15px}.related-controls{align-self:flex-end}.related-track{gap:10px}.related-card{flex-basis:calc((100% - 10px)/2)}.related-card-copy{padding:12px;min-height:150px}.related-card-copy h3{font-size:.78rem}.related-card-price{font-size:.9rem}.related-products-section{margin-top:40px;padding-bottom:45px}}
+@media(max-width:440px){.related-card-image{padding:8px}.related-card-copy{min-height:142px}.related-card-stock{font-size:.49rem}}

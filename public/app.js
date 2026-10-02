@@ -553,8 +553,7 @@ function relatedProductCard(product) {
 function renderRelatedProducts(product, products) {
   const related = relatedProductsFor(product, products);
   if (!related.length) return '';
-  const initial = related.slice(0, Math.min(4, related.length));
-  return `<section class="related-products-section section" id="productosRelacionados"><div class="related-heading"><div><span class="eyebrow">SELECCIÓN YHORS</span><h2>Productos relacionados</h2><p>Descubre otras opciones que pueden combinar con lo que estás viendo.</p></div><div class="related-controls" aria-label="Controles de productos relacionados"><button type="button" class="related-nav" data-related-prev aria-label="Productos anteriores">←</button><button type="button" class="related-nav" data-related-next aria-label="Productos siguientes">→</button></div></div><div class="related-viewport"><div class="related-track" data-related-track>${initial.map(relatedProductCard).join('')}</div></div>${related.length > 4 ? `<div class="related-dots" aria-label="Páginas de productos relacionados">${Array.from({length: Math.ceil(related.length / 4)}, (_,i)=>`<button type="button" class="related-dot ${i===0?'active':''}" data-related-dot="${i}" aria-label="Grupo ${i+1}"></button>`).join('')}</div>` : ''}</section>`;
+  return `<section class="related-products-section section" id="productosRelacionados"><div class="related-heading"><div><span class="eyebrow">SELECCIÓN YHORS</span><h2>Productos relacionados</h2><p>Descubre otras opciones que pueden combinar con lo que estás viendo.</p></div><div class="related-controls" aria-label="Controles de productos relacionados"><button type="button" class="related-nav" data-related-prev aria-label="Productos anteriores">←</button><button type="button" class="related-nav" data-related-next aria-label="Productos siguientes">→</button></div></div><div class="related-viewport"><div class="related-track" data-related-track>${related.map(relatedProductCard).join('')}</div></div></section>`;
 }
 
 function wireRelatedProducts(product, products) {
@@ -563,33 +562,84 @@ function wireRelatedProducts(product, products) {
   const related = relatedProductsFor(product, products);
   if (!related.length) return;
   const track = section.querySelector('[data-related-track]');
-  const dots = [...section.querySelectorAll('[data-related-dot]')];
-  const pageSize = 4;
-  const pageCount = Math.max(1, Math.ceil(related.length / pageSize));
-  let page = 0;
+  if (!track) return;
+
+  // Carrusel continuo: avanza una tarjeta por vez y recicla la que sale por la izquierda.
   let timer = null;
-  const renderPage = nextPage => {
-    page = (nextPage + pageCount) % pageCount;
-    const start = page * pageSize;
-    const items = related.slice(start, start + pageSize);
-    track.classList.add('is-changing');
-    window.setTimeout(() => {
-      track.innerHTML = items.map(relatedProductCard).join('');
-      wireImageFallback(section);
-      requestAnimationFrame(() => track.classList.remove('is-changing'));
-    }, 120);
-    dots.forEach((dot, index) => dot.classList.toggle('active', index === page));
+  let moving = false;
+  const getStep = () => {
+    const first = track.querySelector('.related-card');
+    if (!first) return 0;
+    const styles = window.getComputedStyle(track);
+    const gap = parseFloat(styles.columnGap || styles.gap || '0') || 0;
+    return first.getBoundingClientRect().width + gap;
+  };
+  const moveNext = () => {
+    if (moving || track.children.length < 2) return;
+    const step = getStep();
+    if (!step) return;
+    moving = true;
+    track.classList.add('is-sliding');
+    track.style.transform = `translate3d(-${step}px,0,0)`;
+    const finish = () => {
+      track.removeEventListener('transitionend', finish);
+      track.appendChild(track.firstElementChild);
+      track.style.transition = 'none';
+      track.style.transform = 'translate3d(0,0,0)';
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          track.style.transition = '';
+          track.classList.remove('is-sliding');
+          moving = false;
+        });
+      });
+    };
+    track.addEventListener('transitionend', finish, { once: true });
+    window.setTimeout(() => { if (moving) finish(); }, 650);
+  };
+  const movePrev = () => {
+    if (moving || track.children.length < 2) return;
+    const last = track.lastElementChild;
+    if (!last) return;
+    const step = getStep();
+    if (!step) return;
+    moving = true;
+    track.style.transition = 'none';
+    track.insertBefore(last, track.firstElementChild);
+    track.style.transform = `translate3d(-${step}px,0,0)`;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        track.classList.add('is-sliding');
+        track.style.transition = '';
+        track.style.transform = 'translate3d(0,0,0)';
+      });
+    });
+    const finish = () => {
+      track.removeEventListener('transitionend', finish);
+      track.classList.remove('is-sliding');
+      moving = false;
+    };
+    track.addEventListener('transitionend', finish, { once: true });
+    window.setTimeout(() => { if (moving) finish(); }, 650);
   };
   const restart = () => {
-    if (pageCount <= 1) return;
     clearInterval(timer);
-    timer = window.setInterval(() => renderPage(page + 1), 4800);
+    timer = window.setInterval(moveNext, 4200);
   };
-  section.querySelector('[data-related-prev]')?.addEventListener('click', () => { renderPage(page - 1); restart(); });
-  section.querySelector('[data-related-next]')?.addEventListener('click', () => { renderPage(page + 1); restart(); });
-  dots.forEach(dot => dot.addEventListener('click', () => { renderPage(Number(dot.dataset.relatedDot)); restart(); }));
+
+  section.querySelector('[data-related-prev]')?.addEventListener('click', () => { movePrev(); restart(); });
+  section.querySelector('[data-related-next]')?.addEventListener('click', () => { moveNext(); restart(); });
   section.addEventListener('mouseenter', () => clearInterval(timer));
   section.addEventListener('mouseleave', restart);
+  section.addEventListener('focusin', () => clearInterval(timer));
+  section.addEventListener('focusout', event => { if (!section.contains(event.relatedTarget)) restart(); });
+  window.addEventListener('resize', () => {
+    if (!moving) {
+      track.style.transition = 'none';
+      track.style.transform = 'translate3d(0,0,0)';
+      requestAnimationFrame(() => { track.style.transition = ''; });
+    }
+  });
   wireImageFallback(section);
   restart();
 }
