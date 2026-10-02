@@ -949,8 +949,23 @@ function findProductBySlug(products, slug) {
   return products.find(product => productSlug(product).toLowerCase() === target);
 }
 function esc(value = '') { return String(value).replace(/[&<>'"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', "'":'&#39;', '"':'&quot;' }[c])); }
-function stripText(value = '') { return String(value).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim(); }
-function renderDescriptionHtml(value = '') { return sanitizeDescriptionHtml(value, 2000); }
+function decodeHtmlEntities(value = '') {
+  let text = String(value ?? '');
+  const entities = { '&lt;':'<', '&gt;':'>', '&amp;':'&', '&quot;':'"', '&#39;':"'", '&nbsp;':' ' };
+  for (let i = 0; i < 3; i += 1) {
+    const decoded = text.replace(/&(?:lt|gt|amp|quot|#39|nbsp);/gi, token => entities[token.toLowerCase()] ?? token)
+      .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Math.min(0x10ffff, Number(n))))
+      .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(Math.min(0x10ffff, parseInt(n, 16))));
+    if (decoded === text) break;
+    text = decoded;
+  }
+  return text;
+}
+function stripText(value = '') {
+  const decoded = decodeHtmlEntities(value);
+  return decoded.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+}
+function renderDescriptionHtml(value = '') { return sanitizeDescriptionHtml(decodeHtmlEntities(value), 2000); }
 function absoluteImage(value = '') {
   if (!value) return `${SITE_URL}/favicon.svg`;
   return value.startsWith('http') ? value : `${SITE_URL}${value.startsWith('/') ? '' : '/'}${value}`;
@@ -2565,7 +2580,8 @@ function decoratePayment(payment, sales = null, orders = null) {
     sellerName: source?.assignedSellerName || payment.sellerName || 'Sin vendedor',
     totalSale: Number(source?.total ?? payment.totalSale ?? 0),
     saleStatus: source?.status || payment.saleStatus || '—',
-    sourceType: sale ? 'venta' : order ? 'orden' : payment.sourceType || 'venta'
+    sourceType: sale ? 'venta' : order ? 'orden' : payment.sourceType || 'venta',
+    note: payment.note || ''
   };
 }
 function getSalesHistoryRecord(order, req) {
@@ -2693,6 +2709,27 @@ function validateDeviceIdentifiersAcrossOrder(items) {
   }
 }
 
+function financialPurchaseCost(item, fallbackProduct) {
+  // Los alquileres NO representan una venta del producto: el ingreso del alquiler
+  // es la venta y no se descuenta el precio de compra del inventario.
+  if (String(item?.purchaseMode || 'purchase') !== 'purchase') return 0;
+
+  const snapshot = Number(item?.purchaseCost);
+  // Las órdenes nuevas marcan explícitamente que el costo quedó congelado al
+  // momento de la venta. Así, cambiar luego el inventario no altera el histórico.
+  if (item?.purchaseCostRecorded === true && Number.isFinite(snapshot) && snapshot >= 0) {
+    return snapshot;
+  }
+
+  // Compatibilidad con órdenes antiguas: si ya tenían un costo > 0, conservarlo.
+  if (Number.isFinite(snapshot) && snapshot > 0) return snapshot;
+
+  // Si la orden antigua no guardó el costo, usar el precio de compra actual del
+  // producto como respaldo para que esas ventas no aparezcan con costo $0.
+  const fallback = Number(fallbackProduct?.purchasePrice);
+  return Number.isFinite(fallback) && fallback >= 0 ? fallback : 0;
+}
+
 function validateOrder(input, options = {}) {
   const requireDeviceIdentifiers = options.requireDeviceIdentifiers === true;
   const customer = input?.customer || {};
@@ -2776,6 +2813,7 @@ function validateOrder(input, options = {}) {
       deviceIdentifiers,
       unitPrice: Math.round(price * 100) / 100,
       purchaseCost: purchaseMode === 'purchase' ? Math.round(Math.max(0, Number(product.purchasePrice) || 0) * 100) / 100 : 0,
+      purchaseCostRecorded: purchaseMode === 'purchase',
       subtotal: Math.round(price * quantity * durationMultiplier * 100) / 100
     });
   }
@@ -3073,17 +3111,52 @@ function validateProduct(input, current = {}, allProducts = []) {
     if (!(/^\/uploads\/[a-zA-Z0-9._-]+$/.test(imageUrl) || /^https:\/\/[a-zA-Z0-9./?&=_:%#-]+$/.test(imageUrl))) return { error: 'Una de las URL de las imágenes no es válida.' };
   }
   const finalImages = images.length ? images : (current.images?.length ? current.images : (current.image ? [current.image] : []));
+  const purchasePriceRaw = input.purchasePrice === '' || input.purchasePrice === undefined || input.purchasePrice === null
+    ? Number(current.purchasePrice || 0) : Number(input.purchasePrice);
+  const stockRaw = input.stock === '' || input.stock === undefined || input.stock === null
+    ? Number(current.stock || 0) : Number(input.stock);
+  const stockMinRaw = input.stockMin === '' || input.stockMin === undefined || input.stockMin === null
+    ? Number(current.stockMin || 0) : Number(input.stockMin);
+  const tags = Array.isArray(input.tags)
+    ? [...new Set(input.tags.map(value => cleanText(value, 50)).filter(Boolean))].slice(0, 30)
+    : (typeof input.tags === 'string' ? [...new Set(input.tags.split(',').map(value => cleanText(value, 50)).filter(Boolean))].slice(0, 30) : (Array.isArray(current.tags) ? current.tags.slice(0, 30) : []));
+  const requiresDeviceIdentifier = category === 'tech'
+    ? (input.requiresDeviceIdentifier === undefined ? current.requiresDeviceIdentifier !== false : (input.requiresDeviceIdentifier === true || input.requiresDeviceIdentifier === 'true'))
+    : false;
+  const isRental = category === 'cosplay'
+    ? (input.isRental === undefined ? current.isRental === true : (input.isRental === true || input.isRental === 'true'))
+    : false;
+  const rentalDaysRaw = category === 'cosplay' ? Number(input.rentalDays ?? current.rentalDays ?? 1) : null;
+
+  if (!Number.isFinite(purchasePriceRaw) || purchasePriceRaw < 0 || purchasePriceRaw > 100000000) {
+    return { error: 'El precio de compra no es válido.' };
+  }
+  if (!Number.isInteger(stockRaw) || stockRaw < 0 || stockRaw > 100000000) {
+    return { error: 'El stock debe ser un número entero igual o mayor que 0.' };
+  }
+  if (!Number.isInteger(stockMinRaw) || stockMinRaw < 0 || stockMinRaw > 100000000) {
+    return { error: 'El stock mínimo debe ser un número entero igual o mayor que 0.' };
+  }
+  if (category === 'cosplay' && (!Number.isInteger(rentalDaysRaw) || rentalDaysRaw < 1 || rentalDaysRaw > 10)) {
+    return { error: 'Los días de alquiler deben estar entre 1 y 10.' };
+  }
+
   return { product: {
     ...current, name, description, category, brand, productType, sku,
     salePrice: Math.round(salePrice * 100) / 100,
-    purchasePrice: Number.isFinite(Number(current.purchasePrice)) ? Math.max(0, Math.round(Number(current.purchasePrice) * 100) / 100) : 0,
-    stock: Number.isInteger(Number(current.stock)) && Number(current.stock) >= 0 ? Number(current.stock) : 0,
+    purchasePrice: Math.round(purchasePriceRaw * 100) / 100,
+    stock: stockRaw,
+    stockMin: stockMinRaw,
+    tags,
+    requiresDeviceIdentifier,
+    isRental,
+    rentalDays: category === 'cosplay' ? rentalDaysRaw : null,
     rentalPrice: category === 'cosplay' ? Math.round(rentalPrice * 100) / 100 : null,
     price: Math.round(salePrice * 100) / 100,
     image: finalImages[0] || '', images: finalImages,
     published: input.published === undefined ? (current.published !== false) : (input.published === true || input.published === 'true'),
-    featured: input.featured === true || input.featured === 'true',
-    hero: input.hero === true || input.hero === 'true',
+    featured: input.featured === undefined ? Boolean(current.featured) : (input.featured === true || input.featured === 'true'),
+    hero: input.hero === undefined ? Boolean(current.hero) : (input.hero === true || input.hero === 'true'),
     heroOrder: Number.isFinite(Number(input.heroOrder)) ? Math.max(0, Math.min(999, Number(input.heroOrder))) : (Number(current.heroOrder) || 0)
   }};
 }
@@ -3109,6 +3182,10 @@ function normalizeProduct(product) {
     salePrice: Number.isFinite(Number(product.salePrice ?? product.price)) && Number(product.salePrice ?? product.price) >= 0 ? Math.round(Number(product.salePrice ?? product.price) * 100) / 100 : 0,
     price: Number.isFinite(Number(product.salePrice ?? product.price)) && Number(product.salePrice ?? product.price) >= 0 ? Math.round(Number(product.salePrice ?? product.price) * 100) / 100 : 0,
     stock: Number.isInteger(stock) && stock >= 0 ? stock : 0,
+    stockMin: Number.isInteger(Number(product.stockMin)) && Number(product.stockMin) >= 0 ? Number(product.stockMin) : 0,
+    tags: Array.isArray(product.tags) ? [...new Set(product.tags.map(value => String(value || '').trim()).filter(Boolean))].slice(0, 30) : [],
+    isRental: String(product.category || '').toLowerCase() === 'cosplay' ? (product.isRental === true || (product.rentalPrice !== null && product.rentalPrice !== undefined && product.rentalPrice !== '')) : false,
+    rentalDays: String(product.category || '').toLowerCase() === 'cosplay' ? Math.max(1, Math.min(10, Number(product.rentalDays || 1))) : null,
     // Para productos TEC existentes conservamos el comportamiento anterior: solicitar identificación.
     // El Gestor de Series/IMEIS puede desactivarlo individualmente.
     requiresDeviceIdentifier: isTechProduct(product)
@@ -3744,7 +3821,7 @@ app.get('/api/admin/resumen-financiero', requireAdmin, (req, res) => {
     for (const item of Array.isArray(order.items) ? order.items : []) {
       if (item.purchaseMode !== 'purchase') continue;
       const fallbackProduct = productMap.get(String(item.productId || ''));
-      const purchaseCost = Number.isFinite(Number(item.purchaseCost)) ? Number(item.purchaseCost) : Number(fallbackProduct?.purchasePrice || 0);
+      const purchaseCost = financialPurchaseCost(item, fallbackProduct);
       purchases += Math.max(0, purchaseCost) * Math.max(0, Number(item.quantity || 0));
     }
     const sellerId = order.assignedSellerId || 'unassigned';
@@ -3984,7 +4061,7 @@ app.get('/api/admin/resumen-financiero/pdf', requireAdmin, (req, res) => {
     for (const item of Array.isArray(order.items) ? order.items : []) {
       if (item.purchaseMode !== 'purchase') continue;
       const fallback = productMap.get(String(item.productId || ''));
-      const cost = Number.isFinite(Number(item.purchaseCost)) ? Number(item.purchaseCost) : Number(fallback?.purchasePrice || 0);
+      const cost = financialPurchaseCost(item, fallback);
       purchases += Math.max(0,cost) * Math.max(0,Number(item.quantity || 0));
     }
     const sellerId=order.assignedSellerId || 'unassigned';
@@ -4563,6 +4640,7 @@ function buildEditedOrderItems(requestedItems, products) {
       deviceIdentifiers,
       unitPrice: Math.round(price * 100) / 100,
       purchaseCost: purchaseMode === 'purchase' ? Math.round(Math.max(0, Number(product.purchasePrice) || 0) * 100) / 100 : 0,
+      purchaseCostRecorded: purchaseMode === 'purchase',
       subtotal: Math.round(price * quantity * durationMultiplier * 100) / 100
     });
   }
@@ -5150,24 +5228,37 @@ app.get('/api/admin/clientes', requireOrdersAccess, (req, res) => {
 
 app.get('/api/admin/clientes/:id', requireOrdersAccess, (req, res) => {
   const session = getSession(req);
-  const customer = readCustomers().find(item => String(item.id) === String(req.params.id));
+  const customer = buildCustomerDirectory().find(item => String(item.id) === String(req.params.id)) || readCustomers().find(item => String(item.id) === String(req.params.id));
   if (!customer) return res.status(404).json({ error: 'Cliente no encontrado.' });
-  const allOrders = readOrders();
-  const allSales = readSales();
-  const tx = customerTransactions(customer, allOrders, allSales);
-  const customerSales = allSales.filter(s => customerIdentity(s.customer || {}) === customer.identity);
-  const saleIds = new Set(customerSales.map(s => String(s.id)));
-  let payments = readPayments().filter(p => saleIds.has(String(p.saleId)));
-  if (isSellerRole(session.role)) payments = payments.filter(p => customerSales.some(s => String(s.id) === String(p.saleId) && String(s.assignedSellerId || '') === String(session.accountId || '')));
-  const paidTotal = payments.reduce((sum,p) => sum + Number(p.amount || 0), 0);
-  const salesTotal = customerSales.reduce((sum,s) => sum + Number(s.total || 0), 0);
-  const statement = [
-    ...customerSales.map(s => ({ id:`sale:${s.id}`, kind:'cargo', type:'venta', number:s.orderNumber, date:s.notifiedAt || s.createdAt, source:'Venta', status:s.status || 'Entregado', total:Number(s.total || 0), debit:Number(s.total || 0), credit:0 })),
-    ...payments.map(p => ({ id:`payment:${p.id}`, kind:'abono', type:'pago', number:p.saleNumber || customerSales.find(s=>String(s.id)===String(p.saleId))?.orderNumber, date:p.date || p.createdAt, source:`${paymentMethodLabel(p.method)}${p.bank ? ` · ${p.bank}` : ''}`, status:'Abono', total:Number(p.amount || 0), debit:0, credit:Number(p.amount || 0), payment:p }))
-  ].sort((a,b)=>new Date(a.date||0)-new Date(b.date||0));
-  let running=0;
-  const statementWithBalance=statement.map(row=>{ running += Number(row.debit||0)-Number(row.credit||0); return {...row,balance:Math.round(running*100)/100}; }).reverse();
-  return res.json({ customer, transactions: tx, statement: statementWithBalance, payments: payments.map(p=>decoratePayment(p,customerSales)), totals: { orders: tx.filter(item=>item.type==='pedido').length, sales: customerSales.length, salesTotal: Math.round(salesTotal*100)/100, paidTotal: Math.round(paidTotal*100)/100, balance: Math.round(Math.max(0,salesTotal-paidTotal)*100)/100 } });
+  const allOrders = readOrders(); const allSales = readSales();
+  const identity = customer.identity || customerIdentity(customer);
+  const customerOrders = allOrders.filter(o => customerIdentity(o.customer || {}) === identity);
+  const customerSales = allSales.filter(s => customerIdentity(s.customer || {}) === identity);
+  const visibleOrders = isSellerRole(session.role) ? customerOrders.filter(o => String(o.assignedSellerId || '') === String(session.accountId || '')) : customerOrders;
+  const visibleSales = isSellerRole(session.role) ? customerSales.filter(s => String(s.assignedSellerId || '') === String(session.accountId || '')) : customerSales;
+  const saleByOrder = new Map(visibleSales.filter(s => s.orderId).map(s => [String(s.orderId), s]));
+  const obligations = [];
+  for (const sale of visibleSales) {
+    const detail = Array.isArray(sale.items) && sale.items.length ? sale.items.map(i => `${Number(i.quantity || 1)}× ${i.name || 'Producto'}`).join(' · ') : 'Venta confirmada';
+    obligations.push({ id:`venta:${sale.id}`, sourceType:'venta', sourceId:sale.id, orderId:sale.orderId || null, number:sale.orderNumber || '—', date:sale.notifiedAt || sale.createdAt, total:Number(sale.total || 0), detail, status:sale.status || 'Vendida' });
+  }
+  for (const order of visibleOrders) {
+    if (saleByOrder.has(String(order.id))) continue;
+    const detail = Array.isArray(order.items) && order.items.length ? order.items.map(i => `${Number(i.quantity || 1)}× ${i.name || 'Producto'}`).join(' · ') : 'Orden sin productos';
+    obligations.push({ id:`orden:${order.id}`, sourceType:'orden', sourceId:order.id, orderId:order.id, number:order.orderNumber || '—', date:order.createdAt, total:Number(order.total || 0), detail, status:order.status || 'Pendiente' });
+  }
+  const obligationIds = new Set(obligations.map(o => o.id));
+  let payments = readPayments().filter(p => obligationIds.has(p.saleId ? `venta:${p.saleId}` : p.orderId ? `orden:${p.orderId}` : ''));
+  const paidByKey = new Map();
+  payments.forEach(p => { const key=p.saleId?`venta:${p.saleId}`:`orden:${p.orderId}`; paidByKey.set(key,(paidByKey.get(key)||0)+Number(p.amount||0)); });
+  const ledger=[];
+  obligations.forEach(o=>{const paid=Math.round((paidByKey.get(o.id)||0)*100)/100; const balance=Math.max(0,Math.round((o.total-paid)*100)/100); ledger.push({id:o.id,kind:'cargo',type:o.sourceType,number:o.number,date:o.date,timestamp:o.date,source:o.detail,detail:`${o.sourceType==='venta'?'Compra':'Orden'} · ${o.status}`,status:o.status,total:o.total,debit:o.total,credit:0,paid,balance,orderId:o.orderId,sourceId:o.sourceId,sourceType:o.sourceType});});
+  payments.forEach(p=>{const key=p.saleId?`venta:${p.saleId}`:`orden:${p.orderId}`; const obligation=obligations.find(o=>o.id===key); ledger.push({id:`payment:${p.id}`,kind:'abono',type:'pago',number:p.saleNumber||obligation?.number||'—',date:p.date||p.createdAt,timestamp:p.createdAt||p.date,source:`${paymentMethodLabel(p.method)}${p.bank?` · ${p.bank}`:''}${p.transactionNumber?` · TRX ${p.transactionNumber}`:''}`,detail:p.note||'Abono registrado',status:'Abono',total:Number(p.amount||0),debit:0,credit:Number(p.amount||0),payment:p,orderId:p.orderId||obligation?.orderId||null,sourceId:p.saleId||p.orderId||null,sourceType:p.saleId?'venta':'orden'});});
+  ledger.sort((a,b)=>new Date(a.date||0)-new Date(b.date||0)); let running=0; const statement=ledger.map(row=>{running=Math.round((running+Number(row.debit||0)-Number(row.credit||0))*100)/100;return {...row,balance:Math.max(0,running)};}).reverse();
+  const totalBought=obligations.reduce((sum,o)=>sum+o.total,0); const paidTotal=payments.reduce((sum,p)=>sum+Number(p.amount||0),0);
+  const tx=[...visibleOrders.map(o=>({type:'pedido',id:o.id,number:o.orderNumber,date:o.createdAt,status:o.status,total:Number(o.total||0),source:o.source==='admin_generated'?'Orden interna':'Pedido WEB'})),...visibleSales.map(s=>({type:'venta',id:s.id,number:s.orderNumber,date:s.notifiedAt||s.createdAt,status:s.status||'Vendida',total:Number(s.total||0),source:'Historial de ventas'}))];
+  const uniqueTx=new Map(); tx.forEach(row=>uniqueTx.set(`${row.type}:${row.id}`,row));
+  return res.json({customer,transactions:[...uniqueTx.values()].sort((a,b)=>new Date(b.date||0)-new Date(a.date||0)),statement,payments:payments.map(p=>decoratePayment(p,visibleSales,visibleOrders)),totals:{orders:visibleOrders.length,sales:visibleSales.length,salesTotal:Math.round(totalBought*100)/100,paidTotal:Math.round(paidTotal*100)/100,balance:Math.max(0,Math.round((totalBought-paidTotal)*100)/100),obligations:obligations.length}});
 });
 
 app.post('/api/admin/clientes', requireOrdersAccess, (req, res) => {
@@ -5266,11 +5357,11 @@ app.post('/api/admin/dinero/pagos-orden', requireOrdersAccess, (req,res) => {
   const amount=normalizeMoneyAmount(body.amount); if(amount===null)return res.status(400).json({error:'El valor del pago no es válido.'});
   const date=/^\d{4}-\d{2}-\d{2}$/.test(String(body.date||''))?String(body.date):localDateEc(new Date());
   const bank=cleanText(body.bank,100); if(!bank)return res.status(400).json({error:'Indica el banco o caja donde ingresó el dinero.'});
-  const batch=cleanText(body.batch,100); const transactionNumber=cleanText(body.transactionNumber,120);
+  const batch=cleanText(body.batch,100); const transactionNumber=cleanText(body.transactionNumber,120); const note=cleanText(body.note,500);
   if((method==='transfer'||method==='card')&&!transactionNumber)return res.status(400).json({error:'El número de transacción es obligatorio para transferencias y tarjetas.'});
   const payments=readPayments(); const already=payments.filter(p=>String(p.orderId||'')===orderId).reduce((sum,p)=>sum+Number(p.amount||0),0); const remaining=Math.max(0,Math.round((Number(order.total||0)-already)*100)/100);
   if(amount>remaining+0.001)return res.status(400).json({error:`El pago supera el saldo pendiente de ${remaining.toFixed(2)}.`});
-  const now=new Date().toISOString(); const payment={id:crypto.randomUUID(),orderId:order.id,saleId:null,saleNumber:order.orderNumber,customerId:order.customerId||order.customer?.id||null,customerName:order.customer?.name||'',customerCedula:order.customer?.cedula||'',sellerId:order.assignedSellerId||null,sellerName:order.assignedSellerName||'',method,date,batch:batch||null,transactionNumber:transactionNumber||null,bank,amount,totalSale:Number(order.total||0),sourceType:'orden',createdAt:now,createdBy:session.accountId||null}; payments.unshift(payment); writePayments(payments);
+  const now=new Date().toISOString(); const payment={id:crypto.randomUUID(),orderId:order.id,saleId:null,saleNumber:order.orderNumber,customerId:order.customerId||order.customer?.id||null,customerName:order.customer?.name||'',customerCedula:order.customer?.cedula||'',sellerId:order.assignedSellerId||null,sellerName:order.assignedSellerName||'',method,date,batch:batch||null,transactionNumber:transactionNumber||null,bank,note:note||'',amount,totalSale:Number(order.total||0),sourceType:'orden',createdAt:now,createdBy:session.accountId||null}; payments.unshift(payment); writePayments(payments);
   const newPaid=already+amount; const status=newPaid>=Number(order.total||0)-0.001?'PAGADO':'ABONO'; auditLog(req,'Pago registrado en orden','Dinero',{paymentId:payment.id,orderId:order.id,orderNumber:order.orderNumber,method,amount,date,bank,batch,transactionNumber,status,balance:Math.max(0,Number(order.total||0)-newPaid)});
   return res.status(201).json({...decoratePayment(payment,[],orders),paid:Math.round(newPaid*100)/100,balance:Math.max(0,Math.round((Number(order.total||0)-newPaid)*100)/100),status});
 });
@@ -5283,11 +5374,11 @@ app.post('/api/admin/dinero/pagos', requireOrdersAccess, (req, res) => {
   const amount=normalizeMoneyAmount(body.amount); if(amount===null)return res.status(400).json({error:'El valor del pago no es válido.'});
   const date=/^\d{4}-\d{2}-\d{2}$/.test(String(body.date||''))?String(body.date):localDateEc(new Date());
   const bank=cleanText(body.bank,100); if(!bank)return res.status(400).json({error:'Indica el banco o caja donde ingresó el dinero.'});
-  const batch=cleanText(body.batch,100); const transactionNumber=cleanText(body.transactionNumber,120);
+  const batch=cleanText(body.batch,100); const transactionNumber=cleanText(body.transactionNumber,120); const note=cleanText(body.note,500);
   if((method==='transfer'||method==='card')&&!transactionNumber)return res.status(400).json({error:'El número de transacción es obligatorio para transferencias y tarjetas.'});
   const payments=readPayments(); const already=payments.filter(p=>String(p.saleId)===saleId).reduce((sum,p)=>sum+Number(p.amount||0),0); const remaining=Math.max(0,Math.round((Number(sale.total||0)-already)*100)/100);
   if(amount>remaining+0.001)return res.status(400).json({error:`El pago supera el saldo pendiente de ${remaining.toFixed(2)}.`});
-  const now=new Date().toISOString(); const payment={id:crypto.randomUUID(),saleId:sale.id,saleNumber:sale.orderNumber,customerId:sale.customer?.id||null,customerName:sale.customer?.name||'',customerCedula:sale.customer?.cedula||'',sellerId:sale.assignedSellerId||null,sellerName:sale.assignedSellerName||'',method,date,batch:batch||null,transactionNumber:transactionNumber||null,bank,amount,totalSale:Number(sale.total||0),createdAt:now,createdBy:session.accountId||null}; payments.unshift(payment); writePayments(payments);
+  const now=new Date().toISOString(); const payment={id:crypto.randomUUID(),saleId:sale.id,saleNumber:sale.orderNumber,customerId:sale.customer?.id||null,customerName:sale.customer?.name||'',customerCedula:sale.customer?.cedula||'',sellerId:sale.assignedSellerId||null,sellerName:sale.assignedSellerName||'',method,date,batch:batch||null,transactionNumber:transactionNumber||null,bank,note:note||'',amount,totalSale:Number(sale.total||0),createdAt:now,createdBy:session.accountId||null}; payments.unshift(payment); writePayments(payments);
   const newPaid=already+amount; const status=newPaid>=Number(sale.total||0)-0.001?'PAGADO':'ABONO'; auditLog(req,'Pago registrado','Dinero',{paymentId:payment.id,saleId:sale.id,orderNumber:sale.orderNumber,method,amount,date,bank,batch,transactionNumber,status,balance:Math.max(0,Number(sale.total||0)-newPaid)});
   return res.status(201).json({...decoratePayment(payment,sales),paid:Math.round(newPaid*100)/100,balance:Math.max(0,Math.round((Number(sale.total||0)-newPaid)*100)/100),status});
 });
@@ -5296,7 +5387,7 @@ app.put('/api/admin/dinero/pagos/:id', requireAdmin, (req,res) => {
   const payments=readPayments(); const index=payments.findIndex(p=>String(p.id)===String(req.params.id)); if(index<0)return res.status(404).json({error:'Pago no encontrado.'});
   const current=payments[index]; const sales=readSales(); const orders=readOrders(); const sale=current.saleId?sales.find(s=>String(s.id)===String(current.saleId)):null; const order=!sale&&current.orderId?orders.find(o=>String(o.id)===String(current.orderId)):null; const source=sale||order;
   if(!source)return res.status(404).json({error:'La venta u orden asociada ya no existe.'});
-  const body=req.body||{}; const method=cleanText(body.method??current.method,20); if(!['cash','transfer','card'].includes(method))return res.status(400).json({error:'Forma de pago no válida.'}); const amount=normalizeMoneyAmount(body.amount??current.amount); if(amount===null)return res.status(400).json({error:'El valor no es válido.'}); const date=/^\d{4}-\d{2}-\d{2}$/.test(String(body.date??current.date))?String(body.date??current.date):current.date; const bank=cleanText(body.bank??current.bank,100); if(!bank)return res.status(400).json({error:'Indica el banco o caja.'}); const transactionNumber=cleanText(body.transactionNumber??current.transactionNumber,120); if((method==='transfer'||method==='card')&&!transactionNumber)return res.status(400).json({error:'El número de transacción es obligatorio.'}); const otherPaid=payments.filter((p,i)=>i!==index&&String(p.saleId||'')===String(current.saleId||'')&&String(p.orderId||'')===String(current.orderId||'')).reduce((sum,p)=>sum+Number(p.amount||0),0); if(amount+otherPaid>Number(source.total||0)+0.001)return res.status(400).json({error:'El nuevo valor supera el total pendiente de la operación.'}); const updated={...current,method,amount,date,bank,batch:cleanText(body.batch??current.batch,100)||null,transactionNumber:transactionNumber||null,updatedAt:new Date().toISOString(),editedBy:getSession(req)?.accountId||null}; payments[index]=updated; writePayments(payments); const totalPaid=otherPaid+amount; auditLog(req,'Pago actualizado','Dinero',{paymentId:updated.id,before:auditValue(current),after:auditValue(updated)}); return res.json({...decoratePayment(updated,sales,orders),paid:totalPaid,balance:Math.max(0,Number(source.total||0)-totalPaid),status:totalPaid>=Number(source.total||0)-0.001?'PAGADO':totalPaid>0?'ABONO':'PENDIENTE'});
+  const body=req.body||{}; const method=cleanText(body.method??current.method,20); if(!['cash','transfer','card'].includes(method))return res.status(400).json({error:'Forma de pago no válida.'}); const amount=normalizeMoneyAmount(body.amount??current.amount); if(amount===null)return res.status(400).json({error:'El valor no es válido.'}); const date=/^\d{4}-\d{2}-\d{2}$/.test(String(body.date??current.date))?String(body.date??current.date):current.date; const bank=cleanText(body.bank??current.bank,100); if(!bank)return res.status(400).json({error:'Indica el banco o caja.'}); const transactionNumber=cleanText(body.transactionNumber??current.transactionNumber,120); const note=cleanText(body.note??current.note,500); if((method==='transfer'||method==='card')&&!transactionNumber)return res.status(400).json({error:'El número de transacción es obligatorio.'}); const otherPaid=payments.filter((p,i)=>i!==index&&String(p.saleId||'')===String(current.saleId||'')&&String(p.orderId||'')===String(current.orderId||'')).reduce((sum,p)=>sum+Number(p.amount||0),0); if(amount+otherPaid>Number(source.total||0)+0.001)return res.status(400).json({error:'El nuevo valor supera el total pendiente de la operación.'}); const updated={...current,method,amount,date,bank,batch:cleanText(body.batch??current.batch,100)||null,transactionNumber:transactionNumber||null,note:note||'',updatedAt:new Date().toISOString(),editedBy:getSession(req)?.accountId||null}; payments[index]=updated; writePayments(payments); const totalPaid=otherPaid+amount; auditLog(req,'Pago actualizado','Dinero',{paymentId:updated.id,before:auditValue(current),after:auditValue(updated)}); return res.json({...decoratePayment(updated,sales,orders),paid:totalPaid,balance:Math.max(0,Number(source.total||0)-totalPaid),status:totalPaid>=Number(source.total||0)-0.001?'PAGADO':totalPaid>0?'ABONO':'PENDIENTE'});
 });
 
 app.delete('/api/admin/dinero/pagos/:id', requireAdmin, (req,res) => {
@@ -5381,8 +5472,34 @@ app.put('/api/admin/inventory/:id', requireAdmin, (req, res) => {
     return res.status(400).json({ error: 'El precio de venta no es válido.' });
   }
 
+  const validCategories = ['elegant','sports','tech','cosplay','pets','details','collectibles'];
+  const category = body.category === undefined || body.category === null || body.category === '' ? previous.category : String(body.category).trim().toLowerCase();
+  const brand = body.brand === undefined ? (previous.brand || '') : cleanText(body.brand, 80);
+  const productType = body.productType === undefined ? (previous.productType || '') : cleanText(body.productType, 80);
+  const tags = Array.isArray(body.tags)
+    ? [...new Set(body.tags.map(value => cleanText(value, 50)).filter(Boolean))].slice(0, 30)
+    : (Array.isArray(previous.tags) ? previous.tags.slice(0, 30) : []);
+  const stockMin = body.stockMin === undefined || body.stockMin === '' ? Number(previous.stockMin || 0) : Number(body.stockMin);
+  const published = body.published === undefined ? previous.published !== false : Boolean(body.published);
+  const requiresDeviceIdentifier = category === 'tech' ? (body.requiresDeviceIdentifier === undefined ? previous.requiresDeviceIdentifier !== false : Boolean(body.requiresDeviceIdentifier)) : false;
+  const isRental = category === 'cosplay' ? Boolean(body.isRental === undefined ? (previous.isRental === true || previous.rentalPrice !== null && previous.rentalPrice !== undefined && previous.rentalPrice !== '') : body.isRental) : false;
+  const rentalDays = category === 'cosplay' ? Math.max(1, Math.min(10, Number(body.rentalDays || previous.rentalDays || 1))) : null;
+
+  if (!validCategories.includes(category)) return res.status(400).json({ error: 'La categoría seleccionada no es válida.' });
+  if (!Number.isInteger(stockMin) || stockMin < 0 || stockMin > 100000000) return res.status(400).json({ error: 'El stock mínimo debe ser un número entero igual o mayor que 0.' });
+  if (category === 'cosplay' && isRental && !Number.isInteger(rentalDays)) return res.status(400).json({ error: 'Los días de alquiler no son válidos.' });
+
   const updated = {
     ...previous,
+    category,
+    brand,
+    productType,
+    tags,
+    stockMin,
+    published,
+    requiresDeviceIdentifier,
+    isRental,
+    rentalDays,
     purchasePrice: Math.round(purchasePrice * 100) / 100,
     salePrice: Math.round(salePrice * 100) / 100,
     price: Math.round(salePrice * 100) / 100,
@@ -5390,13 +5507,16 @@ app.put('/api/admin/inventory/:id', requireAdmin, (req, res) => {
     updatedAt: new Date().toISOString()
   };
 
-  if (previous.category === 'cosplay') {
+  if (category === 'cosplay' && isRental) {
     if (body.rentalPrice !== undefined && body.rentalPrice !== null && body.rentalPrice !== '') {
       const rentalPrice = Number(body.rentalPrice);
       if (!Number.isFinite(rentalPrice) || rentalPrice < 0 || rentalPrice > 100000000) {
         return res.status(400).json({ error: 'El precio de alquiler no es válido.' });
       }
       updated.rentalPrice = Math.round(rentalPrice * 100) / 100;
+    } else {
+      const currentRental = Number(previous.rentalPrice);
+      updated.rentalPrice = Number.isFinite(currentRental) && currentRental >= 0 ? Math.round(currentRental * 100) / 100 : 0;
     }
   } else {
     updated.rentalPrice = null;
