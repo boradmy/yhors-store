@@ -4674,7 +4674,10 @@ async function renderAdminClientes() {
             if(match)time=match[1].length===5?`${match[1]}:00`:match[1];
             return `${day}T${time}`;
           };
-          return movementKey(a).localeCompare(movementKey(b));
+          // Mostrar siempre el movimiento más reciente arriba y el primero abajo.
+          // Así el estado de cuenta se lee como un historial: última acción arriba,
+          // primera acción abajo.
+          return movementKey(b).localeCompare(movementKey(a));
         });
         const formatDateTime=value=>{if(!value)return 'Fecha no registrada'; const d=new Date(value); if(Number.isNaN(d.getTime()))return 'Fecha no registrada'; return escapeHTML(d.toLocaleString('es-EC',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit',hour12:false,timeZone:'America/Guayaquil'}));};
         const renderedCustomerRows=rows.map(row=>{
