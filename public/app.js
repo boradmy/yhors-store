@@ -838,8 +838,26 @@ function checkoutPage() {
 }
 
 async function loadStoreData() {
-  const [products, storefront, classifications] = await Promise.all([request('/api/products'), request('/api/storefront'), request('/api/classifications')]);
-  return { products, storefront, classifications };
+  // El HTML inicial de las rutas públicas ya viene renderizado por el servidor.
+  // Si una API tarda o falla, nunca debemos reemplazar ese HTML indexable por
+  // una vista vacía. Solo el catálogo de productos es imprescindible para la
+  // hidratación; storefront y clasificaciones pueden usar valores seguros.
+  const results = await Promise.allSettled([
+    request('/api/products'),
+    request('/api/storefront'),
+    request('/api/classifications')
+  ]);
+  const productsResult = results[0];
+  if (productsResult.status !== 'fulfilled' || !Array.isArray(productsResult.value)) {
+    const error = productsResult.status === 'rejected' ? productsResult.reason : new Error('La API de productos no devolvió un catálogo válido.');
+    error.code = 'PUBLIC_CATALOG_UNAVAILABLE';
+    throw error;
+  }
+  return {
+    products: productsResult.value,
+    storefront: results[1].status === 'fulfilled' && results[1].value ? results[1].value : { heroProductIds: [], featuredProductIds: [], whatsappNumber: '' },
+    classifications: results[2].status === 'fulfilled' && results[2].value ? results[2].value : { brands: {}, productTypes: {} }
+  };
 }
 function productPriceLabel(product) {
   return product.category === 'cosplay' && Number.isFinite(Number(product.salePrice)) ? money(product.salePrice) : money(product.price);
@@ -976,7 +994,13 @@ function updateSeoMeta({ title, description, canonical, image = '', robots = 'in
 async function renderHome() {
   updateSeoMeta({ title: 'YHORS-STORE | Tecnología, detalles, cosplay y más', description: 'YHORS-STORE: tecnología, celulares, accesorios, cosplay, detalles, regalos, mascotas y coleccionables. Descubre productos seleccionados en Ecuador.', canonical: `${location.origin}/` });
   let products = [], storefront = { heroProductIds: [], featuredProductIds: [], whatsappNumber: '' }, classifications = {};
-  try { ({ products, storefront, classifications } = await loadStoreData()); } catch { /* empty state */ }
+  try { ({ products, storefront, classifications } = await loadStoreData()); }
+  catch (error) {
+    // Conserva el HTML SSR que recibió el crawler. No lo sustituyas por un
+    // contenedor vacío si la API pública está temporalmente indisponible.
+    console.warn('[YHORS SEO] Se conserva el HTML SSR de inicio:', error?.message || error);
+    return;
+  }
   const searchTerm = (new URLSearchParams(location.search).get('buscar') || '').trim().toLowerCase();
   const heroIds = storefront.heroProductIds || []; const featuredIds = storefront.featuredProductIds || [];
   const byIds = ids => ids.map(id => getProduct(id, products)).filter(Boolean);
@@ -1008,7 +1032,11 @@ async function renderCategoryPage(categoryKey) {
   const label = categories[categoryKey] || 'YHORS';
   updateSeoMeta({ title: `${label} | YHORS-STORE`, description: categoryDescriptions[categoryKey] || 'Productos seleccionados en YHORS-STORE.', canonical: `${location.origin}/categoria/${encodeURIComponent(categoryKey === 'all' ? 'principal' : categoryKey)}` });
   let products = [], storefront = { whatsappNumber: '' }, classifications = {};
-  try { ({ products, storefront, classifications } = await loadStoreData()); } catch { /* empty */ }
+  try { ({ products, storefront, classifications } = await loadStoreData()); }
+  catch (error) {
+    console.warn('[YHORS SEO] Se conserva el HTML SSR de categoría:', error?.message || error);
+    return;
+  }
   const categoryProducts = products.filter(product => categoryKey === 'all' || product.category === categoryKey);
   const slides = categoryProducts.slice(0, 4).map(product => ({ ...product, image: productImages(product)[0], heroTitle: product.name, heroDescription: product.description }));
   app.innerHTML = `${renderHeader(categoryKey)}<main>${heroMarkup(slides, true, categoryKey)}<section class="section category-page-section" id="productos-categoria"><div class="category-intro"><div><span class="eyebrow">Colección independiente</span><h1>${escapeHTML(categories[categoryKey])}</h1></div><p>${escapeHTML(categoryDescriptions[categoryKey])}</p></div><div class="catalog-layout">${catalogFilters(classifications, categoryKey, { category: categoryKey })}<div class="catalog-results"><div class="results-count" id="resultsCount"></div><div class="products product-type-container" id="categoryProducts"></div></div></div></section></main>${renderFooter()}${cartMarkup()}`;
@@ -1044,7 +1072,13 @@ async function renderProductDetail(product, products, storefront) {
 async function renderStore() {
   const categoryKey = currentCategoryFromPath();
   let products = [], storefront = { whatsappNumber: '', heroProductIds: [], featuredProductIds: [] };
-  try { ({ products, storefront } = await loadStoreData()); } catch { /* empty state */ }
+  try { ({ products, storefront } = await loadStoreData()); }
+  catch (error) {
+    // Las rutas públicas ya tienen HTML SSR. Ante un fallo temporal de la API,
+    // no debemos borrar ese contenido ni convertir la página en una Soft 404.
+    console.warn('[YHORS SEO] Se conserva el HTML SSR de la ruta pública:', error?.message || error);
+    return;
+  }
   const productSlugPath = location.pathname.match(/^\/producto\/([^/]+)\/?$/);
   if (productSlugPath) { const product = products.find(item => productSlug(item) === decodeURIComponent(productSlugPath[1])); if (product) return renderProductDetail(product, products, storefront); }
   const productId = new URLSearchParams(location.search).get('producto');

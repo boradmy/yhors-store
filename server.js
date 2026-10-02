@@ -1945,11 +1945,22 @@ app.get('/robots.txt', (_, res) => {
 
 app.get('/sitemap.xml', (_, res) => {
   const products = readProducts().map(normalizeProduct).filter(product => product.published !== false);
+  const categoryCounts = new Map(VALID_PUBLIC_CATEGORIES.map(category => [
+    category,
+    products.filter(product => product.category === category).length
+  ]));
   const urls = [
     { loc: `${SITE_URL}/` },
     { loc: `${SITE_URL}/yhors-corp` },
-    { loc: `${SITE_URL}/categoria/principal` },
-    ...VALID_PUBLIC_CATEGORIES.map(category => ({ loc: `${SITE_URL}/categoria/${category}` })),
+    { loc: `${SITE_URL}/categoria/principal`, lastmod: products.reduce((latest, product) => latest > (product.updatedAt || product.createdAt || '') ? latest : (product.updatedAt || product.createdAt || ''), '') },
+    ...VALID_PUBLIC_CATEGORIES
+      .filter(category => (categoryCounts.get(category) || 0) > 0)
+      .map(category => ({
+        loc: `${SITE_URL}/categoria/${category}`,
+        lastmod: products
+          .filter(product => product.category === category)
+          .reduce((latest, product) => latest > (product.updatedAt || product.createdAt || '') ? latest : (product.updatedAt || product.createdAt || ''), '')
+      })),
     ...products.map(product => ({ loc: productUrl(product), lastmod: product.updatedAt || product.createdAt }))
   ];
 
@@ -2007,10 +2018,20 @@ app.get('/categoria/:category', (req, res, next) => {
   if (key === 'principal') return next();
   if (!VALID_PUBLIC_CATEGORIES.includes(key)) return next();
   const products = readProducts().map(normalizeProduct).filter(product => product.published !== false);
+  const categoryProducts = products.filter(product => product.category === key);
   const label = CATEGORY_LABELS[key];
   const canonical = `${SITE_URL}/categoria/${key}`;
   const description = CATEGORY_DESCRIPTIONS[key];
-  const itemList = products.filter(p=>p.category===key).slice(0,100).map((p,i)=>({ '@type':'ListItem', position:i+1, name:p.name, url:productUrl(p) }));
+  if (!categoryProducts.length) {
+    return res.status(404).send(layout({
+      title: `${label} | YHORS-STORE`,
+      description: `La categoría ${label} no tiene productos publicados actualmente en YHORS-STORE.`,
+      canonical,
+      robots: 'noindex,follow',
+      body: `<main class="section"><div class="category-intro"><div><span class="eyebrow">YHORS-STORE</span><h1>${esc(label)}</h1></div><p>Esta categoría no tiene productos publicados actualmente.</p><a class="button" href="/categoria/principal">Ver catálogo YHORS <span>→</span></a></div></main>`
+    }));
+  }
+  const itemList = categoryProducts.slice(0,100).map((p,i)=>({ '@type':'ListItem', position:i+1, name:p.name, url:productUrl(p) }));
   const breadcrumb = { '@context':'https://schema.org', '@type':'BreadcrumbList', itemListElement:[
     { '@type':'ListItem', position:1, name:'YHORS-STORE', item:`${SITE_URL}/` },
     { '@type':'ListItem', position:2, name:label, item:canonical }
