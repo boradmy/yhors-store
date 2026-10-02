@@ -20,5 +20,16 @@
     "system": false,
     "createdAt": "2026-09-25T14:54:18.492Z",
     "updatedAt": "2026-09-25T14:54:18.492Z"
+  },
+  {
+    "id": "0537e7bf-fc9e-436f-9598-34272adf4eab",
+    "name": "Administrador principal",
+    "username": "yhors_corp",
+    "passwordHash": "$2a$12$Z8U8gb3AMjgTb86Xwxtu8.Deor4T95wxxmPqfeqoJ4gZhXrL.sAmi",
+    "role": "admin",
+    "active": true,
+    "system": true,
+    "createdAt": "2026-10-01T20:51:49.257Z",
+    "updatedAt": "2026-10-01T20:51:49.258Z"
   }
 ]
