@@ -5647,8 +5647,17 @@ html:has(.admin-web-shell),body:has(.admin-web-shell),#app:has(.admin-web-shell)
 .customer-ledger-amount strong{font-size:1rem}
 .customer-ledger-amount small{font-size:.65rem;color:#9a712d}
 @media(max-width:700px){.customer-ledger-card{grid-template-columns:36px minmax(0,1fr);gap:10px;padding:13px}.customer-ledger-icon{width:34px;height:34px}.customer-ledger-amount{grid-column:2;text-align:left;padding-top:4px;border-top:1px solid #eee7dc}.customer-ledger-main strong{font-size:.82rem}}
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+>>>>>>> fc4ea7003a4db67708a3292c8cddc6ed1c1b6208
 
 /* Estado de cuenta: cronología con fecha y hora visibles */
 .customer-ledger-card .customer-ledger-main small{font-variant-numeric:tabular-nums}
 .customer-ledger-card.is-payment .customer-ledger-main strong{color:#2f6842}
 .customer-ledger-card.is-purchase .customer-ledger-main strong{color:#1f1c18}
+<<<<<<< HEAD
+=======
+=======
+>>>>>>> b25300966d7578a176483f77589180751dc1ee34
+>>>>>>> fc4ea7003a4db67708a3292c8cddc6ed1c1b6208
