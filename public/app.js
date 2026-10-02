@@ -47,10 +47,18 @@ function compactProductDescription(value = '', maxLength = 145) {
   const cut = text.slice(0, maxLength).replace(/\s+\S*$/, '').trim();
   return `${cut}…`;
 }
+function decodeRichHtmlEntities(value = '') {
+  // Decodifica entidades (&lt;ul&gt;, &amp;, etc.) SIN eliminar las etiquetas HTML
+  // que ya vienen guardadas como HTML real. No podemos reutilizar decodeHtmlEntities()
+  // porque esa función usa textContent y, al hacerlo, aplana todo el HTML.
+  const textarea = document.createElement('textarea');
+  textarea.innerHTML = String(value ?? '');
+  return textarea.value;
+}
 function richDescriptionHTML(value = '') {
   let raw = String(value ?? '').replace(/\r/g, '');
   if (!raw) return '';
-  raw = decodeHtmlEntities(raw);
+  raw = decodeRichHtmlEntities(raw);
   if (!/[<>]/.test(raw)) return escapeHTML(raw).replace(/\n/g, '<br>');
   const parser = new DOMParser();
   const doc = parser.parseFromString(raw, 'text/html');
@@ -5311,14 +5319,17 @@ async function renderAdmin() {
       if (!confirmed) return;
       submit.disabled = true; message.textContent = 'Guardando…';
       try {
+        const data = Object.fromEntries(new FormData(form).entries());
+        // La descripción es HTML rico. Si el usuario NO tocó el editor, enviamos
+        // exactamente la versión original y jamás una serialización accidental
+        // del contenteditable. Si sí la editó, usamos el HTML actual del editor.
         if (editing && !descriptionDirty) {
-          // Conserva exactamente el HTML que ya estaba guardado.
-          // La edición de otros campos no debe destruir listas, negritas o saltos.
-          if (descriptionField) descriptionField.value = originalDescription;
+          data.description = originalDescription;
         } else {
           syncDescription();
+          data.description = descriptionField?.value || '';
         }
-        const data = Object.fromEntries(new FormData(form).entries()); delete data.heroOrder; data.published = form.elements.published ? form.elements.published.checked : true; data.featured = form.elements.featured.checked; data.hero = form.elements.hero.checked; data.price = data.salePrice; data.images = [data.image, data.image2, data.image3, data.image4].filter(Boolean);
+        delete data.heroOrder; data.published = form.elements.published ? form.elements.published.checked : true; data.featured = form.elements.featured.checked; data.hero = form.elements.hero.checked; data.price = data.salePrice; data.images = [data.image, data.image2, data.image3, data.image4].filter(Boolean);
         const pendingImages = window.__yhorsPendingImageFiles || {};
         for (let slot = 1; slot <= 4; slot++) {
           const file = pendingImages[slot];
