@@ -5612,3 +5612,10 @@ body:has(.admin-web-shell),
     grid-column:auto!important;
   }
 }
+
+/* YHORS · Dinero / Clientes · pagos parciales y mixtos */
+.payment-mixed-fields{margin-top:14px;padding:16px;border:1px solid #d9c9a6;border-radius:12px;background:#fbf7eb}
+.payment-mixed-head{display:grid;gap:3px;margin-bottom:12px}.payment-mixed-head strong{font-size:.86rem}.payment-mixed-head small{color:var(--muted);font-size:.72rem}
+.payment-mixed-grid{display:grid;gap:12px}.payment-mixed-line{display:grid;grid-template-columns:1.1fr .8fr 1.2fr 1.1fr;gap:10px;padding:12px;background:#fff;border:1px solid var(--line);border-radius:9px}.payment-mixed-line label{display:grid;gap:5px;font-size:.72rem;font-weight:800}.payment-mixed-line input,.payment-mixed-line select{min-width:0;padding:9px;border:1px solid #cfcac0;border-radius:6px;background:#fff;font:inherit}
+.customer-debt-callout{display:flex;align-items:center;justify-content:space-between;gap:18px;margin:18px 0;padding:17px 19px;border:1px solid #ddc98f;border-radius:12px;background:#fff9e9}.customer-debt-callout>div{display:grid;gap:3px}.customer-debt-callout span{font-size:.68rem;font-weight:850;letter-spacing:.12em;color:#8f6b2f}.customer-debt-callout strong{font-size:1.35rem}.customer-debt-callout small{color:var(--muted)}.customer-row.has-balance{border-color:#ddc98f;background:#fffaf0}.customer-row.has-balance .customer-row-meta b{color:#9a7127}
+@media(max-width:760px){.payment-mixed-line{grid-template-columns:1fr 1fr}.payment-mixed-line label:nth-child(3),.payment-mixed-line label:nth-child(4){grid-column:1/-1}.customer-debt-callout{align-items:flex-start;flex-direction:column}.customer-debt-callout .button{width:100%;text-align:center}}
