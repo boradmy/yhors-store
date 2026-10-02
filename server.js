@@ -1058,7 +1058,7 @@ function layout({ title, description, canonical, body, robots, image, json }) {
 }
 
 function relatedProductsSeo(product) {
-  const all = readProducts().map(normalizeProduct).filter(item => item.published !== false && String(item.id) !== String(product.id));
+  const all = readProducts().map(normalizeProduct).filter(item => item.published !== false && Number(item.stock || 0) > 0 && String(item.id) !== String(product.id));
   const category = String(product.category || '');
   const type = String(product.productType || '').trim().toLowerCase();
   const brand = String(product.brand || '').trim().toLowerCase();
@@ -1073,7 +1073,7 @@ function relatedProductsSeo(product) {
   };
   const related = all.sort((a,b) => score(b)-score(a) || String(a.name||'').localeCompare(String(b.name||''), 'es')).slice(0,8);
   if (!related.length) return '';
-  const cards = related.map(item => `<article class="related-card"><a class="related-card-link" href="${esc(productUrl(item))}"><div class="related-card-image"><img src="${esc(absoluteImage((item.images||[])[0]||item.image))}" alt="${esc(item.name)}" width="600" height="600"></div><div class="related-card-copy"><span class="related-card-category">${esc(CATEGORY_LABELS[item.category] || item.category || 'YHORS')}</span><h3>${esc(item.name)}</h3><div class="related-card-price">$${Number(item.salePrice ?? item.price ?? 0).toFixed(2)}</div><span class="related-card-stock ${Number(item.stock||0)>0?'':'out'}">${Number(item.stock||0)>0?'DISPONIBLE':'SIN STOCK'}</span><span class="related-card-action">Ver producto <span>→</span></span></div></a></article>`).join('');
+  const cards = related.map(item => `<article class="related-card"><a class="related-card-link" href="${esc(productUrl(item))}"><div class="related-card-image"><img src="${esc(absoluteImage((item.images||[])[0]||item.image))}" alt="${esc(item.name)}" width="600" height="600"></div><div class="related-card-copy"><span class="related-card-category">${esc(CATEGORY_LABELS[item.category] || item.category || 'YHORS')}</span><h3>${esc(item.name)}</h3><div class="related-card-price">$${Number(item.salePrice ?? item.price ?? 0).toFixed(2)}</div><span class="related-card-action">Ver producto <span>→</span></span></div></a></article>`).join('');
   return `<section class="related-products-section section"><div class="related-heading"><div><span class="eyebrow">SELECCIÓN YHORS</span><h2>Productos relacionados</h2><p>Descubre otras opciones que pueden combinar con lo que estás viendo.</p></div></div><div class="related-viewport"><div class="related-track">${cards}</div></div></section>`;
 }
 
@@ -1984,7 +1984,7 @@ app.get('/robots.txt', (_, res) => {
 });
 
 app.get('/sitemap.xml', (_, res) => {
-  const products = readProducts().map(normalizeProduct).filter(product => product.published !== false);
+  const products = readProducts().map(normalizeProduct).filter(product => product.published !== false && Number(product.stock || 0) > 0);
   const categoryCounts = new Map(VALID_PUBLIC_CATEGORIES.map(category => [
     category,
     products.filter(product => product.category === category).length
@@ -2024,7 +2024,7 @@ app.get('/sitemap.xml', (_, res) => {
 
 // SEO-friendly public routes are rendered server-side so search engines receive useful HTML on first response.
 app.get('/producto/:slug', (req, res) => {
-  const products = readProducts().map(normalizeProduct).filter(product => product.published !== false);
+  const products = readProducts().map(normalizeProduct).filter(product => product.published !== false && Number(product.stock || 0) > 0);
   const product = findProductBySlug(products, req.params.slug);
   if (!product) return res.status(404).send(layout({
     title: 'Producto no encontrado | YHORS-STORE',
@@ -2057,7 +2057,7 @@ app.get('/categoria/:category', (req, res, next) => {
   const key = String(req.params.category || '').toLowerCase();
   if (key === 'principal') return next();
   if (!VALID_PUBLIC_CATEGORIES.includes(key)) return next();
-  const products = readProducts().map(normalizeProduct).filter(product => product.published !== false);
+  const products = readProducts().map(normalizeProduct).filter(product => product.published !== false && Number(product.stock || 0) > 0);
   const categoryProducts = products.filter(product => product.category === key);
   const label = CATEGORY_LABELS[key];
   const canonical = `${SITE_URL}/categoria/${key}`;
@@ -2083,7 +2083,7 @@ app.get('/categoria/:category', (req, res, next) => {
 app.get('/categoria/todo', (_, res) => res.redirect(301, '/categoria/principal'));
 
 app.get('/categoria/principal', (_, res) => {
-  const products = readProducts().map(normalizeProduct).filter(product => product.published !== false);
+  const products = readProducts().map(normalizeProduct).filter(product => product.published !== false && Number(product.stock || 0) > 0);
   const canonical = `${SITE_URL}/categoria/principal`;
   const itemList = products.slice(0,100).map((p,i)=>({ '@type':'ListItem', position:i+1, name:p.name, url:productUrl(p) }));
   return res.send(layout({ title:'Catálogo | YHORS-STORE', description:CATEGORY_DESCRIPTIONS.principal, canonical, json:[
@@ -2103,7 +2103,7 @@ app.get('/yhors-corp', (_, res) => {
 app.get('/', (req, res, next) => {
   // Redirect legacy product query URLs to their permanent, descriptive URL.
   if (req.query.producto) {
-    const product = readProducts().map(normalizeProduct).find(item => item.id === String(req.query.producto) && item.published !== false);
+    const product = readProducts().map(normalizeProduct).find(item => item.id === String(req.query.producto) && item.published !== false && Number(item.stock || 0) > 0);
     if (product) return res.redirect(301, productUrl(product));
   }
   // Search result pages are useful to users but should not become an indexable URL for every query.
@@ -2112,7 +2112,7 @@ app.get('/', (req, res, next) => {
     const products = readProducts().map(normalizeProduct);
     return res.send(layout({ title: `Resultados para ${query} | YHORS-STORE`, description: `Resultados de búsqueda de ${query} en YHORS-STORE.`, canonical: `${SITE_URL}/`, robots: 'noindex,follow', json: [], body: `<main class="section"><div class="section-heading"><div><span class="eyebrow">Búsqueda YHORS</span><h1>Resultados para “${esc(query)}”</h1></div><p>Usa el buscador para explorar productos, marcas y categorías de YHORS-STORE.</p></div><p><a class="button" href="/">Volver al catálogo <span>→</span></a></p></main>` }));
   }
-  const products = readProducts().map(normalizeProduct).filter(product => product.published !== false);
+  const products = readProducts().map(normalizeProduct).filter(product => product.published !== false && Number(product.stock || 0) > 0);
   const canonical = `${SITE_URL}/`;
   const organization = { '@context':'https://schema.org', '@type':'Organization', name:CORPORATE_NAME, url:`${SITE_URL}/yhors-corp`, brand:{ '@type':'Brand', name:'YHORS' }, subOrganization:{ '@type':'OnlineStore', name:SITE_NAME, url:canonical } };
   const website = { '@context':'https://schema.org', '@type':'WebSite', name:SITE_NAME, alternateName:['YHORS','YHORS-STORE'], url:canonical, potentialAction:{ '@type':'SearchAction', target:`${SITE_URL}/?buscar={search_term_string}`, 'query-input':'required name=search_term_string' } };
@@ -3351,7 +3351,7 @@ function publicProduct(product) {
   return { ...safe, inStock: stock > 0 };
 }
 
-app.get('/api/products', (_, res) => res.json(readProducts().map(normalizeProduct).filter(product => product.published !== false).map(publicProduct)));
+app.get('/api/products', (_, res) => res.json(readProducts().map(normalizeProduct).filter(product => product.published !== false && Number(product.stock || 0) > 0).map(publicProduct)));
 app.get('/api/classifications', (_, res) => res.json(readClassifications()));
 app.get('/api/storefront', (_, res) => {
   const settings = readStorefront();

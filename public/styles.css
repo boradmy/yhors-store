@@ -5720,3 +5720,7 @@ html:has(.admin-web-shell),body:has(.admin-web-shell),#app:has(.admin-web-shell)
 @media(max-width:900px){.related-card{flex-basis:calc((100% - 32px)/3)}.related-products-section{padding-left:18px;padding-right:18px}}
 @media(max-width:700px){.related-heading{align-items:start;flex-direction:column;gap:15px}.related-controls{align-self:flex-end}.related-track{gap:10px}.related-card{flex-basis:calc((100% - 10px)/2)}.related-card-copy{padding:12px;min-height:150px}.related-card-copy h3{font-size:.78rem}.related-card-price{font-size:.9rem}.related-products-section{margin-top:40px;padding-bottom:45px}}
 @media(max-width:440px){.related-card-image{padding:8px}.related-card-copy{min-height:142px}.related-card-stock{font-size:.49rem}}
+
+/* YHORS · SKU centrado en ficha pública */
+.product-detail-page .detail-copy .detail-sku{display:flex;width:max-content;margin-left:auto;margin-right:auto;justify-content:center;}
+.related-card-stock{display:none!important;}
