@@ -2602,10 +2602,12 @@ function paymentAccessAllowed(session, sale) {
 }
 function paymentTotalsForSales(sales = [], payments = []) {
   const saleMap = new Map(sales.map(s => [String(s.id), s]));
+  const saleByOrder = new Map(sales.filter(s => s.orderId).map(s => [String(s.orderId), s]));
   const totals = new Map();
   for (const payment of payments) {
-    if (!saleMap.has(String(payment.saleId))) continue;
-    totals.set(String(payment.saleId), (totals.get(String(payment.saleId)) || 0) + Number(payment.amount || 0));
+    const sale = payment.saleId ? saleMap.get(String(payment.saleId)) : (payment.orderId ? saleByOrder.get(String(payment.orderId)) : null);
+    if (!sale) continue;
+    totals.set(String(sale.id), (totals.get(String(sale.id)) || 0) + Number(payment.amount || 0));
   }
   return totals;
 }
@@ -2619,8 +2621,14 @@ function paymentTotalsForOrders(orders = [], payments = []) {
   return totals;
 }
 function decoratePayment(payment, sales = null, orders = null) {
-  const sale = (sales || readSales()).find(s => String(s.id) === String(payment.saleId));
-  const order = !sale && payment.orderId ? (orders || readOrders()).find(o => String(o.id) === String(payment.orderId)) : null;
+  const salesList = sales || readSales();
+  const ordersList = orders || readOrders();
+  // Un pago puede haber sido registrado cuando la operación todavía era una
+  // orden. Si luego esa orden pasa a Historial de Ventas, debe seguir contando
+  // como pago de la venta y conservar toda su trazabilidad.
+  const sale = salesList.find(s => String(s.id) === String(payment.saleId))
+    || (payment.orderId ? salesList.find(s => String(s.orderId || '') === String(payment.orderId)) : null);
+  const order = !sale && payment.orderId ? ordersList.find(o => String(o.id) === String(payment.orderId)) : null;
   const source = sale || order;
   return { ...payment,
     methodLabel: paymentMethodLabel(payment.method),
@@ -3891,12 +3899,36 @@ app.get('/api/admin/resumen-financiero', requireAdmin, (req, res) => {
   const totalExpensesRounded = round(totalExpenses);
   const profit = round(totalSales - totalPurchases - totalExpensesRounded);
   const margin = totalSales > 0 ? round((profit / totalSales) * 100) : 0;
-  const financialSales = readSales().filter(sale => { const date=localDate(sale.notifiedAt||sale.createdAt); return date && (!from||date>=from) && (!to||date<=to); });
-  const financialSaleIds = new Set(financialSales.map(s=>String(s.id)));
-  const financialPayments = readPayments().filter(payment => financialSaleIds.has(String(payment.saleId)));
+  // El dinero ingresado se filtra por la FECHA DEL PAGO, no por la fecha de la venta.
+  // Incluye pagos de ventas, abonos de pedidos abiertos y anticipos/saldos a favor.
+  const allSalesForFinance = readSales();
+  const allPaymentsForFinance = readPayments();
+  const financialSales = allSalesForFinance.filter(sale => { const date=localDate(sale.notifiedAt||sale.createdAt); return date && (!from||date>=from) && (!to||date<=to); });
+  const financialSalesIds = new Set(allSalesForFinance.map(s=>String(s.id)));
+  const financialOrderIds = new Set(orders.map(o=>String(o.id)));
+  const financialPayments = allPaymentsForFinance.filter(payment => {
+    const date = String(payment.date || '').slice(0,10) || localDate(payment.createdAt);
+    if (!date || (from && date < from) || (to && date > to)) return false;
+    if (payment.saleId && !financialSalesIds.has(String(payment.saleId))) return false;
+    if (payment.orderId && !financialOrderIds.has(String(payment.orderId))) return false;
+    return true;
+  });
   const moneyIn = financialPayments.reduce((acc,p)=>{ const method=String(p.method||''); const amount=Number(p.amount||0); acc.total+=amount; if(method==='cash')acc.cash+=amount; if(method==='transfer')acc.transfer+=amount; if(method==='card')acc.card+=amount; return acc; },{total:0,cash:0,transfer:0,card:0});
-  const paymentTotals = paymentTotalsForSales(financialSales, financialPayments);
-  const receivable = financialSales.reduce((sum,sale)=>sum+Math.max(0,Number(sale.total||0)-Number(paymentTotals.get(String(sale.id))||0)),0);
+
+  // Por cobrar: ventas confirmadas y órdenes aún abiertas del período, sin duplicar
+  // una orden que ya fue convertida en venta/historial.
+  const saleByOrderFinance = new Set(financialSales.filter(s=>s.orderId).map(s=>String(s.orderId)));
+  const paymentBySaleAll = paymentTotalsForSales(allSalesForFinance, allPaymentsForFinance);
+  const paymentByOrderAll = paymentTotalsForOrders(orders, allPaymentsForFinance);
+  let receivable = 0;
+  for (const sale of financialSales) {
+    receivable += Math.max(0, Number(sale.total||0) - Number(paymentBySaleAll.get(String(sale.id))||0));
+  }
+  for (const order of filteredOrders) {
+    if (order.salesNotifiedAt || order.salesHistoryId || saleByOrderFinance.has(String(order.id))) continue;
+    receivable += Math.max(0, Number(order.total||0) - Number(paymentByOrderAll.get(String(order.id))||0));
+  }
+  receivable = round(receivable);
   const expenseRows = filteredExpenses
     .map(expense => ({ ...expense, amount: round(expense.amount) }))
     .sort((a, b) => String(b.date).localeCompare(String(a.date)) || String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
@@ -3983,8 +4015,8 @@ function buildFinancialReportPdf(report) {
   const metrics = [
     ['VENTAS TOTALES', money(report.totals.sales)],
     ['TOTAL COMPRAS', money(report.totals.purchases)],
-    ['GANANCIAS NETAS', money(report.totals.profit)],
-    ['TOTAL GASTOS', money(report.totals.expenses)]
+    ['DINERO INGRESADO', money(report.totals.moneyIn?.total || 0)],
+    ['POR COBRAR', money(report.totals.receivable || 0)]
   ];
   const gap = 10, mw = (right - margin - gap * 3) / 4;
   metrics.forEach((m,i) => {
@@ -4040,13 +4072,15 @@ function buildFinancialReportPdf(report) {
 
   if (y < 120) newPage();
   y -= 8;
-  fill(ops,margin,y-88,right-margin,88,0.95,0.92,0.84);
-  rect(ops,margin,y-88,right-margin,88,.8);
+  fill(ops,margin,y-116,right-margin,116,0.95,0.92,0.84);
+  rect(ops,margin,y-116,right-margin,116,.8);
   drawText(ops,'DESGLOSE FINAL',margin+10,y-16,9,boldFont);
   drawText(ops,'Ventas',margin+10,y-33,8); drawText(ops,money(report.totals.sales),right-10,y-33,8,normalFont,'right');
   drawText(ops,'Compras',margin+10,y-47,8); drawText(ops,money(report.totals.purchases),right-10,y-47,8,normalFont,'right');
   drawText(ops,'Gastos',margin+10,y-61,8); drawText(ops,money(report.totals.expenses),right-10,y-61,8,normalFont,'right');
-  drawText(ops,'GANANCIA NETA',right-150,y-75,8,boldFont,'right'); drawText(ops,money(report.totals.profit),right-10,y-75,8,boldFont,'right');
+  drawText(ops,'Dinero ingresado',margin+10,y-75,8); drawText(ops,money(report.totals.moneyIn?.total || 0),right-10,y-75,8,normalFont,'right');
+  drawText(ops,'Por cobrar',margin+10,y-89,8); drawText(ops,money(report.totals.receivable || 0),right-10,y-89,8,normalFont,'right');
+  drawText(ops,'GANANCIA NETA',right-150,y-103,8,boldFont,'right'); drawText(ops,money(report.totals.profit),right-10,y-103,8,boldFont,'right');
 
   pages.push(ops.join('\n'));
 
