@@ -5724,3 +5724,149 @@ html:has(.admin-web-shell),body:has(.admin-web-shell),#app:has(.admin-web-shell)
 /* YHORS · SKU centrado en ficha pública */
 .product-detail-page .detail-copy .detail-sku{display:flex;width:max-content;margin-left:auto;margin-right:auto;justify-content:center;}
 .related-card-stock{display:none!important;}
+
+/* YHORS · ficha de producto 2026 · composición editorial más completa */
+.product-detail-page .detail-layout{
+  grid-template-columns:minmax(0,1.06fr) minmax(390px,.94fr);
+  gap:52px;
+}
+.product-detail-page .detail-copy{
+  padding-top:12px;
+}
+.product-detail-page .detail-copy h1{
+  max-width:640px;
+  font-size:clamp(2rem,3.35vw,3.45rem);
+  line-height:1.01;
+  margin:13px 0 20px;
+}
+.product-detail-page .detail-price-wrap{
+  display:flex;
+  flex-direction:column;
+  gap:3px;
+  margin-bottom:2px;
+}
+.product-detail-page .detail-price-label{
+  font-size:.64rem;
+  text-transform:uppercase;
+  letter-spacing:.14em;
+  color:#9a9186;
+  font-weight:800;
+}
+.product-detail-page .detail-price{
+  font-size:2rem;
+  line-height:1.05;
+  letter-spacing:-.025em;
+}
+.product-detail-page .detail-price-wrap .price-secondary{
+  margin:3px 0 0;
+  color:var(--muted);
+  font-size:.8rem;
+}
+.product-detail-page .detail-copy .detail-sku{
+  width:max-content !important;
+  margin:13px 0 18px !important;
+  justify-content:flex-start !important;
+}
+.product-detail-page .detail-buy{
+  margin-top:18px;
+  gap:9px;
+}
+.product-detail-page .detail-add{
+  min-height:54px;
+  border-radius:6px;
+  font-size:.88rem;
+}
+.product-detail-page .detail-mini-note{
+  display:flex;
+  align-items:center;
+  gap:7px;
+  margin-top:13px;
+  color:#6f685f;
+  font-size:.75rem;
+}
+.product-detail-page .detail-mini-note > span:first-child{color:#4d7657;font-weight:900}
+.product-detail-page .detail-main-image{
+  box-shadow:0 10px 32px rgba(30,25,18,.035);
+}
+.product-detail-page .thumbnail-row{margin-top:14px}
+
+.detail-support-grid{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:12px;
+  margin-top:30px;
+  padding-top:26px;
+  border-top:1px solid var(--line);
+}
+.detail-support-card{
+  display:grid;
+  grid-template-columns:auto 1fr;
+  gap:12px;
+  align-items:start;
+  padding:17px 16px;
+  background:rgba(255,255,255,.62);
+  border:1px solid var(--line);
+  border-radius:9px;
+}
+.detail-support-number{
+  display:grid;
+  place-items:center;
+  width:31px;height:31px;
+  border-radius:50%;
+  background:#f0e7d7;
+  color:#a57a35;
+  font-size:.63rem;
+  font-weight:850;
+  letter-spacing:.04em;
+}
+.detail-support-card strong{display:block;font-size:.78rem;line-height:1.2;margin:2px 0 5px}
+.detail-support-card p{margin:0;color:var(--muted);font-size:.69rem;line-height:1.5}
+
+.detail-information{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) 310px;
+  gap:24px;
+  margin-top:18px;
+  padding-top:42px;
+  border-top:1px solid var(--line);
+}
+.detail-information-main{
+  min-width:0;
+  padding:4px 4px 0 0;
+}
+.detail-information-main h2{
+  margin:8px 0 22px;
+  font-size:clamp(1.65rem,2.6vw,2.25rem);
+  letter-spacing:-.035em;
+}
+.detail-information .detail-description{
+  max-width:780px;
+  font-size:.94rem;
+  line-height:1.85;
+}
+.detail-help-card{
+  align-self:start;
+  padding:23px 22px;
+  background:#211e1b;
+  color:#fff;
+  border-radius:10px;
+  box-shadow:0 12px 28px rgba(30,25,18,.08);
+}
+.detail-help-card .eyebrow{color:#d2b071}
+.detail-help-card h3{margin:10px 0 8px;font-size:1.05rem;letter-spacing:-.01em}
+.detail-help-card p{margin:0 0 18px;color:#c8c1b8;font-size:.75rem;line-height:1.65}
+.detail-help-card .button.secondary{width:100%;background:#fff;color:var(--ink);border-color:#fff}
+.detail-help-card .button.secondary:hover{background:#f1ede6}
+
+@media(max-width:900px){
+  .product-detail-page .detail-layout{grid-template-columns:1fr;gap:30px}
+  .detail-support-grid{grid-template-columns:1fr}
+  .detail-information{grid-template-columns:1fr}
+  .detail-help-card{max-width:none}
+}
+@media(max-width:700px){
+  .product-detail-page .detail-copy{padding-top:0}
+  .product-detail-page .detail-copy h1{font-size:2rem}
+  .product-detail-page .detail-price{font-size:1.7rem}
+  .detail-information{margin-top:10px;padding-top:30px}
+}
