@@ -4593,13 +4593,45 @@ async function renderAdminClientes() {
     try {
       const data=await request(`/api/admin/clientes/${encodeURIComponent(id)}`); const c=data.customer; const tx=data.transactions||[]; const statement=data.statement||[];
       const todayAccount=new Date().toLocaleDateString('en-CA',{timeZone:'America/Guayaquil'});
-      detail.innerHTML=`<div class="customer-detail-head"><div><span class="eyebrow">EXPEDIENTE DEL CLIENTE</span><h2>${escapeHTML(c.name||'Sin nombre')}</h2><p>${escapeHTML(c.cedula||'')} ${c.city?`· ${escapeHTML(c.city)}`:''}</p></div><div class="customer-detail-actions">${canEdit?'<button class="button small" id="editCustomer">Editar ficha</button>':''}${String(session.role||'').toLowerCase()==='admin'?'<button class="button danger small" id="deleteCustomer">Eliminar cliente</button>':''}</div></div><div class="customer-metrics"><article><span>PEDIDOS</span><strong>${data.totals.orders}</strong></article><article><span>VENTAS</span><strong>${data.totals.sales}</strong></article><article><span>TOTAL COMPRADO</span><strong>${money(data.totals.salesTotal)}</strong></article><article class="customer-balance-metric"><span>POR COBRAR</span><strong>${money(data.totals.balance)}</strong></article></div><div class="customer-info-grid"><div><span>CÉDULA / RUC</span><strong>${escapeHTML(c.cedula||'—')}</strong></div><div><span>CELULAR</span><strong>${escapeHTML(c.phone||'—')}</strong></div><div><span>CORREO</span><strong>${escapeHTML(c.email||'—')}</strong></div><div><span>CIUDAD</span><strong>${escapeHTML(c.city||'—')}</strong></div><div class="full"><span>DIRECCIÓN</span><strong>${escapeHTML(c.address||'—')}</strong></div><div class="full"><span>NOTAS</span><strong>${escapeHTML(c.notes||'—')}</strong></div></div><div class="customer-statement"><div class="customer-statement-head"><div><span class="eyebrow">ESTADO DE CUENTA</span><h3>Movimientos del cliente</h3></div><small>Ventas, abonos y saldo pendiente</small></div><div class="customer-statement-filters"><label><span>Desde</span><input id="customerTxFrom" type="date" value=""></label><label><span>Hasta</span><input id="customerTxTo" type="date" value=""></label><button type="button" class="button secondary small" id="clearCustomerTxFilters">Limpiar</button></div><div class="customer-statement-balance"><div><span>VENDIDO</span><strong>${money(data.totals.salesTotal)}</strong></div><div><span>ABONADO</span><strong>${money(data.totals.paidTotal)}</strong></div><div><span>SALDO</span><strong>${money(data.totals.balance)}</strong></div></div><div id="customerStatementTable" class="customer-statement-table"></div></div>`;
+      detail.innerHTML=`<div class="customer-detail-head"><div><span class="eyebrow">EXPEDIENTE DEL CLIENTE</span><h2>${escapeHTML(c.name||'Sin nombre')}</h2><p>${escapeHTML(c.cedula||'')} ${c.city?`· ${escapeHTML(c.city)}`:''}</p></div><div class="customer-detail-actions">${canEdit?'<button class="button small" id="editCustomer">Editar ficha</button>':''}${String(session.role||'').toLowerCase()==='admin'?'<button class="button danger small" id="deleteCustomer">Eliminar cliente</button>':''}</div></div><div class="customer-metrics"><article><span>PEDIDOS</span><strong>${data.totals.orders}</strong></article><article><span>VENTAS</span><strong>${data.totals.sales}</strong></article><article><span>TOTAL COMPRADO</span><strong>${money(data.totals.salesTotal)}</strong></article><article class="customer-balance-metric"><span>POR COBRAR</span><strong>${money(data.totals.balance)}</strong></article></div><div class="customer-info-grid"><div><span>CÉDULA / RUC</span><strong>${escapeHTML(c.cedula||'—')}</strong></div><div><span>CELULAR</span><strong>${escapeHTML(c.phone||'—')}</strong></div><div><span>CORREO</span><strong>${escapeHTML(c.email||'—')}</strong></div><div><span>CIUDAD</span><strong>${escapeHTML(c.city||'—')}</strong></div><div class="full"><span>DIRECCIÓN</span><strong>${escapeHTML(c.address||'—')}</strong></div><div class="full"><span>NOTAS</span><strong>${escapeHTML(c.notes||'—')}</strong></div></div><div class="customer-statement"><div class="customer-statement-head"><div><span class="eyebrow">ESTADO DE CUENTA</span><h3>Movimientos del cliente</h3></div><small>Ventas, abonos y saldo pendiente</small></div><div class="customer-statement-filters"><label><span>Desde</span><input id="customerTxFrom" type="date" value="${todayAccount}"></label><label><span>Hasta</span><input id="customerTxTo" type="date" value="${todayAccount}"></label><button type="button" class="button secondary small" id="clearCustomerTxFilters">Limpiar</button></div><div class="customer-statement-balance"><div><span>VENDIDO</span><strong id="customerStatementSold">${money(data.totals.salesTotal)}</strong></div><div><span>ABONADO</span><strong id="customerStatementPaid">${money(data.totals.paidTotal)}</strong></div><div><span>SALDO</span><strong id="customerStatementBalance">${money(data.totals.balance)}</strong></div></div><div id="customerStatementTable" class="customer-statement-table"></div></div>`;
+      const accountDate=value=>{
+        if(!value)return '';
+        const raw=String(value);
+        // Las fechas de pagos se guardan como YYYY-MM-DD. No debemos hacer
+        // new Date('YYYY-MM-DD') porque JavaScript las interpreta como UTC y
+        // en Ecuador pueden terminar mostrando el día anterior.
+        const dateOnly=raw.match(/^(\d{4}-\d{2}-\d{2})$/);
+        if(dateOnly)return dateOnly[1];
+        const d=new Date(value);
+        if(Number.isNaN(d.getTime()))return '';
+        return new Intl.DateTimeFormat('en-CA',{timeZone:'America/Guayaquil'}).format(d);
+      };
       const renderCustomerTransactions=()=>{
-        const from=document.querySelector('#customerTxFrom')?.value||'';
-        const to=document.querySelector('#customerTxTo')?.value||'';
+        const from=document.querySelector('#customerTxFrom')?.value||todayAccount;
+        const to=document.querySelector('#customerTxTo')?.value||todayAccount;
         const table=document.querySelector('#customerStatementTable');
-        if(from&&to&&from>to){table.innerHTML='<div class="message error">La fecha inicial no puede ser posterior a la fecha final.</div>';return;}
-        const rows=statement.filter(row=>{const day=row.date?new Intl.DateTimeFormat('en-CA',{timeZone:'America/Guayaquil'}).format(new Date(row.date)):'';return (!from||day>=from)&&(!to||day<=to);});
+        const soldEl=document.querySelector('#customerStatementSold');
+        const paidEl=document.querySelector('#customerStatementPaid');
+        const balanceEl=document.querySelector('#customerStatementBalance');
+        if(from&&to&&from>to){
+          if(soldEl)soldEl.textContent=money(0);
+          if(paidEl)paidEl.textContent=money(0);
+          if(balanceEl)balanceEl.textContent=money(0);
+          table.innerHTML='<div class="message error">La fecha inicial no puede ser posterior a la fecha final.</div>';
+          return;
+        }
+        const rows=statement.filter(row=>{
+          const day=accountDate(row.date||row.timestamp);
+          return (!from||day>=from)&&(!to||day<=to);
+        });
+        // Los indicadores deben usar exactamente los mismos movimientos que
+        // se están mostrando. Así ventas y pagos responden al mismo rango.
+        const filteredSold=rows.reduce((sum,row)=>sum+Number(row.debit||0),0);
+        const filteredPaid=rows.reduce((sum,row)=>sum+Number(row.credit||0),0);
+        const filteredBalance=Math.max(0,Math.round((filteredSold-filteredPaid)*100)/100);
+        if(soldEl)soldEl.textContent=money(filteredSold);
+        if(paidEl)paidEl.textContent=money(filteredPaid);
+        if(balanceEl)balanceEl.textContent=money(filteredBalance);
         const formatDateTime=value=>{if(!value)return 'Fecha no registrada'; const d=new Date(value); if(Number.isNaN(d.getTime()))return 'Fecha no registrada'; return escapeHTML(d.toLocaleString('es-EC',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit',hour12:false,timeZone:'America/Guayaquil'}));};
         const renderedCustomerRows=rows.map(row=>{
           const isPayment=row.kind==='abono';
@@ -4619,7 +4651,7 @@ async function renderAdminClientes() {
       };
       document.querySelector('#customerTxFrom')?.addEventListener('change',renderCustomerTransactions);
       document.querySelector('#customerTxTo')?.addEventListener('change',renderCustomerTransactions);
-      document.querySelector('#clearCustomerTxFilters')?.addEventListener('click',()=>{document.querySelector('#customerTxFrom').value='';document.querySelector('#customerTxTo').value='';renderCustomerTransactions();});
+      document.querySelector('#clearCustomerTxFilters')?.addEventListener('click',()=>{document.querySelector('#customerTxFrom').value=todayAccount;document.querySelector('#customerTxTo').value=todayAccount;renderCustomerTransactions();});
       renderCustomerTransactions();
       document.querySelectorAll('.customer-row').forEach(b=>b.classList.toggle('active',b.dataset.customerId===String(id)));
       document.querySelector('#editCustomer')?.addEventListener('click',()=>openEditCustomer(c));
