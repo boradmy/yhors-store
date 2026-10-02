@@ -4743,9 +4743,6 @@ async function renderAdminClientes() {
             const methodMap={cash:'Efectivo',transfer:'Transferencia',card:'Tarjeta'}; const methodLabel=methodMap[String(row.payment?.method||'').toLowerCase()]||'Devolución';
             return `<article class="customer-ledger-card is-purchase"><div class="customer-ledger-icon">↩</div><div class="customer-ledger-main"><span class="customer-ledger-eyebrow">DEVOLUCIÓN · ADMINISTRACIÓN</span><strong>Devolución ${methodLabel.toLowerCase()}</strong><small>${dateLabel} · ${escapeHTML(row.detail||'Devolución de dinero')}</small></div><div class="customer-ledger-amount"><span>SALIDA</span><strong>${money(row.debit)}</strong><small>${Number(row.balance||0)<-0.001?`Saldo a favor: ${money(Math.abs(row.balance))}`:`Saldo después: ${money(row.balance)}`}</small></div></article>`;
           }
-          if(row.kind==='anulacion'){
-            return `<article class="customer-ledger-card is-purchase"><div class="customer-ledger-icon">×</div><div class="customer-ledger-main"><span class="customer-ledger-eyebrow">ANULACIÓN · ${escapeHTML(row.source || 'ORDEN')}</span><strong>Orden anulada ${escapeHTML(row.number || '')}</strong><small>${dateLabel} · ${escapeHTML(row.detail || 'Anulación de la orden')}</small></div><div class="customer-ledger-amount"><span>SIN MOVIMIENTO DE DINERO</span><strong>—</strong><small>El saldo no cambia · Inventario según el estado de la orden</small></div></article>`;
-          }
           if(isPayment){
             const methodMap={cash:'Efectivo',transfer:'Transferencia',card:'Tarjeta'}; const methodLabel=methodMap[String(row.payment?.method||'').toLowerCase()]||'Ingreso de dinero';
             const method=escapeHTML(methodLabel);
@@ -5105,6 +5102,7 @@ async function renderAdmin() {
           featured: featuredProductIds.includes(p.id)
         }));
         showSaveSuccess(message, 'Portada y destacados guardados con el orden indicado.');
+        drawList();
       } catch (e) { message.className = 'message error'; message.textContent = e.message; }
     });
   }
@@ -5175,7 +5173,19 @@ async function renderAdmin() {
     const descriptionEditor = document.querySelector('#descriptionEditor');
     const descriptionField = document.querySelector('#description');
     const richButtons = [...document.querySelectorAll('[data-rich-command]')];
-    const syncDescription = () => { if (descriptionEditor && descriptionField) descriptionField.value = descriptionEditor.innerHTML.trim(); };
+    // No reserializamos una descripción existente si el usuario no la editó.
+    // Esto evita que contenteditable/execCommand convierta accidentalmente una
+    // descripción rica (listas, negritas y saltos) en texto plano al editar
+    // solamente precio, stock, imágenes, etc.
+    let descriptionDirty = false;
+    const originalDescription = String(editing?.description || '');
+    const syncDescription = () => {
+      if (descriptionEditor && descriptionField) descriptionField.value = descriptionEditor.innerHTML.trim();
+    };
+    const markDescriptionDirty = () => {
+      descriptionDirty = true;
+      syncDescription();
+    };
     const updateRichToolbar = () => {
       if (!descriptionEditor) return;
       const commandState = command => { try { return document.queryCommandState(command); } catch { return false; } };
@@ -5208,7 +5218,7 @@ async function renderAdmin() {
         value = activeHeading ? 'p' : 'h2';
       }
       document.execCommand(command, false, value);
-      syncDescription();
+      markDescriptionDirty();
       updateRichToolbar();
     };
     descriptionEditor?.addEventListener('keydown', event => {
@@ -5252,14 +5262,14 @@ async function renderAdmin() {
           try { document.execCommand('insertHTML', false, '<br>'); } catch {}
         }
       }
-      syncDescription();
+      markDescriptionDirty();
       updateRichToolbar();
     });
-    descriptionEditor?.addEventListener('input', () => { syncDescription(); updateRichToolbar(); });
+    descriptionEditor?.addEventListener('input', () => { markDescriptionDirty(); updateRichToolbar(); });
     descriptionEditor?.addEventListener('keyup', updateRichToolbar);
     descriptionEditor?.addEventListener('mouseup', updateRichToolbar);
     descriptionEditor?.addEventListener('focus', updateRichToolbar);
-    descriptionEditor?.addEventListener('paste', () => setTimeout(() => { syncDescription(); updateRichToolbar(); }, 0));
+    descriptionEditor?.addEventListener('paste', () => setTimeout(() => { markDescriptionDirty(); updateRichToolbar(); }, 0));
     document.querySelectorAll('[data-rich-command]').forEach(button => button.addEventListener('mousedown', event => event.preventDefault()));
     richButtons.forEach(button => button.addEventListener('click', () => execRichCommand(button)));
     if (window.__yhorsRichSelectionHandler) document.removeEventListener('selectionchange', window.__yhorsRichSelectionHandler);
@@ -5273,7 +5283,13 @@ async function renderAdmin() {
       if (!confirmed) return;
       submit.disabled = true; message.textContent = 'Guardando…';
       try {
-        syncDescription();
+        if (editing && !descriptionDirty) {
+          // Conserva exactamente el HTML que ya estaba guardado.
+          // La edición de otros campos no debe destruir listas, negritas o saltos.
+          if (descriptionField) descriptionField.value = originalDescription;
+        } else {
+          syncDescription();
+        }
         const data = Object.fromEntries(new FormData(form).entries()); delete data.heroOrder; data.published = form.elements.published ? form.elements.published.checked : true; data.featured = form.elements.featured.checked; data.hero = form.elements.hero.checked; data.price = data.salePrice; data.images = [data.image, data.image2, data.image3, data.image4].filter(Boolean);
         const pendingImages = window.__yhorsPendingImageFiles || {};
         for (let slot = 1; slot <= 4; slot++) {

@@ -4912,13 +4912,6 @@ app.put('/api/admin/orders/:id', requireOrdersAccess, (req, res) => {
     updated.delivery = { ...(currentOrder.delivery || {}), cost: updated.shippingCost };
   }
   if (hasStatus) updated.status = normalizedStatus;
-  // Registrar el momento exacto de la anulación para que el Estado de Cuenta
-  // muestre la acción aunque la orden no tenga ningún movimiento de dinero.
-  if (statusChanged && String(nextStatus).toLocaleLowerCase('es-EC') === 'cancelado') {
-    updated.cancelledAt = new Date().toISOString();
-  } else if (String(nextStatus).toLocaleLowerCase('es-EC') !== 'cancelado') {
-    delete updated.cancelledAt;
-  }
   if (orderStatusUsesStock(normalizedStatus)) {
     updated.stockReservedAt = currentOrder.stockReservedAt || new Date().toISOString();
     delete updated.stockRestoredAt;
@@ -5421,29 +5414,6 @@ app.get('/api/admin/clientes/:id', requireOrdersAccess, (req, res) => {
   payments.forEach(p => { const obligation=resolvePaymentObligation(p); if(obligation) paidByKey.set(obligation.id,(paidByKey.get(obligation.id)||0)+Number(p.amount||0)); });
   const ledger=[];
   obligations.forEach(o=>{const paid=Math.round((paidByKey.get(o.id)||0)*100)/100; ledger.push({id:o.id,kind:'cargo',type:o.sourceType,number:o.number,date:o.date,timestamp:o.date,source:o.detail,detail:`${o.sourceType==='venta'?'Compra':'Orden'} · ${o.status}`,status:o.status,total:o.total,debit:o.total,credit:0,paid,balance:Math.max(0,Math.round((o.total-paid)*100)/100),orderId:o.orderId,sourceId:o.sourceId,sourceType:o.sourceType});});
-  // La anulación es un movimiento de trazabilidad, no un movimiento de dinero:
-  // no suma ni resta del saldo, pero queda visible en el Estado de Cuenta.
-  customerOrders.filter(order => String(order.status || '').toLowerCase() === 'cancelado').forEach(order => {
-    ledger.push({
-      id:`anulacion:${order.id}`,
-      kind:'anulacion',
-      type:'anulacion',
-      number:order.orderNumber || '—',
-      date:order.cancelledAt || order.updatedAt || order.createdAt,
-      timestamp:order.cancelledAt || order.updatedAt || order.createdAt,
-      source:order.source === 'admin_generated' ? 'Orden interna' : 'Pedido WEB',
-      detail:`Anulación de ${order.orderNumber || 'orden'} · ${Array.isArray(order.items) && order.items.length ? order.items.map(i => `${Number(i.quantity || 1)}× ${i.name || 'Producto'}`).join(' · ') : 'Orden sin productos'}`,
-      status:'Cancelado',
-      total:Number(order.total || 0),
-      debit:0,
-      credit:0,
-      paid:0,
-      balance:0,
-      orderId:order.id,
-      sourceId:order.id,
-      sourceType:'anulacion'
-    });
-  });
   payments.forEach(p=>{
     const obligation=resolvePaymentObligation(p);
     const isRefund = String(p.sourceType || '').toLowerCase() === 'refund';
