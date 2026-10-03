@@ -17,6 +17,20 @@ const categoryDescriptions = {
   collectibles: 'Figuras y objetos para quienes disfrutan coleccionar lo extraordinario.'
 };
 const publicCategories = Object.entries(categories);
+let publicCatalogProducts = [];
+
+function setPublicCatalogProducts(products = []) {
+  publicCatalogProducts = Array.isArray(products) ? products : [];
+}
+function publicCategoryEntries(products = publicCatalogProducts) {
+  const list = Array.isArray(products) ? products : [];
+  const counts = new Map();
+  list.forEach(product => {
+    const key = String(product?.category || '').trim();
+    if (key && categories[key]) counts.set(key, (counts.get(key) || 0) + 1);
+  });
+  return publicCategories.filter(([key]) => key === 'all' ? list.length > 0 : (counts.get(key) || 0) > 0);
+}
 const placeholder = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="800" height="800"%3E%3Crect width="100%25" height="100%25" fill="%23e8e5de"/%3E%3Ctext x="50%25" y="50%25" dominant-baseline="middle" text-anchor="middle" fill="%23706d66" font-family="Arial" font-size="32"%3EYHORS%3C/text%3E%3C/svg%3E';
 
 function escapeHTML(value = '') { return String(value).replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char])); }
@@ -307,10 +321,10 @@ function currentCategoryFromPath() {
   return '';
 }
 function categoryHref(key) { return key === 'all' ? '/categoria/principal' : `/categoria/${encodeURIComponent(key)}`; }
-function categoryLinks(currentId = '') {
-  return publicCategories.map(([key, label]) => `<a class="header-category ${currentId === key ? 'current' : ''}" href="${categoryHref(key)}" data-category-link="${key}">${escapeHTML(label)}</a>`).join('');
+function categoryLinks(currentId = '', products = publicCatalogProducts) {
+  return publicCategoryEntries(products).map(([key, label]) => `<a class="header-category ${currentId === key ? 'current' : ''}" href="${categoryHref(key)}" data-category-link="${key}">${escapeHTML(label)}</a>`).join('');
 }
-function renderHeader(currentCategory = '') {
+function renderHeader(currentCategory = '', products = publicCatalogProducts) {
   return `<header class="site-header">
     <div class="topbar"><div class="header-main">
       <button class="mobile-menu-toggle" id="mobileMenuToggle" type="button" aria-label="Abrir menú" aria-controls="siteNav" aria-expanded="false"><span></span><span></span><span></span></button>
@@ -321,7 +335,7 @@ function renderHeader(currentCategory = '') {
       </form>
       <button class="cart-button" id="cartButton" aria-label="Abrir carrito"><span class="cart-icon" aria-hidden="true">🛒</span><span class="cart-label">Carrito</span><span class="count" id="cartCount">0</span></button>
     </div></div>
-    <div class="nav-wrap"><nav class="nav" id="siteNav" aria-label="Categorías">${categoryLinks(currentCategory)}</nav></div>
+    <div class="nav-wrap"><nav class="nav" id="siteNav" aria-label="Categorías">${categoryLinks(currentCategory, products)}</nav></div>
   </header>`;
 }
 function wireSearch() {
@@ -408,10 +422,10 @@ function wireMobileMenu() {
   document.__yhorsMobileEscapeHandler = event => { if (event.key === 'Escape') close(); };
   document.addEventListener('keydown', document.__yhorsMobileEscapeHandler);
 }
-function renderFooter() {
+function renderFooter(products = publicCatalogProducts) {
   return `<footer class="site-footer"><div class="footer-inner footer-grid">
     <div><a class="brand" href="/">YHORS</a><p>©2021 YHORS. Todos los derechos reservados.</p></div>
-    <div class="footer-links"><strong>Explora YHORS</strong><div>${categoryLinks()}</div></div>
+    <div class="footer-links"><strong>Explora YHORS</strong><div>${categoryLinks('', products)}</div></div>
     <div><strong>Atención personal</strong><p>Pedidos y consultas directamente con YHORS.</p></div>
   </div></footer>`;
 }
@@ -504,8 +518,10 @@ function wireHero(slides) {
   scheduleNext();
 }
 
-function categoryBlocks() {
-  return `<section class="category-blocks section" id="categorias"><div class="section-heading"><div><span class="eyebrow">Explora por universo</span><h2>Encuentra tu estilo</h2></div><p>Cada categoría tiene su propio espacio.</p></div><div class="category-grid">${publicCategories.map(([key, label], index) => `<a class="category-card category-${key}" href="${categoryHref(key)}"><span class="category-number">0${index + 1}</span><div><span class="category-kicker">YHORS</span><h3>${escapeHTML(label)}</h3><p>${escapeHTML(categoryDescriptions[key])}</p></div><span class="category-arrow">↗</span></a>`).join('')}</div></section>`;
+function categoryBlocks(products = publicCatalogProducts) {
+  const entries = publicCategoryEntries(products).filter(([key]) => key !== 'all');
+  if (!entries.length) return '';
+  return `<section class="category-blocks section" id="categorias"><div class="section-heading"><div><span class="eyebrow">Explora por universo</span><h2>Encuentra tu estilo</h2></div><p>Cada categoría tiene su propio espacio.</p></div><div class="category-grid">${entries.map(([key, label], index) => `<a class="category-card category-${key}" href="${categoryHref(key)}"><span class="category-number">${String(index + 1).padStart(2, '0')}</span><div><span class="category-kicker">YHORS</span><h3>${escapeHTML(label)}</h3><p>${escapeHTML(categoryDescriptions[key])}</p></div><span class="category-arrow">↗</span></a>`).join('')}</div></section>`;
 }
 function productCard(product) {
   const image = productImages(product)[0];
@@ -1023,17 +1039,27 @@ function productMatchesQuery(product, query) {
   ].filter(Boolean).join(' '));
   return terms.every(term => haystack.includes(term));
 }
-function allClassificationValues(classifications = {}, key, category = null) {
-  const source = category && category !== 'all'
+function allClassificationValues(classifications = {}, key, category = null, products = publicCatalogProducts) {
+  const list = Array.isArray(products) ? products : [];
+  const scopedProducts = category && category !== 'all' ? list.filter(product => product.category === category) : list;
+  const field = key === 'brands' ? 'brand' : 'productType';
+  const fromProducts = scopedProducts.map(product => String(product?.[field] || '').trim()).filter(Boolean);
+  const configured = category && category !== 'all'
     ? (classifications[key]?.[category] || [])
     : Object.values(classifications[key] || {}).flat();
-  return [...new Set(source.filter(Boolean))].sort((a,b) => a.localeCompare(b, 'es', { sensitivity: 'base' }));
+  // Los filtros públicos se basan en productos realmente disponibles.
+  // Así una clasificación guardada en administración no aparece si no tiene productos publicados y con stock.
+  const available = new Set(fromProducts.map(value => value.toLocaleLowerCase('es')));
+  const source = [...new Set([...configured, ...fromProducts].filter(Boolean))].filter(value => available.has(String(value).toLocaleLowerCase('es')));
+  return source.sort((a,b) => a.localeCompare(b, 'es', { sensitivity: 'base' }));
 }
-function catalogFilters(classifications = {}, currentCategory = 'all', active = {}) {
+function catalogFilters(classifications = {}, currentCategory = 'all', active = {}, products = publicCatalogProducts) {
+  if (!Array.isArray(products) || !products.length) return '';
   const scoped = currentCategory && currentCategory !== 'all';
-  const brands = allClassificationValues(classifications, 'brands', currentCategory);
-  const types = allClassificationValues(classifications, 'productTypes', currentCategory);
-  const categoriesHtml = publicCategories
+  const brands = allClassificationValues(classifications, 'brands', currentCategory, products);
+  const types = allClassificationValues(classifications, 'productTypes', currentCategory, products);
+  const availableCategories = publicCategoryEntries(products).filter(([key]) => key !== 'all');
+  const categoriesHtml = availableCategories
     .map(([key, label]) => `<label class="filter-check"><input type="checkbox" data-filter-category value="${escapeHTML(key)}" ${active.category === key ? 'checked' : ''}><span>${escapeHTML(label)}</span></label>`)
     .join('');
   const brandsHtml = brands.map(value => `<label class="filter-check"><input type="checkbox" data-filter-brand value="${escapeHTML(value)}" ${active.brand === value ? 'checked' : ''}><span>${escapeHTML(value)}</span></label>`).join('');
@@ -1144,6 +1170,7 @@ async function renderHome() {
     console.warn('[YHORS SEO] Se conserva el HTML SSR de inicio:', error?.message || error);
     return;
   }
+  setPublicCatalogProducts(products);
   const searchTerm = (new URLSearchParams(location.search).get('buscar') || '').trim().toLowerCase();
   const heroIds = storefront.heroProductIds || []; const featuredIds = storefront.featuredProductIds || [];
   const byIds = ids => ids.map(id => getProduct(id, products)).filter(Boolean);
@@ -1160,12 +1187,12 @@ async function renderHome() {
   const featuredTitle = searchTerm ? `Resultados para “${escapeHTML(searchTerm)}”` : 'Selección YHORS';
   const featuredText = searchTerm ? `${searchResults.length} producto(s) encontrado(s) en nuestro catálogo.` : 'Tecnología, detalles y piezas elegidas para destacar.';
   const searchCatalog = searchTerm ? `<section class="catalog-shell section search-only" id="destacados"><div class="search-results-heading"><div><span class="eyebrow">Búsqueda YHORS</span><h1>Resultados para “${escapeHTML(searchTerm)}”</h1></div><p>Explora los productos relacionados con tu búsqueda.</p></div><div class="catalog-results"><div class="results-count" id="resultsCount"></div><div class="products" id="featuredProducts"></div></div></section>` : `<section class="section featured-section" id="destacados"><div class="section-heading"><div><span class="eyebrow">Edición YHORS</span><h2>Selección YHORS</h2></div><p>Tecnología, detalles y piezas elegidas para destacar.</p></div><div class="products" id="featuredProducts"></div></section>`;
-  app.innerHTML = `${renderHeader('all')}<main>
+  app.innerHTML = `${renderHeader('all', products)}<main>
     ${searchTerm ? '' : `<section class="promo-ribbon" aria-label="Beneficios YHORS"><div class="promo-item"><span>01</span><strong>DISEÑO CON IDENTIDAD</strong><small>Una tienda pensada alrededor de YHORS.</small></div><div class="promo-item"><span>02</span><strong>PRODUCTOS DE CALIDAD</strong><small>Productos elegidos por estilo y utilidad.</small></div><div class="promo-item"><span>03</span><strong>ATENCIÓN DIRECTA</strong><small>Pedidos y consultas de forma personal.</small></div></section>${heroMarkup(heroSlides)}`}
     ${searchCatalog}
-    ${!searchTerm ? `<section class="statement-strip"><div><span class="eyebrow">YHORS-STORE</span><h2>Elegancia que también se encuentra en los detalles.</h2></div><a class="button" href="#categorias">Explorar universos <span>→</span></a></section>${categoryBlocks()}` : ''}
+    ${!searchTerm ? `<section class="statement-strip"><div><span class="eyebrow">YHORS-STORE</span><h2>Elegancia que también se encuentra en los detalles.</h2></div><a class="button" href="#categorias">Explorar universos <span>→</span></a></section>${categoryBlocks(products)}` : ''}
     <section class="brand-section" id="nosotros"><div class="brand-section-inner"><span class="eyebrow">Sobre nosotros</span><h2>YHORS<br><em>más que un producto</em></h2><p>Un catálogo dividido por universos para que cada persona encuentre algo que conecte con su estilo, sus pasiones y sus momentos especiales.</p></div></section>
-  </main>${renderFooter()}${cartMarkup()}</div>`;
+  </main>${renderFooter(products)}${cartMarkup()}</div>`;
   wireCategoryNavigation(); wireMobileMenu(); wireSearch(); wireHero(heroSlides); markPageEnter(); const cart = wireCart(products, storefront); const featuredArea = document.querySelector('#featuredProducts');
   const renderSearchResults = (items) => { renderProductsInto(featuredArea, items, id => openProduct(id, products), (product, button) => cart.addToCart(product, button)); const count = document.querySelector('#resultsCount'); if (count) count.textContent = `${items.length} producto${items.length === 1 ? '' : 's'} encontrado${items.length === 1 ? '' : 's'}`; if (!items.length) featuredArea.innerHTML = '<div class="empty featured-empty">No encontramos productos con esa búsqueda.<br><small>Prueba con otra marca, categoría o nombre.</small></div>'; };
   if (searchTerm) { renderSearchResults(searchResults); } else { renderProductsInto(featuredArea, visibleFeatured, id => openProduct(id, products), (product, button) => cart.addToCart(product, button)); if (!visibleFeatured.length) featuredArea.innerHTML = '<div class="empty featured-empty">Todavía no has seleccionado productos destacados.<br><small>Entra a YHORS Administración y marca los productos que quieres mostrar aquí.</small></div>'; }
@@ -1181,14 +1208,20 @@ async function renderCategoryPage(categoryKey) {
     return;
   }
   const categoryProducts = products.filter(product => categoryKey === 'all' || product.category === categoryKey);
+  if (categoryKey !== 'all' && !categoryProducts.length) {
+    history.replaceState({}, '', categoryHref('all'));
+    return renderStore();
+  }
+  setPublicCatalogProducts(products);
   const slides = categoryProducts.slice(0, 4).map(product => ({ ...product, image: productImages(product)[0], heroTitle: product.heroTitle || product.name, heroDescription: product.heroDescription || product.description }));
-  app.innerHTML = `${renderHeader(categoryKey)}<main>${heroMarkup(slides, true, categoryKey)}<section class="section category-page-section" id="productos-categoria"><div class="category-intro"><div><span class="eyebrow">Colección independiente</span><h1>${escapeHTML(categories[categoryKey])}</h1></div><p>${escapeHTML(categoryDescriptions[categoryKey])}</p></div><div class="catalog-layout">${catalogFilters(classifications, categoryKey, { category: categoryKey })}<div class="catalog-results"><div class="results-count" id="resultsCount"></div><div class="products product-type-container" id="categoryProducts"></div></div></div></section></main>${renderFooter()}${cartMarkup()}`;
+  app.innerHTML = `${renderHeader(categoryKey, products)}<main>${heroMarkup(slides, true, categoryKey)}<section class="section category-page-section" id="productos-categoria"><div class="category-intro"><div><span class="eyebrow">Colección independiente</span><h1>${escapeHTML(categories[categoryKey])}</h1></div><p>${escapeHTML(categoryDescriptions[categoryKey])}</p></div><div class="catalog-layout">${catalogFilters(classifications, categoryKey, { category: categoryKey }, categoryProducts)}<div class="catalog-results"><div class="results-count" id="resultsCount"></div><div class="products product-type-container" id="categoryProducts"></div></div></div></section></main>${renderFooter(products)}${cartMarkup()}`;
   wireCategoryNavigation(); wireMobileMenu(); wireSearch(); wireHero(slides); markPageEnter(); const cart = wireCart(products, storefront); const area = document.querySelector('#categoryProducts');
   const renderCategoryResults = (items) => { renderProductsInto(area, items, id => openProduct(id, products), (product, button) => cart.addToCart(product, button), { groupByType: true, groupOrder: storefront.categorySectionOrder?.[categoryKey] || [] }); const count = document.querySelector('#resultsCount'); if (count) count.textContent = `${items.length} producto${items.length === 1 ? '' : 's'} en ${escapeHTML(categories[categoryKey])}`; if (!items.length) area.innerHTML = '<div class="empty">No hay productos que coincidan con estos filtros.</div>'; };
   wireCatalogFilters(categoryProducts, classifications, { category: categoryKey }, renderCategoryResults);
 }
 
 async function renderProductDetail(product, products, storefront) {
+  setPublicCatalogProducts(products);
   const images = productImages(product); updateSeoMeta({ title: `${product.name} | YHORS-STORE`, description: compactProductDescription(product.description || `${product.name} disponible en YHORS-STORE.`, 155), canonical: `${location.origin}${productHref(product)}`, image: images[0] && (images[0].startsWith('http') ? images[0] : `${location.origin}${images[0]}`) }); let selected = 0; const isCosplay = product.category === 'cosplay'; const hasRental = isCosplay && Number.isFinite(Number(product.rentalPrice));
   const modeOptions = hasRental ? `<div class="purchase-choice"><span class="choice-label">¿Cómo quieres obtenerlo?</span><div class="purchase-options" role="radiogroup" aria-label="Modalidad"><button type="button" class="purchase-option active" data-purchase-mode="purchase"><strong>Comprar</strong><span>${productPriceLabel(product)}</span></button><button type="button" class="purchase-option" data-purchase-mode="rental"><strong>Alquilar</strong><span>Alquiler: ${money(product.rentalPrice)}</span></button></div><div class="rental-days-picker hidden" id="rentalDaysPicker"><label for="rentalDays">Días de alquiler</label><select id="rentalDays" name="rentalDays">${Array.from({length:10},(_,i)=>i+1).map(day=>`<option value="${day}" ${day===1?'selected':''}>${day} día${day===1?'':'s'}</option>`).join('')}</select><small class="field-help">Selecciona de 1 a 10 días.</small></div></div>` : '';
   const whatsappNumber = String(storefront?.whatsappNumber || '').replace(/\D/g, '');
@@ -1196,7 +1229,7 @@ async function renderProductDetail(product, products, storefront) {
   const whatsappHref = whatsappNumber ? `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(whatsappMessage)}` : categoryHref(product.category);
   const supportCards = `<section class="detail-support-grid detail-support-grid--four" aria-label="Información de compra"><article class="detail-support-card"><span class="detail-support-number">01</span><div><strong>Compra directa</strong><p>Un proceso sencillo y atención personal durante tu compra.</p></div></article><article class="detail-support-card"><span class="detail-support-number">02</span><div><strong>Stock actualizado</strong><p>La disponibilidad se sincroniza con el inventario de YHORS.</p></div></article><article class="detail-support-card"><span class="detail-support-number">03</span><div><strong>Atención YHORS</strong><p>¿Tienes dudas? Escríbenos directamente y te ayudamos.</p></div></article><article class="detail-support-card detail-support-card--notice"><span class="detail-support-number">04</span><div><strong>Precio vigente</strong><p>Los precios pueden cambiar sin previo aviso. El valor mostrado es el vigente al momento de consultar.</p></div></article></section>`;
   const detailDescription = `<section class="detail-information" aria-label="Información del producto"><div class="detail-information-main"><span class="eyebrow">DETALLES DEL PRODUCTO</span><h2>Descripción</h2><div class="detail-description">${richDescriptionHTML(product.description)}</div></div><aside class="detail-help-card"><span class="eyebrow">ATENCIÓN YHORS</span><h3>¿Necesitas más información?</h3><p>Te ayudamos a confirmar características, compatibilidad o cualquier detalle antes de comprar.</p><a class="detail-whatsapp-button" href="${escapeHTML(whatsappHref)}" ${whatsappNumber ? 'target="_blank" rel="noopener noreferrer"' : ''}><span class="detail-whatsapp-icon">◉</span><span><strong>Consultar por WhatsApp</strong><small>${whatsappNumber ? `+${escapeHTML(whatsappNumber)}` : 'Contactar con YHORS'}</small></span><span class="detail-whatsapp-arrow">↗</span></a><div class="detail-contact-product"><span>Consulta por</span><strong>${escapeHTML(product.name || 'Producto')}</strong><small>SKU ${escapeHTML(product.sku || '—')} · ${money(product.salePrice ?? product.price ?? 0)}</small></div></aside></section>`;
-  app.innerHTML = `${renderHeader(product.category)}<main class="product-detail-page"><div class="breadcrumbs"><a href="${categoryHref(product.category)}">${escapeHTML(categories[product.category])}</a><span>/</span><strong>${escapeHTML(product.name)}</strong></div><section class="detail-layout"><div class="detail-gallery"><div class="detail-main-image"><img id="detailMainImage" data-fallback src="${escapeHTML(images[0])}" alt="${escapeHTML(product.name)}"></div>${images.length > 1 ? `<div class="thumbnail-row">${images.map((image, index) => `<button class="thumb ${index === 0 ? 'active' : ''}" data-image-index="${index}"><img data-fallback src="${escapeHTML(image)}" alt="Imagen ${index + 1}"></button>`).join('')}</div>` : ''}</div><div class="detail-copy"><span class="eyebrow">${escapeHTML(categories[product.category])}</span><h1>${escapeHTML(product.name)}</h1><div class="detail-price-wrap"><span class="detail-price-label">Precio</span><div class="detail-price" id="detailPrice">${productPriceLabel(product)}</div></div><div class="detail-sku" aria-label="SKU de YHORS"><span class="detail-sku-icon">⌑</span><span>SKU: <strong>${escapeHTML(product.sku || '—')}</strong></span></div>${modeOptions}<div class="detail-buy"><button class="add detail-add" id="detailAdd" ${!hasRental && !product.inStock ? 'disabled' : ''}><span>${!hasRental && !product.inStock ? 'Sin stock' : 'Añadir al carrito'}</span><span>${!hasRental && !product.inStock ? '—' : '+'}</span></button><a class="button secondary back-button" href="${categoryHref(product.category)}">← Volver a ${escapeHTML(categories[product.category])}</a></div><div class="detail-mini-note"><span>✓</span><span>Compra directa y atención personal.</span></div><div class="detail-basic-meta" aria-label="Datos del producto"><div><strong>Categoría:</strong> <span>${escapeHTML(categories[product.category] || product.category || '—')}</span></div><div><strong>Tipo:</strong> <span>${escapeHTML(product.productType || '—')}</span></div><div><strong>Marca:</strong> <span>${escapeHTML(product.brand || '—')}</span></div></div></div></section>${supportCards}${detailDescription}</main>${renderRelatedProducts(product, products)}${renderFooter()}${cartMarkup()}`;
+  app.innerHTML = `${renderHeader(product.category, products)}<main class="product-detail-page"><div class="breadcrumbs"><a href="${categoryHref(product.category)}">${escapeHTML(categories[product.category])}</a><span>/</span><strong>${escapeHTML(product.name)}</strong></div><section class="detail-layout"><div class="detail-gallery"><div class="detail-main-image"><img id="detailMainImage" data-fallback src="${escapeHTML(images[0])}" alt="${escapeHTML(product.name)}"></div>${images.length > 1 ? `<div class="thumbnail-row">${images.map((image, index) => `<button class="thumb ${index === 0 ? 'active' : ''}" data-image-index="${index}"><img data-fallback src="${escapeHTML(image)}" alt="Imagen ${index + 1}"></button>`).join('')}</div>` : ''}</div><div class="detail-copy"><span class="eyebrow">${escapeHTML(categories[product.category])}</span><h1>${escapeHTML(product.name)}</h1><div class="detail-price-wrap"><span class="detail-price-label">Precio</span><div class="detail-price" id="detailPrice">${productPriceLabel(product)}</div></div><div class="detail-sku" aria-label="SKU de YHORS"><span class="detail-sku-icon">⌑</span><span>SKU: <strong>${escapeHTML(product.sku || '—')}</strong></span></div>${modeOptions}<div class="detail-buy"><button class="add detail-add" id="detailAdd" ${!hasRental && !product.inStock ? 'disabled' : ''}><span>${!hasRental && !product.inStock ? 'Sin stock' : 'Añadir al carrito'}</span><span>${!hasRental && !product.inStock ? '—' : '+'}</span></button><a class="button secondary back-button" href="${categoryHref(product.category)}">← Volver a ${escapeHTML(categories[product.category])}</a></div><div class="detail-mini-note"><span>✓</span><span>Compra directa y atención personal.</span></div><div class="detail-basic-meta" aria-label="Datos del producto"><div><strong>Categoría:</strong> <span>${escapeHTML(categories[product.category] || product.category || '—')}</span></div><div><strong>Tipo:</strong> <span>${escapeHTML(product.productType || '—')}</span></div>${product.brand ? `<div><strong>Marca:</strong> <span>${escapeHTML(product.brand)}</span></div>` : ''}</div></div></section>${supportCards}${detailDescription}</main>${renderRelatedProducts(product, products)}${renderFooter(products)}${cartMarkup()}`;
   wireCategoryNavigation(); wireMobileMenu(); wireSearch(); wireImageFallback(document.querySelector('.product-detail-page')); markPageEnter(); wireRelatedProducts(product, products); document.querySelectorAll('[data-image-index]').forEach(button => button.addEventListener('click', () => {
     const nextIndex = Number(button.dataset.imageIndex);
     if (!Number.isInteger(nextIndex) || !images[nextIndex] || nextIndex === selected) return;
