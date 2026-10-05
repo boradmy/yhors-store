@@ -3246,6 +3246,11 @@ async function renderAdminOrders() {
   app.insertAdjacentHTML('beforeend', `<div class="money-modal" id="orderPaymentModal" hidden>
     <div class="money-modal-backdrop" data-close-order-payment></div>
     <div class="money-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="orderPaymentModalTitle">
+      <div class="payment-register-loading" id="paymentRegisterLoading" hidden aria-live="polite">
+        <div class="payment-register-spinner" aria-hidden="true"></div>
+        <strong>Registrando Pago</strong>
+        <span>Guardando el ingreso y actualizando el control de pago…</span>
+      </div>
       <div class="money-modal-head">
         <div><span class="eyebrow">INGRESO DE DINERO</span><h2 id="orderPaymentModalTitle">Registrar pago</h2><small id="orderPaymentContext"></small></div>
         <button type="button" class="money-modal-close" data-close-order-payment>×</button>
@@ -3275,6 +3280,11 @@ async function renderAdminOrders() {
     if (orderPaymentModal) orderPaymentModal.hidden = true;
     document.querySelector('#orderPaymentMessage').textContent = '';
     document.body.classList.remove('money-modal-open');
+  };
+  const setPaymentRegisterLoading = active => {
+    const overlay = document.querySelector('#paymentRegisterLoading');
+    if (overlay) overlay.hidden = !active;
+    if (orderPaymentModal) orderPaymentModal.classList.toggle('is-registering-payment', Boolean(active));
   };
   document.querySelectorAll('[data-close-order-payment]').forEach(button => button.addEventListener('click', closeOrderPayment));
   const updateOrderPaymentMethodFields = () => {
@@ -3361,24 +3371,23 @@ async function renderAdminOrders() {
       transactionNumber: document.querySelector('#orderPaymentTransaction').value.trim(),
       note: document.querySelector('#orderPaymentNote').value.trim()
     };
-    submit.disabled = true; submit.classList.add('is-loading'); msg.className = 'message'; msg.textContent = 'Guardando…';
+    submit.disabled = true; submit.classList.add('is-loading'); msg.className = 'message'; msg.textContent = '';
+    setPaymentRegisterLoading(true);
     try {
-      const result = await request('/api/admin/dinero/pagos-orden', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
+      await request('/api/admin/dinero/pagos-orden', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
       const order = orders.find(item => String(item.id) === String(orderId));
       if (order) await refreshOrderPaymentView(orderId, null, order.total);
       const state = await loadOrderPaymentState(orderId);
-      if (state.balance > 0.001) {
-        renderOrderPaymentModalState(state);
-        document.querySelector('#orderPaymentMessage').className = 'message success';
-        document.querySelector('#orderPaymentMessage').textContent = `Pago registrado. Saldo restante: ${money(state.balance)}.`;
-      } else {
-        renderOrderPaymentModalState(state);
-        document.querySelector('#orderPaymentMessage').className = 'message success';
-        document.querySelector('#orderPaymentMessage').textContent = 'Pago completo registrado. La entrega queda habilitada.';
-      }
+      renderOrderPaymentModalState(state);
+      const paymentMessage = document.querySelector('#orderPaymentMessage');
+      paymentMessage.className = 'message success';
+      paymentMessage.textContent = state.balance > 0.001
+        ? `Pago registrado. Saldo restante: ${money(state.balance)}.`
+        : 'Pago completo registrado. La entrega queda habilitada.';
     } catch (error) {
       msg.className = 'message error'; msg.textContent = error.message || 'No se pudo registrar el pago.';
     } finally {
+      setPaymentRegisterLoading(false);
       submit.disabled = false; submit.classList.remove('is-loading');
     }
   });
@@ -3806,7 +3815,7 @@ async function renderAdminOrders() {
       }
     };
 
-    const refreshOrderPaymentView = async (orderId, orderCard, orderTotal) => {
+    var refreshOrderPaymentView = async (orderId, orderCard, orderTotal) => {
       try {
         const overview = await request('/api/admin/dinero/resumen?from=&to=&showPaid=true');
         const row = (Array.isArray(overview?.receivables) ? overview.receivables : []).find(item => String(item.orderId || '') === String(orderId));
