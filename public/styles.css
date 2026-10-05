@@ -5969,3 +5969,4 @@ html:has(.admin-web-shell),body:has(.admin-web-shell),#app:has(.admin-web-shell)
 .refunds-panel .refund-section .section-heading{margin-bottom:14px}
 .refunds-panel .refund-section .section-heading h3{margin:4px 0 0;font-size:20px}
 .refunds-panel .refund-section .section-heading p{max-width:520px;margin:0}
+.refunds-panel .refund-annulled{opacity:.62;background:#faf8f4}.refunds-panel .refund-annulled td strong{text-decoration:line-through}.refunds-panel .refund-annulled small{color:#a66a1b;font-weight:800;letter-spacing:.06em}
