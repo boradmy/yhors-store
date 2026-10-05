@@ -5950,63 +5950,43 @@ app.post('/api/admin/dinero/devoluciones-orden', requireAdmin, (req, res) => {
   return res.status(201).json({ amount: totalRefunded, refunds });
 });
 
-app.post('/api/admin/dinero/devoluciones', requireAdmin, (req, res) => {
-  const body = req.body || {};
-  const paymentId = cleanText(body.paymentId, 120);
+app.get('/api/admin/dinero/devoluciones', requireAdmin, (req, res) => {
   const payments = readPayments();
-  const original = payments.find(p => String(p.id) === String(paymentId));
-  if (!original) return res.status(404).json({ error: 'Pago no encontrado.' });
-  if (String(original.sourceType || '').toLowerCase() === 'refund') return res.status(400).json({ error: 'Este movimiento ya es una devolución.' });
+  const from = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.from || '')) ? String(req.query.from) : '';
+  const to = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.to || '')) ? String(req.query.to) : '';
+  const q = cleanText(req.query.q, 180).toLocaleLowerCase('es-EC');
+  const sales = readSales(); const orders = readOrders();
+  const refunds = payments.filter(p => String(p.sourceType || '').toLowerCase() === 'refund').map(p => ({...decoratePayment(p, sales, orders), refundReason:p.refundReason||'', refundOfPaymentId:p.refundOfPaymentId||null})).filter(p => {
+    const day=String(p.date||'').slice(0,10); if(from&&day<from)return false; if(to&&day>to)return false;
+    if(q){const hay=`${p.saleNumber||''} ${p.customerName||''} ${p.customerCedula||''} ${p.refundReason||''} ${p.note||''} ${p.transactionNumber||''} ${p.bank||''}`.toLocaleLowerCase('es-EC'); if(!hay.includes(q))return false;}
+    return true;
+  }).sort((a,b)=>String(b.date||b.createdAt).localeCompare(String(a.date||a.createdAt)));
+  const refundedByPayment=new Map(); refunds.forEach(r=>refundedByPayment.set(String(r.refundOfPaymentId||''),(refundedByPayment.get(String(r.refundOfPaymentId||''))||0)+Math.abs(Number(r.amount||0))));
+  const eligiblePayments=payments.filter(p=>String(p.sourceType||'').toLowerCase()!=='refund'&&Number(p.amount||0)>0).map(p=>{const refunded=Number(refundedByPayment.get(String(p.id))||0);const remaining=Math.max(0,Math.round((Math.abs(Number(p.amount||0))-refunded)*100)/100);return {...decoratePayment(p,sales,orders),refunded,remaining};}).filter(p=>p.remaining>0.001);
+  const totals={cash:0,deposit:0,transfer:0,card_reversal:0,amount:0}; refunds.forEach(r=>{const m=String(r.method||'');const a=Math.abs(Number(r.amount||0));totals[m]=(totals[m]||0)+a;totals.amount+=a;});
+  return res.json({refunds,eligiblePayments,totals});
+});
 
-  const amount = Math.round(Math.abs(Number(original.amount || 0)) * 100) / 100;
-  if (!Number.isFinite(amount) || amount <= 0) return res.status(400).json({ error: 'El pago no tiene un valor válido para devolver.' });
-
-  const alreadyRefunded = payments
-    .filter(p => String(p.sourceType || '').toLowerCase() === 'refund' && String(p.refundOfPaymentId || '') === String(original.id))
-    .reduce((sum, p) => sum + Math.abs(Number(p.amount || 0)), 0);
-  const remaining = Math.round((amount - alreadyRefunded) * 100) / 100;
-  if (remaining <= 0.001) return res.status(409).json({ error: 'Este pago ya fue devuelto.' });
-
-  const now = new Date().toISOString();
-  const refund = {
-    id: crypto.randomUUID(),
-    sourceType: 'refund',
-    refundOfPaymentId: original.id,
-    orderId: original.orderId || null,
-    saleId: original.saleId || null,
-    saleNumber: original.saleNumber || null,
-    customerId: original.customerId || null,
-    customerName: original.customerName || '',
-    customerCedula: original.customerCedula || '',
-    customerEmail: original.customerEmail || '',
-    customerPhone: original.customerPhone || '',
-    customerIdentity: original.customerIdentity || customerIdentity({ name: original.customerName || '', cedula: original.customerCedula || '', email: original.customerEmail || '', phone: original.customerPhone || '' }),
-    sellerId: original.sellerId || null,
-    sellerName: original.sellerName || '',
-    method: original.method || 'cash',
-    date: cleanText(body.date, 20) || localDate(now),
-    batch: original.batch || null,
-    transactionNumber: original.transactionNumber || null,
-    bank: original.bank || '',
-    note: cleanText(body.note, 500) || `Devolución administrativa de ${original.saleNumber || 'pago'} · ${original.customerName || 'cliente'}`,
-    amount: remaining,
-    totalSale: Number(original.totalSale || 0),
-    createdAt: now,
-    createdBy: getSession(req)?.accountId || null
-  };
-  payments.unshift(refund);
-  writePayments(payments);
-  auditLog(req, 'Devolución de dinero', 'Dinero', {
-    refundId: refund.id,
-    refundOfPaymentId: original.id,
-    customerId: refund.customerId,
-    customerName: refund.customerName,
-    amount: refund.amount,
-    method: refund.method,
-    orderId: refund.orderId,
-    saleId: refund.saleId
-  });
-  return res.status(201).json(refund);
+app.post('/api/admin/dinero/devoluciones', requireAdmin, (req, res) => {
+  const body=req.body||{}; const paymentId=cleanText(body.paymentId,120); const payments=readPayments();
+  const original=payments.find(p=>String(p.id)===String(paymentId));
+  if(!original)return res.status(404).json({error:'Pago original no encontrado.'});
+  if(String(original.sourceType||'').toLowerCase()==='refund')return res.status(400).json({error:'No puedes devolver una devolución.'});
+  const method=cleanText(body.method,30); if(!['cash','transfer','deposit','card_reversal'].includes(method))return res.status(400).json({error:'Forma de devolución no válida.'});
+  const amount=normalizeMoneyAmount(body.amount); if(amount===null||amount<=0)return res.status(400).json({error:'Indica un monto de devolución válido.'});
+  const alreadyRefunded=payments.filter(p=>String(p.sourceType||'').toLowerCase()==='refund'&&String(p.refundOfPaymentId||'')===String(original.id)).reduce((sum,p)=>sum+Math.abs(Number(p.amount||0)),0);
+  const available=Math.round((Math.abs(Number(original.amount||0))-alreadyRefunded)*100)/100;
+  if(amount>available+0.001)return res.status(400).json({error:`El monto supera lo disponible para devolver: ${available.toFixed(2)}.`});
+  const reason=cleanText(body.reason,300); if(!reason)return res.status(400).json({error:'Indica el motivo de la devolución.'});
+  const date=/^\d{4}-\d{2}-\d{2}$/.test(String(body.date||''))?String(body.date):localDateEc(new Date());
+  const bank=cleanText(body.bank,100); if(!bank)return res.status(400).json({error:'Indica el banco o caja utilizado para la devolución.'});
+  const batch=cleanText(body.batch,100); const transactionNumber=cleanText(body.transactionNumber,120); const note=cleanText(body.note,500);
+  if(method!=='cash'&&!transactionNumber)return res.status(400).json({error:'Indica la referencia o número de transacción de la devolución.'});
+  const now=new Date().toISOString();
+  const refund={id:crypto.randomUUID(),sourceType:'refund',refundOfPaymentId:original.id,orderId:original.orderId||null,saleId:original.saleId||null,saleNumber:original.saleNumber||null,customerId:original.customerId||null,customerName:original.customerName||'',customerCedula:original.customerCedula||'',customerEmail:original.customerEmail||'',customerPhone:original.customerPhone||'',customerIdentity:original.customerIdentity||customerIdentity({name:original.customerName||'',cedula:original.customerCedula||'',email:original.customerEmail||'',phone:original.customerPhone||''}),sellerId:original.sellerId||null,sellerName:original.sellerName||'',method,date,batch:batch||null,transactionNumber:transactionNumber||null,bank,note:note||'',refundReason:reason,amount,originalPaymentAmount:Math.abs(Number(original.amount||0)),totalSale:Number(original.totalSale||0),createdAt:now,createdBy:getSession(req)?.accountId||null};
+  payments.unshift(refund); writePayments(payments);
+  auditLog(req,'Devolución de dinero','Finanzas',{refundId:refund.id,refundOfPaymentId:original.id,customerId:refund.customerId,customerName:refund.customerName,amount,method,date,reason,orderId:refund.orderId,saleId:refund.saleId});
+  return res.status(201).json({...decoratePayment(refund,readSales(),readOrders()),refundReason:reason,remaining:Math.max(0,Math.round((available-amount)*100)/100)});
 });
 
 app.delete('/api/admin/dinero/pagos/:id', requireAdmin, (req,res) => {
