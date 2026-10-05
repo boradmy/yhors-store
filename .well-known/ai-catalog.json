@@ -1,0 +1,35 @@
+{
+  "specVersion": "1.0",
+  "host": "https://yhors-store.onrender.com",
+  "entries": [
+    {
+      "id": "urn:air:resource:yhors-store",
+      "displayName": "YHORS-STORE",
+      "type": "website",
+      "url": "https://yhors-store.onrender.com/",
+      "description": "Sitio público de YHORS-STORE con catálogo de productos y servicios.",
+      "tags": ["YHORS", "store", "catalog", "products", "services"],
+      "representativeQueries": [
+        "¿Qué productos ofrece YHORS-STORE?",
+        "Buscar productos de YHORS-STORE",
+        "¿Qué servicios ofrece YHORS-STORE?"
+      ]
+    },
+    {
+      "id": "urn:air:resource:yhors-corp",
+      "displayName": "YHORS Corp",
+      "type": "website",
+      "url": "https://yhors-store.onrender.com/yhors-corp",
+      "description": "Información pública corporativa de YHORS.",
+      "tags": ["YHORS", "corporate", "company"]
+    },
+    {
+      "id": "urn:air:resource:yhors-sitemap",
+      "displayName": "YHORS-STORE Sitemap",
+      "type": "sitemap",
+      "url": "https://yhors-store.onrender.com/sitemap.xml",
+      "description": "Mapa de las URLs públicas de YHORS-STORE.",
+      "tags": ["sitemap", "urls", "discovery"]
+    }
+  ]
+}

@@ -2142,6 +2142,24 @@ app.get('/yhors/flyer', requireOrdersAccess, (_, res) => {
 
 app.use('/uploads', express.static(UPLOADS_DIR, { maxAge: '7d', immutable: true }));
 
+// Recursos públicos para descubrimiento por agentes de IA. Estas rutas deben
+// resolverse antes del fallback SPA para evitar que Express devuelva index.html.
+app.get('/llms.txt', (_, res) => {
+  res.type('text/markdown; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+  return res.sendFile(path.join(__dirname, 'llms.txt'));
+});
+app.get('/.well-known/ai-catalog.json', (_, res) => {
+  res.type('application/json; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+  return res.sendFile(path.join(__dirname, '.well-known', 'ai-catalog.json'));
+});
+app.get('/.well-known/ard.json', (_, res) => {
+  res.type('application/json; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+  return res.sendFile(path.join(__dirname, '.well-known', 'ard.json'));
+});
+
 // Los archivos de la interfaz (HTML/CSS/JS) no deben quedarse congelados en la
 // caché del navegador durante un despliegue. Esto permite que cada actualización
 // del sitio se refleje automáticamente sin que el usuario tenga que borrar

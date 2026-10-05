@@ -9,3 +9,4 @@ Disallow: /api/
 Disallow: /yhors/admin593
 
 Sitemap: https://yhors-store.onrender.com/sitemap.xml
+Agentmap: https://yhors-store.onrender.com/.well-known/ai-catalog.json
