@@ -1,0 +1,9 @@
+
+/* YHORS: estado Preparado */
+.status-badge[data-status="Preparado"],
+.order-status[data-status="Preparado"],
+[data-status="Preparado"].status-badge {
+  background: #8b5cf6 !important;
+  border-color: #8b5cf6 !important;
+  color: #ffffff !important;
+}

@@ -1,0 +1,95 @@
+[
+  {
+    "id": "47f7b74c-b367-463a-b149-ebb76b8acd0f",
+    "orderNumber": "YH-0002",
+    "status": "Enviado",
+    "createdAt": "2026-09-24T18:33:51.891Z",
+    "updatedAt": "2026-09-24T22:43:49.209Z",
+    "customer": {
+      "name": "YHORS1.TASQu5iJX9WKQ1S7.cgiuo2gh3XDleQxi2z6eiw.9Uon9WZL",
+      "phone": "YHORS1.QFO02EPGqDzACL_k.jUxeLqAXQQaVNGRHHBaZEA.0mPd2DkZRl_44w",
+      "email": "YHORS1.SVCa55MeY9yRXNGQ.axi7Gn0XhKOZPzXgRA64Uw.zBLQDspFVQyRd0Tj_O-z9T0",
+      "city": "YHORS1.xA76UGL3d8ookY8E.1rPSaF5mTBt0fCDeExckbw.EjhUVFk",
+      "address": "",
+      "mapsUrl": "",
+      "notes": "YHORS1.rX7tfrNyq7fmFuGs.04bHxlIVc0D2G9K1nFfypQ.l7MgnA"
+    },
+    "delivery": {
+      "method": "office",
+      "label": "Retiro en oficina",
+      "cost": 0
+    },
+    "items": [
+      {
+        "productId": "7757b362-1f89-4e24-be36-de4d49a71c19",
+        "sku": "82XQ01V5LM",
+        "name": "NOTEBOOK LENOVO IP1 15AMN7 R5 7520U 8GB-256GB SSD-BLUE-15.6\"-W11 TECLADO INGLES",
+        "category": "tech",
+        "purchaseMode": "purchase",
+        "quantity": 1,
+        "unitPrice": 599.99,
+        "subtotal": 599.99
+      },
+      {
+        "productId": "d049e7a4-05cb-493e-832e-11cc3c0fe099",
+        "sku": "C2N6L4-BL",
+        "name": "PARLANTE SMART AMAZON ECHO DOT 5ta. GENERACION – ALEXA – AZUL",
+        "category": "tech",
+        "purchaseMode": "purchase",
+        "quantity": 1,
+        "unitPrice": 80,
+        "subtotal": 80
+      }
+    ],
+    "subtotal": 679.99,
+    "shippingCost": 0,
+    "total": 679.99,
+    "internalNote": "YHORS1.Jaz07E5YNnLIppVg.rso5g8DoPwSMUGAosOUL0g.EoXtTgkVrkUr4_NjQKV3QKQ7NfTQ4dOenzFuijctTiKtzIZt"
+  },
+  {
+    "id": "d88112c0-18c3-42c4-8006-fc9b1d193986",
+    "orderNumber": "YH-0001",
+    "status": "Pendiente",
+    "createdAt": "2026-09-24T18:14:39.812Z",
+    "updatedAt": "2026-09-24T19:19:00.309Z",
+    "customer": {
+      "name": "YHORS1.VLNdPUdLC0SNTqxM.L7yixMkW6CB4gwK1vdasNw.UHJrVZE",
+      "phone": "YHORS1.xLwSmFDA6I_emUD4.n4yREPkXeJ2zSMRBQZe0vg.b-AORr07tIee9A",
+      "email": "YHORS1.xoYE2TKI5ZlrOvWw.TVT5-3VZ6-LkD-_FsuXdMA.b9bBiMvpYBWD3UmkfPWIyOk",
+      "city": "YHORS1.d6R_udXr4sbykIaM.SpMe_H8nmtvv0c-7YTyWAg.YZA88zM",
+      "address": "",
+      "mapsUrl": "",
+      "notes": ""
+    },
+    "delivery": {
+      "method": "office",
+      "label": "Retiro en oficina",
+      "cost": 0
+    },
+    "items": [
+      {
+        "productId": "d9dabf42-3c1c-4bdc-aa71-624acf051cfc",
+        "sku": "YH-COS-AHIRI",
+        "name": "COSPLAY AHRI (League of Legends)",
+        "category": "cosplay",
+        "purchaseMode": "purchase",
+        "quantity": 1,
+        "unitPrice": 200,
+        "subtotal": 200
+      },
+      {
+        "productId": "d9dabf42-3c1c-4bdc-aa71-624acf051cfc",
+        "sku": "YH-COS-AHIRI",
+        "name": "COSPLAY AHRI (League of Legends)",
+        "category": "cosplay",
+        "purchaseMode": "rental",
+        "quantity": 1,
+        "unitPrice": 90,
+        "subtotal": 90
+      }
+    ],
+    "subtotal": 290,
+    "shippingCost": 0,
+    "total": 290
+  }
+]
