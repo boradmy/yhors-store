@@ -3308,6 +3308,42 @@ async function renderAdminOrders() {
   document.querySelector('#orderPaymentMethod')?.addEventListener('change', updateOrderPaymentMethodFields);
   updateOrderPaymentMethodFields();
 
+  const refreshOrderPaymentView = async (orderId, orderCard = null, orderTotal = null) => {
+    try {
+      const overview = await request('/api/admin/dinero/resumen?from=&to=&showPaid=true');
+      const row = (Array.isArray(overview?.receivables) ? overview.receivables : []).find(item => String(item.orderId || '') === String(orderId));
+      const order = orders.find(item => String(item.id) === String(orderId));
+      const totalDue = Number(orderTotal ?? order?.total ?? row?.totalSale ?? 0);
+      const paid = Number(row?.paid || 0);
+      const balance = Math.max(0, Number(row?.balance ?? Math.max(0, totalDue - paid)));
+      const state = balance <= 0.001 ? 'paid' : paid > 0 ? 'partial' : 'pending';
+      const label = state === 'paid' ? 'PAGADO 100%' : state === 'partial' ? 'ABONO · SALDO PENDIENTE' : 'PENDIENTE DE PAGO';
+      const card = orderCard || document.querySelector(`[data-order-id="${CSS.escape(String(orderId))}"]`);
+      const paymentCard = card?.querySelector('.order-payment-card');
+      if (paymentCard) {
+        paymentCard.className = `order-payment-card ${state}`;
+        const mainStrong = paymentCard.querySelector('.order-payment-main strong');
+        const badge = paymentCard.querySelector('.order-payment-badge');
+        const numberBlocks = paymentCard.querySelectorAll('.order-payment-numbers > div');
+        const balanceStrong = paymentCard.querySelector('.order-payment-balance strong');
+        const footerText = paymentCard.querySelector('.order-payment-footer small');
+        if (mainStrong) mainStrong.textContent = label;
+        if (badge) badge.textContent = state === 'paid' ? '✓' : state === 'partial' ? '!' : '$';
+        if (numberBlocks[0]?.querySelector('strong')) numberBlocks[0].querySelector('strong').textContent = money(totalDue);
+        if (numberBlocks[1]?.querySelector('strong')) numberBlocks[1].querySelector('strong').textContent = money(paid);
+        if (balanceStrong) balanceStrong.textContent = money(balance);
+        if (footerText) footerText.textContent = balance > 0.001 ? 'No se debe entregar hasta completar el pago.' : 'Pago completo registrado · entrega habilitada.';
+        const action = paymentCard.querySelector('[data-order-open-payment]');
+        if (action) action.textContent = balance > 0.001 ? 'Ver / registrar dinero →' : 'Ver pagos';
+      }
+      paymentByOrder.set(String(orderId), { ...(row || {}), orderId, totalSale: totalDue, paid, balance, status: state === 'paid' ? 'PAGADO' : state === 'partial' ? 'ABONO' : 'PENDIENTE' });
+      return { order, row, total: totalDue, paid, balance };
+    } catch (error) {
+      console.warn('No se pudo actualizar el control de pago automáticamente:', error);
+      return null;
+    }
+  };
+
   const loadOrderPaymentState = async orderId => {
     const overview = await request('/api/admin/dinero/resumen?from=&to=&showPaid=true');
     const row = (Array.isArray(overview?.receivables) ? overview.receivables : []).find(item => String(item.orderId || '') === String(orderId));
@@ -3812,36 +3848,6 @@ async function renderAdminOrders() {
           const first = order.items?.[0];
           firstSummaryItem.textContent = first ? `${first.quantity || 1}× ${first.name || 'Sin productos'}${(order.items?.length || 0) > 1 ? ` · +${order.items.length - 1} más` : ''}` : 'Sin productos';
         }
-      }
-    };
-
-    var refreshOrderPaymentView = async (orderId, orderCard, orderTotal) => {
-      try {
-        const overview = await request('/api/admin/dinero/resumen?from=&to=&showPaid=true');
-        const row = (Array.isArray(overview?.receivables) ? overview.receivables : []).find(item => String(item.orderId || '') === String(orderId));
-        const totalDue = Number(orderTotal || 0);
-        const paid = Number(row?.paid || 0);
-        const balance = Math.max(0, Number(row?.balance ?? Math.max(0, totalDue - paid)));
-        const state = balance <= 0.001 ? 'paid' : paid > 0 ? 'partial' : 'pending';
-        const label = state === 'paid' ? 'PAGADO 100%' : state === 'partial' ? 'ABONO · SALDO PENDIENTE' : 'PENDIENTE DE PAGO';
-        const card = orderCard || list.querySelector(`[data-order-id="${CSS.escape(String(orderId))}"]`);
-        const paymentCard = card?.querySelector('.order-payment-card');
-        if (!paymentCard) return;
-        paymentCard.className = `order-payment-card ${state}`;
-        const mainStrong = paymentCard.querySelector('.order-payment-main strong');
-        const badge = paymentCard.querySelector('.order-payment-badge');
-        const numberBlocks = paymentCard.querySelectorAll('.order-payment-numbers > div');
-        const balanceStrong = paymentCard.querySelector('.order-payment-balance strong');
-        const footerText = paymentCard.querySelector('.order-payment-footer small');
-        if (mainStrong) mainStrong.textContent = label;
-        if (badge) badge.textContent = state === 'paid' ? '✓' : state === 'partial' ? '!' : '$';
-        if (numberBlocks[0]?.querySelector('strong')) numberBlocks[0].querySelector('strong').textContent = money(totalDue);
-        if (numberBlocks[1]?.querySelector('strong')) numberBlocks[1].querySelector('strong').textContent = money(paid);
-        if (balanceStrong) balanceStrong.textContent = money(balance);
-        if (footerText) footerText.textContent = balance > 0.001 ? 'No se debe entregar hasta completar el pago.' : 'Pago completo registrado · entrega habilitada.';
-        paymentByOrder.set(String(orderId), { ...(row || {}), orderId, totalSale: totalDue, paid, balance, status: state === 'paid' ? 'PAGADO' : state === 'partial' ? 'ABONO' : 'PENDIENTE' });
-      } catch (error) {
-        console.warn('No se pudo actualizar el control de pago automáticamente:', error);
       }
     };
 
