@@ -1407,7 +1407,7 @@ function productForm(product = {}, classifications = {}) {
     </div>
     <div class="field ${isCosplay ? '' : 'hidden'}"><label for="rentalPrice">Precio de alquiler por día (USD)</label><input id="rentalPrice" name="rentalPrice" ${isCosplay ? 'required' : ''} ${lock} min="0" step="0.01" type="number" value="${escapeHTML(product.rentalPrice ?? '')}"><small class="field-help">Disponible para productos de Cosplay.</small></div>
     <div class="field full"><span class="eyebrow image-section-label">Fotos del producto</span><small class="field-help">Haz clic en cada imagen para abrir el selector y elegir archivo o enlace.</small></div>
-    ${[0,1,2,3].map((index) => { const slot=index+1, current=images[index] || (index===0 ? product.image || '' : ''); return `<div class="field full product-image-slot"><div class="product-image-slot-head"><div><strong>${index===0?'Imagen principal':`Imagen ${slot}`}</strong><small>${current ? 'Imagen cargada' : 'Sin imagen · puedes agregarla después'}</small></div><button type="button" class="button secondary small" data-open-image-picker="${slot}" ${lock}>${current ? 'Cambiar imagen' : '+ Agregar imagen'}</button></div><input type="hidden" id="image${index===0?'':slot}" name="image${index===0?'':slot}" value="${escapeHTML(current)}"><div class="product-image-slot-preview ${current?'has-image':''}"><img id="productImagePreview${slot}" data-fallback src="${escapeHTML(current || placeholder)}" alt="Imagen ${slot}"><span>${current ? '' : 'SIN IMAGEN'}</span></div></div>`; }).join('')}
+    ${[0,1,2,3].map((index) => { const slot=index+1, current=images[index] || (index===0 ? product.image || '' : ''); return `<div class="field full product-image-slot"><div class="product-image-slot-head"><div><strong>${index===0?'Imagen principal':`Imagen ${slot}`}</strong><small>${current ? 'Imagen cargada' : 'Sin imagen · puedes agregarla después'}</small></div><div class="product-image-slot-head-actions"><button type="button" class="button secondary small" data-open-image-picker="${slot}" ${lock}>${current ? 'Cambiar imagen' : '+ Agregar imagen'}</button>${current ? `<button type="button" class="button danger small" data-remove-product-image="${slot}" ${lock}>Eliminar foto</button>` : ''}</div></div><input type="hidden" id="image${index===0?'':slot}" name="image${index===0?'':slot}" value="${escapeHTML(current)}"><div class="product-image-slot-preview ${current?'has-image':''}"><img id="productImagePreview${slot}" data-fallback src="${escapeHTML(current || placeholder)}" alt="Imagen ${slot}"><span>${current ? '' : 'SIN IMAGEN'}</span></div></div>`; }).join('')}
     <div class="field full rich-description-field"><label for="descriptionEditor">Descripción completa</label><div class="rich-editor" data-rich-editor ${locked ? 'aria-disabled="true"' : ''}><div class="rich-editor-toolbar" role="toolbar" aria-label="Formato de descripción"><button type="button" class="rich-tool rich-tool-heading" data-rich-command="formatBlock" data-rich-value="h2" title="Título (H2) · activar/desactivar" aria-label="Título" ${locked ? 'disabled' : ''}><strong>Título</strong></button><span class="rich-tool-separator" aria-hidden="true"></span><button type="button" class="rich-tool" data-rich-command="bold" title="Negrita" aria-label="Negrita" ${locked ? 'disabled' : ''}><strong>B</strong></button><button type="button" class="rich-tool" data-rich-command="italic" title="Cursiva" aria-label="Cursiva" ${locked ? 'disabled' : ''}><em>I</em></button><button type="button" class="rich-tool" data-rich-command="underline" title="Subrayado" aria-label="Subrayado" ${locked ? 'disabled' : ''}><u>U</u></button><span class="rich-tool-separator" aria-hidden="true"></span><button type="button" class="rich-tool rich-tool-list" data-rich-command="insertUnorderedList" title="Lista con viñetas" aria-label="Lista con viñetas" ${locked ? 'disabled' : ''}>• Lista</button><button type="button" class="rich-tool rich-tool-list" data-rich-command="insertOrderedList" title="Lista numerada" aria-label="Lista numerada" ${locked ? 'disabled' : ''}>1. Lista</button><span class="rich-tool-separator" aria-hidden="true"></span><button type="button" class="rich-tool rich-tool-wide" data-rich-command="removeFormat" title="Quitar formato" ${locked ? 'disabled' : ''}>Limpiar</button></div><div id="descriptionEditor" class="rich-editor-content" contenteditable="${locked ? 'false' : 'true'}" role="textbox" aria-multiline="true" aria-label="Descripción completa">${richDescriptionHTML(product.description || '')}</div></div><textarea id="description" name="description" required maxlength="2000" rows="9" ${lock} hidden>${escapeHTML(product.description || '')}</textarea><small class="field-help">Escribe como en Word: <strong>negrita</strong>, <em>cursiva</em>, subrayado, títulos, viñetas y saltos de línea.</small></div>
     <div class="field featured-field"><label><input id="hero" name="hero" type="checkbox" ${lock} ${product.hero ? 'checked' : ''}> Usar en slider de portada</label><label><input id="featured" name="featured" type="checkbox" ${lock} ${product.featured ? 'checked' : ''}> Mostrar como destacado</label></div>
   </div><div class="form-actions"><button class="button" type="submit" ${lock}>${product.id ? 'Guardar cambios' : 'Crear producto'}</button><button class="button secondary ${product.id ? '' : 'hidden'}" type="button" id="cancelEdit">Cancelar</button><span class="message" id="formMessage"></span></div></form>`;
@@ -5254,6 +5254,23 @@ function openInventoryNewProductModal({ classifications, product = null, onSaved
         });
       });
     });
+    area.querySelectorAll('[data-remove-product-image]').forEach(button => {
+      button.addEventListener('click', event => {
+        event.preventDefault(); event.stopPropagation();
+        const slot = Number(button.dataset.removeProductImage || 1);
+        const fieldId = slot === 1 ? '#image' : `#image${slot}`;
+        const field = area.querySelector(fieldId);
+        if (field) field.value = '';
+        window.__yhorsPendingImageFiles ||= {};
+        delete window.__yhorsPendingImageFiles[slot];
+        const imagePreview = area.querySelector(`#productImagePreview${slot}`);
+        if (imagePreview) imagePreview.src = placeholder;
+        const box = button.closest('.product-image-slot');
+        box?.querySelector('small')?.replaceChildren(document.createTextNode('Sin imagen · puedes agregarla después'));
+        box?.querySelector('.product-image-slot-preview')?.classList.remove('has-image');
+        button.remove();
+      });
+    });
     area.querySelector('#category')?.addEventListener('change', e => { draft = { ...draft, category: e.target.value }; draw(); });
     const refreshProductFormProfit = () => {
       const sale = Number(area.querySelector('#salePrice')?.value || 0);
@@ -6091,6 +6108,21 @@ async function renderAdmin() {
         slotBox?.querySelector('small')?.replaceChildren(document.createTextNode(file ? 'Archivo seleccionado · se subirá al guardar' : (url ? 'Imagen cargada por enlace' : 'Sin imagen · puedes agregarla después')));
         slotBox?.querySelector('.product-image-slot-preview')?.classList.toggle('has-image', Boolean(file || url));
       });
+    }));
+    document.querySelectorAll('[data-remove-product-image]').forEach(button => button.addEventListener('click', event => {
+      event.preventDefault(); event.stopPropagation();
+      const slot = Number(button.dataset.removeProductImage || 1);
+      const fieldId = slot === 1 ? '#image' : `#image${slot}`;
+      const field = document.querySelector(fieldId);
+      if (field) field.value = '';
+      window.__yhorsPendingImageFiles ||= {};
+      delete window.__yhorsPendingImageFiles[slot];
+      const imagePreview = document.querySelector(`#productImagePreview${slot}`);
+      if (imagePreview) imagePreview.src = placeholder;
+      const slotBox = button.closest('.product-image-slot');
+      slotBox?.querySelector('small')?.replaceChildren(document.createTextNode('Sin imagen · puedes agregarla después'));
+      slotBox?.querySelector('.product-image-slot-preview')?.classList.remove('has-image');
+      button.remove();
     }));
     document.querySelectorAll('[data-open-image-picker]').forEach(button => button.disabled = false);
     document.querySelector('#name')?.addEventListener('input', e => { if (previewName) previewName.textContent = e.target.value.trim() || 'Nuevo producto'; });

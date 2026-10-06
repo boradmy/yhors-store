@@ -5341,7 +5341,7 @@ body.login-loading-active{overflow:hidden}
 }
 /* Selector de imágenes desde Inventario / Página Web */
 .product-image-slot{border:1px solid var(--line);border-radius:9px;padding:12px;background:#fbfaf7}
-.product-image-slot-head{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:10px}
+.product-image-slot-head{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:10px}.product-image-slot-head-actions{display:flex;align-items:center;justify-content:flex-end;gap:7px;flex-wrap:wrap}
 .product-image-slot-head strong{display:block;font-size:.78rem}
 .product-image-slot-head small{display:block;margin-top:3px;color:var(--muted);font-size:.68rem}
 .product-image-slot-preview{height:110px;border:1px dashed #d6cec0;border-radius:7px;background:#f5f2ec;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden}
@@ -5371,7 +5371,7 @@ body.login-loading-active{overflow:hidden}
 .inventory-new-product-dialog{z-index:1;width:min(980px,100%)}
 .inventory-new-product-dialog #productForm{padding-bottom:2px}
 .inventory-new-product-modal .form-grid{margin-top:0}
-@media(max-width:650px){.product-image-picker-backdrop,.inventory-new-product-modal{padding:9px}.product-image-picker,.inventory-new-product-dialog{padding:17px;max-height:95vh}.product-image-picker-option{grid-template-columns:34px 1fr}.product-image-picker-option .button,.product-image-picker-option input[type=url]{grid-column:1/-1;width:100%}.product-image-picker-foot{flex-direction:column}.product-image-picker-foot .button{width:100%}.product-image-slot-head{align-items:flex-start;flex-direction:column}.product-image-slot-head .button{width:100%}}
+@media(max-width:650px){.product-image-picker-backdrop,.inventory-new-product-modal{padding:9px}.product-image-picker,.inventory-new-product-dialog{padding:17px;max-height:95vh}.product-image-picker-option{grid-template-columns:34px 1fr}.product-image-picker-option .button,.product-image-picker-option input[type=url]{grid-column:1/-1;width:100%}.product-image-picker-foot{flex-direction:column}.product-image-picker-foot .button{width:100%}.product-image-slot-head{align-items:flex-start;flex-direction:column}.product-image-slot-head .button{width:100%}.product-image-slot-head-actions{width:100%;justify-content:flex-start}}
 
 /* Inventario · ficha unificada */
 .product-image-picker-backdrop{z-index:140}
@@ -5391,7 +5391,7 @@ body.login-loading-active{overflow:hidden}
 .inventory-classifications-card{display:flex;align-items:center;justify-content:space-between;gap:20px;border-left:4px solid #b58a43}.inventory-categories-card{display:flex;align-items:center;justify-content:space-between;gap:20px;border-left:4px solid #8f7650}.category-manager-content{padding-top:18px}.category-manager-add{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:end;padding:16px;border:1px solid var(--line);border-radius:13px;background:#fbfaf7}.category-manager-add label{display:grid;gap:7px}.category-manager-add label span{font-size:.72rem;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}.category-manager-add input{width:100%;border:1px solid var(--line);border-radius:7px;padding:11px 12px;background:#fff}.category-manager-list{display:grid;gap:8px;margin-top:16px}.category-manager-row{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:8px;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:#fff}.category-manager-row>div{display:grid;gap:3px}.category-manager-row strong{font-size:.86rem}.category-manager-row small{color:var(--muted);font-size:.68rem}.category-manager-badge{padding:5px 8px;border-radius:999px;background:#f3eee5;color:#80633a;font-size:.64rem;font-weight:800;text-transform:uppercase;letter-spacing:.06em}.inventory-category-dialog{width:min(760px,100%)}
 .inventory-registration-card{padding-bottom:20px}
 .inventory-registration-card .inventory-page-heading{display:flex;justify-content:space-between;align-items:center;gap:20px;margin:0}
-.inventory-registration-card .inventory-page-heading h2{font-family:inherit;font-size:1.75rem;font-weight:800;line-height:1.05;letter-spacing:normal;margin:5px 0 5px}
+.inventory-registration-card .inventory-page-heading h2{font-family:inherit;font-size:1.75rem;font-weight:700;line-height:1.05;letter-spacing:normal;margin:5px 0 5px}
 .inventory-registration-card .inventory-page-heading-actions{display:flex;align-items:center;gap:18px}
 .inventory-registration-card .inventory-page-heading-actions p{max-width:430px;text-align:right}
 .inventory-products-card{padding:22px 24px 26px}
