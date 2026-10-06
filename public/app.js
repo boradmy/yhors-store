@@ -1092,8 +1092,8 @@ function catalogFilters(classifications = {}, currentCategory = 'all', active = 
       <button type="button" class="filter-title" aria-expanded="false"><span>Ordenar precio</span><span>⌄</span></button>
       <div class="filter-options filter-sort-options">
         <label class="filter-radio"><input type="radio" name="catalogPriceSort" value="" ${!active.sort ? 'checked' : ''}><span>Predeterminado</span></label>
-        <label class="filter-radio"><input type="radio" name="catalogPriceSort" value="price-asc" ${active.sort === 'price-asc' ? 'checked' : ''}><span>Precio: menor a mayor</span></label>
-        <label class="filter-radio"><input type="radio" name="catalogPriceSort" value="price-desc" ${active.sort === 'price-desc' ? 'checked' : ''}><span>Precio: mayor a menor</span></label>
+        <label class="filter-radio"><input type="radio" name="catalogPriceSort" value="price-desc" ${active.sort === 'price-desc' ? 'checked' : ''}><span>Mayor a Menor</span></label>
+        <label class="filter-radio"><input type="radio" name="catalogPriceSort" value="price-asc" ${active.sort === 'price-asc' ? 'checked' : ''}><span>Menor a Mayor</span></label>
       </div>
     </div>`;
   const typesBlock = types.length ? `
@@ -1113,7 +1113,7 @@ function catalogFilters(classifications = {}, currentCategory = 'all', active = 
       <div><span class="eyebrow">Filtrar</span><h2>${scoped ? escapeHTML(categories[currentCategory]) : 'Encuentra lo tuyo'}</h2></div>
       <button type="button" class="clear-filters" id="clearCatalogFilters">Restablecer</button>
     </div>
-    ${categoriesBlock}${sortBlock}${typesBlock}${brandsBlock}
+    ${categoriesBlock}${typesBlock}${brandsBlock}${sortBlock}
   </aside>`;
 }
 function applyCatalogFilters(products, active = {}) {
@@ -1379,8 +1379,9 @@ function openProductImagePicker(slot, current = '', onApply) {
 function productForm(product = {}, classifications = {}) {
   const images = Array.isArray(product.images) && product.images.length ? product.images : (product.image ? [product.image] : []);
   const selectedCategory = product.category || '';
-  const brands = selectedCategory ? (classifications.brands?.[selectedCategory] || []) : [];
-  const types = selectedCategory ? (classifications.productTypes?.[selectedCategory] || []) : [];
+  const sortClassificationValues = values => [...new Set(Array.isArray(values) ? values.filter(Boolean) : [])].sort((a,b) => String(a).localeCompare(String(b), 'es', { sensitivity:'base' }));
+  const brands = selectedCategory ? sortClassificationValues(classifications.brands?.[selectedCategory]) : [];
+  const types = selectedCategory ? sortClassificationValues(classifications.productTypes?.[selectedCategory]) : [];
   const isCosplay = selectedCategory === 'cosplay';
   const locked = !selectedCategory;
   const lock = locked ? 'disabled' : '';
@@ -1393,6 +1394,7 @@ function productForm(product = {}, classifications = {}) {
     <div class="field"><label for="productType">Tipo de producto</label><select id="productType" name="productType" ${lock}><option value="">Sin clasificación</option>${types.map(v => `<option value="${escapeHTML(v)}" ${product.productType === v ? 'selected' : ''}>${escapeHTML(v)}</option>`).join('')}</select></div>
     <div class="field"><label for="salePrice">Precio de venta (USD)</label><input id="salePrice" name="salePrice" required min="0" step="0.01" type="number" ${lock} value="${escapeHTML(product.salePrice ?? product.price ?? '')}"></div>
     <div class="field"><label for="purchasePrice">Precio de compra (USD)</label><input id="purchasePrice" name="purchasePrice" min="0" step="0.01" type="number" ${lock} value="${escapeHTML(product.purchasePrice ?? '')}"></div>
+    <div class="field full product-form-profit-field"><span class="product-form-profit-label">Resultado comercial</span><strong id="productFormProfit" class="inventory-profit-badge ${Number(product.salePrice ?? product.price ?? 0) - Number(product.purchasePrice ?? 0) >= 0 ? 'profit-positive' : 'profit-negative'}">${Number(product.salePrice ?? product.price ?? 0) - Number(product.purchasePrice ?? 0) >= 0 ? 'Ganancia' : 'Pérdida'}: ${money(Math.abs(Number(product.salePrice ?? product.price ?? 0) - Number(product.purchasePrice ?? 0)))}</strong></div>
     <div class="field"><label for="stock">Stock disponible</label><input id="stock" name="stock" min="0" step="1" type="number" ${lock} value="${escapeHTML(product.stock ?? 0)}"></div>
     <div class="field"><label for="stockMin">Stock mínimo</label><input id="stockMin" name="stockMin" min="0" step="1" type="number" ${lock} value="${escapeHTML(product.stockMin ?? 0)}"></div>
     <div class="field full"><label for="tags">Etiquetas / palabras clave <small>(opcional)</small></label><input id="tags" name="tags" ${lock} value="${escapeHTML(Array.isArray(product.tags) ? product.tags.join(', ') : '')}" placeholder="Gaming, Xiaomi, 512GB..."><small class="field-help">Sirven para buscar y encontrar el producto rápidamente. Ej.: Gaming, 512GB, Ryzen 7.</small></div>
@@ -4803,18 +4805,18 @@ function inventoryPageMarkup(products = [], options = {}) {
     <div class="admin-top"><div><a class="brand admin-brand" href="${ADMIN_PATH}/inteligente" data-smooth-route aria-label="YHORS · Panel Administrativo · Ir a YHORS Inteligente"><span class="admin-brand-mark" aria-hidden="true"><img src="/favicon.svg" alt=""></span><span class="admin-brand-word">YHORS</span><span class="admin-brand-divider" aria-hidden="true"></span><small>Panel Administrativo</small></a><h1 class="admin-title">Inventario</h1><p class="admin-subtitle">Control de costos, precios, existencias y clasificación</p></div><div class="admin-top-actions">${accountMenu(window.__yhorsSession || {})}</div></div>
     ${adminSectionNav({ role }, 'inventario')}
     <section class="admin-panel inventory-page-panel">
-      <div class="inventory-workflow-card inventory-classifications-card">
-        <div><span class="eyebrow">01 · Organización</span><h2>Clasificaciones</h2><p>Administra marcas y tipos de producto sin llenar la pantalla principal de Inventario.</p></div>
-        <button class="button secondary small" type="button" id="openInventoryClassifications">Abrir clasificaciones →</button>
-      </div>
-
       <div class="inventory-workflow-card inventory-categories-card">
-        <div><span class="eyebrow">02 · Universos</span><h2>Categorías / universos</h2><p>Crea nuevos universos para que aparezcan automáticamente al registrar productos y en la tienda.</p></div>
+        <div><span class="eyebrow">01 · Universos</span><h2>Categorías / universos</h2><p>Crea nuevos universos para que aparezcan automáticamente al registrar productos y en la tienda.</p></div>
         <button class="button secondary small" type="button" id="openInventoryCategories">Gestionar categorías →</button>
       </div>
 
+      <div class="inventory-workflow-card inventory-classifications-card">
+        <div><span class="eyebrow">02 · Organización</span><h2>Clasificaciones</h2><p>Administra marcas y tipos de producto sin llenar la pantalla principal de Inventario.</p></div>
+        <button class="button secondary small" type="button" id="openInventoryClassifications">Abrir clasificaciones →</button>
+      </div>
+
       <section class="inventory-workflow-card inventory-registration-card">
-        <div class="section-heading inventory-page-heading"><div><span class="eyebrow">03 · Inventario</span><h2>Inventario de productos</h2></div><div class="inventory-page-heading-actions"><p>Completa costos, precios, stock y clasificación. Las imágenes pueden agregarse después.</p><button class="button primary small inventory-add-product" type="button" id="inventoryAddProduct">+ Agregar nuevo producto</button></div></div>
+        <div class="inventory-page-heading"><div><span class="eyebrow">03 · Inventario</span><h2>Inventario de productos</h2></div><div class="inventory-page-heading-actions"><p>Completa costos, precios, stock y clasificación. Las imágenes pueden agregarse después.</p><button class="button primary small inventory-add-product" type="button" id="inventoryAddProduct">+ Agregar nuevo producto</button></div></div>
       </section>
 
       <section class="inventory-workflow-card inventory-products-card">
@@ -4831,14 +4833,14 @@ function inventoryPageMarkup(products = [], options = {}) {
     <div class="inventory-classification-modal" id="inventoryClassificationModal" hidden>
       <div class="inventory-classification-backdrop" data-close-inventory-classifications></div>
       <div class="inventory-classification-dialog" role="dialog" aria-modal="true" aria-labelledby="inventoryClassificationTitle">
-        <div class="inventory-classification-dialog-head"><div><span class="eyebrow">01 · Organización</span><h2 id="inventoryClassificationTitle">Clasificaciones</h2><p>Marcas y tipos de producto, organizados por universo.</p></div><button type="button" class="product-image-picker-close" data-close-inventory-classifications aria-label="Cerrar">×</button></div>
+        <div class="inventory-classification-dialog-head"><div><span class="eyebrow">02 · Organización</span><h2 id="inventoryClassificationTitle">Clasificaciones</h2><p>Marcas y tipos de producto, organizados por universo.</p></div><button type="button" class="product-image-picker-close" data-close-inventory-classifications aria-label="Cerrar">×</button></div>
         ${classificationPanel(classifications).replace('<section class="admin-panel classification-panel" id="classificationPanel">','<section class="classification-modal-content" id="classificationPanel">')}
       </div>
     </div>
     <div class="inventory-classification-modal inventory-category-modal" id="inventoryCategoryModal" hidden>
       <div class="inventory-classification-backdrop" data-close-inventory-categories></div>
       <div class="inventory-classification-dialog inventory-category-dialog" role="dialog" aria-modal="true" aria-labelledby="inventoryCategoryTitle">
-        <div class="inventory-classification-dialog-head"><div><span class="eyebrow">02 · Universos</span><h2 id="inventoryCategoryTitle">Categorías / universos</h2><p>Agrega los universos que necesites para organizar tus productos.</p></div><button type="button" class="product-image-picker-close" data-close-inventory-categories aria-label="Cerrar">×</button></div>
+        <div class="inventory-classification-dialog-head"><div><span class="eyebrow">01 · Universos</span><h2 id="inventoryCategoryTitle">Categorías / universos</h2><p>Agrega los universos que necesites para organizar tus productos.</p></div><button type="button" class="product-image-picker-close" data-close-inventory-categories aria-label="Cerrar">×</button></div>
         <div class="category-manager-content">
           <form id="inventoryCategoryForm" class="category-manager-add"><label><span>Nombre de la nueva categoría / universo</span><input id="newInventoryCategory" maxlength="60" placeholder="Ej. Audio, Hogar, Gaming…" required></label><button type="submit" class="button primary small">+ Agregar categoría</button></form>
           <span class="message" id="categoryManagerMessage"></span>
@@ -5253,6 +5255,16 @@ function openInventoryNewProductModal({ classifications, product = null, onSaved
       });
     });
     area.querySelector('#category')?.addEventListener('change', e => { draft = { ...draft, category: e.target.value }; draw(); });
+    const refreshProductFormProfit = () => {
+      const sale = Number(area.querySelector('#salePrice')?.value || 0);
+      const purchase = Number(area.querySelector('#purchasePrice')?.value || 0);
+      const profit = sale - purchase;
+      const badge = area.querySelector('#productFormProfit');
+      if (!badge) return;
+      badge.className = `inventory-profit-badge ${profit >= 0 ? 'profit-positive' : 'profit-negative'}`;
+      badge.textContent = `${profit >= 0 ? 'Ganancia' : 'Pérdida'}: ${money(Math.abs(profit))}`;
+    };
+    area.querySelectorAll('#salePrice,#purchasePrice').forEach(input => input.addEventListener('input', refreshProductFormProfit));
     const editor = area.querySelector('#descriptionEditor');
     const hidden = area.querySelector('#description');
     // En edición, NO volvemos a serializar la descripción solo por guardar
