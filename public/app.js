@@ -4823,7 +4823,7 @@ function inventoryPageMarkup(products = [], options = {}) {
       </section>
 
       <section class="inventory-workflow-card inventory-products-card">
-        <div class="inventory-products-heading"><div><span class="eyebrow">04 · Registro</span><h2>Productos ya registrados</h2></div><span class="inventory-count inventory-count-large" id="inventoryPageCount">${products.length} productos</span></div>
+        <div class="inventory-products-heading"><div><span class="eyebrow">04 · Registro</span><h2>Productos ya registrados</h2></div><div class="inventory-products-heading-actions"><button class="button danger small" type="button" id="inventoryFindDuplicates">Revisar repetidos</button><span class="inventory-count inventory-count-large" id="inventoryPageCount">${products.length} productos</span></div></div>
         <div class="inventory-toolbar inventory-toolbar-extended">
           <label class="inventory-search"><span aria-hidden="true">⌕</span><input id="inventoryPageSearch" type="search" placeholder="Buscar por nombre, SKU, marca, tipo o etiqueta…" autocomplete="off"><button id="clearInventoryPageSearch" type="button" aria-label="Limpiar búsqueda">×</button></label>
           <label class="inventory-filter"><span>Tipo de producto</span><select id="inventoryPageTypeFilter"><option value="">Todos los tipos</option>${allValues('productTypes').map(v=>`<option value="${escapeHTML(v)}">${escapeHTML(v)}</option>`).join('')}</select></label>
@@ -4838,6 +4838,15 @@ function inventoryPageMarkup(products = [], options = {}) {
       <div class="inventory-classification-dialog" role="dialog" aria-modal="true" aria-labelledby="inventoryClassificationTitle">
         <div class="inventory-classification-dialog-head"><div><span class="eyebrow">02 · Organización</span><h2 id="inventoryClassificationTitle">Clasificaciones</h2><p>Marcas y tipos de producto, organizados por universo.</p></div><button type="button" class="product-image-picker-close" data-close-inventory-classifications aria-label="Cerrar">×</button></div>
         ${classificationPanel(classifications).replace('<section class="admin-panel classification-panel" id="classificationPanel">','<section class="classification-modal-content" id="classificationPanel">')}
+      </div>
+    </div>
+    <div class="inventory-classification-modal inventory-duplicates-modal" id="inventoryDuplicatesModal" hidden>
+      <div class="inventory-classification-backdrop" data-close-inventory-duplicates></div>
+      <div class="inventory-classification-dialog inventory-duplicates-dialog" role="dialog" aria-modal="true" aria-labelledby="inventoryDuplicatesTitle">
+        <div class="inventory-classification-dialog-head"><div><span class="eyebrow">04 · Limpieza</span><h2 id="inventoryDuplicatesTitle">Productos repetidos</h2><p>YHORS detecta fichas prácticamente idénticas y propone conservar la más antigua. Revisa antes de eliminar.</p></div><button type="button" class="product-image-picker-close" data-close-inventory-duplicates aria-label="Cerrar">×</button></div>
+        <div class="inventory-duplicates-summary" id="inventoryDuplicatesSummary"></div>
+        <div class="inventory-duplicates-list" id="inventoryDuplicatesList"></div>
+        <div class="inventory-duplicates-actions"><span class="message" id="inventoryDuplicatesMessage"></span><button type="button" class="button secondary" data-close-inventory-duplicates>Cancelar</button><button type="button" class="button danger" id="inventoryDeleteDuplicates">Eliminar seleccionados</button></div>
       </div>
     </div>
     <div class="inventory-classification-modal inventory-category-modal" id="inventoryCategoryModal" hidden>
@@ -5546,6 +5555,83 @@ async function renderAdminInventory() {
   const closeClassificationModal = () => { if (!classificationModal) return; classificationModal.classList.remove('is-open'); document.body.classList.remove('generate-modal-open'); setTimeout(() => { classificationModal.hidden = true; }, 180); };
   document.querySelector('#openInventoryClassifications')?.addEventListener('click', () => { if (!classificationModal) return; classificationModal.hidden = false; requestAnimationFrame(() => classificationModal.classList.add('is-open')); document.body.classList.add('generate-modal-open'); });
   classificationModal?.querySelectorAll('[data-close-inventory-classifications]').forEach(btn => btn.addEventListener('click', closeClassificationModal));
+
+  const duplicatesModal = document.querySelector('#inventoryDuplicatesModal');
+  const closeDuplicatesModal = () => { if (!duplicatesModal) return; duplicatesModal.classList.remove('is-open'); document.body.classList.remove('generate-modal-open'); setTimeout(() => { duplicatesModal.hidden = true; }, 180); };
+  const duplicateKey = product => {
+    const normalize = value => String(value ?? '').trim().toLocaleLowerCase('es').replace(/\s+/g, ' ');
+    const images = productImages(product).filter(src => src && src !== placeholder).map(normalize).sort().join('|');
+    return [
+      normalize(product.name), normalize(product.variantLabel || product.color || ''), normalize(product.brand),
+      normalize(product.productType), normalize(product.category), Number(product.purchasePrice ?? 0).toFixed(2),
+      Number(product.salePrice ?? product.price ?? 0).toFixed(2), normalize(product.description), images
+    ].join('¦');
+  };
+  const findDuplicateGroups = () => {
+    const groups = new Map();
+    products.forEach(product => {
+      const key = duplicateKey(product);
+      if (!key || key.startsWith('¦')) return;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(product);
+    });
+    return [...groups.values()].filter(group => group.length > 1).sort((a,b) => new Date(a[0].createdAt || 0) - new Date(b[0].createdAt || 0));
+  };
+  const renderDuplicateManager = () => {
+    const list = document.querySelector('#inventoryDuplicatesList');
+    const summary = document.querySelector('#inventoryDuplicatesSummary');
+    const message = document.querySelector('#inventoryDuplicatesMessage');
+    const removeButton = document.querySelector('#inventoryDeleteDuplicates');
+    if (!list || !summary) return;
+    const groups = findDuplicateGroups();
+    if (!groups.length) {
+      summary.innerHTML = '<div class="inventory-duplicates-empty"><strong>✓ No encontramos repetidos exactos.</strong><small>Las variantes legítimas con distinto color o datos diferentes no se marcan como repetidas.</small></div>';
+      list.innerHTML = '';
+      if (removeButton) removeButton.disabled = true;
+      return;
+    }
+    const totalDuplicates = groups.reduce((sum, group) => sum + group.length - 1, 0);
+    summary.innerHTML = `<strong>${totalDuplicates} repetido${totalDuplicates === 1 ? '' : 's'} detectado${totalDuplicates === 1 ? '' : 's'}</strong><small>En cada grupo se propone conservar el registro más antiguo y eliminar los demás.</small>`;
+    list.innerHTML = groups.map((group, groupIndex) => {
+      const keep = [...group].sort((a,b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0))[0];
+      const duplicates = group.filter(p => p.id !== keep.id);
+      return `<section class="inventory-duplicate-group"><div class="inventory-duplicate-group-head"><div><span class="eyebrow">Grupo ${groupIndex + 1}</span><h3>${escapeHTML(keep.name || 'Producto sin nombre')}</h3><small>${escapeHTML(keep.brand || '')} · ${escapeHTML(keep.productType || '')} · ${escapeHTML(categories[keep.category] || keep.category || '')}</small></div><span class="inventory-duplicate-count">${group.length} registros</span></div><div class="inventory-duplicate-rows"><div class="inventory-duplicate-row is-keep"><span class="inventory-duplicate-check"></span><div><strong>CONSERVAR</strong><span>${escapeHTML(keep.sku || 'Sin SKU')} · ${Number(keep.stock || 0)} en stock</span></div><small>Registro más antiguo</small></div>${duplicates.map(product => `<label class="inventory-duplicate-row"><input type="checkbox" data-duplicate-delete="${escapeHTML(product.id)}" checked><span><strong>ELIMINAR</strong><span>${escapeHTML(product.sku || 'Sin SKU')} · ${Number(product.stock || 0)} en stock${product.variantLabel ? ` · ${escapeHTML(product.variantLabel)}` : ''}</span></span><small>Se borrará esta ficha</small></label>`).join('')}</div></section>`;
+    }).join('');
+    if (removeButton) removeButton.disabled = false;
+    if (message) { message.className = 'message'; message.textContent = ''; }
+  };
+  document.querySelector('#inventoryFindDuplicates')?.addEventListener('click', () => {
+    renderDuplicateManager();
+    if (!duplicatesModal) return;
+    duplicatesModal.hidden = false;
+    requestAnimationFrame(() => duplicatesModal.classList.add('is-open'));
+    document.body.classList.add('generate-modal-open');
+  });
+  duplicatesModal?.querySelectorAll('[data-close-inventory-duplicates]').forEach(btn => btn.addEventListener('click', closeDuplicatesModal));
+  document.querySelector('#inventoryDeleteDuplicates')?.addEventListener('click', async () => {
+    const ids = [...document.querySelectorAll('[data-duplicate-delete]:checked')].map(input => input.dataset.duplicateDelete).filter(Boolean);
+    const message = document.querySelector('#inventoryDuplicatesMessage');
+    if (!ids.length) { if (message) { message.className='message error'; message.textContent='No hay productos seleccionados para eliminar.'; } return; }
+    const selected = products.filter(product => ids.includes(product.id));
+    const stockTotal = selected.reduce((sum, product) => sum + Number(product.stock || 0), 0);
+    const confirmed = await showYhorsConfirm('¿Eliminar los productos repetidos seleccionados?', `Se eliminarán <strong>${ids.length}</strong> ficha(s). Actualmente suman <strong>${stockTotal}</strong> unidad(es) de inventario. Esta acción no se puede deshacer.`);
+    if (!confirmed) return;
+    const button = document.querySelector('#inventoryDeleteDuplicates');
+    if (button) { button.disabled = true; button.textContent = 'Eliminando…'; }
+    try {
+      for (const id of ids) await request(`/api/admin/products/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      products = products.filter(product => !ids.includes(product.id));
+      const settings = await request('/api/admin/storefront').catch(() => ({ heroProductIds: [], featuredProductIds: [] }));
+      const cleanSettings = { ...settings, heroProductIds: (settings.heroProductIds || []).filter(id => !ids.includes(id)), featuredProductIds: (settings.featuredProductIds || []).filter(id => !ids.includes(id)) };
+      await request('/api/admin/storefront', { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(cleanSettings) }).catch(() => {});
+      draw();
+      closeDuplicatesModal();
+      alert(`Se eliminaron ${ids.length} producto(s) repetido(s).`);
+    } catch (e) {
+      if (message) { message.className='message error'; message.textContent=e.message || 'No se pudieron eliminar todos los repetidos.'; }
+      if (button) { button.disabled = false; button.textContent = 'Eliminar seleccionados'; }
+    }
+  });
 
   const categoryModal = document.querySelector('#inventoryCategoryModal');
   const closeCategoryModal = () => { if (!categoryModal) return; categoryModal.classList.remove('is-open'); document.body.classList.remove('generate-modal-open'); setTimeout(() => { categoryModal.hidden = true; }, 180); };
