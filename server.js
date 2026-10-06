@@ -6238,11 +6238,18 @@ app.put('/api/admin/classifications', requireAdmin, (req, res) => res.json(write
 app.put('/api/admin/storefront', requireAdmin, (req, res) => {
   const products = readProducts();
   const ids = new Set(products.map(product => product.id));
-  const heroProductIds = Array.isArray(req.body?.heroProductIds) ? req.body.heroProductIds.filter(id => ids.has(id)).slice(0, 8) : [];
-  const featuredProductIds = Array.isArray(req.body?.featuredProductIds) ? req.body.featuredProductIds.filter(id => ids.has(id)).slice(0, 12) : [];
+  // PATCH semántico: si una sección no viene en la petición, conserva su configuración actual.
+  // Esto evita que guardar el orden de categorías borre la portada o los destacados.
+  const currentStorefront = readStorefront();
+  const heroProductIds = Array.isArray(req.body?.heroProductIds)
+    ? req.body.heroProductIds.filter(id => ids.has(id)).slice(0, 8)
+    : (Array.isArray(currentStorefront.heroProductIds) ? currentStorefront.heroProductIds.filter(id => ids.has(id)).slice(0, 8) : []);
+  const featuredProductIds = Array.isArray(req.body?.featuredProductIds)
+    ? req.body.featuredProductIds.filter(id => ids.has(id)).slice(0, 12)
+    : (Array.isArray(currentStorefront.featuredProductIds) ? currentStorefront.featuredProductIds.filter(id => ids.has(id)).slice(0, 12) : []);
   const heroOrders = (req.body && req.body.heroOrders && typeof req.body.heroOrders === 'object') ? req.body.heroOrders : {};
   const incomingCategoryOrder = req.body?.categorySectionOrder && typeof req.body.categorySectionOrder === 'object' ? req.body.categorySectionOrder : {};
-  const currentCategoryOrder = readStorefront().categorySectionOrder || {};
+  const currentCategoryOrder = currentStorefront.categorySectionOrder || {};
   const categorySectionOrder = { ...currentCategoryOrder };
   Object.entries(incomingCategoryOrder).forEach(([category, values]) => {
     if (!Array.isArray(values)) return;

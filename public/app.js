@@ -5870,7 +5870,13 @@ async function renderAdmin() {
       const confirmed = await showYhorsConfirm('¿Guardar el orden de las separaciones?', 'Las categorías públicas mostrarán sus bloques de productos en el nuevo orden.');
       if (!confirmed) return;
       try {
-        const response = await request('/api/admin/storefront', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ categorySectionOrder }) });
+        // Enviar también la configuración actual de portada/destacados para que
+        // esta acción sea segura incluso si el servidor recibe una actualización parcial.
+        const response = await request('/api/admin/storefront', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+          heroProductIds: Array.isArray(settings.heroProductIds) ? settings.heroProductIds : [],
+          featuredProductIds: Array.isArray(settings.featuredProductIds) ? settings.featuredProductIds : [],
+          categorySectionOrder
+        }) });
         settings = { ...settings, ...response, categorySectionOrder: response.categorySectionOrder || categorySectionOrder };
         showSaveSuccess(message, 'Orden de separaciones guardado correctamente.');
       } catch (e) { message.className = 'message error'; message.textContent = e.message; }
