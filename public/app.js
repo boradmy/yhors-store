@@ -5361,6 +5361,13 @@ function openInventoryNewProductModal({ classifications, product = null, product
             : (editor?.innerHTML?.trim() || hidden.value || '');
         }
         const data=Object.fromEntries(new FormData(form).entries());
+        // La descripción vive en un editor contenteditable. En algunos navegadores
+        // FormData puede tomar el textarea oculto antes de que se sincronice.
+        // Para crear/editar nunca permitimos enviar una descripción vacía si el
+        // editor sí contiene contenido.
+        if (!String(data.description || '').trim() && editor?.innerHTML?.trim()) {
+          data.description = editor.innerHTML.trim();
+        }
         data.heroTitle=String(form.elements.heroTitle?.value || '').trim(); data.heroDescription=String(form.elements.heroDescription?.value || '').trim(); data.published=form.elements.published?form.elements.published.checked:true; data.requiresDeviceIdentifier=form.elements.requiresDeviceIdentifier?form.elements.requiresDeviceIdentifier.checked:false; data.isRental=form.elements.isRental?form.elements.isRental.checked:false; data.featured=Boolean(product?.featured); data.hero=Boolean(product?.hero); data.price=data.salePrice; data.purchasePrice=purchasePrice; data.stock=stock; data.stockMin=stockMin; data.tags=String(form.elements.tags?.value||'').split(',').map(v=>v.trim()).filter(Boolean).slice(0,30); data.images=[data.image,data.image2,data.image3,data.image4].filter(Boolean);
         const pending=window.__yhorsPendingImageFiles||{};
         for(let slot=1;slot<=4;slot++){const file=pending[slot];if(!file)continue;const fd=new FormData();fd.append('image',file);const uploaded=await request('/api/admin/upload',{method:'POST',body:fd});const key=slot===1?'image':`image${slot}`;data[key]=uploaded.image;data.images[slot-1]=uploaded.image;}
@@ -6301,6 +6308,12 @@ async function renderAdmin() {
       submit.disabled = true; message.textContent = 'Guardando…';
       try {
         const data = Object.fromEntries(new FormData(form).entries());
+        // La descripción es HTML rico. El contenido real está en contenteditable;
+        // sincronízalo siempre antes de validar/enviar para evitar el falso aviso
+        // de "Revisa nombre, descripción, categoría y precio de venta".
+        if (!String(data.description || '').trim() && descriptionEditor?.innerHTML?.trim()) {
+          data.description = descriptionEditor.innerHTML.trim();
+        }
         // La descripción es HTML rico. Si el usuario NO tocó el editor, enviamos
         // exactamente la versión original y jamás una serialización accidental
         // del contenteditable. Si sí la editó, usamos el HTML actual del editor.

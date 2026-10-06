@@ -3312,7 +3312,8 @@ function makeUniqueSku(inputSku, product, products, currentId = '') {
 
 function validateProduct(input, current = {}, allProducts = []) {
   const name = cleanText(input.name, 90);
-  const description = sanitizeDescriptionHtml(input.description, 2000);
+  const rawDescription = typeof input.description === 'string' ? input.description : (typeof input.descriptionText === 'string' ? input.descriptionText : '');
+  const description = sanitizeDescriptionHtml(rawDescription, 2000);
   const heroTitle = cleanText(input.heroTitle, 140);
   const heroDescription = sanitizeDescriptionHtml(input.heroDescription, 500);
   const category = cleanText(input.category, 30).toLowerCase();
