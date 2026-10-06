@@ -545,14 +545,10 @@ function productCard(product) {
   const availability = inStock ? `` : ``;
   const isCosplayRental = product.category === 'cosplay' && product.isRental === true && Number.isFinite(Number(product.rentalPrice));
   const rental = isCosplayRental ? `<small class="price-secondary">Alquiler: ${money(product.rentalPrice)}</small>` : '';
-  const variantOptions = Array.isArray(product.variantOptions) ? product.variantOptions : [];
-  const variantChoices = '';
-  const action = variantOptions.length
-    ? `<a class="add product-choose-variant" href="${escapeHTML(productHref(product))}"><span>Elegir acabado</span><span>→</span></a>`
-    : (isCosplayRental
-      ? `<button class="add cosplay-options" data-open-option="${escapeHTML(product.id)}"><span>Ver opciones</span><span>→</span></button>`
-      : `<button class="add" data-id="${escapeHTML(product.id)}" ${!inStock ? 'disabled' : ''}><span>${inStock ? 'Añadir' : 'Sin stock'}</span><span>${inStock ? '+' : '—'}</span></button>`);
-  return `<article class="product" data-product="${escapeHTML(product.id)}"><a class="product-open" data-open="${escapeHTML(product.id)}" href="${escapeHTML(productHref(product))}" aria-label="Ver ${escapeHTML(product.name)}"><div class="product-image"><img data-fallback src="${escapeHTML(image)}" alt="${escapeHTML(product.name)}" loading="lazy"></div><div class="product-info"><span class="product-category">${escapeHTML(categories[product.category] || product.category)}</span>${meta ? `<small class="product-meta">${escapeHTML(meta)}</small>` : ''}<h3>${escapeHTML(product.name)}</h3><div class="product-description">${escapeHTML(compactProductDescription(product.description, 112))}</div>${variantChoices}<span class="detail-link">Ver detalles <span>→</span></span></div></a><div class="product-bottom"><div><span class="price">${productPriceLabel(product)}</span>${rental}<span class="price-secondary">${availability}</span></div>${action}</div></article>`;
+  const action = isCosplayRental
+    ? `<button class="add cosplay-options" data-open-option="${escapeHTML(product.id)}"><span>Ver opciones</span><span>→</span></button>`
+    : `<button class="add" data-id="${escapeHTML(product.id)}" ${!inStock ? 'disabled' : ''}><span>${inStock ? 'Añadir' : 'Sin stock'}</span><span>${inStock ? '+' : '—'}</span></button>`;
+  return `<article class="product" data-product="${escapeHTML(product.id)}"><a class="product-open" data-open="${escapeHTML(product.id)}" href="${escapeHTML(productHref(product))}" aria-label="Ver ${escapeHTML(product.name)}"><div class="product-image"><img data-fallback src="${escapeHTML(image)}" alt="${escapeHTML(product.name)}" loading="lazy"></div><div class="product-info"><span class="product-category">${escapeHTML(categories[product.category] || product.category)}</span>${meta ? `<small class="product-meta">${escapeHTML(meta)}</small>` : ''}<h3>${escapeHTML(product.name)}</h3><div class="product-description">${escapeHTML(compactProductDescription(product.description, 112))}</div><span class="detail-link">Ver detalles <span>→</span></span></div></a><div class="product-bottom"><div><span class="price">${productPriceLabel(product)}</span>${rental}<span class="price-secondary">${availability}</span></div>${action}</div></article>`;
 }
 
 function relatedProductsFor(product, products) {
@@ -716,17 +712,6 @@ function renderProductsInto(area, products, onOpen, onAdd, options = {}) {
     : '<div class="empty">Aún no hay productos en esta colección.</div>';
   wireImageFallback(area);
   area.querySelectorAll('[data-open]').forEach(button => button.addEventListener('click', e => { e.preventDefault(); onOpen(button.dataset.open); }));
-  area.querySelectorAll('[data-variant-open]').forEach(button => button.addEventListener('click', e => {
-    e.preventDefault();
-    e.stopPropagation();
-    const base = button.dataset.variantOpen;
-    const variantId = button.dataset.variantId;
-    if (base && variantId) {
-      history.pushState({ product: base, variant: variantId }, '', `${productHref(products.find(item => String(item.id) === String(base)) || { id: base, name: '' })}?variante=${encodeURIComponent(variantId)}`);
-      renderStore();
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
-  }));
   area.querySelectorAll('.add').forEach(button => button.addEventListener('click', e => { e.stopPropagation();
     const productId = button.dataset.openOption;
     if (productId) { onOpen(productId); return; }
@@ -1274,94 +1259,15 @@ async function renderCategoryPage(categoryKey) {
 
 async function renderProductDetail(product, products, storefront) {
   setPublicCatalogProducts(products);
-  let activeProduct = product;
-  let images = productImages(product); updateSeoMeta({ title: `${product.name} | YHORS-STORE`, description: compactProductDescription(product.description || `${product.name} disponible en YHORS-STORE.`, 155), canonical: `${location.origin}${productHref(product)}`, image: images[0] && (images[0].startsWith('http') ? images[0] : `${location.origin}${images[0]}`) }); let selected = 0; const isCosplay = product.category === 'cosplay'; const hasRental = isCosplay && Number.isFinite(Number(product.rentalPrice));
+  const images = productImages(product); updateSeoMeta({ title: `${product.name} | YHORS-STORE`, description: compactProductDescription(product.description || `${product.name} disponible en YHORS-STORE.`, 155), canonical: `${location.origin}${productHref(product)}`, image: images[0] && (images[0].startsWith('http') ? images[0] : `${location.origin}${images[0]}`) }); let selected = 0; const isCosplay = product.category === 'cosplay'; const hasRental = isCosplay && Number.isFinite(Number(product.rentalPrice));
   const modeOptions = hasRental ? `<div class="purchase-choice"><span class="choice-label">¿Cómo quieres obtenerlo?</span><div class="purchase-options" role="radiogroup" aria-label="Modalidad"><button type="button" class="purchase-option active" data-purchase-mode="purchase"><strong>Comprar</strong><span>${productPriceLabel(product)}</span></button><button type="button" class="purchase-option" data-purchase-mode="rental"><strong>Alquilar</strong><span>Alquiler: ${money(product.rentalPrice)}</span></button></div><div class="rental-days-picker hidden" id="rentalDaysPicker"><label for="rentalDays">Días de alquiler</label><select id="rentalDays" name="rentalDays">${Array.from({length:10},(_,i)=>i+1).map(day=>`<option value="${day}" ${day===1?'selected':''}>${day} día${day===1?'':'s'}</option>`).join('')}</select><small class="field-help">Selecciona de 1 a 10 días.</small></div></div>` : '';
   const whatsappNumber = String(storefront?.whatsappNumber || '').replace(/\D/g, '');
-  const variantBase = product.variantGroupId ? (products.find(item => String(item.variantGroupId || '') === String(product.variantGroupId) && item.published !== false) || product) : product;
-  const productVariants = Array.isArray(product.variantOptions) && product.variantOptions.length
-    ? product.variantOptions
-    : (product.variantGroupId ? products.filter(item => String(item.variantGroupId || '') === String(product.variantGroupId)) : []);
-  const variantSelector = productVariants.length > 0 ? `<div class="detail-variants" aria-label="Variantes disponibles"><div class="detail-variants-head"><div><span class="detail-variants-kicker">PERSONALIZA TU ELECCIÓN</span><label class="detail-variants-label">Elige tu acabado</label></div><span class="detail-variants-current" id="detailVariantCurrent">Selecciona un acabado</span></div><div class="detail-variants-list">${productVariants.map(item => { const disabled = item.inStock === false; const active = false; const label = item.variantLabel || item.sku || 'Variante'; return `<button type="button" class="detail-variant-chip ${active ? 'is-active' : ''}" data-detail-variant="${escapeHTML(item.id)}" ${disabled ? 'disabled' : ''}><span class="detail-variant-swatch" aria-hidden="true"></span><span class="detail-variant-chip-copy"><strong>${escapeHTML(label)}</strong><small>${disabled ? 'Agotado' : 'Disponible'}</small></span><span class="detail-variant-check" aria-hidden="true">✓</span></button>`; }).join('')}</div></div>` : '';
   const whatsappMessage = `Hola YHORS 👋, necesito más información sobre este producto.\n\nProducto: ${product.name || ''}\nSKU: ${product.sku || '—'}\nPrecio actual: ${money(product.salePrice ?? product.price ?? 0)}\n\n¿Podrían ayudarme con más información?`;
   const whatsappHref = whatsappNumber ? `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(whatsappMessage)}` : categoryHref(product.category);
   const supportCards = `<section class="detail-support-grid detail-support-grid--four" aria-label="Información de compra"><article class="detail-support-card"><span class="detail-support-number">01</span><div><strong>Compra directa</strong><p>Un proceso sencillo y atención personal durante tu compra.</p></div></article><article class="detail-support-card"><span class="detail-support-number">02</span><div><strong>Stock actualizado</strong><p>La disponibilidad se sincroniza con el inventario de YHORS.</p></div></article><article class="detail-support-card"><span class="detail-support-number">03</span><div><strong>Atención YHORS</strong><p>¿Tienes dudas? Escríbenos directamente y te ayudamos.</p></div></article><article class="detail-support-card detail-support-card--notice"><span class="detail-support-number">04</span><div><strong>Precio vigente</strong><p>Los precios pueden cambiar sin previo aviso. El valor mostrado es el vigente al momento de consultar.</p></div></article></section>`;
   const detailDescription = `<section class="detail-information" aria-label="Información del producto"><div class="detail-information-main"><span class="eyebrow">DETALLES DEL PRODUCTO</span><h2>Descripción</h2><div class="detail-description">${richDescriptionHTML(product.description)}</div></div><aside class="detail-help-card"><span class="eyebrow">ATENCIÓN YHORS</span><h3>¿Necesitas más información?</h3><p>Te ayudamos a confirmar características, compatibilidad o cualquier detalle antes de comprar.</p><a class="detail-whatsapp-button" href="${escapeHTML(whatsappHref)}" ${whatsappNumber ? 'target="_blank" rel="noopener noreferrer"' : ''}><span class="detail-whatsapp-icon">◉</span><span><strong>Consultar por WhatsApp</strong><small>${whatsappNumber ? `+${escapeHTML(whatsappNumber)}` : 'Contactar con YHORS'}</small></span><span class="detail-whatsapp-arrow">↗</span></a><div class="detail-contact-product"><span>Consulta por</span><strong>${escapeHTML(product.name || 'Producto')}</strong><small>SKU ${escapeHTML(product.sku || '—')} · ${money(product.salePrice ?? product.price ?? 0)}</small></div></aside></section>`;
-  app.innerHTML = `${renderHeader(product.category, products)}<main class="product-detail-page"><div class="breadcrumbs"><a href="${categoryHref(product.category)}">${escapeHTML(categories[product.category])}</a><span>/</span><strong id="detailBreadcrumbName">${escapeHTML(product.name)}</strong></div><section class="detail-layout"><div class="detail-gallery"><div class="detail-main-image"><img id="detailMainImage" data-fallback src="${escapeHTML(images[0])}" alt="${escapeHTML(product.name)}"></div>${images.length > 1 ? `<div class="thumbnail-row">${images.map((image, index) => `<button class="thumb ${index === 0 ? 'active' : ''}" data-image-index="${index}"><img data-fallback src="${escapeHTML(image)}" alt="Imagen ${index + 1}"></button>`).join('')}</div>` : ''}</div><div class="detail-copy"><span class="eyebrow">${escapeHTML(categories[product.category])}</span><h1 id="detailProductTitle" class="detail-product-title ${(() => { const n = String(product.name || '').trim().length; return n > 95 ? 'detail-title--xl' : n > 70 ? 'detail-title--long' : n > 48 ? 'detail-title--medium' : 'detail-title--short'; })()}">${escapeHTML(product.name)}</h1><div class="detail-price-wrap"><span class="detail-price-label">Precio</span><div class="detail-price" id="detailPrice">${productPriceLabel(product)}</div></div><div class="detail-sku" aria-label="SKU de YHORS"><span class="detail-sku-icon">⌑</span><span>SKU: <strong id="detailSkuValue">${productVariants.length > 0 ? 'Se asignará al elegir' : escapeHTML(product.sku || '—')}</strong></span></div>${variantSelector}${modeOptions}<div class="detail-buy"><button class="add detail-add" id="detailAdd" ${(productVariants.length > 0 || (!hasRental && !product.inStock)) ? 'disabled' : ''}><span>${productVariants.length > 0 ? 'Elige un acabado' : (!hasRental && !product.inStock ? 'Sin stock' : 'Añadir al carrito')}</span><span>${productVariants.length > 0 || (!hasRental && !product.inStock) ? '—' : '+'}</span></button><a class="button secondary back-button" href="${categoryHref(product.category)}">← Volver a ${escapeHTML(categories[product.category])}</a></div><div class="detail-mini-note"><span>✓</span><span>Compra directa y atención personal.</span></div><div class="detail-basic-meta" aria-label="Datos del producto"><div><strong>Categoría:</strong> <span id="detailCategoryValue">${escapeHTML(categories[product.category] || product.category || '—')}</span></div><div><strong>Tipo:</strong> <span id="detailTypeValue">${escapeHTML(product.productType || '—')}</span></div><div id="detailBrandRow" ${product.brand ? '' : 'hidden'}><strong>Marca:</strong> <span id="detailBrandValue">${escapeHTML(product.brand || '—')}</span></div></div></div></section>${supportCards}${detailDescription}</main>${renderRelatedProducts(product, products)}${renderFooter(products)}${cartMarkup()}`;
-  if (productVariants.length > 0) activeProduct = null;
-  wireCategoryNavigation(); wireMobileMenu(); wireSearch(); wireImageFallback(document.querySelector('.product-detail-page')); document.querySelectorAll('[data-detail-variant]').forEach(button => button.addEventListener('click', () => {
-    const variantId = button.dataset.detailVariant;
-    const next = productVariants.find(item => String(item.id) === String(variantId));
-    if (!next || next.inStock === false || activeProduct && String(next.id) === String(activeProduct.id)) return;
-    activeProduct = next;
-    images = productImages(activeProduct);
-    selected = 0;
-
-    const main = document.querySelector('#detailMainImage');
-    const thumbRow = document.querySelector('.thumbnail-row');
-    if (main && images[0]) {
-      main.classList.add('is-changing');
-      const preloader = new Image();
-      preloader.onload = () => {
-        main.src = images[0];
-        main.alt = activeProduct.name || product.name;
-        requestAnimationFrame(() => {
-          main.classList.remove('is-changing');
-          main.classList.add('is-entering');
-          window.setTimeout(() => main.classList.remove('is-entering'), 380);
-        });
-      };
-      preloader.onerror = () => { main.src = images[0]; main.classList.remove('is-changing'); };
-      preloader.src = images[0];
-    }
-    if (thumbRow) {
-      thumbRow.innerHTML = images.length > 1
-        ? images.map((image, index) => `<button class="thumb ${index === 0 ? 'active' : ''}" data-image-index="${index}" type="button"><img data-fallback src="${escapeHTML(image)}" alt="Imagen ${index + 1}"></button>`).join('')
-        : '';
-      wireImageFallback(thumbRow);
-      thumbRow.querySelectorAll('[data-image-index]').forEach(bindThumb);
-    }
-
-    const title = document.querySelector('#detailProductTitle');
-    if (title) {
-      title.textContent = activeProduct.name || '';
-      const n = String(activeProduct.name || '').trim().length;
-      title.className = `detail-product-title ${n > 95 ? 'detail-title--xl' : n > 70 ? 'detail-title--long' : n > 48 ? 'detail-title--medium' : 'detail-title--short'}`;
-    }
-    document.querySelector('#detailBreadcrumbName')?.replaceChildren(document.createTextNode(activeProduct.name || ''));
-    document.querySelector('#detailSkuValue')?.replaceChildren(document.createTextNode(activeProduct.sku || '—'));
-    document.querySelector('#detailCategoryValue')?.replaceChildren(document.createTextNode(categories[activeProduct.category] || activeProduct.category || '—'));
-    document.querySelector('#detailTypeValue')?.replaceChildren(document.createTextNode(activeProduct.productType || '—'));
-    const brandRow = document.querySelector('#detailBrandRow');
-    if (brandRow) {
-      brandRow.hidden = !activeProduct.brand;
-      document.querySelector('#detailBrandValue')?.replaceChildren(document.createTextNode(activeProduct.brand || '—'));
-    }
-    document.querySelector('#detailVariantCurrent')?.replaceChildren(document.createTextNode(activeProduct.variantLabel || 'Selecciona un acabado'));
-    document.querySelectorAll('[data-detail-variant]').forEach(item => item.classList.toggle('is-active', String(item.dataset.detailVariant) === String(activeProduct.id)));
-
-    const price = document.querySelector('#detailPrice');
-    if (price) price.textContent = productPriceLabel(activeProduct);
-    const soldOut = !activeProduct.inStock;
-    const detailAdd = document.querySelector('#detailAdd');
-    if (detailAdd) {
-      detailAdd.disabled = soldOut;
-      detailAdd.innerHTML = `<span>${soldOut ? 'Sin stock' : 'Añadir al carrito'}</span><span>${soldOut ? '—' : '+'}</span>`;
-    }
-
-    const contactProduct = document.querySelector('.detail-contact-product strong');
-    const contactMeta = document.querySelector('.detail-contact-product small');
-    if (contactProduct) contactProduct.textContent = activeProduct.name || 'Producto';
-    if (contactMeta) contactMeta.textContent = `SKU ${activeProduct.sku || '—'} · ${money(activeProduct.salePrice ?? activeProduct.price ?? 0)}`;
-
-    const detailDescription = document.querySelector('.detail-description');
-    if (detailDescription) detailDescription.innerHTML = richDescriptionHTML(activeProduct.description);
-    const whatsappLink = document.querySelector('.detail-whatsapp-button');
-    if (whatsappLink && whatsappNumber) {
-      const msg = `Hola YHORS 👋, necesito más información sobre este producto.\n\nProducto: ${activeProduct.name || ''}\nSKU: ${activeProduct.sku || '—'}\nPrecio actual: ${money(activeProduct.salePrice ?? activeProduct.price ?? 0)}\n\n¿Podrían ayudarme con más información?`;
-      whatsappLink.href = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(msg)}`;
-    }
-  })); markPageEnter(); wireRelatedProducts(product, products); const bindThumb = button => button.addEventListener('click', () => {
+  app.innerHTML = `${renderHeader(product.category, products)}<main class="product-detail-page"><div class="breadcrumbs"><a href="${categoryHref(product.category)}">${escapeHTML(categories[product.category])}</a><span>/</span><strong>${escapeHTML(product.name)}</strong></div><section class="detail-layout"><div class="detail-gallery"><div class="detail-main-image"><img id="detailMainImage" data-fallback src="${escapeHTML(images[0])}" alt="${escapeHTML(product.name)}"></div>${images.length > 1 ? `<div class="thumbnail-row">${images.map((image, index) => `<button class="thumb ${index === 0 ? 'active' : ''}" data-image-index="${index}"><img data-fallback src="${escapeHTML(image)}" alt="Imagen ${index + 1}"></button>`).join('')}</div>` : ''}</div><div class="detail-copy"><span class="eyebrow">${escapeHTML(categories[product.category])}</span><h1 class="detail-product-title ${(() => { const n = String(product.name || '').trim().length; return n > 95 ? 'detail-title--xl' : n > 70 ? 'detail-title--long' : n > 48 ? 'detail-title--medium' : 'detail-title--short'; })()}">${escapeHTML(product.name)}</h1><div class="detail-price-wrap"><span class="detail-price-label">Precio</span><div class="detail-price" id="detailPrice">${productPriceLabel(product)}</div></div><div class="detail-sku" aria-label="SKU de YHORS"><span class="detail-sku-icon">⌑</span><span>SKU: <strong>${escapeHTML(product.sku || '—')}</strong></span></div>${modeOptions}<div class="detail-buy"><button class="add detail-add" id="detailAdd" ${!hasRental && !product.inStock ? 'disabled' : ''}><span>${!hasRental && !product.inStock ? 'Sin stock' : 'Añadir al carrito'}</span><span>${!hasRental && !product.inStock ? '—' : '+'}</span></button><a class="button secondary back-button" href="${categoryHref(product.category)}">← Volver a ${escapeHTML(categories[product.category])}</a></div><div class="detail-mini-note"><span>✓</span><span>Compra directa y atención personal.</span></div><div class="detail-basic-meta" aria-label="Datos del producto"><div><strong>Categoría:</strong> <span>${escapeHTML(categories[product.category] || product.category || '—')}</span></div><div><strong>Tipo:</strong> <span>${escapeHTML(product.productType || '—')}</span></div>${product.brand ? `<div><strong>Marca:</strong> <span>${escapeHTML(product.brand)}</span></div>` : ''}</div></div></section>${supportCards}${detailDescription}</main>${renderRelatedProducts(product, products)}${renderFooter(products)}${cartMarkup()}`;
+  wireCategoryNavigation(); wireMobileMenu(); wireSearch(); wireImageFallback(document.querySelector('.product-detail-page')); markPageEnter(); wireRelatedProducts(product, products); document.querySelectorAll('[data-image-index]').forEach(button => button.addEventListener('click', () => {
     const nextIndex = Number(button.dataset.imageIndex);
     if (!Number.isInteger(nextIndex) || !images[nextIndex] || nextIndex === selected) return;
     selected = nextIndex;
@@ -1383,25 +1289,23 @@ async function renderProductDetail(product, products, storefront) {
     preloader.onerror = () => { main.src = nextSrc; main.classList.remove('is-changing'); };
     preloader.src = nextSrc;
     document.querySelectorAll('.thumb').forEach(item => item.classList.toggle('active', item === button));
-  });
-  document.querySelectorAll('[data-image-index]').forEach(bindThumb);
+  }));
   const cart = wireCart(products, storefront); let purchaseMode = 'purchase';
   document.querySelectorAll('[data-purchase-mode]').forEach(button => button.addEventListener('click', () => {
     purchaseMode = button.dataset.purchaseMode;
     document.querySelectorAll('[data-purchase-mode]').forEach(item => item.classList.toggle('active', item === button));
-    document.querySelector('#detailPrice').firstChild.textContent = purchaseMode === 'rental' ? money(activeProduct?.rentalPrice) : (activeProduct ? productPriceLabel(activeProduct) : 'Selecciona un acabado');
+    document.querySelector('#detailPrice').firstChild.textContent = purchaseMode === 'rental' ? money(product.rentalPrice) : productPriceLabel(product);
     document.querySelector('#rentalDaysPicker')?.classList.toggle('hidden', purchaseMode !== 'rental');
     const detailAdd = document.querySelector('#detailAdd');
     if (detailAdd) {
-      const soldOut = purchaseMode === 'purchase' && (!activeProduct || !activeProduct.inStock);
+      const soldOut = purchaseMode === 'purchase' && !product.inStock;
       detailAdd.disabled = soldOut;
       detailAdd.innerHTML = `<span>${soldOut ? 'Sin stock' : 'Añadir al carrito'}</span><span>${soldOut ? '—' : '+'}</span>`;
     }
   }));
   document.querySelector('#detailAdd').addEventListener('click', e => {
-    if (productVariants.length > 0 && !activeProduct) return;
     const rentalDays = purchaseMode === 'rental' ? rentalDaysValue(document.querySelector('#rentalDays')?.value) : 1;
-    cart.addToCart(activeProduct || product, e.currentTarget, hasRental ? purchaseMode : 'purchase', rentalDays);
+    cart.addToCart(product, e.currentTarget, hasRental ? purchaseMode : 'purchase', rentalDays);
   });
 }
 
@@ -1416,19 +1320,7 @@ async function renderStore() {
     return;
   }
   const productSlugPath = location.pathname.match(/^\/producto\/([^/]+)\/?$/);
-  if (productSlugPath) {
-    const product = products.find(item => productSlug(item) === decodeURIComponent(productSlugPath[1]));
-    if (product) {
-      const requestedVariantId = new URLSearchParams(location.search).get('variante');
-      const selectedVariant = requestedVariantId && Array.isArray(product.variantOptions) ? product.variantOptions.find(item => String(item.id) === String(requestedVariantId)) : null;
-      if (selectedVariant) {
-        const detailProduct = { ...selectedVariant, variantOptions: product.variantOptions };
-        const detailProducts = products.some(item => String(item.id) === String(selectedVariant.id)) ? products : [...products, detailProduct];
-        return renderProductDetail(detailProduct, detailProducts, storefront);
-      }
-      return renderProductDetail(product, products, storefront);
-    }
-  }
+  if (productSlugPath) { const product = products.find(item => productSlug(item) === decodeURIComponent(productSlugPath[1])); if (product) return renderProductDetail(product, products, storefront); }
   const productId = new URLSearchParams(location.search).get('producto');
   if (productId) { const product = getProduct(productId, products); if (product) return renderProductDetail(product, products, storefront); }
   if (categoryKey) return renderCategoryPage(categoryKey);
@@ -1498,8 +1390,6 @@ function productForm(product = {}, classifications = {}) {
     <div class="field full"><label for="category">Categoría / universo</label><select id="category" name="category" required><option value="">Elegir Categoría</option>${Object.entries(categories).filter(([key]) => key !== 'all').map(([key, label]) => `<option value="${key}" ${selectedCategory === key ? 'selected' : ''}>${label}</option>`).join('')}</select><small class="field-help">Las clasificaciones se administran abajo. Elige una categoría para habilitar el resto del formulario.</small></div>
     <div class="field"><label for="name">Nombre del producto</label><input id="name" name="name" required maxlength="90" ${lock} value="${escapeHTML(product.name || '')}"></div>
     <div class="field"><label for="sku">SKU</label><input id="sku" name="sku" required maxlength="40" pattern="[A-Za-z0-9._-]+" ${lock} value="${escapeHTML(product.sku || '')}"><small class="field-help">Código único del producto. Ejemplo: YH-TEC-001</small></div>
-    <div class="field"><label for="variantLabel">Color / variante <small>(opcional)</small></label><input id="variantLabel" name="variantLabel" maxlength="80" ${lock} value="${escapeHTML(product.variantLabel || '')}" placeholder="Ej. Negro, Blanco, Silver"><small class="field-help">Si este producto pertenece a un modelo con variantes, aquí se guarda el color que se mostrará al venderlo.</small></div>
-    ${product.variantGroupId ? `<input type="hidden" id="variantGroupId" name="variantGroupId" value="${escapeHTML(product.variantGroupId)}"><input type="hidden" id="variantOfId" name="variantOfId" value="${escapeHTML(product.variantOfId || '')}">` : ''}
     <div class="field"><label for="brand">Marca</label><select id="brand" name="brand" ${lock}><option value="">Sin marca</option>${brands.map(v => `<option value="${escapeHTML(v)}" ${product.brand === v ? 'selected' : ''}>${escapeHTML(v)}</option>`).join('')}</select></div>
     <div class="field"><label for="productType">Tipo de producto</label><select id="productType" name="productType" ${lock}><option value="">Sin clasificación</option>${types.map(v => `<option value="${escapeHTML(v)}" ${product.productType === v ? 'selected' : ''}>${escapeHTML(v)}</option>`).join('')}</select></div>
     <div class="field"><label for="salePrice">Precio de venta (USD)</label><input id="salePrice" name="salePrice" required min="0" step="0.01" type="number" ${lock} value="${escapeHTML(product.salePrice ?? product.price ?? '')}"></div>
@@ -2098,7 +1988,7 @@ async function renderAdminGenerateOrder() {
   function drawLines() { document.querySelector('#generateOrderLines').innerHTML = generateOrderProductRows(lines); wireImageFallback(document.querySelector('#generateOrderLines')); updateTotals(); }
   function updateTotals() { const subtotal = lines.reduce((sum, line) => sum + Number(line.price || 0) * Number(line.quantity || 0) * (line.purchaseMode === 'rental' ? Math.max(1, Number(line.rentalDays || 1)) : 1), 0); const delivery = document.querySelector('input[name="generateDelivery"]:checked')?.value || 'office'; const shipping = delivery === 'local' ? 3 : delivery === 'courier' ? 5 : 0; document.querySelector('#generateSubtotal').textContent = money(subtotal); document.querySelector('#generateShipping').textContent = money(shipping); document.querySelector('#generateTotal').textContent = money(subtotal + shipping); customer.deliveryMethod = delivery; document.querySelector('#customerSummary') && drawCustomer(); }
   function addProduct(product, mode='purchase') { const rental = mode === 'rental'; if (rental && !(product.category === 'cosplay' && product.isRental === true && Number.isFinite(Number(product.rentalPrice)))) return; const id = `${product.id}::${mode}`; const existing = lines.find(line => line.id === id); if (existing) existing.quantity = Math.min(99, Number(existing.quantity || 0) + 1); else lines.push({ ...product, id, productId: product.id, requiresDeviceIdentifier: product.requiresDeviceIdentifier !== false, price: Number(rental ? product.rentalPrice : (product.salePrice ?? product.price)), purchaseMode: mode, rentalDays: rental ? 1 : null, quantity: 1 }); drawLines(); }
-  function drawPicker() { const query = (document.querySelector('#generateProductSearch')?.value || '').trim().toLowerCase(); const category = document.querySelector('#generateProductCategory')?.value || ''; const filtered = products.filter(product => { const hay = `${product.name || ''} ${product.sku || ''} ${product.brand || ''} ${product.productType || ''}`.toLowerCase(); return (!query || hay.includes(query)) && (!category || product.category === category); }); const list = document.querySelector('#generatePickerList'); list.innerHTML = filtered.length ? filtered.map(product => { const stock = Number(product.stock || 0); const rental = product.category === 'cosplay' && product.isRental === true && Number.isFinite(Number(product.rentalPrice)); return `<article class="generate-picker-product"><img src="${escapeHTML(productImages(product)[0])}" data-fallback alt=""><div class="generate-picker-info"><strong>${escapeHTML(product.name)}</strong><small>SKU: ${escapeHTML(product.sku || '—')}${product.variantLabel ? ` · Color: ${escapeHTML(product.variantLabel)}` : ''} · ${escapeHTML(categories[product.category] || product.category || 'Producto')}</small><b>${money(product.salePrice ?? product.price ?? 0)} · Stock ${stock}</b></div><div class="generate-picker-actions"><button type="button" class="button primary small" data-add-generate="${escapeHTML(product.id)}" data-mode="purchase">Agregar</button>${rental ? `<button type="button" class="button secondary small" data-add-generate="${escapeHTML(product.id)}" data-mode="rental">Alquiler</button>` : ''}</div></article>`; }).join('') : '<div class="generate-empty-state"><span>⌕</span><strong>No encontramos productos</strong><small>Prueba con otro nombre, SKU o categoría.</small></div>'; wireImageFallback(list); list.querySelectorAll('[data-add-generate]').forEach(button => button.addEventListener('click', () => { const product = products.find(item => item.id === button.dataset.addGenerate); if (product) addProduct(product, button.dataset.mode); })); }
+  function drawPicker() { const query = (document.querySelector('#generateProductSearch')?.value || '').trim().toLowerCase(); const category = document.querySelector('#generateProductCategory')?.value || ''; const filtered = products.filter(product => { const hay = `${product.name || ''} ${product.sku || ''} ${product.brand || ''} ${product.productType || ''}`.toLowerCase(); return (!query || hay.includes(query)) && (!category || product.category === category); }); const list = document.querySelector('#generatePickerList'); list.innerHTML = filtered.length ? filtered.map(product => { const stock = Number(product.stock || 0); const rental = product.category === 'cosplay' && product.isRental === true && Number.isFinite(Number(product.rentalPrice)); return `<article class="generate-picker-product"><img src="${escapeHTML(productImages(product)[0])}" data-fallback alt=""><div class="generate-picker-info"><strong>${escapeHTML(product.name)}</strong><small>SKU: ${escapeHTML(product.sku || '—')} · ${escapeHTML(categories[product.category] || product.category || 'Producto')}</small><b>${money(product.salePrice ?? product.price ?? 0)} · Stock ${stock}</b></div><div class="generate-picker-actions"><button type="button" class="button primary small" data-add-generate="${escapeHTML(product.id)}" data-mode="purchase">Agregar</button>${rental ? `<button type="button" class="button secondary small" data-add-generate="${escapeHTML(product.id)}" data-mode="rental">Alquiler</button>` : ''}</div></article>`; }).join('') : '<div class="generate-empty-state"><span>⌕</span><strong>No encontramos productos</strong><small>Prueba con otro nombre, SKU o categoría.</small></div>'; wireImageFallback(list); list.querySelectorAll('[data-add-generate]').forEach(button => button.addEventListener('click', () => { const product = products.find(item => item.id === button.dataset.addGenerate); if (product) addProduct(product, button.dataset.mode); })); }
   document.querySelector('#generateProductSearch')?.addEventListener('input', drawPicker); document.querySelector('#generateProductCategory')?.addEventListener('change', drawPicker);
   document.querySelector('#generateCustomerForm')?.addEventListener('submit', async event => {
     event.preventDefault();
@@ -4845,7 +4735,7 @@ function inventoryPageMarkup(products = [], options = {}) {
       : Object.values(classifications[key] || {}).flat();
     return [...new Set(source.filter(Boolean))].sort((a,b) => String(a).localeCompare(String(b), 'es', { sensitivity:'base' }));
   };
-  const renderRecord = product => {
+  const rows = products.length ? products.map(product => {
     const images = productImages(product).filter(src => src !== placeholder);
     const hasImages = images.length > 0;
     const profit = Number(product.salePrice ?? product.price ?? 0) - Number(product.purchasePrice ?? 0);
@@ -4906,29 +4796,9 @@ function inventoryPageMarkup(products = [], options = {}) {
 
         <div class="inventory-image-status ${hasImages ? 'has-images' : 'missing-images'}"><span>${hasImages ? '✓' : '⚠'}</span><strong>${hasImages ? `${images.length} imagen${images.length === 1 ? '' : 'es'} cargada${images.length === 1 ? '' : 's'}` : 'SIN IMAGEN'}</strong>${!hasImages ? '<small>Agrega las fotos desde la ficha del producto cuando tengas tiempo.</small>' : ''}</div>
 
-        <div class="inventory-record-actions">${inventoryReadOnly ? '<span class="inventory-readonly-note">Solo consulta · stock disponible</span>' : `<button class="button secondary small" type="button" data-inventory-edit>Editar ficha</button><button class="button secondary small" type="button" data-inventory-variant>+ Añadir variante</button><button class="button danger small" type="button" data-inventory-delete>Eliminar producto</button><span class="inventory-edit-hint">Los cambios se realizan desde “Editar ficha”.</span><span class="message" data-inventory-message></span>`}</div>
+        <div class="inventory-record-actions">${inventoryReadOnly ? '<span class="inventory-readonly-note">Solo consulta · stock disponible</span>' : '<button class="button secondary small" type="button" data-inventory-edit>Editar ficha</button><button class="button primary small" type="button" data-inventory-save disabled>Guardar cambios</button><button class="button secondary small" type="button" data-inventory-cancel disabled>Cancelar</button><span class="message" data-inventory-message></span>'}</div>
       </div>
     </article>`;
-  };
-  const modelGroups = new Map();
-  products.forEach(product => {
-    const key = product.variantGroupId ? `group:${product.variantGroupId}` : `single:${product.id}`;
-    if (!modelGroups.has(key)) modelGroups.set(key, []);
-    modelGroups.get(key).push(product);
-  });
-  const rows = products.length ? [...modelGroups.values()].map(group => {
-    const lead = group[0];
-    const isModel = group.length > 1 || Boolean(lead?.variantGroupId);
-    const totalStock = group.reduce((sum, item) => sum + Number(item.stock || 0), 0);
-    const publishedCount = group.filter(item => item.published !== false && Number(item.stock || 0) > 0).length;
-    const modelLabel = lead?.name || 'Modelo sin nombre';
-    const variantCount = group.length;
-    const groupKey = lead?.variantGroupId || lead?.id || '';
-    const status = isModel
-      ? `${variantCount} variante${variantCount === 1 ? '' : 's'} · ${totalStock} unidad${totalStock === 1 ? '' : 'es'} · ${publishedCount ? `${publishedCount} publicada${publishedCount === 1 ? '' : 's'}` : 'Solo inventario'}`
-      : `1 producto · ${totalStock} unidad${totalStock === 1 ? '' : 'es'} · ${lead?.published !== false ? 'Publicado' : 'Solo inventario'}`;
-    const header = `<div class="inventory-model-summary"><div class="inventory-model-summary-main"><span class="eyebrow">${isModel ? 'MODELO' : 'PRODUCTO'} · ${escapeHTML(categories[lead.category] || lead.category || 'Producto')}</span><h3>${escapeHTML(modelLabel)}</h3><small>${status}</small></div><div class="inventory-model-summary-actions"><button type="button" class="button secondary small" data-model-toggle="${escapeHTML(groupKey)}">${isModel ? 'Ver variantes' : 'Ver producto'}</button></div></div>`;
-    return `<section class="inventory-model-group ${isModel ? 'is-model' : 'is-single'}" data-model-group="${escapeHTML(groupKey)}">${header}<div class="inventory-model-variants is-collapsed" data-model-variants="${escapeHTML(groupKey)}">${group.map(renderRecord).join('')}</div></section>`;
   }).join('') : '<div class="empty">No hay productos registrados.</div>';
 
   return `<main class="admin-shell"><div class="admin-wrap">
@@ -4950,7 +4820,7 @@ function inventoryPageMarkup(products = [], options = {}) {
       </section>
 
       <section class="inventory-workflow-card inventory-products-card">
-        <div class="inventory-products-heading"><div><span class="eyebrow">04 · Registro</span><h2>Productos ya registrados</h2></div><div class="inventory-products-heading-actions"><button class="button danger small" type="button" id="inventoryFindDuplicates">Revisar repetidos</button><span class="inventory-count inventory-count-large" id="inventoryPageCount">${products.length} productos</span></div></div>
+        <div class="inventory-products-heading"><div><span class="eyebrow">04 · Registro</span><h2>Productos ya registrados</h2></div><span class="inventory-count inventory-count-large" id="inventoryPageCount">${products.length} productos</span></div>
         <div class="inventory-toolbar inventory-toolbar-extended">
           <label class="inventory-search"><span aria-hidden="true">⌕</span><input id="inventoryPageSearch" type="search" placeholder="Buscar por nombre, SKU, marca, tipo o etiqueta…" autocomplete="off"><button id="clearInventoryPageSearch" type="button" aria-label="Limpiar búsqueda">×</button></label>
           <label class="inventory-filter"><span>Tipo de producto</span><select id="inventoryPageTypeFilter"><option value="">Todos los tipos</option>${allValues('productTypes').map(v=>`<option value="${escapeHTML(v)}">${escapeHTML(v)}</option>`).join('')}</select></label>
@@ -4965,15 +4835,6 @@ function inventoryPageMarkup(products = [], options = {}) {
       <div class="inventory-classification-dialog" role="dialog" aria-modal="true" aria-labelledby="inventoryClassificationTitle">
         <div class="inventory-classification-dialog-head"><div><span class="eyebrow">02 · Organización</span><h2 id="inventoryClassificationTitle">Clasificaciones</h2><p>Marcas y tipos de producto, organizados por universo.</p></div><button type="button" class="product-image-picker-close" data-close-inventory-classifications aria-label="Cerrar">×</button></div>
         ${classificationPanel(classifications).replace('<section class="admin-panel classification-panel" id="classificationPanel">','<section class="classification-modal-content" id="classificationPanel">')}
-      </div>
-    </div>
-    <div class="inventory-classification-modal inventory-duplicates-modal" id="inventoryDuplicatesModal" hidden>
-      <div class="inventory-classification-backdrop" data-close-inventory-duplicates></div>
-      <div class="inventory-classification-dialog inventory-duplicates-dialog" role="dialog" aria-modal="true" aria-labelledby="inventoryDuplicatesTitle">
-        <div class="inventory-classification-dialog-head"><div><span class="eyebrow">04 · Limpieza</span><h2 id="inventoryDuplicatesTitle">Productos repetidos</h2><p>YHORS detecta fichas prácticamente idénticas y propone conservar la más antigua. Revisa antes de eliminar.</p></div><button type="button" class="product-image-picker-close" data-close-inventory-duplicates aria-label="Cerrar">×</button></div>
-        <div class="inventory-duplicates-summary" id="inventoryDuplicatesSummary"></div>
-        <div class="inventory-duplicates-list" id="inventoryDuplicatesList"></div>
-        <div class="inventory-duplicates-actions"><span class="message" id="inventoryDuplicatesMessage"></span><button type="button" class="button secondary" data-close-inventory-duplicates>Cancelar</button><button type="button" class="button danger" id="inventoryDeleteDuplicates">Eliminar seleccionados</button></div>
       </div>
     </div>
     <div class="inventory-classification-modal inventory-category-modal" id="inventoryCategoryModal" hidden>
@@ -5359,68 +5220,20 @@ async function renderFlyerPreview() {
   wireImageFallback(document.querySelector('.flyer-page'));
 }
 
-function openInventoryNewProductModal({ classifications, product = null, products = [], onSaved }) {
+function openInventoryNewProductModal({ classifications, product = null, onSaved }) {
   document.querySelector('#inventoryNewProductModal')?.remove();
   document.querySelector('#productImagePickerModal')?.remove();
   const modal = document.createElement('div');
   modal.id = 'inventoryNewProductModal';
   modal.className = 'inventory-new-product-modal';
   const editingProduct = Boolean(product?.id);
-  modal.innerHTML = `<div class="inventory-new-product-backdrop" data-inventory-new-close></div><div class="inventory-new-product-dialog" role="dialog" aria-modal="true" aria-labelledby="inventoryNewProductTitle"><div class="inventory-new-product-head"><div><span class="eyebrow">INVENTARIO · ${editingProduct ? 'EDITAR PRODUCTO' : 'NUEVO PRODUCTO'}</span><h2 id="inventoryNewProductTitle">${editingProduct ? 'Editar producto' : 'Agregar nuevo producto'}</h2><small>Completa la ficha comercial, existencias y las imágenes sin salir de Inventario.</small></div><button type="button" class="product-image-picker-close" data-inventory-new-close aria-label="Cerrar">×</button></div><div id="inventoryNewProductFormArea"></div><div id="inventoryVariantManager"></div></div>`;
+  modal.innerHTML = `<div class="inventory-new-product-backdrop" data-inventory-new-close></div><div class="inventory-new-product-dialog" role="dialog" aria-modal="true" aria-labelledby="inventoryNewProductTitle"><div class="inventory-new-product-head"><div><span class="eyebrow">INVENTARIO · ${editingProduct ? 'EDITAR PRODUCTO' : 'NUEVO PRODUCTO'}</span><h2 id="inventoryNewProductTitle">${editingProduct ? 'Editar producto' : 'Agregar nuevo producto'}</h2><small>Completa la ficha comercial, existencias y las imágenes sin salir de Inventario.</small></div><button type="button" class="product-image-picker-close" data-inventory-new-close aria-label="Cerrar">×</button></div><div id="inventoryNewProductFormArea"></div></div>`;
   document.body.appendChild(modal);
   const area = modal.querySelector('#inventoryNewProductFormArea');
-  const variantManager = modal.querySelector('#inventoryVariantManager');
   let draft = product ? { ...product } : {};
-  const renderVariantManager = () => {
-    if (!variantManager || !editingProduct) { if (variantManager) variantManager.innerHTML = ''; return; }
-    const groupId = product?.variantGroupId || '';
-    const variants = groupId ? products.filter(item => String(item.variantGroupId || '') === String(groupId)) : [product];
-    const candidates = products.filter(item => String(item.id) !== String(product.id) && !item.variantGroupId);
-    const modelName = product?.name || 'Este modelo';
-    variantManager.innerHTML = `<section class="inventory-variant-manager"><div class="inventory-variant-manager-head"><div><span class="eyebrow">MISMO MODELO</span><h3>${escapeHTML(modelName)}</h3><p>Todos los colores son SKUs reales: cada uno conserva su propio stock, precio, compras, fotos y series/IMEI.</p></div><button type="button" class="button primary small" id="createProductVariant">+ Crear variante</button></div>${variants.length ? `<div class="inventory-variant-list">${variants.map(item => `<div class="inventory-variant-row ${String(item.id) === String(product.id) ? 'is-current' : ''}"><div><strong>${escapeHTML(item.variantLabel || 'Sin color asignado')}</strong><small>${escapeHTML(item.sku || '—')} · Stock ${Number(item.stock || 0)} · ${money(item.salePrice ?? item.price ?? 0)}</small></div><div class="inventory-variant-row-actions"><span>${item.published === false ? 'Solo inventario' : 'Publicado'}</span>${String(item.id) !== String(product.id) && groupId ? `<button type="button" class="button secondary small" data-unlink-variant="${escapeHTML(item.id)}">Desvincular</button>` : ''}</div></div>`).join('')}</div>` : `<div class="inventory-variant-empty">Todavía no hay variantes enlazadas.</div>`}<div class="inventory-variant-link"><div><strong>Vincular un SKU ya existente</strong><small>Busca un producto independiente y conviértelo en otra variante sin perder su stock, SKU o precio.</small></div><select id="existingVariantProduct"><option value="">Elegir SKU existente…</option>${candidates.map(item => `<option value="${escapeHTML(item.id)}">${escapeHTML(item.sku || 'SIN SKU')} · ${escapeHTML(item.variantLabel || item.name || 'Producto')}</option>`).join('')}</select><input id="existingVariantLabel" maxlength="80" placeholder="Color / variante · Ej. Negro"><button type="button" class="button secondary small" id="linkExistingVariant" ${candidates.length ? '' : 'disabled'}>Vincular</button></div></section>`;
-    modal.querySelectorAll('[data-unlink-variant]').forEach(button => button.addEventListener('click', async () => {
-      const variantId = button.dataset.unlinkVariant;
-      const target = variants.find(item => String(item.id) === String(variantId));
-      if (!target) return;
-      const confirmed = await showYhorsConfirm('¿Desvincular esta variante?', `<strong>${escapeHTML(target.variantLabel || target.name || 'Esta variante')}</strong> seguirá existiendo como producto independiente. No se borrará su SKU, stock, precio, fotos ni historial.`);
-      if (!confirmed) return;
-      try {
-        const result = await request(`/api/admin/products/${encodeURIComponent(product.id)}/unlink-variant`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ variantId }) });
-        products = products.map(item => result.products.find(v => v.id === item.id) || item);
-        renderVariantManager();
-        await onSaved?.(result.base, result.products);
-      } catch (error) { alert(error.message || 'No se pudo desvincular la variante.'); }
-    }));
-    modal.querySelector('#createProductVariant')?.addEventListener('click', () => {
-      const group = product?.variantGroupId || crypto.randomUUID();
-      const clone = { ...product, id: undefined, sku: `${String(product.sku || 'YH-VAR').slice(0, 35)}-VAR`, stock: 0, published: false, hero: false, featured: false, variantGroupId: group, variantOfId: product?.variantOfId || product.id, variantLabel: '', images: Array.isArray(product.images) ? [...product.images] : (product.image ? [product.image] : []) };
-      close();
-      openInventoryNewProductModal({ classifications, products, product: clone, onSaved: async saved => {
-        let base = product;
-        if (saved.variantGroupId && !product.variantGroupId) {
-          base = await request(`/api/admin/products/${encodeURIComponent(product.id)}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ variantGroupId: saved.variantGroupId, variantOfId: product.id, variantLabel: product.variantLabel || 'Sin color asignado' }) });
-        }
-        products = products.map(item => item.id === base.id ? base : item);
-        await onSaved?.(saved, [base, saved]);
-      } });
-    });
-    modal.querySelector('#linkExistingVariant')?.addEventListener('click', async () => {
-      const variantId = modal.querySelector('#existingVariantProduct')?.value; const variantLabel = modal.querySelector('#existingVariantLabel')?.value.trim() || '';
-      if (!variantId) return;
-      const confirmed = await showYhorsConfirm('¿Enlazar este SKU?', 'El producto conservará su propio stock, precio y compras, pero quedará agrupado con este modelo.');
-      if (!confirmed) return;
-      try {
-        const result = await request(`/api/admin/products/${encodeURIComponent(product.id)}/link-variant`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ variantId, variantLabel }) });
-        products = products.map(item => result.variants.find(v => v.id === item.id) || item);
-        renderVariantManager();
-        await onSaved?.(result.base, result.variants);
-      } catch (error) { alert(error.message || 'No se pudo enlazar la variante.'); }
-    });
-  };
   const close = () => { document.querySelector('#productImagePickerModal')?.remove(); modal.remove(); };
   const draw = () => {
     area.innerHTML = productForm(draft, classifications);
-    renderVariantManager();
     wireImageFallback(area);
     area.querySelectorAll('[data-open-image-picker]').forEach(button => {
       button.disabled = false;
@@ -5511,13 +5324,6 @@ function openInventoryNewProductModal({ classifications, product = null, product
             : (editor?.innerHTML?.trim() || hidden.value || '');
         }
         const data=Object.fromEntries(new FormData(form).entries());
-        // La descripción vive en un editor contenteditable. En algunos navegadores
-        // FormData puede tomar el textarea oculto antes de que se sincronice.
-        // Para crear/editar nunca permitimos enviar una descripción vacía si el
-        // editor sí contiene contenido.
-        if (!String(data.description || '').trim() && editor?.innerHTML?.trim()) {
-          data.description = editor.innerHTML.trim();
-        }
         data.heroTitle=String(form.elements.heroTitle?.value || '').trim(); data.heroDescription=String(form.elements.heroDescription?.value || '').trim(); data.published=form.elements.published?form.elements.published.checked:true; data.requiresDeviceIdentifier=form.elements.requiresDeviceIdentifier?form.elements.requiresDeviceIdentifier.checked:false; data.isRental=form.elements.isRental?form.elements.isRental.checked:false; data.featured=Boolean(product?.featured); data.hero=Boolean(product?.hero); data.price=data.salePrice; data.purchasePrice=purchasePrice; data.stock=stock; data.stockMin=stockMin; data.tags=String(form.elements.tags?.value||'').split(',').map(v=>v.trim()).filter(Boolean).slice(0,30); data.images=[data.image,data.image2,data.image3,data.image4].filter(Boolean);
         const pending=window.__yhorsPendingImageFiles||{};
         for(let slot=1;slot<=4;slot++){const file=pending[slot];if(!file)continue;const fd=new FormData();fd.append('image',file);const uploaded=await request('/api/admin/upload',{method:'POST',body:fd});const key=slot===1?'image':`image${slot}`;data[key]=uploaded.image;data.images[slot-1]=uploaded.image;}
@@ -5566,14 +5372,6 @@ async function renderAdminInventory() {
     const inventoryList = inventoryTemplate.content.querySelector('#inventoryPageList');
     list.innerHTML = inventoryList ? inventoryList.innerHTML : '<div class="empty">No hay productos.</div>';
     wireImageFallback(list);
-    list.querySelectorAll('[data-model-toggle]').forEach(button => button.addEventListener('click', () => {
-      const group = button.closest('[data-model-group]');
-      const variants = group?.querySelector('[data-model-variants]');
-      if (!variants) return;
-      const collapsed = variants.classList.toggle('is-collapsed');
-      const isModel = group?.classList.contains('is-model');
-      button.textContent = collapsed ? (isModel ? 'Ver variantes' : 'Ver producto') : (isModel ? 'Ocultar variantes' : 'Ocultar producto');
-    }));
 
     const refreshProfit = record => {
       const buy = Number(record.querySelector('[data-field="purchasePrice"]')?.value || 0);
@@ -5592,58 +5390,12 @@ async function renderAdminInventory() {
       record.querySelector('[data-inventory-edit]')?.addEventListener('click', () => {
         const product = products.find(p => p.id === record.dataset.inventoryId);
         if (!product) return;
-        openInventoryNewProductModal({ classifications, products, product, onSaved: async (updated, relatedVariants = []) => {
-          const changed = Array.isArray(relatedVariants) && relatedVariants.length ? relatedVariants : [updated];
-          products = products.map(p => changed.find(item => item.id === p.id) || p);
-          draw();
-        }});
-      });
-      record.querySelector('[data-inventory-variant]')?.addEventListener('click', () => {
-        const product = products.find(p => p.id === record.dataset.inventoryId);
-        if (!product) return;
-        const group = product.variantGroupId || crypto.randomUUID();
-        const clone = { ...product, id: undefined, sku: `${String(product.sku || 'YH-VAR').slice(0, 35)}-VAR`, stock: 0, published: false, hero: false, featured: false, variantGroupId: group, variantOfId: product.variantOfId || product.id, variantLabel: '', images: Array.isArray(product.images) ? [...product.images] : (product.image ? [product.image] : []) };
-        openInventoryNewProductModal({ classifications, products, product: clone, onSaved: async created => {
-          let base = product;
-          if (!product.variantGroupId) {
-            base = await request(`/api/admin/products/${encodeURIComponent(product.id)}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ variantGroupId: group, variantOfId: product.id, variantLabel: product.variantLabel || 'Sin color asignado' }) });
-          }
-          products = products.map(p => p.id === base.id ? base : p);
-          products = [created, ...products.filter(p => p.id !== created.id)];
+        openInventoryNewProductModal({ classifications, product, onSaved: async updated => {
+          products = products.map(p => p.id === updated.id ? updated : p);
           draw();
         }});
       });
       record.querySelector('[data-inventory-cancel]')?.addEventListener('click', () => draw());
-      record.querySelector('[data-inventory-delete]')?.addEventListener('click', async () => {
-        const product = products.find(p => p.id === record.dataset.inventoryId);
-        if (!product) return;
-        const stock = Number(product.stock || 0);
-        const confirmed = await showYhorsConfirm(
-          '¿Eliminar este producto?',
-          `Se eliminará <strong>${escapeHTML(product.name || 'este producto')}</strong> con SKU <strong>${escapeHTML(product.sku || 'sin SKU')}</strong> del inventario. ${stock > 0 ? `Actualmente tiene <strong>${stock}</strong> unidad(es) registradas. ` : ''}También dejará de aparecer en la web. Esta acción no se puede deshacer.`,
-          { cancelText: 'Cancelar', confirmText: 'Eliminar producto' }
-        );
-        if (!confirmed) return;
-        const button = record.querySelector('[data-inventory-delete]');
-        const message = record.querySelector('[data-inventory-message]');
-        if (button) { button.disabled = true; button.textContent = 'Eliminando…'; }
-        try {
-          await request(`/api/admin/products/${encodeURIComponent(product.id)}`, { method: 'DELETE' });
-          products = products.filter(p => p.id !== product.id);
-          const settings = await request('/api/admin/storefront').catch(() => ({ heroProductIds: [], featuredProductIds: [] }));
-          const cleanSettings = {
-            ...settings,
-            heroProductIds: (settings.heroProductIds || []).filter(id => String(id) !== String(product.id)),
-            featuredProductIds: (settings.featuredProductIds || []).filter(id => String(id) !== String(product.id))
-          };
-          await request('/api/admin/storefront', { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(cleanSettings) }).catch(() => {});
-          draw();
-          alert(`Producto eliminado correctamente${stock > 0 ? ` · ${stock} unidad(es) estaban registradas en este SKU` : ''}.`);
-        } catch (e) {
-          if (button) { button.disabled = false; button.textContent = 'Eliminar producto'; }
-          if (message) { message.className='message error'; message.textContent=e.message || 'No se pudo eliminar el producto.'; }
-        }
-      });
       record.querySelector('[data-inventory-save]')?.addEventListener('click', async () => {
         const product = products.find(p => p.id === record.dataset.inventoryId);
         if (!product) return;
@@ -5735,83 +5487,6 @@ async function renderAdminInventory() {
   document.querySelector('#openInventoryClassifications')?.addEventListener('click', () => { if (!classificationModal) return; classificationModal.hidden = false; requestAnimationFrame(() => classificationModal.classList.add('is-open')); document.body.classList.add('generate-modal-open'); });
   classificationModal?.querySelectorAll('[data-close-inventory-classifications]').forEach(btn => btn.addEventListener('click', closeClassificationModal));
 
-  const duplicatesModal = document.querySelector('#inventoryDuplicatesModal');
-  const closeDuplicatesModal = () => { if (!duplicatesModal) return; duplicatesModal.classList.remove('is-open'); document.body.classList.remove('generate-modal-open'); setTimeout(() => { duplicatesModal.hidden = true; }, 180); };
-  const duplicateKey = product => {
-    const normalize = value => String(value ?? '').trim().toLocaleLowerCase('es').replace(/\s+/g, ' ');
-    const images = productImages(product).filter(src => src && src !== placeholder).map(normalize).sort().join('|');
-    return [
-      normalize(product.name), normalize(product.variantLabel || product.color || ''), normalize(product.brand),
-      normalize(product.productType), normalize(product.category), Number(product.purchasePrice ?? 0).toFixed(2),
-      Number(product.salePrice ?? product.price ?? 0).toFixed(2), normalize(product.description), images
-    ].join('¦');
-  };
-  const findDuplicateGroups = () => {
-    const groups = new Map();
-    products.forEach(product => {
-      const key = duplicateKey(product);
-      if (!key || key.startsWith('¦')) return;
-      if (!groups.has(key)) groups.set(key, []);
-      groups.get(key).push(product);
-    });
-    return [...groups.values()].filter(group => group.length > 1).sort((a,b) => new Date(a[0].createdAt || 0) - new Date(b[0].createdAt || 0));
-  };
-  const renderDuplicateManager = () => {
-    const list = document.querySelector('#inventoryDuplicatesList');
-    const summary = document.querySelector('#inventoryDuplicatesSummary');
-    const message = document.querySelector('#inventoryDuplicatesMessage');
-    const removeButton = document.querySelector('#inventoryDeleteDuplicates');
-    if (!list || !summary) return;
-    const groups = findDuplicateGroups();
-    if (!groups.length) {
-      summary.innerHTML = '<div class="inventory-duplicates-empty"><strong>✓ No encontramos repetidos exactos.</strong><small>Las variantes legítimas con distinto color o datos diferentes no se marcan como repetidas.</small></div>';
-      list.innerHTML = '';
-      if (removeButton) removeButton.disabled = true;
-      return;
-    }
-    const totalDuplicates = groups.reduce((sum, group) => sum + group.length - 1, 0);
-    summary.innerHTML = `<strong>${totalDuplicates} repetido${totalDuplicates === 1 ? '' : 's'} detectado${totalDuplicates === 1 ? '' : 's'}</strong><small>En cada grupo se propone conservar el registro más antiguo y eliminar los demás.</small>`;
-    list.innerHTML = groups.map((group, groupIndex) => {
-      const keep = [...group].sort((a,b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0))[0];
-      const duplicates = group.filter(p => p.id !== keep.id);
-      return `<section class="inventory-duplicate-group"><div class="inventory-duplicate-group-head"><div><span class="eyebrow">Grupo ${groupIndex + 1}</span><h3>${escapeHTML(keep.name || 'Producto sin nombre')}</h3><small>${escapeHTML(keep.brand || '')} · ${escapeHTML(keep.productType || '')} · ${escapeHTML(categories[keep.category] || keep.category || '')}</small></div><span class="inventory-duplicate-count">${group.length} registros</span></div><div class="inventory-duplicate-rows"><div class="inventory-duplicate-row is-keep"><span class="inventory-duplicate-check"></span><div><strong>CONSERVAR</strong><span>${escapeHTML(keep.sku || 'Sin SKU')} · ${Number(keep.stock || 0)} en stock</span></div><small>Registro más antiguo</small></div>${duplicates.map(product => `<label class="inventory-duplicate-row"><input type="checkbox" data-duplicate-delete="${escapeHTML(product.id)}" checked><span><strong>ELIMINAR</strong><span>${escapeHTML(product.sku || 'Sin SKU')} · ${Number(product.stock || 0)} en stock${product.variantLabel ? ` · ${escapeHTML(product.variantLabel)}` : ''}</span></span><small>Se borrará esta ficha</small></label>`).join('')}</div></section>`;
-    }).join('');
-    if (removeButton) removeButton.disabled = false;
-    if (message) { message.className = 'message'; message.textContent = ''; }
-  };
-  document.querySelector('#inventoryFindDuplicates')?.addEventListener('click', () => {
-    renderDuplicateManager();
-    if (!duplicatesModal) return;
-    duplicatesModal.hidden = false;
-    requestAnimationFrame(() => duplicatesModal.classList.add('is-open'));
-    document.body.classList.add('generate-modal-open');
-  });
-  duplicatesModal?.querySelectorAll('[data-close-inventory-duplicates]').forEach(btn => btn.addEventListener('click', closeDuplicatesModal));
-  document.querySelector('#inventoryDeleteDuplicates')?.addEventListener('click', async () => {
-    const ids = [...document.querySelectorAll('[data-duplicate-delete]:checked')].map(input => input.dataset.duplicateDelete).filter(Boolean);
-    const message = document.querySelector('#inventoryDuplicatesMessage');
-    if (!ids.length) { if (message) { message.className='message error'; message.textContent='No hay productos seleccionados para eliminar.'; } return; }
-    const selected = products.filter(product => ids.includes(product.id));
-    const stockTotal = selected.reduce((sum, product) => sum + Number(product.stock || 0), 0);
-    const confirmed = await showYhorsConfirm('¿Eliminar los productos repetidos seleccionados?', `Se eliminarán <strong>${ids.length}</strong> ficha(s). Actualmente suman <strong>${stockTotal}</strong> unidad(es) de inventario. Esta acción no se puede deshacer.`);
-    if (!confirmed) return;
-    const button = document.querySelector('#inventoryDeleteDuplicates');
-    if (button) { button.disabled = true; button.textContent = 'Eliminando…'; }
-    try {
-      for (const id of ids) await request(`/api/admin/products/${encodeURIComponent(id)}`, { method: 'DELETE' });
-      products = products.filter(product => !ids.includes(product.id));
-      const settings = await request('/api/admin/storefront').catch(() => ({ heroProductIds: [], featuredProductIds: [] }));
-      const cleanSettings = { ...settings, heroProductIds: (settings.heroProductIds || []).filter(id => !ids.includes(id)), featuredProductIds: (settings.featuredProductIds || []).filter(id => !ids.includes(id)) };
-      await request('/api/admin/storefront', { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(cleanSettings) }).catch(() => {});
-      draw();
-      closeDuplicatesModal();
-      alert(`Se eliminaron ${ids.length} producto(s) repetido(s).`);
-    } catch (e) {
-      if (message) { message.className='message error'; message.textContent=e.message || 'No se pudieron eliminar todos los repetidos.'; }
-      if (button) { button.disabled = false; button.textContent = 'Eliminar seleccionados'; }
-    }
-  });
-
   const categoryModal = document.querySelector('#inventoryCategoryModal');
   const closeCategoryModal = () => { if (!categoryModal) return; categoryModal.classList.remove('is-open'); document.body.classList.remove('generate-modal-open'); setTimeout(() => { categoryModal.hidden = true; }, 180); };
   const renderCategoryManager = () => {
@@ -5859,7 +5534,7 @@ async function renderAdminInventory() {
   renderCategoryManager();
   document.querySelector('#openInventoryCategories')?.addEventListener('click', () => { if (!categoryModal) return; categoryModal.hidden=false; renderCategoryManager(); requestAnimationFrame(() => categoryModal.classList.add('is-open')); document.body.classList.add('generate-modal-open'); });
   categoryModal?.querySelectorAll('[data-close-inventory-categories]').forEach(btn => btn.addEventListener('click', closeCategoryModal));
-  document.querySelector('#inventoryAddProduct')?.addEventListener('click', () => openInventoryNewProductModal({ classifications, products, onSaved: async created => { products = [created, ...products]; draw(); } }));
+  document.querySelector('#inventoryAddProduct')?.addEventListener('click', () => openInventoryNewProductModal({ classifications, onSaved: async created => { products = [created, ...products]; draw(); } }));
   draw();
   document.querySelector('#inventoryPageSearch')?.addEventListener('input', draw);
   document.querySelector('#inventoryPageCategoryFilter')?.addEventListener('change', draw);
@@ -6573,12 +6248,6 @@ async function renderAdmin() {
       submit.disabled = true; message.textContent = 'Guardando…';
       try {
         const data = Object.fromEntries(new FormData(form).entries());
-        // La descripción es HTML rico. El contenido real está en contenteditable;
-        // sincronízalo siempre antes de validar/enviar para evitar el falso aviso
-        // de "Revisa nombre, descripción, categoría y precio de venta".
-        if (!String(data.description || '').trim() && descriptionEditor?.innerHTML?.trim()) {
-          data.description = descriptionEditor.innerHTML.trim();
-        }
         // La descripción es HTML rico. Si el usuario NO tocó el editor, enviamos
         // exactamente la versión original y jamás una serialización accidental
         // del contenteditable. Si sí la editó, usamos el HTML actual del editor.
