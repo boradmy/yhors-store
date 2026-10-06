@@ -4799,7 +4799,7 @@ function inventoryPageMarkup(products = [], options = {}) {
 
         <div class="inventory-image-status ${hasImages ? 'has-images' : 'missing-images'}"><span>${hasImages ? '✓' : '⚠'}</span><strong>${hasImages ? `${images.length} imagen${images.length === 1 ? '' : 'es'} cargada${images.length === 1 ? '' : 's'}` : 'SIN IMAGEN'}</strong>${!hasImages ? '<small>Agrega las fotos desde la ficha del producto cuando tengas tiempo.</small>' : ''}</div>
 
-        <div class="inventory-record-actions">${inventoryReadOnly ? '<span class="inventory-readonly-note">Solo consulta · stock disponible</span>' : `<button class="button secondary small" type="button" data-inventory-edit>Editar ficha</button><button class="button secondary small" type="button" data-inventory-variant>+ Añadir variante</button><button class="button primary small" type="button" data-inventory-save disabled>Guardar cambios</button><button class="button secondary small" type="button" data-inventory-cancel disabled>Cancelar</button><span class="message" data-inventory-message></span>`}</div>
+        <div class="inventory-record-actions">${inventoryReadOnly ? '<span class="inventory-readonly-note">Solo consulta · stock disponible</span>' : `<button class="button secondary small" type="button" data-inventory-edit>Editar ficha</button><button class="button secondary small" type="button" data-inventory-variant>+ Añadir variante</button><button class="button primary small" type="button" data-inventory-save disabled>Guardar cambios</button><button class="button secondary small" type="button" data-inventory-cancel disabled>Cancelar</button><button class="button danger small" type="button" data-inventory-delete>Eliminar producto</button><span class="message" data-inventory-message></span>`}</div>
       </div>
     </article>`;
   }).join('') : '<div class="empty">No hay productos registrados.</div>';
@@ -5465,6 +5465,36 @@ async function renderAdminInventory() {
         }});
       });
       record.querySelector('[data-inventory-cancel]')?.addEventListener('click', () => draw());
+      record.querySelector('[data-inventory-delete]')?.addEventListener('click', async () => {
+        const product = products.find(p => p.id === record.dataset.inventoryId);
+        if (!product) return;
+        const stock = Number(product.stock || 0);
+        const confirmed = await showYhorsConfirm(
+          '¿Eliminar este producto?',
+          `Se eliminará <strong>${escapeHTML(product.name || 'este producto')}</strong> con SKU <strong>${escapeHTML(product.sku || 'sin SKU')}</strong> del inventario. ${stock > 0 ? `Actualmente tiene <strong>${stock}</strong> unidad(es) registradas. ` : ''}También dejará de aparecer en la web. Esta acción no se puede deshacer.`,
+          { cancelText: 'Cancelar', confirmText: 'Eliminar producto' }
+        );
+        if (!confirmed) return;
+        const button = record.querySelector('[data-inventory-delete]');
+        const message = record.querySelector('[data-inventory-message]');
+        if (button) { button.disabled = true; button.textContent = 'Eliminando…'; }
+        try {
+          await request(`/api/admin/products/${encodeURIComponent(product.id)}`, { method: 'DELETE' });
+          products = products.filter(p => p.id !== product.id);
+          const settings = await request('/api/admin/storefront').catch(() => ({ heroProductIds: [], featuredProductIds: [] }));
+          const cleanSettings = {
+            ...settings,
+            heroProductIds: (settings.heroProductIds || []).filter(id => String(id) !== String(product.id)),
+            featuredProductIds: (settings.featuredProductIds || []).filter(id => String(id) !== String(product.id))
+          };
+          await request('/api/admin/storefront', { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(cleanSettings) }).catch(() => {});
+          draw();
+          alert(`Producto eliminado correctamente${stock > 0 ? ` · ${stock} unidad(es) estaban registradas en este SKU` : ''}.`);
+        } catch (e) {
+          if (button) { button.disabled = false; button.textContent = 'Eliminar producto'; }
+          if (message) { message.className='message error'; message.textContent=e.message || 'No se pudo eliminar el producto.'; }
+        }
+      });
       record.querySelector('[data-inventory-save]')?.addEventListener('click', async () => {
         const product = products.find(p => p.id === record.dataset.inventoryId);
         if (!product) return;
