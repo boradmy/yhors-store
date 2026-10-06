@@ -3354,7 +3354,13 @@ function validateProduct(input, current = {}, allProducts = []) {
     ? (input.isRental === undefined ? current.isRental === true : (input.isRental === true || input.isRental === 'true'))
     : false;
   const rentalDaysRaw = category === 'cosplay' ? Number(input.rentalDays ?? current.rentalDays ?? 1) : null;
+  const variantGroupId = cleanText(input.variantGroupId ?? current.variantGroupId, 80);
+  const variantOfId = cleanText(input.variantOfId ?? current.variantOfId, 80);
+  const variantLabel = cleanText(input.variantLabel ?? current.variantLabel, 80);
 
+  if (variantOfId && variantOfId === String(current.id || '')) {
+    return { error: 'Una variante no puede enlazarse consigo misma.' };
+  }
   if (!Number.isFinite(purchasePriceRaw) || purchasePriceRaw < 0 || purchasePriceRaw > 100000000) {
     return { error: 'El precio de compra no es válido.' };
   }
@@ -3384,7 +3390,10 @@ function validateProduct(input, current = {}, allProducts = []) {
     published: input.published === undefined ? (current.published !== false) : (input.published === true || input.published === 'true'),
     featured: input.featured === undefined ? Boolean(current.featured) : (input.featured === true || input.featured === 'true'),
     hero: input.hero === undefined ? Boolean(current.hero) : (input.hero === true || input.hero === 'true'),
-    heroOrder: Number.isFinite(Number(input.heroOrder)) ? Math.max(0, Math.min(999, Number(input.heroOrder))) : (Number(current.heroOrder) || 0)
+    heroOrder: Number.isFinite(Number(input.heroOrder)) ? Math.max(0, Math.min(999, Number(input.heroOrder))) : (Number(current.heroOrder) || 0),
+    variantGroupId: variantGroupId || null,
+    variantOfId: variantOfId || null,
+    variantLabel: variantLabel || null
   }};
 }
 function deleteUploadedImage(image) {
@@ -6321,6 +6330,25 @@ app.put('/api/admin/products/:id', requireAdmin, (req, res) => {
     }
   });
   return res.json(products[index]);
+});
+
+app.post('/api/admin/products/:id/link-variant', requireAdmin, (req, res) => {
+  const products = readProducts();
+  const base = products.find(item => String(item.id) === String(req.params.id));
+  const variant = products.find(item => String(item.id) === String(req.body?.variantId || ''));
+  if (!base || !variant) return res.status(404).json({ error: 'Producto base o variante no encontrado.' });
+  if (base.id === variant.id) return res.status(400).json({ error: 'No puedes enlazar un producto consigo mismo.' });
+  const groupId = String(base.variantGroupId || variant.variantGroupId || crypto.randomUUID());
+  const label = cleanText(req.body?.variantLabel, 80);
+  const updated = products.map(item => {
+    if (item.id === base.id) return { ...item, variantGroupId: groupId, variantOfId: item.variantOfId || item.id, variantLabel: item.variantLabel || 'Base', updatedAt: new Date().toISOString() };
+    if (item.id === variant.id) return { ...item, variantGroupId: groupId, variantOfId: base.variantOfId || base.id, variantLabel: label || item.variantLabel || null, updatedAt: new Date().toISOString() };
+    return item;
+  }).map(normalizeProduct);
+  writeProducts(updated);
+  const linked = updated.filter(item => item.variantGroupId === groupId);
+  auditLog(req, 'Variante enlazada', 'Inventario', { baseProductId: base.id, variantProductId: variant.id, variantGroupId: groupId, variantLabel: label || variant.variantLabel || null });
+  return res.json({ base: updated.find(item => item.id === base.id), variant: updated.find(item => item.id === variant.id), variants: linked });
 });
 
 app.delete('/api/admin/products/:id', requireAdmin, (req, res) => {

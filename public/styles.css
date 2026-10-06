@@ -5991,3 +5991,18 @@ html:has(.admin-web-shell),body:has(.admin-web-shell),#app:has(.admin-web-shell)
 .refunds-panel .refund-section .section-heading h3{margin:4px 0 0;font-size:20px}
 .refunds-panel .refund-section .section-heading p{max-width:520px;margin:0}
 .refunds-panel .refund-annulled{opacity:.62;background:#faf8f4}.refunds-panel .refund-annulled td strong{text-decoration:line-through}.refunds-panel .refund-annulled small{color:#a66a1b;font-weight:800;letter-spacing:.06em}
+
+/* Variantes de producto · cada SKU conserva inventario independiente */
+.inventory-variant-manager{margin:18px 0 4px;padding:20px;border:1px solid #ddd6c8;border-radius:16px;background:#fbfaf7}
+.inventory-variant-manager-head{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:14px}
+.inventory-variant-manager-head h3{margin:4px 0 4px;font-size:20px;font-weight:600}
+.inventory-variant-manager-head p,.inventory-variant-link small{margin:0;color:#746f67;font-size:13px;line-height:1.5}
+.inventory-variant-list{display:grid;gap:8px;margin:12px 0}
+.inventory-variant-row{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:11px 13px;border:1px solid #e4ded2;border-radius:11px;background:#fff}
+.inventory-variant-row.is-current{border-color:#b58a43}
+.inventory-variant-row strong{display:block;font-size:14px}.inventory-variant-row small{display:block;margin-top:3px;color:#777168}.inventory-variant-row>span{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#8b8479}
+.inventory-variant-empty{padding:12px 14px;border:1px dashed #d8d0c2;border-radius:11px;color:#777168;font-size:13px;margin-bottom:12px}
+.inventory-variant-link{display:grid;grid-template-columns:minmax(180px,1fr) minmax(220px,280px) minmax(150px,210px) auto;gap:10px;align-items:end;padding-top:14px;border-top:1px solid #e6e0d6}
+.inventory-variant-link>div{display:flex;flex-direction:column;gap:3px}.inventory-variant-link select,.inventory-variant-link input{height:42px;border:1px solid #d8d0c2;border-radius:9px;background:#fff;padding:0 11px;font:inherit}
+.detail-variants{margin:18px 0 2px}.detail-variants-label{display:block;text-transform:uppercase;letter-spacing:.12em;font-size:11px;font-weight:700;color:#9a8e7e;margin-bottom:8px}.detail-variants-list{display:flex;flex-wrap:wrap;gap:8px}.detail-variant-chip{display:inline-flex;align-items:center;min-height:34px;padding:7px 12px;border:1px solid #ddd5c6;border-radius:999px;text-decoration:none;color:#292622;background:#fff;font-size:13px;transition:.18s ease}.detail-variant-chip:hover{border-color:#b58a43;transform:translateY(-1px)}.detail-variant-chip.is-active{border-color:#b58a43;background:#f3ecdf;font-weight:700}
+@media (max-width:800px){.inventory-variant-manager-head{flex-direction:column}.inventory-variant-link{grid-template-columns:1fr}.inventory-variant-link button{width:100%}}
