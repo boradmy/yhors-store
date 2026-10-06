@@ -5744,6 +5744,22 @@ html:has(.admin-web-shell),body:has(.admin-web-shell),#app:has(.admin-web-shell)
   font-size:clamp(2rem,3.35vw,3.45rem);
   line-height:1.01;
   margin:13px 0 20px;
+  overflow-wrap:anywhere;
+  text-wrap:balance;
+}
+/* Títulos largos: conservamos la jerarquía visual, pero reducimos progresivamente
+   el tamaño para evitar bloques enormes y mantener la ficha elegante. */
+.product-detail-page .detail-copy h1.detail-title--medium{
+  font-size:clamp(1.9rem,2.95vw,3rem);
+}
+.product-detail-page .detail-copy h1.detail-title--long{
+  font-size:clamp(1.75rem,2.55vw,2.65rem);
+  line-height:1.04;
+}
+.product-detail-page .detail-copy h1.detail-title--xl{
+  font-size:clamp(1.6rem,2.15vw,2.3rem);
+  line-height:1.07;
+  letter-spacing:-.018em;
 }
 .product-detail-page .detail-price-wrap{
   display:flex;
