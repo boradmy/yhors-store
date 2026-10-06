@@ -6352,6 +6352,32 @@ app.post('/api/admin/products/:id/link-variant', requireAdmin, (req, res) => {
   return res.json({ base: updated.find(item => item.id === base.id), variant: updated.find(item => item.id === variant.id), variants: linked });
 });
 
+
+app.post('/api/admin/products/:id/unlink-variant', requireAdmin, (req, res) => {
+  const products = readProducts();
+  const base = products.find(item => String(item.id) === String(req.params.id));
+  const variant = products.find(item => String(item.id) === String(req.body?.variantId || ''));
+  if (!base || !variant) return res.status(404).json({ error: 'Modelo o variante no encontrado.' });
+  const groupId = String(base.variantGroupId || '');
+  if (!groupId || String(variant.variantGroupId || '') !== groupId) return res.status(400).json({ error: 'La variante no pertenece a este modelo.' });
+  const remaining = products.filter(item => String(item.variantGroupId || '') === groupId && String(item.id) !== String(variant.id));
+  const updated = products.map(item => {
+    if (String(item.id) === String(variant.id)) return normalizeProduct({ ...item, variantGroupId: null, variantOfId: null, updatedAt: new Date().toISOString() });
+    if (remaining.length === 1 && String(item.variantGroupId || '') === groupId) return normalizeProduct({ ...item, variantGroupId: null, variantOfId: null, updatedAt: new Date().toISOString() });
+    return item;
+  });
+  writeProducts(updated);
+  auditLog(req, 'Variante desvinculada', 'Inventario', {
+    baseProductId: base.id,
+    variantProductId: variant.id,
+    variantGroupId: groupId,
+    remainingVariantCount: Math.max(0, remaining.length - (remaining.length === 1 ? 1 : 0))
+  });
+  const baseAfter = updated.find(item => String(item.id) === String(base.id));
+  const groupProducts = baseAfter?.variantGroupId ? updated.filter(item => String(item.variantGroupId || '') === String(baseAfter.variantGroupId)) : [baseAfter].filter(Boolean);
+  return res.json({ base: baseAfter, unlinked: updated.find(item => String(item.id) === String(variant.id)), products: updated, variants: groupProducts });
+});
+
 app.delete('/api/admin/products/:id', requireAdmin, (req, res) => {
   const products = readProducts();
   const product = products.find((item) => item.id === req.params.id);
