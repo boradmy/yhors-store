@@ -973,11 +973,11 @@ app.use('/api/admin', (req, res, next) => {
 const SITE_URL = 'https://yhors-store.onrender.com';
 const SITE_NAME = 'YHORS-STORE';
 const CORPORATE_NAME = 'YHORS-CORP';
-const CATEGORY_LABELS = {
+let CATEGORY_LABELS = {
   principal: 'Principal', elegant: 'Elegant', sports: 'Sports', tech: 'Tech', cosplay: 'Cosplay',
   pets: 'Pets', details: 'Details', collectibles: 'Coleccionables'
 };
-const CATEGORY_DESCRIPTIONS = {
+let CATEGORY_DESCRIPTIONS = {
   principal: 'Descubre todo el universo YHORS en un solo lugar.',
   elegant: 'Detalles refinados, regalos y piezas pensadas para momentos especiales.',
   sports: 'Accesorios y productos para quienes viven con energía y movimiento.',
@@ -987,7 +987,7 @@ const CATEGORY_DESCRIPTIONS = {
   details: 'Regalos, arreglos y detalles creados para sorprender.',
   collectibles: 'Figuras y objetos para quienes disfrutan coleccionar lo extraordinario.'
 };
-const VALID_PUBLIC_CATEGORIES = Object.keys(CATEGORY_LABELS).filter(key => key !== 'principal');
+let VALID_PUBLIC_CATEGORIES = Object.keys(CATEGORY_LABELS).filter(key => key !== 'principal');
 function seoSlug(value = '') {
   return String(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
     .replace(/&/g, ' y ').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 90) || 'producto';
@@ -2539,26 +2539,69 @@ function writeStorefront(settings) {
   fs.renameSync(temporaryFile, STOREFRONT_FILE);
 }
 
+const BUILTIN_CATEGORY_KEYS = new Set(['elegant','sports','tech','cosplay','pets','details','collectibles']);
+function refreshServerCategoryConfig() {
+  let custom = {};
+  try {
+    const parsed = JSON.parse(fs.readFileSync(CLASSIFICATIONS_FILE, 'utf8'));
+    custom = parsed?.categories && typeof parsed.categories === 'object' ? parsed.categories : {};
+  } catch {}
+  const defaults = { principal: 'Principal', elegant: 'Elegant', sports: 'Sports', tech: 'Tech', cosplay: 'Cosplay', pets: 'Pets', details: 'Details', collectibles: 'Coleccionables' };
+  const defaultDescriptions = {
+    principal: 'Descubre todo el universo YHORS en un solo lugar.',
+    elegant: 'Detalles refinados, regalos y piezas pensadas para momentos especiales.',
+    sports: 'Accesorios y productos para quienes viven con energía y movimiento.',
+    tech: 'Tecnología, gadgets y soluciones que combinan utilidad con estilo.',
+    cosplay: 'Piezas para transformar tu personaje y llevar tu imaginación más lejos.',
+    pets: 'Detalles y productos para consentir a quienes siempre están contigo.',
+    details: 'Regalos, arreglos y detalles creados para sorprender.',
+    collectibles: 'Figuras y objetos para quienes disfrutan coleccionar lo extraordinario.'
+  };
+  const labels = { ...defaults };
+  const descriptions = { ...defaultDescriptions };
+  Object.entries(custom).forEach(([key, value]) => {
+    const cleanKey = String(key || '').trim().toLowerCase();
+    const cleanLabel = cleanText(value, 60);
+    if (!cleanKey || cleanKey === 'principal' || BUILTIN_CATEGORY_KEYS.has(cleanKey)) return;
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(cleanKey) || !cleanLabel) return;
+    labels[cleanKey] = cleanLabel;
+    descriptions[cleanKey] = `Productos seleccionados del universo ${cleanLabel}.`;
+  });
+  CATEGORY_LABELS = labels;
+  CATEGORY_DESCRIPTIONS = descriptions;
+  VALID_PUBLIC_CATEGORIES = Object.keys(labels).filter(key => key !== 'principal');
+}
+
 function readClassifications() {
   try {
     const parsed = JSON.parse(fs.readFileSync(CLASSIFICATIONS_FILE, 'utf8'));
-    return { brands: parsed.brands || {}, productTypes: parsed.productTypes || {} };
-  } catch { return { brands: {}, productTypes: {} }; }
+    return { brands: parsed.brands || {}, productTypes: parsed.productTypes || {}, categories: parsed.categories || {} };
+  } catch { return { brands: {}, productTypes: {}, categories: {} }; }
 }
 function writeClassifications(settings) {
   maybeAutoBackup();
-  const clean = { brands: {}, productTypes: {} };
+  const clean = { brands: {}, productTypes: {}, categories: {} };
   for (const key of ['brands','productTypes']) {
     for (const [category, values] of Object.entries(settings?.[key] || {})) {
-      if (!['elegant','sports','tech','cosplay','pets','details','collectibles'].includes(category)) continue;
+      if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(String(category || ''))) continue;
+      if (String(category) === 'all' || String(category) === 'principal') continue;
       clean[key][category] = [...new Set((Array.isArray(values) ? values : []).map(v => cleanText(v, 50)).filter(Boolean))].slice(0, 100);
     }
+  }
+  for (const [category, label] of Object.entries(settings?.categories || {})) {
+    const key = String(category || '').trim().toLowerCase();
+    const cleanLabel = cleanText(label, 60);
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(key) || key === 'all' || key === 'principal' || BUILTIN_CATEGORY_KEYS.has(key) || !cleanLabel) continue;
+    clean.categories[key] = cleanLabel;
   }
   const temporaryFile = `${CLASSIFICATIONS_FILE}.tmp`;
   fs.writeFileSync(temporaryFile, `${JSON.stringify(clean, null, 2)}\n`, 'utf8');
   fs.renameSync(temporaryFile, CLASSIFICATIONS_FILE);
+  refreshServerCategoryConfig();
   return clean;
 }
+
+refreshServerCategoryConfig();
 
 function writeProducts(products) {
   maybeAutoBackup();
@@ -3280,7 +3323,7 @@ function validateProduct(input, current = {}, allProducts = []) {
   const rentalRaw = input.rentalPrice;
   const rentalPrice = rentalRaw === '' || rentalRaw === null || rentalRaw === undefined ? null : Number(rentalRaw);
   const image = cleanText(input.image, 1000);
-  const validCategories = ['elegant', 'sports', 'tech', 'cosplay', 'pets', 'details', 'collectibles'];
+  const validCategories = Object.keys(CATEGORY_LABELS).filter(key => key !== 'principal');
   const sku = makeUniqueSku(requestedSku, { name, category }, allProducts, current.id || '');
   if (!name || !description || !validCategories.includes(category) || !Number.isFinite(salePrice) || salePrice < 0 || salePrice > 100000000) {
     return { error: 'Revisa nombre, descripción, categoría y precio de venta.' };
@@ -6130,7 +6173,7 @@ app.put('/api/admin/inventory/:id', requireAdmin, (req, res) => {
     return res.status(400).json({ error: 'El precio de venta no es válido.' });
   }
 
-  const validCategories = ['elegant','sports','tech','cosplay','pets','details','collectibles'];
+  const validCategories = Object.keys(CATEGORY_LABELS).filter(key => key !== 'principal');
   const category = body.category === undefined || body.category === null || body.category === '' ? previous.category : String(body.category).trim().toLowerCase();
   const brand = body.brand === undefined ? (previous.brand || '') : cleanText(body.brand, 80);
   const productType = body.productType === undefined ? (previous.productType || '') : cleanText(body.productType, 80);

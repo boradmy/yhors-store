@@ -2,11 +2,11 @@ const app = document.querySelector('#app');
 const ADMIN_PATH = '/yhors/admin593';
 const ORDER_STATUS_CLASS = { Pendiente:'pending', Confirmado:'confirmed', Preparado:'preparing', Enviado:'shipped', Entregado:'delivered', Cancelado:'cancelled' };
 const statusClass = value => ORDER_STATUS_CLASS[value] || 'pending';
-const categories = {
+let categories = {
   all: 'Principal', elegant: 'Elegant', sports: 'Sports', tech: 'Tech', cosplay: 'Cosplay',
   pets: 'Pets', details: 'Details', collectibles: 'Coleccionables'
 };
-const categoryDescriptions = {
+let categoryDescriptions = {
   all: 'Descubre todo el universo YHORS en un solo lugar.',
   elegant: 'Detalles refinados, regalos y piezas pensadas para momentos especiales.',
   sports: 'Accesorios y productos para quienes viven con energía y movimiento.',
@@ -16,8 +16,22 @@ const categoryDescriptions = {
   details: 'Regalos, arreglos y detalles creados para sorprender.',
   collectibles: 'Figuras y objetos para quienes disfrutan coleccionar lo extraordinario.'
 };
-const publicCategories = Object.entries(categories);
+let publicCategories = Object.entries(categories);
 let publicCatalogProducts = [];
+
+const BUILTIN_CATEGORY_KEYS = new Set(['elegant','sports','tech','cosplay','pets','details','collectibles']);
+function applyClassificationCategories(classifications = {}) {
+  const configured = classifications?.categories && typeof classifications.categories === 'object' ? classifications.categories : {};
+  const next = { all: 'Principal', elegant: 'Elegant', sports: 'Sports', tech: 'Tech', cosplay: 'Cosplay', pets: 'Pets', details: 'Details', collectibles: 'Coleccionables' };
+  Object.entries(configured).forEach(([key, value]) => {
+    const cleanKey = String(key || '').trim().toLowerCase();
+    const cleanLabel = String(value || '').trim().slice(0, 60);
+    if (/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(cleanKey) && cleanKey !== 'all' && cleanLabel) next[cleanKey] = cleanLabel;
+  });
+  categories = next;
+  categoryDescriptions = Object.fromEntries(Object.entries(categories).map(([key, label]) => [key, key === 'all' ? 'Descubre todo el universo YHORS en un solo lugar.' : (key === 'tech' ? 'Tecnología, gadgets y soluciones que combinan utilidad con estilo.' : key === 'cosplay' ? 'Piezas para transformar tu personaje y llevar tu imaginación más lejos.' : `Productos seleccionados del universo ${label}.`)]));
+  publicCategories = Object.entries(categories);
+}
 
 function setPublicCatalogProducts(products = []) {
   publicCatalogProducts = Array.isArray(products) ? products : [];
@@ -153,6 +167,7 @@ async function recoverCustomersFromLocalCache(customers = []) {
 async function request(url, options = {}) {
   const response = await fetch(url, { credentials: 'same-origin', cache: 'no-store', ...options, headers: { 'Cache-Control': 'no-cache', ...(options.headers || {}) } });
   const json = response.status === 204 ? null : await response.json().catch(() => ({}));
+  if (response.ok && /\/api\/(?:admin\/)?classifications(?:\?|$)/.test(String(url))) applyClassificationCategories(json);
   if (!response.ok) {
     const error = new Error(json.error || (response.status === 401 ? 'Tu sesión administrativa expiró. Inicia sesión nuevamente.' : 'No se pudo completar la operación.'));
     error.status = response.status;
@@ -1013,10 +1028,12 @@ async function loadStoreData() {
     error.code = 'PUBLIC_CATALOG_UNAVAILABLE';
     throw error;
   }
+  const classifications = results[2].status === 'fulfilled' && results[2].value ? results[2].value : { brands: {}, productTypes: {}, categories: {} };
+  applyClassificationCategories(classifications);
   return {
     products: productsResult.value,
     storefront: results[1].status === 'fulfilled' && results[1].value ? results[1].value : { heroProductIds: [], featuredProductIds: [], categorySectionOrder: {}, whatsappNumber: '' },
-    classifications: results[2].status === 'fulfilled' && results[2].value ? results[2].value : { brands: {}, productTypes: {} }
+    classifications
   };
 }
 function productPriceLabel(product) {
@@ -1070,6 +1087,15 @@ function catalogFilters(classifications = {}, currentCategory = 'all', active = 
       <button type="button" class="filter-title" aria-expanded="false"><span>Categorías</span><span>⌄</span></button>
       <div class="filter-options">${categoriesHtml}</div>
     </div>`;
+  const sortBlock = `
+    <div class="filter-accordion filter-sort-accordion">
+      <button type="button" class="filter-title" aria-expanded="false"><span>Ordenar precio</span><span>⌄</span></button>
+      <div class="filter-options filter-sort-options">
+        <label class="filter-radio"><input type="radio" name="catalogPriceSort" value="" ${!active.sort ? 'checked' : ''}><span>Predeterminado</span></label>
+        <label class="filter-radio"><input type="radio" name="catalogPriceSort" value="price-asc" ${active.sort === 'price-asc' ? 'checked' : ''}><span>Precio: menor a mayor</span></label>
+        <label class="filter-radio"><input type="radio" name="catalogPriceSort" value="price-desc" ${active.sort === 'price-desc' ? 'checked' : ''}><span>Precio: mayor a menor</span></label>
+      </div>
+    </div>`;
   const typesBlock = types.length ? `
     <div class="filter-accordion">
       <button type="button" class="filter-title" aria-expanded="false"><span>Tipo de producto</span><span>⌄</span></button>
@@ -1087,17 +1113,25 @@ function catalogFilters(classifications = {}, currentCategory = 'all', active = 
       <div><span class="eyebrow">Filtrar</span><h2>${scoped ? escapeHTML(categories[currentCategory]) : 'Encuentra lo tuyo'}</h2></div>
       <button type="button" class="clear-filters" id="clearCatalogFilters">Restablecer</button>
     </div>
-    ${categoriesBlock}${typesBlock}${brandsBlock}
+    ${categoriesBlock}${sortBlock}${typesBlock}${brandsBlock}
   </aside>`;
 }
 function applyCatalogFilters(products, active = {}) {
-  return products.filter(product =>
+  const filtered = products.filter(product =>
     (!active.category || active.category === 'all' || product.category === active.category) &&
     (!active.brand || product.brand === active.brand) &&
     (!active.type || product.productType === active.type) &&
-    (!active.minPrice || Number(productPriceLabel(product).replace(/[^0-9.,-]/g, '').replace(',', '.')) >= Number(active.minPrice)) &&
-    (!active.maxPrice || Number(productPriceLabel(product).replace(/[^0-9.,-]/g, '').replace(',', '.')) <= Number(active.maxPrice))
+    (!active.minPrice || productPriceValue(product) >= Number(active.minPrice)) &&
+    (!active.maxPrice || productPriceValue(product) <= Number(active.maxPrice))
   );
+  if (active.sort === 'price-asc') return filtered.sort((a,b) => productPriceValue(a) - productPriceValue(b));
+  if (active.sort === 'price-desc') return filtered.sort((a,b) => productPriceValue(b) - productPriceValue(a));
+  return filtered;
+}
+function productPriceValue(product) {
+  const value = product?.salePrice ?? product?.price ?? 0;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
 }
 function wireCatalogFilters(products, classifications, initial = {}, renderResults) {
   const sidebar = document.querySelector('.catalog-sidebar');
@@ -1112,7 +1146,8 @@ function wireCatalogFilters(products, classifications, initial = {}, renderResul
       : contextualCategory;
     active.brand = sidebar.querySelector('[data-filter-brand]:checked')?.value || '';
     active.type = sidebar.querySelector('[data-filter-type]:checked')?.value || '';
-    const selectedCount = [categoryControl ? active.category : '', active.brand, active.type].filter(Boolean).filter(value => value !== contextualCategory).length;
+    active.sort = sidebar.querySelector('input[name="catalogPriceSort"]:checked')?.value || '';
+    const selectedCount = [categoryControl ? active.category : '', active.brand, active.type, active.sort].filter(Boolean).filter(value => value !== contextualCategory).length;
     const mobileLabel = sidebar.querySelector('.mobile-filter-count');
     if (mobileLabel && !sidebar.classList.contains('mobile-open')) mobileLabel.textContent = selectedCount ? `${selectedCount} filtro${selectedCount === 1 ? '' : 's'} activo${selectedCount === 1 ? '' : 's'}` : 'Abrir opciones';
     renderResults(applyCatalogFilters(products, active), active);
@@ -1122,6 +1157,7 @@ function wireCatalogFilters(products, classifications, initial = {}, renderResul
     sidebar.querySelectorAll(`input[data-filter-${group}]`).forEach(item => { if (item !== input) item.checked = false; });
     draw();
   }));
+  sidebar.querySelectorAll('input[name="catalogPriceSort"]').forEach(input => input.addEventListener('change', draw));
   sidebar.querySelectorAll('.filter-title').forEach(button => button.addEventListener('click', () => {
     const box = button.parentElement;
     const open = box.classList.toggle('open');
@@ -1135,7 +1171,7 @@ function wireCatalogFilters(products, classifications, initial = {}, renderResul
     if (label) label.textContent = open ? 'Cerrar opciones' : 'Abrir opciones';
   });
   sidebar.querySelector('#clearCatalogFilters')?.addEventListener('click', () => {
-    sidebar.querySelectorAll('input[data-filter-brand], input[data-filter-type]').forEach(input => input.checked = false);
+    sidebar.querySelectorAll('input[data-filter-brand], input[data-filter-type], input[name="catalogPriceSort"]').forEach(input => input.checked = input.name === 'catalogPriceSort' && input.value === '');
     if (categoryControl) sidebar.querySelectorAll('input[data-filter-category]').forEach(input => input.checked = false);
     draw();
     sidebar.querySelectorAll('.filter-accordion.open').forEach(box => {
@@ -4772,12 +4808,17 @@ function inventoryPageMarkup(products = [], options = {}) {
         <button class="button secondary small" type="button" id="openInventoryClassifications">Abrir clasificaciones →</button>
       </div>
 
+      <div class="inventory-workflow-card inventory-categories-card">
+        <div><span class="eyebrow">02 · Universos</span><h2>Categorías / universos</h2><p>Crea nuevos universos para que aparezcan automáticamente al registrar productos y en la tienda.</p></div>
+        <button class="button secondary small" type="button" id="openInventoryCategories">Gestionar categorías →</button>
+      </div>
+
       <section class="inventory-workflow-card inventory-registration-card">
-        <div class="section-heading inventory-page-heading"><div><span class="eyebrow">02 · Inventario</span><h2>Inventario de productos</h2></div><div class="inventory-page-heading-actions"><p>Completa costos, precios, stock y clasificación. Las imágenes pueden agregarse después.</p><button class="button primary small inventory-add-product" type="button" id="inventoryAddProduct">+ Agregar nuevo producto</button></div></div>
+        <div class="section-heading inventory-page-heading"><div><span class="eyebrow">03 · Inventario</span><h2>Inventario de productos</h2></div><div class="inventory-page-heading-actions"><p>Completa costos, precios, stock y clasificación. Las imágenes pueden agregarse después.</p><button class="button primary small inventory-add-product" type="button" id="inventoryAddProduct">+ Agregar nuevo producto</button></div></div>
       </section>
 
       <section class="inventory-workflow-card inventory-products-card">
-        <div class="inventory-products-heading"><div><span class="eyebrow">03 · Registro</span><h2>Productos ya registrados</h2></div><span class="inventory-count inventory-count-large" id="inventoryPageCount">${products.length} productos</span></div>
+        <div class="inventory-products-heading"><div><span class="eyebrow">04 · Registro</span><h2>Productos ya registrados</h2></div><span class="inventory-count inventory-count-large" id="inventoryPageCount">${products.length} productos</span></div>
         <div class="inventory-toolbar inventory-toolbar-extended">
           <label class="inventory-search"><span aria-hidden="true">⌕</span><input id="inventoryPageSearch" type="search" placeholder="Buscar por nombre, SKU, marca, tipo o etiqueta…" autocomplete="off"><button id="clearInventoryPageSearch" type="button" aria-label="Limpiar búsqueda">×</button></label>
           <label class="inventory-filter"><span>Tipo de producto</span><select id="inventoryPageTypeFilter"><option value="">Todos los tipos</option>${allValues('productTypes').map(v=>`<option value="${escapeHTML(v)}">${escapeHTML(v)}</option>`).join('')}</select></label>
@@ -4792,6 +4833,17 @@ function inventoryPageMarkup(products = [], options = {}) {
       <div class="inventory-classification-dialog" role="dialog" aria-modal="true" aria-labelledby="inventoryClassificationTitle">
         <div class="inventory-classification-dialog-head"><div><span class="eyebrow">01 · Organización</span><h2 id="inventoryClassificationTitle">Clasificaciones</h2><p>Marcas y tipos de producto, organizados por universo.</p></div><button type="button" class="product-image-picker-close" data-close-inventory-classifications aria-label="Cerrar">×</button></div>
         ${classificationPanel(classifications).replace('<section class="admin-panel classification-panel" id="classificationPanel">','<section class="classification-modal-content" id="classificationPanel">')}
+      </div>
+    </div>
+    <div class="inventory-classification-modal inventory-category-modal" id="inventoryCategoryModal" hidden>
+      <div class="inventory-classification-backdrop" data-close-inventory-categories></div>
+      <div class="inventory-classification-dialog inventory-category-dialog" role="dialog" aria-modal="true" aria-labelledby="inventoryCategoryTitle">
+        <div class="inventory-classification-dialog-head"><div><span class="eyebrow">02 · Universos</span><h2 id="inventoryCategoryTitle">Categorías / universos</h2><p>Agrega los universos que necesites para organizar tus productos.</p></div><button type="button" class="product-image-picker-close" data-close-inventory-categories aria-label="Cerrar">×</button></div>
+        <div class="category-manager-content">
+          <form id="inventoryCategoryForm" class="category-manager-add"><label><span>Nombre de la nueva categoría / universo</span><input id="newInventoryCategory" maxlength="60" placeholder="Ej. Audio, Hogar, Gaming…" required></label><button type="submit" class="button primary small">+ Agregar categoría</button></form>
+          <span class="message" id="categoryManagerMessage"></span>
+          <div id="inventoryCategoryList" class="category-manager-list"></div>
+        </div>
       </div>
     </div>
   </div></main>`;
@@ -5264,7 +5316,8 @@ async function renderAdminInventory() {
   window.__yhorsSession = session;
   const inventoryReadOnly = false;
   let products = await request('/api/admin/products').catch(() => []);
-  const classifications = await request('/api/admin/classifications').catch(() => ({ brands: {}, productTypes: {} }));
+  const classifications = await request('/api/admin/classifications').catch(() => ({ brands: {}, productTypes: {}, categories: {} }));
+  applyClassificationCategories(classifications);
   const fields = ['name','sku','brand','productType','category','purchasePrice','salePrice','rentalPrice','stock','image','description','featured','hero','heroOrder'];
   const draw = () => {
     const query = (document.querySelector('#inventoryPageSearch')?.value || '').trim().toLowerCase();
@@ -5404,6 +5457,54 @@ async function renderAdminInventory() {
   const closeClassificationModal = () => { if (!classificationModal) return; classificationModal.classList.remove('is-open'); document.body.classList.remove('generate-modal-open'); setTimeout(() => { classificationModal.hidden = true; }, 180); };
   document.querySelector('#openInventoryClassifications')?.addEventListener('click', () => { if (!classificationModal) return; classificationModal.hidden = false; requestAnimationFrame(() => classificationModal.classList.add('is-open')); document.body.classList.add('generate-modal-open'); });
   classificationModal?.querySelectorAll('[data-close-inventory-classifications]').forEach(btn => btn.addEventListener('click', closeClassificationModal));
+
+  const categoryModal = document.querySelector('#inventoryCategoryModal');
+  const closeCategoryModal = () => { if (!categoryModal) return; categoryModal.classList.remove('is-open'); document.body.classList.remove('generate-modal-open'); setTimeout(() => { categoryModal.hidden = true; }, 180); };
+  const renderCategoryManager = () => {
+    const target = document.querySelector('#inventoryCategoryList');
+    if (!target) return;
+    const builtin = Object.entries(categories).filter(([key]) => key !== 'all' && BUILTIN_CATEGORY_KEYS.has(key));
+    const custom = Object.entries(classifications.categories || {}).filter(([key]) => !BUILTIN_CATEGORY_KEYS.has(key));
+    target.innerHTML = [...builtin, ...custom].map(([key,label]) => {
+      const protectedCategory = BUILTIN_CATEGORY_KEYS.has(key);
+      return `<div class="category-manager-row"><div><strong>${escapeHTML(label)}</strong><small>${escapeHTML(key)}</small></div>${protectedCategory ? '<span class="category-manager-badge">Predeterminada</span>' : `<button type="button" class="classification-edit" data-edit-category="${escapeHTML(key)}" title="Editar nombre">✎</button><button type="button" class="classification-delete" data-remove-category="${escapeHTML(key)}" title="Eliminar">×</button>`}</div>`;
+    }).join('');
+    target.querySelectorAll('[data-edit-category]').forEach(btn => btn.addEventListener('click', async () => {
+      const key = btn.dataset.editCategory; const current = classifications.categories?.[key] || categories[key] || '';
+      const value = window.prompt('Nuevo nombre de la categoría:', current); if (value === null) return;
+      const clean = value.trim().slice(0,60); if (!clean || clean === current) return;
+      classifications.categories[key] = clean; await saveInventoryCategories();
+    }));
+    target.querySelectorAll('[data-remove-category]').forEach(btn => btn.addEventListener('click', async () => {
+      const key = btn.dataset.removeCategory;
+      if (products.some(product => product.category === key)) { alert('No puedes eliminar esta categoría porque ya tiene productos asignados. Cambia primero esos productos de categoría.'); return; }
+      if (!confirm(`¿Eliminar la categoría “${categories[key] || key}”?`)) return;
+      delete classifications.categories[key]; delete classifications.brands?.[key]; delete classifications.productTypes?.[key]; await saveInventoryCategories();
+    }));
+  };
+  const saveInventoryCategories = async () => {
+    try {
+      const saved = await request('/api/admin/classifications', { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(classifications) });
+      classifications.categories = saved.categories || {};
+      applyClassificationCategories(classifications);
+      renderCategoryManager(); draw();
+      const message = document.querySelector('#categoryManagerMessage'); if (message) { message.className='message success'; message.textContent='✓ Categorías guardadas.'; }
+      return true;
+    } catch(e) { const message=document.querySelector('#categoryManagerMessage'); if(message){message.className='message error';message.textContent=e.message || 'No se pudo guardar la categoría.';} return false; }
+  };
+  document.querySelector('#inventoryCategoryForm')?.addEventListener('submit', async event => {
+    event.preventDefault();
+    const input = document.querySelector('#newInventoryCategory');
+    const label = input?.value.trim().slice(0,60) || '';
+    if (!label) return;
+    const baseKey = label.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,40);
+    if (!baseKey || baseKey === 'all' || categories[baseKey]) { const message=document.querySelector('#categoryManagerMessage'); if(message){message.className='message error';message.textContent='Ya existe una categoría con ese nombre o código.';} return; }
+    classifications.categories ||= {}; classifications.categories[baseKey] = label;
+    if (await saveInventoryCategories() && input) input.value = '';
+  });
+  renderCategoryManager();
+  document.querySelector('#openInventoryCategories')?.addEventListener('click', () => { if (!categoryModal) return; categoryModal.hidden=false; renderCategoryManager(); requestAnimationFrame(() => categoryModal.classList.add('is-open')); document.body.classList.add('generate-modal-open'); });
+  categoryModal?.querySelectorAll('[data-close-inventory-categories]').forEach(btn => btn.addEventListener('click', closeCategoryModal));
   document.querySelector('#inventoryAddProduct')?.addEventListener('click', () => openInventoryNewProductModal({ classifications, onSaved: async created => { products = [created, ...products]; draw(); } }));
   draw();
   document.querySelector('#inventoryPageSearch')?.addEventListener('input', draw);
