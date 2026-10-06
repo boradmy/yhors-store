@@ -545,10 +545,14 @@ function productCard(product) {
   const availability = inStock ? `` : ``;
   const isCosplayRental = product.category === 'cosplay' && product.isRental === true && Number.isFinite(Number(product.rentalPrice));
   const rental = isCosplayRental ? `<small class="price-secondary">Alquiler: ${money(product.rentalPrice)}</small>` : '';
+  const variantOptions = Array.isArray(product.variantOptions) ? product.variantOptions : [];
+  const variantChoices = variantOptions.length > 1
+    ? `<div class="product-variant-picker" aria-label="Colores disponibles"><span>Color</span><div class="product-variant-chips">${variantOptions.map(item => `<button type="button" class="product-variant-chip ${String(item.id) === String(product.id) ? 'is-active' : ''}" data-variant-open="${escapeHTML(product.id)}" data-variant-id="${escapeHTML(item.id)}" ${!item.inStock ? 'disabled' : ''} title="${escapeHTML(item.variantLabel || item.sku || 'Variante')}">${escapeHTML(item.variantLabel || 'Variante')}${!item.inStock ? ' · Agotado' : ''}</button>`).join('')}</div></div>`
+    : '';
   const action = isCosplayRental
     ? `<button class="add cosplay-options" data-open-option="${escapeHTML(product.id)}"><span>Ver opciones</span><span>→</span></button>`
     : `<button class="add" data-id="${escapeHTML(product.id)}" ${!inStock ? 'disabled' : ''}><span>${inStock ? 'Añadir' : 'Sin stock'}</span><span>${inStock ? '+' : '—'}</span></button>`;
-  return `<article class="product" data-product="${escapeHTML(product.id)}"><a class="product-open" data-open="${escapeHTML(product.id)}" href="${escapeHTML(productHref(product))}" aria-label="Ver ${escapeHTML(product.name)}"><div class="product-image"><img data-fallback src="${escapeHTML(image)}" alt="${escapeHTML(product.name)}" loading="lazy"></div><div class="product-info"><span class="product-category">${escapeHTML(categories[product.category] || product.category)}</span>${meta ? `<small class="product-meta">${escapeHTML(meta)}</small>` : ''}<h3>${escapeHTML(product.name)}</h3><div class="product-description">${escapeHTML(compactProductDescription(product.description, 112))}</div><span class="detail-link">Ver detalles <span>→</span></span></div></a><div class="product-bottom"><div><span class="price">${productPriceLabel(product)}</span>${rental}<span class="price-secondary">${availability}</span></div>${action}</div></article>`;
+  return `<article class="product" data-product="${escapeHTML(product.id)}"><a class="product-open" data-open="${escapeHTML(product.id)}" href="${escapeHTML(productHref(product))}" aria-label="Ver ${escapeHTML(product.name)}"><div class="product-image"><img data-fallback src="${escapeHTML(image)}" alt="${escapeHTML(product.name)}" loading="lazy"></div><div class="product-info"><span class="product-category">${escapeHTML(categories[product.category] || product.category)}</span>${meta ? `<small class="product-meta">${escapeHTML(meta)}</small>` : ''}<h3>${escapeHTML(product.name)}</h3><div class="product-description">${escapeHTML(compactProductDescription(product.description, 112))}</div>${variantChoices}<span class="detail-link">Ver detalles <span>→</span></span></div></a><div class="product-bottom"><div><span class="price">${productPriceLabel(product)}</span>${rental}<span class="price-secondary">${availability}</span></div>${action}</div></article>`;
 }
 
 function relatedProductsFor(product, products) {
@@ -712,6 +716,17 @@ function renderProductsInto(area, products, onOpen, onAdd, options = {}) {
     : '<div class="empty">Aún no hay productos en esta colección.</div>';
   wireImageFallback(area);
   area.querySelectorAll('[data-open]').forEach(button => button.addEventListener('click', e => { e.preventDefault(); onOpen(button.dataset.open); }));
+  area.querySelectorAll('[data-variant-open]').forEach(button => button.addEventListener('click', e => {
+    e.preventDefault();
+    e.stopPropagation();
+    const base = button.dataset.variantOpen;
+    const variantId = button.dataset.variantId;
+    if (base && variantId) {
+      history.pushState({ product: base, variant: variantId }, '', `${productHref(products.find(item => String(item.id) === String(base)) || { id: base, name: '' })}?variante=${encodeURIComponent(variantId)}`);
+      renderStore();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }));
   area.querySelectorAll('.add').forEach(button => button.addEventListener('click', e => { e.stopPropagation();
     const productId = button.dataset.openOption;
     if (productId) { onOpen(productId); return; }
@@ -1262,14 +1277,23 @@ async function renderProductDetail(product, products, storefront) {
   const images = productImages(product); updateSeoMeta({ title: `${product.name} | YHORS-STORE`, description: compactProductDescription(product.description || `${product.name} disponible en YHORS-STORE.`, 155), canonical: `${location.origin}${productHref(product)}`, image: images[0] && (images[0].startsWith('http') ? images[0] : `${location.origin}${images[0]}`) }); let selected = 0; const isCosplay = product.category === 'cosplay'; const hasRental = isCosplay && Number.isFinite(Number(product.rentalPrice));
   const modeOptions = hasRental ? `<div class="purchase-choice"><span class="choice-label">¿Cómo quieres obtenerlo?</span><div class="purchase-options" role="radiogroup" aria-label="Modalidad"><button type="button" class="purchase-option active" data-purchase-mode="purchase"><strong>Comprar</strong><span>${productPriceLabel(product)}</span></button><button type="button" class="purchase-option" data-purchase-mode="rental"><strong>Alquilar</strong><span>Alquiler: ${money(product.rentalPrice)}</span></button></div><div class="rental-days-picker hidden" id="rentalDaysPicker"><label for="rentalDays">Días de alquiler</label><select id="rentalDays" name="rentalDays">${Array.from({length:10},(_,i)=>i+1).map(day=>`<option value="${day}" ${day===1?'selected':''}>${day} día${day===1?'':'s'}</option>`).join('')}</select><small class="field-help">Selecciona de 1 a 10 días.</small></div></div>` : '';
   const whatsappNumber = String(storefront?.whatsappNumber || '').replace(/\D/g, '');
-  const productVariants = product.variantGroupId ? products.filter(item => String(item.variantGroupId || '') === String(product.variantGroupId) && Number(item.stock || 0) > 0 && item.published !== false) : [];
-  const variantSelector = productVariants.length > 1 ? `<div class="detail-variants" aria-label="Variantes disponibles"><label class="detail-variants-label" for="detailVariantSelect">Color / variante</label><select id="detailVariantSelect" class="detail-variant-select">${productVariants.map(item => `<option value="${escapeHTML(productHref(item))}" ${String(item.id) === String(product.id) ? 'selected' : ''}>${escapeHTML(item.variantLabel || item.sku || 'Variante')} · ${money(item.salePrice ?? item.price ?? 0)}</option>`).join('')}</select></div>` : '';
+  const variantBase = product.variantGroupId ? (products.find(item => String(item.variantGroupId || '') === String(product.variantGroupId) && item.published !== false) || product) : product;
+  const productVariants = Array.isArray(product.variantOptions) && product.variantOptions.length
+    ? product.variantOptions
+    : (product.variantGroupId ? products.filter(item => String(item.variantGroupId || '') === String(product.variantGroupId)) : []);
+  const variantSelector = productVariants.length > 1 ? `<div class="detail-variants" aria-label="Variantes disponibles"><label class="detail-variants-label">Color / variante</label><div class="detail-variants-list">${productVariants.map(item => { const disabled = item.inStock === false; const active = String(item.id) === String(product.id); return `<button type="button" class="detail-variant-chip ${active ? 'is-active' : ''}" data-detail-variant="${escapeHTML(item.id)}" ${disabled ? 'disabled' : ''}>${escapeHTML(item.variantLabel || item.sku || 'Variante')}${disabled ? ' · Agotado' : ''}</button>`; }).join('')}</div></div>` : '';
   const whatsappMessage = `Hola YHORS 👋, necesito más información sobre este producto.\n\nProducto: ${product.name || ''}\nSKU: ${product.sku || '—'}\nPrecio actual: ${money(product.salePrice ?? product.price ?? 0)}\n\n¿Podrían ayudarme con más información?`;
   const whatsappHref = whatsappNumber ? `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(whatsappMessage)}` : categoryHref(product.category);
   const supportCards = `<section class="detail-support-grid detail-support-grid--four" aria-label="Información de compra"><article class="detail-support-card"><span class="detail-support-number">01</span><div><strong>Compra directa</strong><p>Un proceso sencillo y atención personal durante tu compra.</p></div></article><article class="detail-support-card"><span class="detail-support-number">02</span><div><strong>Stock actualizado</strong><p>La disponibilidad se sincroniza con el inventario de YHORS.</p></div></article><article class="detail-support-card"><span class="detail-support-number">03</span><div><strong>Atención YHORS</strong><p>¿Tienes dudas? Escríbenos directamente y te ayudamos.</p></div></article><article class="detail-support-card detail-support-card--notice"><span class="detail-support-number">04</span><div><strong>Precio vigente</strong><p>Los precios pueden cambiar sin previo aviso. El valor mostrado es el vigente al momento de consultar.</p></div></article></section>`;
   const detailDescription = `<section class="detail-information" aria-label="Información del producto"><div class="detail-information-main"><span class="eyebrow">DETALLES DEL PRODUCTO</span><h2>Descripción</h2><div class="detail-description">${richDescriptionHTML(product.description)}</div></div><aside class="detail-help-card"><span class="eyebrow">ATENCIÓN YHORS</span><h3>¿Necesitas más información?</h3><p>Te ayudamos a confirmar características, compatibilidad o cualquier detalle antes de comprar.</p><a class="detail-whatsapp-button" href="${escapeHTML(whatsappHref)}" ${whatsappNumber ? 'target="_blank" rel="noopener noreferrer"' : ''}><span class="detail-whatsapp-icon">◉</span><span><strong>Consultar por WhatsApp</strong><small>${whatsappNumber ? `+${escapeHTML(whatsappNumber)}` : 'Contactar con YHORS'}</small></span><span class="detail-whatsapp-arrow">↗</span></a><div class="detail-contact-product"><span>Consulta por</span><strong>${escapeHTML(product.name || 'Producto')}</strong><small>SKU ${escapeHTML(product.sku || '—')} · ${money(product.salePrice ?? product.price ?? 0)}</small></div></aside></section>`;
   app.innerHTML = `${renderHeader(product.category, products)}<main class="product-detail-page"><div class="breadcrumbs"><a href="${categoryHref(product.category)}">${escapeHTML(categories[product.category])}</a><span>/</span><strong>${escapeHTML(product.name)}</strong></div><section class="detail-layout"><div class="detail-gallery"><div class="detail-main-image"><img id="detailMainImage" data-fallback src="${escapeHTML(images[0])}" alt="${escapeHTML(product.name)}"></div>${images.length > 1 ? `<div class="thumbnail-row">${images.map((image, index) => `<button class="thumb ${index === 0 ? 'active' : ''}" data-image-index="${index}"><img data-fallback src="${escapeHTML(image)}" alt="Imagen ${index + 1}"></button>`).join('')}</div>` : ''}</div><div class="detail-copy"><span class="eyebrow">${escapeHTML(categories[product.category])}</span><h1 class="detail-product-title ${(() => { const n = String(product.name || '').trim().length; return n > 95 ? 'detail-title--xl' : n > 70 ? 'detail-title--long' : n > 48 ? 'detail-title--medium' : 'detail-title--short'; })()}">${escapeHTML(product.name)}</h1><div class="detail-price-wrap"><span class="detail-price-label">Precio</span><div class="detail-price" id="detailPrice">${productPriceLabel(product)}</div></div><div class="detail-sku" aria-label="SKU de YHORS"><span class="detail-sku-icon">⌑</span><span>SKU: <strong>${escapeHTML(product.sku || '—')}</strong></span></div>${variantSelector}${modeOptions}<div class="detail-buy"><button class="add detail-add" id="detailAdd" ${!hasRental && !product.inStock ? 'disabled' : ''}><span>${!hasRental && !product.inStock ? 'Sin stock' : 'Añadir al carrito'}</span><span>${!hasRental && !product.inStock ? '—' : '+'}</span></button><a class="button secondary back-button" href="${categoryHref(product.category)}">← Volver a ${escapeHTML(categories[product.category])}</a></div><div class="detail-mini-note"><span>✓</span><span>Compra directa y atención personal.</span></div><div class="detail-basic-meta" aria-label="Datos del producto"><div><strong>Categoría:</strong> <span>${escapeHTML(categories[product.category] || product.category || '—')}</span></div><div><strong>Tipo:</strong> <span>${escapeHTML(product.productType || '—')}</span></div>${product.brand ? `<div><strong>Marca:</strong> <span>${escapeHTML(product.brand)}</span></div>` : ''}</div></div></section>${supportCards}${detailDescription}</main>${renderRelatedProducts(product, products)}${renderFooter(products)}${cartMarkup()}`;
-  wireCategoryNavigation(); wireMobileMenu(); wireSearch(); wireImageFallback(document.querySelector('.product-detail-page')); document.querySelector('#detailVariantSelect')?.addEventListener('change', event => { const href = event.currentTarget.value; if (href) window.location.href = href; }); markPageEnter(); wireRelatedProducts(product, products); document.querySelectorAll('[data-image-index]').forEach(button => button.addEventListener('click', () => {
+  wireCategoryNavigation(); wireMobileMenu(); wireSearch(); wireImageFallback(document.querySelector('.product-detail-page')); document.querySelectorAll('[data-detail-variant]').forEach(button => button.addEventListener('click', () => {
+    const variantId = button.dataset.detailVariant;
+    if (!variantId) return;
+    history.pushState({ product: variantBase.id, variant: variantId }, '', `${productHref(variantBase)}?variante=${encodeURIComponent(variantId)}`);
+    renderStore();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  })); markPageEnter(); wireRelatedProducts(product, products); document.querySelectorAll('[data-image-index]').forEach(button => button.addEventListener('click', () => {
     const nextIndex = Number(button.dataset.imageIndex);
     if (!Number.isInteger(nextIndex) || !images[nextIndex] || nextIndex === selected) return;
     selected = nextIndex;
@@ -1322,7 +1346,19 @@ async function renderStore() {
     return;
   }
   const productSlugPath = location.pathname.match(/^\/producto\/([^/]+)\/?$/);
-  if (productSlugPath) { const product = products.find(item => productSlug(item) === decodeURIComponent(productSlugPath[1])); if (product) return renderProductDetail(product, products, storefront); }
+  if (productSlugPath) {
+    const product = products.find(item => productSlug(item) === decodeURIComponent(productSlugPath[1]));
+    if (product) {
+      const requestedVariantId = new URLSearchParams(location.search).get('variante');
+      const selectedVariant = requestedVariantId && Array.isArray(product.variantOptions) ? product.variantOptions.find(item => String(item.id) === String(requestedVariantId)) : null;
+      if (selectedVariant) {
+        const detailProduct = { ...selectedVariant, variantOptions: product.variantOptions };
+        const detailProducts = products.some(item => String(item.id) === String(selectedVariant.id)) ? products : [...products, detailProduct];
+        return renderProductDetail(detailProduct, detailProducts, storefront);
+      }
+      return renderProductDetail(product, products, storefront);
+    }
+  }
   const productId = new URLSearchParams(location.search).get('producto');
   if (productId) { const product = getProduct(productId, products); if (product) return renderProductDetail(product, products, storefront); }
   if (categoryKey) return renderCategoryPage(categoryKey);
@@ -4811,15 +4847,18 @@ function inventoryPageMarkup(products = [], options = {}) {
     modelGroups.get(key).push(product);
   });
   const rows = products.length ? [...modelGroups.values()].map(group => {
-    const isModel = group.length > 1 || Boolean(group[0]?.variantGroupId);
     const lead = group[0];
+    const isModel = group.length > 1 || Boolean(lead?.variantGroupId);
     const totalStock = group.reduce((sum, item) => sum + Number(item.stock || 0), 0);
     const publishedCount = group.filter(item => item.published !== false && Number(item.stock || 0) > 0).length;
     const modelLabel = lead?.name || 'Modelo sin nombre';
     const variantCount = group.length;
     const groupKey = lead?.variantGroupId || lead?.id || '';
-    const header = isModel ? `<div class="inventory-model-summary"><div class="inventory-model-summary-main"><span class="eyebrow">MODELO · ${escapeHTML(categories[lead.category] || lead.category || 'Producto')}</span><h3>${escapeHTML(modelLabel)}</h3><small>${variantCount} variante${variantCount === 1 ? '' : 's'} · ${totalStock} unidad${totalStock === 1 ? '' : 'es'} · ${publishedCount ? `${publishedCount} publicada${publishedCount === 1 ? '' : 's'}` : 'Solo inventario'}</small></div><div class="inventory-model-summary-actions"><button type="button" class="button secondary small" data-model-toggle="${escapeHTML(groupKey)}">${variantCount > 1 ? 'Ver variantes' : 'Ver producto'}</button></div></div>` : '';
-    return `<section class="inventory-model-group ${isModel ? 'is-model' : 'is-single'}" data-model-group="${escapeHTML(groupKey)}">${header}<div class="inventory-model-variants" data-model-variants="${escapeHTML(groupKey)}">${group.map(renderRecord).join('')}</div></section>`;
+    const status = isModel
+      ? `${variantCount} variante${variantCount === 1 ? '' : 's'} · ${totalStock} unidad${totalStock === 1 ? '' : 'es'} · ${publishedCount ? `${publishedCount} publicada${publishedCount === 1 ? '' : 's'}` : 'Solo inventario'}`
+      : `1 producto · ${totalStock} unidad${totalStock === 1 ? '' : 'es'} · ${lead?.published !== false ? 'Publicado' : 'Solo inventario'}`;
+    const header = `<div class="inventory-model-summary"><div class="inventory-model-summary-main"><span class="eyebrow">${isModel ? 'MODELO' : 'PRODUCTO'} · ${escapeHTML(categories[lead.category] || lead.category || 'Producto')}</span><h3>${escapeHTML(modelLabel)}</h3><small>${status}</small></div><div class="inventory-model-summary-actions"><button type="button" class="button secondary small" data-model-toggle="${escapeHTML(groupKey)}">${isModel ? 'Ver variantes' : 'Ver producto'}</button></div></div>`;
+    return `<section class="inventory-model-group ${isModel ? 'is-model' : 'is-single'}" data-model-group="${escapeHTML(groupKey)}">${header}<div class="inventory-model-variants is-collapsed" data-model-variants="${escapeHTML(groupKey)}">${group.map(renderRecord).join('')}</div></section>`;
   }).join('') : '<div class="empty">No hay productos registrados.</div>';
 
   return `<main class="admin-shell"><div class="admin-wrap">
@@ -5462,7 +5501,8 @@ async function renderAdminInventory() {
       const variants = group?.querySelector('[data-model-variants]');
       if (!variants) return;
       const collapsed = variants.classList.toggle('is-collapsed');
-      button.textContent = collapsed ? 'Ver variantes' : 'Ocultar variantes';
+      const isModel = group?.classList.contains('is-model');
+      button.textContent = collapsed ? (isModel ? 'Ver variantes' : 'Ver producto') : (isModel ? 'Ocultar variantes' : 'Ocultar producto');
     }));
 
     const refreshProfit = record => {

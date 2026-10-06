@@ -3432,13 +3432,31 @@ function normalizeProduct(product) {
   };
 }
 
-function publicProduct(product) {
+function publicVariantOption(product) {
   const normalized = normalizeProduct(product);
-  const { stock, purchasePrice, published, ...safe } = normalized;
-  return { ...safe, inStock: stock > 0 };
+  const { purchasePrice, published, featured, hero, heroOrder, ...safe } = normalized;
+  return { ...safe, inStock: Number(normalized.stock || 0) > 0, published: normalized.published !== false };
 }
 
-app.get('/api/products', (_, res) => res.json(readProducts().map(normalizeProduct).filter(product => product.published !== false && Number(product.stock || 0) > 0).map(publicProduct)));
+function publicProduct(product, variantOptions = []) {
+  const normalized = normalizeProduct(product);
+  const { stock, purchasePrice, published, ...safe } = normalized;
+  return { ...safe, inStock: stock > 0, variantOptions: Array.isArray(variantOptions) ? variantOptions : [] };
+}
+
+app.get('/api/products', (_, res) => {
+  const all = readProducts().map(normalizeProduct);
+  const visible = all.filter(product => product.published !== false && Number(product.stock || 0) > 0);
+  const payload = visible.map(product => {
+    const variantOptions = product.variantGroupId
+      ? all
+          .filter(item => String(item.variantGroupId || '') === String(product.variantGroupId))
+          .map(publicVariantOption)
+      : [];
+    return publicProduct(product, variantOptions);
+  });
+  return res.json(payload);
+});
 app.get('/api/classifications', (_, res) => res.json(readClassifications()));
 app.get('/api/storefront', (_, res) => {
   const settings = readStorefront();
@@ -6342,7 +6360,7 @@ app.post('/api/admin/products/:id/link-variant', requireAdmin, (req, res) => {
   const groupId = String(base.variantGroupId || variant.variantGroupId || crypto.randomUUID());
   const label = cleanText(req.body?.variantLabel, 80);
   const updated = products.map(item => {
-    if (item.id === base.id) return { ...item, variantGroupId: groupId, variantOfId: item.variantOfId || item.id, variantLabel: item.variantLabel || 'Base', updatedAt: new Date().toISOString() };
+    if (item.id === base.id) return { ...item, variantGroupId: groupId, variantOfId: item.variantOfId || item.id, variantLabel: item.variantLabel || null, updatedAt: new Date().toISOString() };
     if (item.id === variant.id) return { ...item, variantGroupId: groupId, variantOfId: base.variantOfId || base.id, variantLabel: label || item.variantLabel || null, updatedAt: new Date().toISOString() };
     return item;
   }).map(normalizeProduct);
