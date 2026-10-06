@@ -3446,11 +3446,22 @@ function publicProduct(product, variantOptions = []) {
 
 app.get('/api/products', (_, res) => {
   const all = readProducts().map(normalizeProduct);
-  const visible = all.filter(product => product.published !== false && Number(product.stock || 0) > 0);
+  const stockedVariantGroups = new Set(
+    all
+      .filter(product => product.published !== false && product.variantGroupId && Number(product.stock || 0) > 0)
+      .map(product => String(product.variantGroupId))
+  );
+  // Un modelo con variantes puede tener el SKU "base" sin stock: mientras
+  // exista al menos un color publicado con stock, la ficha del modelo sigue
+  // siendo visible y permite escoger el SKU disponible desde la misma página.
+  const visible = all.filter(product =>
+    product.published !== false &&
+    (Number(product.stock || 0) > 0 || (product.variantGroupId && stockedVariantGroups.has(String(product.variantGroupId))))
+  );
   const payload = visible.map(product => {
     const variantOptions = product.variantGroupId
       ? all
-          .filter(item => String(item.variantGroupId || '') === String(product.variantGroupId))
+          .filter(item => String(item.variantGroupId || '') === String(product.variantGroupId) && item.published !== false)
           .map(publicVariantOption)
       : [];
     return publicProduct(product, variantOptions);

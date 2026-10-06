@@ -6004,7 +6004,24 @@ html:has(.admin-web-shell),body:has(.admin-web-shell),#app:has(.admin-web-shell)
 .inventory-variant-empty{padding:12px 14px;border:1px dashed #d8d0c2;border-radius:11px;color:#777168;font-size:13px;margin-bottom:12px}
 .inventory-variant-link{display:grid;grid-template-columns:minmax(180px,1fr) minmax(220px,280px) minmax(150px,210px) auto;gap:10px;align-items:end;padding-top:14px;border-top:1px solid #e6e0d6}
 .inventory-variant-link>div{display:flex;flex-direction:column;gap:3px}.inventory-variant-link select,.inventory-variant-link input{height:42px;border:1px solid #d8d0c2;border-radius:9px;background:#fff;padding:0 11px;font:inherit}
-.detail-variants{margin:18px 0 2px}.detail-variants-label{display:block;text-transform:uppercase;letter-spacing:.12em;font-size:11px;font-weight:700;color:#9a8e7e;margin-bottom:8px}.detail-variants-list{display:flex;flex-wrap:wrap;gap:8px}.detail-variant-chip{display:inline-flex;align-items:center;min-height:34px;padding:7px 12px;border:1px solid #ddd5c6;border-radius:999px;text-decoration:none;color:#292622;background:#fff;font-size:13px;transition:.18s ease}.detail-variant-chip:hover{border-color:#b58a43;transform:translateY(-1px)}.detail-variant-chip.is-active{border-color:#b58a43;background:#f3ecdf;font-weight:700}
+.detail-variants{margin:22px 0 4px;padding:16px 16px 15px;border:1px solid #e6dfd2;border-radius:16px;background:linear-gradient(180deg,#fff 0%,#fbfaf7 100%);box-shadow:0 8px 24px rgba(39,31,20,.045)}
+.detail-variants-head{display:flex;align-items:flex-end;justify-content:space-between;gap:14px;margin-bottom:13px}
+.detail-variants-kicker{display:block;text-transform:uppercase;letter-spacing:.16em;font-size:9px;font-weight:800;color:#b58a43;margin-bottom:4px}
+.detail-variants-label{display:block;font-size:15px;font-weight:750;color:#292622}
+.detail-variants-current{font-size:12px;color:#777168;text-align:right;max-width:45%;font-weight:600}
+.detail-variants-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:9px}
+.detail-variant-chip{position:relative;display:flex;align-items:center;gap:9px;width:100%;min-height:58px;padding:8px 10px;border:1px solid #ded7ca;border-radius:12px;text-decoration:none;color:#292622;background:#fff;font-size:13px;text-align:left;transition:border-color .18s ease,box-shadow .18s ease,transform .18s ease,background .18s ease}
+.detail-variant-chip:hover:not(:disabled){border-color:#c4a267;transform:translateY(-1px);box-shadow:0 7px 16px rgba(39,31,20,.08)}
+.detail-variant-chip.is-active{border-color:#b58a43;background:#fbf6ec;box-shadow:0 0 0 2px rgba(181,138,67,.13)}
+.detail-variant-chip:disabled{opacity:.52;cursor:not-allowed}
+.detail-variant-swatch{flex:0 0 24px;width:24px;height:24px;border-radius:50%;border:1px solid rgba(0,0,0,.12);background:linear-gradient(135deg,#d8d8d8,#f7f7f7 48%,#b9b9b9);box-shadow:inset 0 1px 2px rgba(255,255,255,.8)}
+.detail-variant-chip-copy{min-width:0;display:flex;flex-direction:column;gap:2px;flex:1}
+.detail-variant-chip-copy strong{font-size:12px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.detail-variant-chip-copy small{font-size:10px;color:#918879}
+.detail-variant-check{width:19px;height:19px;display:grid;place-items:center;border-radius:50%;background:#eee7dc;color:transparent;font-size:11px;flex:0 0 auto}
+.detail-variant-chip.is-active .detail-variant-check{background:#b58a43;color:#fff}
+@media (max-width:800px){.detail-variants-head{align-items:flex-start;flex-direction:column}.detail-variants-current{max-width:100%;text-align:left}.detail-variants-list{grid-template-columns:1fr 1fr}.inventory-variant-manager-head{flex-direction:column}.inventory-variant-link{grid-template-columns:1fr}.inventory-variant-link button{width:100%}}
+@media (max-width:480px){.detail-variants-list{grid-template-columns:1fr}.detail-variants{padding:14px}.detail-variant-chip{min-height:54px}}
 @media (max-width:800px){.inventory-variant-manager-head{flex-direction:column}.inventory-variant-link{grid-template-columns:1fr}.inventory-variant-link button{width:100%}}
 
 /* Gestor de productos repetidos */

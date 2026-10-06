@@ -1274,26 +1274,93 @@ async function renderCategoryPage(categoryKey) {
 
 async function renderProductDetail(product, products, storefront) {
   setPublicCatalogProducts(products);
-  const images = productImages(product); updateSeoMeta({ title: `${product.name} | YHORS-STORE`, description: compactProductDescription(product.description || `${product.name} disponible en YHORS-STORE.`, 155), canonical: `${location.origin}${productHref(product)}`, image: images[0] && (images[0].startsWith('http') ? images[0] : `${location.origin}${images[0]}`) }); let selected = 0; const isCosplay = product.category === 'cosplay'; const hasRental = isCosplay && Number.isFinite(Number(product.rentalPrice));
+  let activeProduct = product;
+  let images = productImages(product); updateSeoMeta({ title: `${product.name} | YHORS-STORE`, description: compactProductDescription(product.description || `${product.name} disponible en YHORS-STORE.`, 155), canonical: `${location.origin}${productHref(product)}`, image: images[0] && (images[0].startsWith('http') ? images[0] : `${location.origin}${images[0]}`) }); let selected = 0; const isCosplay = product.category === 'cosplay'; const hasRental = isCosplay && Number.isFinite(Number(product.rentalPrice));
   const modeOptions = hasRental ? `<div class="purchase-choice"><span class="choice-label">¿Cómo quieres obtenerlo?</span><div class="purchase-options" role="radiogroup" aria-label="Modalidad"><button type="button" class="purchase-option active" data-purchase-mode="purchase"><strong>Comprar</strong><span>${productPriceLabel(product)}</span></button><button type="button" class="purchase-option" data-purchase-mode="rental"><strong>Alquilar</strong><span>Alquiler: ${money(product.rentalPrice)}</span></button></div><div class="rental-days-picker hidden" id="rentalDaysPicker"><label for="rentalDays">Días de alquiler</label><select id="rentalDays" name="rentalDays">${Array.from({length:10},(_,i)=>i+1).map(day=>`<option value="${day}" ${day===1?'selected':''}>${day} día${day===1?'':'s'}</option>`).join('')}</select><small class="field-help">Selecciona de 1 a 10 días.</small></div></div>` : '';
   const whatsappNumber = String(storefront?.whatsappNumber || '').replace(/\D/g, '');
   const variantBase = product.variantGroupId ? (products.find(item => String(item.variantGroupId || '') === String(product.variantGroupId) && item.published !== false) || product) : product;
   const productVariants = Array.isArray(product.variantOptions) && product.variantOptions.length
     ? product.variantOptions
     : (product.variantGroupId ? products.filter(item => String(item.variantGroupId || '') === String(product.variantGroupId)) : []);
-  const variantSelector = productVariants.length > 1 ? `<div class="detail-variants" aria-label="Variantes disponibles"><label class="detail-variants-label">Color / variante</label><div class="detail-variants-list">${productVariants.map(item => { const disabled = item.inStock === false; const active = String(item.id) === String(product.id); return `<button type="button" class="detail-variant-chip ${active ? 'is-active' : ''}" data-detail-variant="${escapeHTML(item.id)}" ${disabled ? 'disabled' : ''}>${escapeHTML(item.variantLabel || item.sku || 'Variante')}${disabled ? ' · Agotado' : ''}</button>`; }).join('')}</div></div>` : '';
+  const variantSelector = productVariants.length > 1 ? `<div class="detail-variants" aria-label="Variantes disponibles"><div class="detail-variants-head"><div><span class="detail-variants-kicker">PERSONALIZA TU ELECCIÓN</span><label class="detail-variants-label">Elige tu acabado</label></div><span class="detail-variants-current" id="detailVariantCurrent">${escapeHTML(product.variantLabel || 'Selecciona un acabado')}</span></div><div class="detail-variants-list">${productVariants.map(item => { const disabled = item.inStock === false; const active = String(item.id) === String(product.id); const label = item.variantLabel || item.sku || 'Variante'; return `<button type="button" class="detail-variant-chip ${active ? 'is-active' : ''}" data-detail-variant="${escapeHTML(item.id)}" ${disabled ? 'disabled' : ''}><span class="detail-variant-swatch" aria-hidden="true"></span><span class="detail-variant-chip-copy"><strong>${escapeHTML(label)}</strong><small>${disabled ? 'Agotado' : 'Disponible'}</small></span><span class="detail-variant-check" aria-hidden="true">✓</span></button>`; }).join('')}</div></div>` : '';
   const whatsappMessage = `Hola YHORS 👋, necesito más información sobre este producto.\n\nProducto: ${product.name || ''}\nSKU: ${product.sku || '—'}\nPrecio actual: ${money(product.salePrice ?? product.price ?? 0)}\n\n¿Podrían ayudarme con más información?`;
   const whatsappHref = whatsappNumber ? `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(whatsappMessage)}` : categoryHref(product.category);
   const supportCards = `<section class="detail-support-grid detail-support-grid--four" aria-label="Información de compra"><article class="detail-support-card"><span class="detail-support-number">01</span><div><strong>Compra directa</strong><p>Un proceso sencillo y atención personal durante tu compra.</p></div></article><article class="detail-support-card"><span class="detail-support-number">02</span><div><strong>Stock actualizado</strong><p>La disponibilidad se sincroniza con el inventario de YHORS.</p></div></article><article class="detail-support-card"><span class="detail-support-number">03</span><div><strong>Atención YHORS</strong><p>¿Tienes dudas? Escríbenos directamente y te ayudamos.</p></div></article><article class="detail-support-card detail-support-card--notice"><span class="detail-support-number">04</span><div><strong>Precio vigente</strong><p>Los precios pueden cambiar sin previo aviso. El valor mostrado es el vigente al momento de consultar.</p></div></article></section>`;
   const detailDescription = `<section class="detail-information" aria-label="Información del producto"><div class="detail-information-main"><span class="eyebrow">DETALLES DEL PRODUCTO</span><h2>Descripción</h2><div class="detail-description">${richDescriptionHTML(product.description)}</div></div><aside class="detail-help-card"><span class="eyebrow">ATENCIÓN YHORS</span><h3>¿Necesitas más información?</h3><p>Te ayudamos a confirmar características, compatibilidad o cualquier detalle antes de comprar.</p><a class="detail-whatsapp-button" href="${escapeHTML(whatsappHref)}" ${whatsappNumber ? 'target="_blank" rel="noopener noreferrer"' : ''}><span class="detail-whatsapp-icon">◉</span><span><strong>Consultar por WhatsApp</strong><small>${whatsappNumber ? `+${escapeHTML(whatsappNumber)}` : 'Contactar con YHORS'}</small></span><span class="detail-whatsapp-arrow">↗</span></a><div class="detail-contact-product"><span>Consulta por</span><strong>${escapeHTML(product.name || 'Producto')}</strong><small>SKU ${escapeHTML(product.sku || '—')} · ${money(product.salePrice ?? product.price ?? 0)}</small></div></aside></section>`;
-  app.innerHTML = `${renderHeader(product.category, products)}<main class="product-detail-page"><div class="breadcrumbs"><a href="${categoryHref(product.category)}">${escapeHTML(categories[product.category])}</a><span>/</span><strong>${escapeHTML(product.name)}</strong></div><section class="detail-layout"><div class="detail-gallery"><div class="detail-main-image"><img id="detailMainImage" data-fallback src="${escapeHTML(images[0])}" alt="${escapeHTML(product.name)}"></div>${images.length > 1 ? `<div class="thumbnail-row">${images.map((image, index) => `<button class="thumb ${index === 0 ? 'active' : ''}" data-image-index="${index}"><img data-fallback src="${escapeHTML(image)}" alt="Imagen ${index + 1}"></button>`).join('')}</div>` : ''}</div><div class="detail-copy"><span class="eyebrow">${escapeHTML(categories[product.category])}</span><h1 class="detail-product-title ${(() => { const n = String(product.name || '').trim().length; return n > 95 ? 'detail-title--xl' : n > 70 ? 'detail-title--long' : n > 48 ? 'detail-title--medium' : 'detail-title--short'; })()}">${escapeHTML(product.name)}</h1><div class="detail-price-wrap"><span class="detail-price-label">Precio</span><div class="detail-price" id="detailPrice">${productPriceLabel(product)}</div></div><div class="detail-sku" aria-label="SKU de YHORS"><span class="detail-sku-icon">⌑</span><span>SKU: <strong>${escapeHTML(product.sku || '—')}</strong></span></div>${variantSelector}${modeOptions}<div class="detail-buy"><button class="add detail-add" id="detailAdd" ${!hasRental && !product.inStock ? 'disabled' : ''}><span>${!hasRental && !product.inStock ? 'Sin stock' : 'Añadir al carrito'}</span><span>${!hasRental && !product.inStock ? '—' : '+'}</span></button><a class="button secondary back-button" href="${categoryHref(product.category)}">← Volver a ${escapeHTML(categories[product.category])}</a></div><div class="detail-mini-note"><span>✓</span><span>Compra directa y atención personal.</span></div><div class="detail-basic-meta" aria-label="Datos del producto"><div><strong>Categoría:</strong> <span>${escapeHTML(categories[product.category] || product.category || '—')}</span></div><div><strong>Tipo:</strong> <span>${escapeHTML(product.productType || '—')}</span></div>${product.brand ? `<div><strong>Marca:</strong> <span>${escapeHTML(product.brand)}</span></div>` : ''}</div></div></section>${supportCards}${detailDescription}</main>${renderRelatedProducts(product, products)}${renderFooter(products)}${cartMarkup()}`;
+  app.innerHTML = `${renderHeader(product.category, products)}<main class="product-detail-page"><div class="breadcrumbs"><a href="${categoryHref(product.category)}">${escapeHTML(categories[product.category])}</a><span>/</span><strong id="detailBreadcrumbName">${escapeHTML(product.name)}</strong></div><section class="detail-layout"><div class="detail-gallery"><div class="detail-main-image"><img id="detailMainImage" data-fallback src="${escapeHTML(images[0])}" alt="${escapeHTML(product.name)}"></div>${images.length > 1 ? `<div class="thumbnail-row">${images.map((image, index) => `<button class="thumb ${index === 0 ? 'active' : ''}" data-image-index="${index}"><img data-fallback src="${escapeHTML(image)}" alt="Imagen ${index + 1}"></button>`).join('')}</div>` : ''}</div><div class="detail-copy"><span class="eyebrow">${escapeHTML(categories[product.category])}</span><h1 id="detailProductTitle" class="detail-product-title ${(() => { const n = String(product.name || '').trim().length; return n > 95 ? 'detail-title--xl' : n > 70 ? 'detail-title--long' : n > 48 ? 'detail-title--medium' : 'detail-title--short'; })()}">${escapeHTML(product.name)}</h1><div class="detail-price-wrap"><span class="detail-price-label">Precio</span><div class="detail-price" id="detailPrice">${productPriceLabel(product)}</div></div><div class="detail-sku" aria-label="SKU de YHORS"><span class="detail-sku-icon">⌑</span><span>SKU: <strong id="detailSkuValue">${escapeHTML(product.sku || '—')}</strong></span></div>${variantSelector}${modeOptions}<div class="detail-buy"><button class="add detail-add" id="detailAdd" ${!hasRental && !product.inStock ? 'disabled' : ''}><span>${!hasRental && !product.inStock ? 'Sin stock' : 'Añadir al carrito'}</span><span>${!hasRental && !product.inStock ? '—' : '+'}</span></button><a class="button secondary back-button" href="${categoryHref(product.category)}">← Volver a ${escapeHTML(categories[product.category])}</a></div><div class="detail-mini-note"><span>✓</span><span>Compra directa y atención personal.</span></div><div class="detail-basic-meta" aria-label="Datos del producto"><div><strong>Categoría:</strong> <span id="detailCategoryValue">${escapeHTML(categories[product.category] || product.category || '—')}</span></div><div><strong>Tipo:</strong> <span id="detailTypeValue">${escapeHTML(product.productType || '—')}</span></div><div id="detailBrandRow" ${product.brand ? '' : 'hidden'}><strong>Marca:</strong> <span id="detailBrandValue">${escapeHTML(product.brand || '—')}</span></div></div></div></section>${supportCards}${detailDescription}</main>${renderRelatedProducts(product, products)}${renderFooter(products)}${cartMarkup()}`;
   wireCategoryNavigation(); wireMobileMenu(); wireSearch(); wireImageFallback(document.querySelector('.product-detail-page')); document.querySelectorAll('[data-detail-variant]').forEach(button => button.addEventListener('click', () => {
     const variantId = button.dataset.detailVariant;
-    if (!variantId) return;
-    history.pushState({ product: variantBase.id, variant: variantId }, '', `${productHref(variantBase)}?variante=${encodeURIComponent(variantId)}`);
-    renderStore();
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  })); markPageEnter(); wireRelatedProducts(product, products); document.querySelectorAll('[data-image-index]').forEach(button => button.addEventListener('click', () => {
+    const next = productVariants.find(item => String(item.id) === String(variantId));
+    if (!next || next.inStock === false || String(next.id) === String(activeProduct.id)) return;
+    activeProduct = next;
+    images = productImages(activeProduct);
+    selected = 0;
+
+    const main = document.querySelector('#detailMainImage');
+    const thumbRow = document.querySelector('.thumbnail-row');
+    if (main && images[0]) {
+      main.classList.add('is-changing');
+      const preloader = new Image();
+      preloader.onload = () => {
+        main.src = images[0];
+        main.alt = activeProduct.name || product.name;
+        requestAnimationFrame(() => {
+          main.classList.remove('is-changing');
+          main.classList.add('is-entering');
+          window.setTimeout(() => main.classList.remove('is-entering'), 380);
+        });
+      };
+      preloader.onerror = () => { main.src = images[0]; main.classList.remove('is-changing'); };
+      preloader.src = images[0];
+    }
+    if (thumbRow) {
+      thumbRow.innerHTML = images.length > 1
+        ? images.map((image, index) => `<button class="thumb ${index === 0 ? 'active' : ''}" data-image-index="${index}" type="button"><img data-fallback src="${escapeHTML(image)}" alt="Imagen ${index + 1}"></button>`).join('')
+        : '';
+      wireImageFallback(thumbRow);
+      thumbRow.querySelectorAll('[data-image-index]').forEach(bindThumb);
+    }
+
+    const title = document.querySelector('#detailProductTitle');
+    if (title) {
+      title.textContent = activeProduct.name || '';
+      const n = String(activeProduct.name || '').trim().length;
+      title.className = `detail-product-title ${n > 95 ? 'detail-title--xl' : n > 70 ? 'detail-title--long' : n > 48 ? 'detail-title--medium' : 'detail-title--short'}`;
+    }
+    document.querySelector('#detailBreadcrumbName')?.replaceChildren(document.createTextNode(activeProduct.name || ''));
+    document.querySelector('#detailSkuValue')?.replaceChildren(document.createTextNode(activeProduct.sku || '—'));
+    document.querySelector('#detailCategoryValue')?.replaceChildren(document.createTextNode(categories[activeProduct.category] || activeProduct.category || '—'));
+    document.querySelector('#detailTypeValue')?.replaceChildren(document.createTextNode(activeProduct.productType || '—'));
+    const brandRow = document.querySelector('#detailBrandRow');
+    if (brandRow) {
+      brandRow.hidden = !activeProduct.brand;
+      document.querySelector('#detailBrandValue')?.replaceChildren(document.createTextNode(activeProduct.brand || '—'));
+    }
+    document.querySelector('#detailVariantCurrent')?.replaceChildren(document.createTextNode(activeProduct.variantLabel || 'Selecciona un acabado'));
+    document.querySelectorAll('[data-detail-variant]').forEach(item => item.classList.toggle('is-active', String(item.dataset.detailVariant) === String(activeProduct.id)));
+
+    const price = document.querySelector('#detailPrice');
+    if (price) price.textContent = productPriceLabel(activeProduct);
+    const soldOut = !activeProduct.inStock;
+    const detailAdd = document.querySelector('#detailAdd');
+    if (detailAdd) {
+      detailAdd.disabled = soldOut;
+      detailAdd.innerHTML = `<span>${soldOut ? 'Sin stock' : 'Añadir al carrito'}</span><span>${soldOut ? '—' : '+'}</span>`;
+    }
+
+    const contactProduct = document.querySelector('.detail-contact-product strong');
+    const contactMeta = document.querySelector('.detail-contact-product small');
+    if (contactProduct) contactProduct.textContent = activeProduct.name || 'Producto';
+    if (contactMeta) contactMeta.textContent = `SKU ${activeProduct.sku || '—'} · ${money(activeProduct.salePrice ?? activeProduct.price ?? 0)}`;
+
+    const detailDescription = document.querySelector('.detail-description');
+    if (detailDescription) detailDescription.innerHTML = richDescriptionHTML(activeProduct.description);
+    const whatsappLink = document.querySelector('.detail-whatsapp-button');
+    if (whatsappLink && whatsappNumber) {
+      const msg = `Hola YHORS 👋, necesito más información sobre este producto.\n\nProducto: ${activeProduct.name || ''}\nSKU: ${activeProduct.sku || '—'}\nPrecio actual: ${money(activeProduct.salePrice ?? activeProduct.price ?? 0)}\n\n¿Podrían ayudarme con más información?`;
+      whatsappLink.href = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(msg)}`;
+    }
+  })); markPageEnter(); wireRelatedProducts(product, products); const bindThumb = button => button.addEventListener('click', () => {
     const nextIndex = Number(button.dataset.imageIndex);
     if (!Number.isInteger(nextIndex) || !images[nextIndex] || nextIndex === selected) return;
     selected = nextIndex;
@@ -1315,23 +1382,24 @@ async function renderProductDetail(product, products, storefront) {
     preloader.onerror = () => { main.src = nextSrc; main.classList.remove('is-changing'); };
     preloader.src = nextSrc;
     document.querySelectorAll('.thumb').forEach(item => item.classList.toggle('active', item === button));
-  }));
+  });
+  document.querySelectorAll('[data-image-index]').forEach(bindThumb);
   const cart = wireCart(products, storefront); let purchaseMode = 'purchase';
   document.querySelectorAll('[data-purchase-mode]').forEach(button => button.addEventListener('click', () => {
     purchaseMode = button.dataset.purchaseMode;
     document.querySelectorAll('[data-purchase-mode]').forEach(item => item.classList.toggle('active', item === button));
-    document.querySelector('#detailPrice').firstChild.textContent = purchaseMode === 'rental' ? money(product.rentalPrice) : productPriceLabel(product);
+    document.querySelector('#detailPrice').firstChild.textContent = purchaseMode === 'rental' ? money(activeProduct.rentalPrice) : productPriceLabel(activeProduct);
     document.querySelector('#rentalDaysPicker')?.classList.toggle('hidden', purchaseMode !== 'rental');
     const detailAdd = document.querySelector('#detailAdd');
     if (detailAdd) {
-      const soldOut = purchaseMode === 'purchase' && !product.inStock;
+      const soldOut = purchaseMode === 'purchase' && !activeProduct.inStock;
       detailAdd.disabled = soldOut;
       detailAdd.innerHTML = `<span>${soldOut ? 'Sin stock' : 'Añadir al carrito'}</span><span>${soldOut ? '—' : '+'}</span>`;
     }
   }));
   document.querySelector('#detailAdd').addEventListener('click', e => {
     const rentalDays = purchaseMode === 'rental' ? rentalDaysValue(document.querySelector('#rentalDays')?.value) : 1;
-    cart.addToCart(product, e.currentTarget, hasRental ? purchaseMode : 'purchase', rentalDays);
+    cart.addToCart(activeProduct, e.currentTarget, hasRental ? purchaseMode : 'purchase', rentalDays);
   });
 }
 
