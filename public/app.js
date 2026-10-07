@@ -539,7 +539,7 @@ function categoryBlocks(products = publicCatalogProducts) {
   return `<section class="category-blocks section" id="categorias"><div class="section-heading"><div><span class="eyebrow">Explora por universo</span><h2>Encuentra tu estilo</h2></div><p>Cada categoría tiene su propio espacio.</p></div><div class="category-grid">${entries.map(([key, label], index) => `<a class="category-card category-${key}" href="${categoryHref(key)}"><span class="category-number">${String(index + 1).padStart(2, '0')}</span><div><span class="category-kicker">YHORS</span><h3>${escapeHTML(label)}</h3><p>${escapeHTML(categoryDescriptions[key])}</p></div><span class="category-arrow">↗</span></a>`).join('')}</div></section>`;
 }
 function productCard(product) {
-  const image = productImages(product)[0];
+  const image = product.image || productImages(product)[0];
   const meta = productMeta(product);
   const inStock = product.inStock === true;
   const availability = inStock ? `` : ``;
@@ -579,7 +579,7 @@ function relatedProductsFor(product, products) {
 }
 
 function relatedProductCard(product) {
-  const image = productImages(product)[0] || placeholder;
+  const image = product.image || productImages(product)[0] || placeholder;
   const price = productPriceLabel(product);
   return `<article class="related-card"><a class="related-card-link" href="${escapeHTML(productHref(product))}" aria-label="Ver ${escapeHTML(product.name)}"><div class="related-card-image"><img data-fallback src="${escapeHTML(image)}" alt="${escapeHTML(product.name)}" loading="lazy"></div><div class="related-card-copy"><span class="related-card-category">${escapeHTML(categories[product.category] || product.category || 'YHORS')}</span><h3>${escapeHTML(product.name)}</h3><div class="related-card-price">${escapeHTML(price)}</div><span class="related-card-action">Ver producto <span>→</span></span></div></a></article>`;
 }
@@ -1229,7 +1229,7 @@ async function renderHome() {
   const heroProducts = byIds(heroIds).sort((a, b) => (Number(a.heroOrder) || 0) - (Number(b.heroOrder) || 0));
   const featured = byIds(featuredIds);
   const heroSource = heroProducts.length ? heroProducts : (featured.length ? featured : products.slice(0, 4));
-  const heroSlides = heroSource.map((product, index) => ({ ...product, image: productImages(product)[0], heroTitle: product.heroTitle || (index === 0 && !heroProducts.length ? 'PIEZAS QUE\nCUENTAN TU HISTORIA' : product.name), heroDescription: product.heroDescription || product.description }));
+  const heroSlides = heroSource.map((product, index) => ({ ...product, image: product.image || productImages(product)[0], heroTitle: product.heroTitle || (index === 0 && !heroProducts.length ? 'PIEZAS QUE\nCUENTAN TU HISTORIA' : product.name), heroDescription: product.heroDescription || product.description }));
   const matchesSearch = product => {
     const haystack = [product.name, product.brand, product.productType, categories[product.category], product.description].filter(Boolean).join(' ').toLowerCase();
     return haystack.includes(searchTerm);
@@ -1265,7 +1265,7 @@ async function renderCategoryPage(categoryKey) {
     return renderStore();
   }
   setPublicCatalogProducts(products);
-  const slides = categoryProducts.slice(0, 4).map(product => ({ ...product, image: productImages(product)[0], heroTitle: product.heroTitle || product.name, heroDescription: product.heroDescription || product.description }));
+  const slides = categoryProducts.slice(0, 4).map(product => ({ ...product, image: product.image || productImages(product)[0], heroTitle: product.heroTitle || product.name, heroDescription: product.heroDescription || product.description }));
   app.innerHTML = `${renderHeader(categoryKey, products)}<main>${heroMarkup(slides, true, categoryKey)}<section class="section category-page-section" id="productos-categoria"><div class="category-intro"><div><span class="eyebrow">Colección independiente</span><h1>${escapeHTML(categories[categoryKey])}</h1></div><p>${escapeHTML(categoryDescriptions[categoryKey])}</p></div><div class="catalog-layout">${catalogFilters(classifications, categoryKey, { category: categoryKey }, categoryProducts)}<div class="catalog-results"><div class="results-count" id="resultsCount"></div><div class="products product-type-container" id="categoryProducts"></div></div></div></section></main>${renderFooter(products)}${cartMarkup()}`;
   wireCategoryNavigation(); wireMobileMenu(); wireSearch(); wireHero(slides); markPageEnter(); const cart = wireCart(products, storefront); const area = document.querySelector('#categoryProducts');
   const renderCategoryResults = (items) => { renderProductsInto(area, items, id => openProduct(id, products), (product, button) => cart.addToCart(product, button), { groupByType: true, groupOrder: storefront.categorySectionOrder?.[categoryKey] || [] }); const count = document.querySelector('#resultsCount'); if (count) count.textContent = `${items.length} producto${items.length === 1 ? '' : 's'} en ${escapeHTML(categories[categoryKey])}`; if (!items.length) area.innerHTML = '<div class="empty">No hay productos que coincidan con estos filtros.</div>'; };
