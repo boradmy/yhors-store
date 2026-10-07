@@ -1994,7 +1994,7 @@ app.get('/robots.txt', (_, res) => {
 });
 
 app.get('/sitemap.xml', (_, res) => {
-  const products = readProducts().map(normalizeProduct).filter(product => product.published !== false && Number(product.stock || 0) > 0);
+  const products = readProducts().map(normalizeProduct).filter(product => product.published !== false && product.productKind !== 'variant' && (product.productKind === 'model' || Number(product.stock || 0) > 0));
   const categoryCounts = new Map(VALID_PUBLIC_CATEGORIES.map(category => [
     category,
     products.filter(product => product.category === category).length
@@ -2034,7 +2034,7 @@ app.get('/sitemap.xml', (_, res) => {
 
 // SEO-friendly public routes are rendered server-side so search engines receive useful HTML on first response.
 app.get('/producto/:slug', (req, res) => {
-  const products = readProducts().map(normalizeProduct).filter(product => product.published !== false && Number(product.stock || 0) > 0);
+  const products = readProducts().map(normalizeProduct).filter(product => product.published !== false && product.productKind !== 'variant' && (product.productKind === 'model' || Number(product.stock || 0) > 0));
   const product = findProductBySlug(products, req.params.slug);
   if (!product) return res.status(404).send(layout({
     title: 'Producto no encontrado | YHORS-STORE',
@@ -2067,7 +2067,7 @@ app.get('/categoria/:category', (req, res, next) => {
   const key = String(req.params.category || '').toLowerCase();
   if (key === 'principal') return next();
   if (!VALID_PUBLIC_CATEGORIES.includes(key)) return next();
-  const products = readProducts().map(normalizeProduct).filter(product => product.published !== false && Number(product.stock || 0) > 0);
+  const products = readProducts().map(normalizeProduct).filter(product => product.published !== false && product.productKind !== 'variant' && (product.productKind === 'model' || Number(product.stock || 0) > 0));
   const categoryProducts = products.filter(product => product.category === key);
   const label = CATEGORY_LABELS[key];
   const canonical = `${SITE_URL}/categoria/${key}`;
@@ -2093,7 +2093,7 @@ app.get('/categoria/:category', (req, res, next) => {
 app.get('/categoria/todo', (_, res) => res.redirect(301, '/categoria/principal'));
 
 app.get('/categoria/principal', (_, res) => {
-  const products = readProducts().map(normalizeProduct).filter(product => product.published !== false && Number(product.stock || 0) > 0);
+  const products = readProducts().map(normalizeProduct).filter(product => product.published !== false && product.productKind !== 'variant' && (product.productKind === 'model' || Number(product.stock || 0) > 0));
   const canonical = `${SITE_URL}/categoria/principal`;
   const itemList = products.slice(0,100).map((p,i)=>({ '@type':'ListItem', position:i+1, name:p.name, url:productUrl(p) }));
   return res.send(layout({ title:'Catálogo | YHORS-STORE', description:CATEGORY_DESCRIPTIONS.principal, canonical, json:[
@@ -2122,7 +2122,7 @@ app.get('/', (req, res, next) => {
     const products = readProducts().map(normalizeProduct);
     return res.send(layout({ title: `Resultados para ${query} | YHORS-STORE`, description: `Resultados de búsqueda de ${query} en YHORS-STORE.`, canonical: `${SITE_URL}/`, robots: 'noindex,follow', json: [], body: `<main class="section"><div class="section-heading"><div><span class="eyebrow">Búsqueda YHORS</span><h1>Resultados para “${esc(query)}”</h1></div><p>Usa el buscador para explorar productos, marcas y categorías de YHORS-STORE.</p></div><p><a class="button" href="/">Volver al catálogo <span>→</span></a></p></main>` }));
   }
-  const products = readProducts().map(normalizeProduct).filter(product => product.published !== false && Number(product.stock || 0) > 0);
+  const products = readProducts().map(normalizeProduct).filter(product => product.published !== false && product.productKind !== 'variant' && (product.productKind === 'model' || Number(product.stock || 0) > 0));
   const canonical = `${SITE_URL}/`;
   const organization = { '@context':'https://schema.org', '@type':'Organization', name:CORPORATE_NAME, url:`${SITE_URL}/yhors-corp`, brand:{ '@type':'Brand', name:'YHORS' }, subOrganization:{ '@type':'OnlineStore', name:SITE_NAME, url:canonical } };
   const website = { '@context':'https://schema.org', '@type':'WebSite', name:SITE_NAME, alternateName:['YHORS','YHORS-STORE'], url:canonical, potentialAction:{ '@type':'SearchAction', target:`${SITE_URL}/?buscar={search_term_string}`, 'query-input':'required name=search_term_string' } };
@@ -3370,6 +3370,10 @@ function validateProduct(input, current = {}, allProducts = []) {
 
   return { product: {
     ...current, name, description, heroTitle, heroDescription, category, brand, productType, sku,
+    productKind: category === 'tech' ? (['model','variant'].includes(String(input.productKind || current.productKind || '')) ? String(input.productKind || current.productKind) : 'individual') : 'individual',
+    parentId: category === 'tech' ? cleanText(input.parentId ?? current.parentId ?? '', 100) : '',
+    variantLabel: category === 'tech' ? cleanText(input.variantLabel ?? current.variantLabel ?? '', 60) : '',
+    variantCode: category === 'tech' ? cleanText(input.variantCode ?? current.variantCode ?? '', 12).toUpperCase() : '',
     salePrice: Math.round(salePrice * 100) / 100,
     purchasePrice: Math.round(purchasePriceRaw * 100) / 100,
     stock: stockRaw,
@@ -3403,6 +3407,8 @@ function normalizeProduct(product) {
   return {
     ...product,
     sku: normalizeSku(product.sku) || makeUniqueSku('', product, [], product.id),
+    productKind: String(product.category || '').toLowerCase() === 'tech' ? (['model','variant'].includes(String(product.productKind||'')) ? String(product.productKind) : 'individual') : 'individual',
+    parentId: String(product.parentId || ''), variantLabel: String(product.variantLabel || ''), variantCode: String(product.variantCode || '').toUpperCase(),
     image: product.image || images[0] || '',
     images,
     purchasePrice: Number.isFinite(purchasePrice) && purchasePrice >= 0 ? Math.round(purchasePrice * 100) / 100 : 0,
@@ -3428,7 +3434,18 @@ function publicProduct(product) {
   return { ...safe, inStock: stock > 0 };
 }
 
-app.get('/api/products', (_, res) => res.json(readProducts().map(normalizeProduct).filter(product => product.published !== false && Number(product.stock || 0) > 0).map(publicProduct)));
+app.get('/api/products', (_, res) => {
+  const all = readProducts().map(normalizeProduct);
+  const variantStock = new Map();
+  all.filter(p => p.productKind === 'variant' && p.parentId && p.published !== false).forEach(v => variantStock.set(v.parentId, (variantStock.get(v.parentId)||0) + Number(v.stock||0)));
+  const visible = all.filter(p => {
+    if (p.published === false) return false;
+    if (p.productKind === 'model') return (variantStock.get(p.id)||0) > 0 || all.some(v=>v.parentId===p.id);
+    if (p.productKind === 'variant') return true;
+    return Number(p.stock||0) > 0;
+  }).map(p => ({...publicProduct(p), catalogHidden: p.productKind === 'variant'}));
+  res.json(visible);
+});
 app.get('/api/classifications', (_, res) => res.json(readClassifications()));
 app.get('/api/storefront', (_, res) => {
   const settings = readStorefront();
