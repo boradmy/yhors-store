@@ -3474,8 +3474,20 @@ app.get('/api/products', (_, res) => {
     const published = members.filter(item => item.published !== false);
     const sellable = published.filter(item => Number(item.stock || 0) > 0);
     if (!sellable.length) continue;
-    const configuredBase = published.find(item => String(item.variantOfId || '') === String(item.id || '')) || published[0];
-    const base = Number(configuredBase.stock || 0) > 0 ? configuredBase : (sellable[0] || configuredBase);
+    // La variante PRINCIPAL es la autoridad del modelo para clasificación pública.
+    // Aunque esté sin stock u oculta, su marca/categoría (y fecha de publicación del
+    // modelo) no deben cambiar porque otra variante sea la que se venda inicialmente.
+    const configuredBase = members.find(item => String(item.variantOfId || '') === String(item.id || '')) || published[0];
+    const sellableBase = Number(configuredBase?.stock || 0) > 0 && configuredBase?.published !== false
+      ? configuredBase
+      : (sellable[0] || configuredBase);
+    const base = {
+      ...sellableBase,
+      brand: configuredBase?.brand || sellableBase?.brand || '',
+      category: configuredBase?.category || sellableBase?.category || '',
+      createdAt: configuredBase?.createdAt || sellableBase?.createdAt,
+      publishedAt: configuredBase?.publishedAt || sellableBase?.publishedAt,
+    };
     const options = published
       .filter(item => item.variantLabel)
       .map(publicVariantOption);
