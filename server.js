@@ -3494,7 +3494,33 @@ app.get('/api/products', (_, res) => {
     if (!options.length) continue;
     groupedPublic.push(publicProduct(base, options));
   }
-  return res.json([...singles.map(product => publicProduct(product, [])), ...groupedPublic]);
+  // IMPORTANTE: primero resolvemos productos individuales + familias y RECIÉN DESPUÉS
+  // aplicamos la prioridad de marcas. Así una familia de variantes no queda anexada al final.
+  const publicCatalog = [...singles.map(product => publicProduct(product, [])), ...groupedPublic];
+  const classifications = readClassifications();
+  const brandOrders = classifications?.brandOrder || {};
+  const rankFor = (category, brand) => {
+    const key = String(category || '').trim().toLowerCase();
+    const order = Array.isArray(brandOrders[key]) ? brandOrders[key] : [];
+    const normalizedBrand = String(brand || '').trim().toLowerCase();
+    const index = order.findIndex(item => String(item || '').trim().toLowerCase() === normalizedBrand);
+    return index >= 0 ? index : Number.MAX_SAFE_INTEGER;
+  };
+  const catalogTime = product => {
+    const value = product?.publishedAt || product?.createdAt || product?.updatedAt || '';
+    const time = new Date(value).getTime();
+    return Number.isFinite(time) ? time : 0;
+  };
+  publicCatalog.sort((a, b) => {
+    // Solo imponemos prioridad entre marcas dentro del mismo universo/categoría.
+    if (String(a?.category || '').trim().toLowerCase() === String(b?.category || '').trim().toLowerCase()) {
+      const ar = rankFor(a?.category, a?.brand);
+      const br = rankFor(b?.category, b?.brand);
+      if (ar !== br) return ar - br;
+    }
+    return catalogTime(b) - catalogTime(a);
+  });
+  return res.json(publicCatalog);
 });
 app.get('/api/classifications', (_, res) => res.json(readClassifications()));
 app.get('/api/storefront', (_, res) => {
