@@ -3358,6 +3358,8 @@ function validateProduct(input, current = {}, allProducts = []) {
   const variantGroupId = cleanText(input.variantGroupId ?? current.variantGroupId, 80);
   const variantOfId = cleanText(input.variantOfId ?? current.variantOfId, 80);
   const variantLabel = cleanText(input.variantLabel ?? current.variantLabel, 80);
+  const variantImageIndexRaw = input.variantImageIndex === undefined ? Number(current.variantImageIndex || 0) : Number(input.variantImageIndex);
+  const variantImageIndex = Number.isInteger(variantImageIndexRaw) ? Math.max(0, Math.min(Math.max(0, finalImages.length - 1), variantImageIndexRaw)) : 0;
 
   if (variantOfId && variantOfId === String(current.id || '')) {
     return { error: 'Una variante no puede enlazarse consigo misma.' };
@@ -3394,7 +3396,8 @@ function validateProduct(input, current = {}, allProducts = []) {
     heroOrder: Number.isFinite(Number(input.heroOrder)) ? Math.max(0, Math.min(999, Number(input.heroOrder))) : (Number(current.heroOrder) || 0),
     variantGroupId: variantGroupId || null,
     variantOfId: variantOfId || null,
-    variantLabel: variantLabel || null
+    variantLabel: variantLabel || null,
+    variantImageIndex
   }};
 }
 function deleteUploadedImage(image) {
@@ -3434,6 +3437,11 @@ function normalizeProduct(product) {
 
 function publicVariantOption(product) {
   const normalized = normalizeProduct(product);
+  const preferred = Math.max(0, Math.min((normalized.images || []).length - 1, Number(normalized.variantImageIndex || 0)));
+  if (preferred > 0 && normalized.images?.[preferred]) {
+    normalized.images = [normalized.images[preferred], ...normalized.images.filter((_, index) => index !== preferred)];
+    normalized.image = normalized.images[0];
+  }
   const { purchasePrice, published, featured, hero, heroOrder, ...safe } = normalized;
   return { ...safe, inStock: Number(normalized.stock || 0) > 0, published: normalized.published !== false };
 }
@@ -3456,11 +3464,12 @@ app.get('/api/products', (_, res) => {
   const groupedPublic = [];
   for (const members of groups.values()) {
     const published = members.filter(item => item.published !== false);
-    const sellable = published.filter(item => Number(item.stock || 0) > 0 && String(item.variantOfId || '') !== String(item.id || ''));
+    const sellable = published.filter(item => Number(item.stock || 0) > 0);
     if (!sellable.length) continue;
-    const base = published.find(item => String(item.variantOfId || '') === String(item.id || '')) || published[0];
+    const configuredBase = published.find(item => String(item.variantOfId || '') === String(item.id || '')) || published[0];
+    const base = Number(configuredBase.stock || 0) > 0 ? configuredBase : (sellable[0] || configuredBase);
     const options = published
-      .filter(item => String(item.id) !== String(base.id) && item.variantLabel)
+      .filter(item => item.variantLabel)
       .map(publicVariantOption);
     if (!options.length) continue;
     groupedPublic.push(publicProduct(base, options));
@@ -6378,6 +6387,33 @@ app.post('/api/admin/products/:id/link-variant', requireAdmin, (req, res) => {
   const linked = updated.filter(item => item.variantGroupId === groupId);
   auditLog(req, 'Variante enlazada', 'Inventario', { baseProductId: base.id, variantProductId: variant.id, variantGroupId: groupId, variantLabel: label || variant.variantLabel || null });
   return res.json({ base: updated.find(item => item.id === base.id), variant: updated.find(item => item.id === variant.id), variants: linked });
+});
+
+
+app.post('/api/admin/products/:id/manage-variant', requireAdmin, (req, res) => {
+  const products = readProducts().map(normalizeProduct);
+  const base = products.find(item => String(item.id) === String(req.params.id));
+  const target = products.find(item => String(item.id) === String(req.body?.variantId || ''));
+  if (!base || !target) return res.status(404).json({ error: 'Modelo o variante no encontrado.' });
+  const groupId = String(base.variantGroupId || '');
+  if (!groupId || String(target.variantGroupId || '') !== groupId) return res.status(400).json({ error: 'La variante no pertenece a este modelo.' });
+  const action = String(req.body?.action || '');
+  let updated = products;
+  if (action === 'primary') {
+    updated = products.map(item => String(item.variantGroupId || '') === groupId
+      ? normalizeProduct({ ...item, variantOfId: String(item.id) === String(target.id) ? item.id : target.id, updatedAt: new Date().toISOString() })
+      : item);
+  } else if (action === 'published') {
+    const value = req.body?.value === true || req.body?.value === 'true';
+    updated = products.map(item => String(item.id) === String(target.id) ? normalizeProduct({ ...item, published: value, updatedAt: new Date().toISOString() }) : item);
+  } else if (action === 'image') {
+    const images = Array.isArray(target.images) ? target.images : [];
+    const index = Math.max(0, Math.min(Math.max(0, images.length - 1), Number(req.body?.value || 0)));
+    updated = products.map(item => String(item.id) === String(target.id) ? normalizeProduct({ ...item, variantImageIndex: index, updatedAt: new Date().toISOString() }) : item);
+  } else return res.status(400).json({ error: 'Acción de variante no válida.' });
+  writeProducts(updated);
+  const variants = updated.filter(item => String(item.variantGroupId || '') === groupId);
+  return res.json({ base: updated.find(item => String(item.id) === String(base.id)), variants });
 });
 
 

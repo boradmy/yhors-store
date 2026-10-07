@@ -6065,3 +6065,13 @@ html:has(.admin-web-shell),body:has(.admin-web-shell),#app:has(.admin-web-shell)
 .detail-variants + .detail-buy{margin-top:14px}
 .detail-add:disabled{cursor:not-allowed;opacity:.72}
 @media(max-width:760px){.inventory-edit-hint{width:100%;margin:4px 0 0}.inventory-record-actions{flex-wrap:wrap}}
+
+/* v10.2 · Gestión visual de variantes */
+.inventory-model-summary-actions{flex-wrap:wrap;justify-content:flex-end}
+.inventory-variant-row.is-primary{border-color:#b58a43;background:#fffdf8;box-shadow:0 0 0 1px rgba(181,138,67,.08)}
+.inventory-variant-info{min-width:0;flex:1}.inventory-variant-title{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.variant-primary-badge{font-size:9px;letter-spacing:.1em;font-weight:900;color:#7b5a24;background:#f4ead8;border:1px solid #e3cfaa;border-radius:999px;padding:4px 7px}
+.variant-image-choices{display:flex;gap:6px;flex-wrap:wrap;margin-top:9px}
+.variant-image-choice{width:46px;height:46px;padding:2px;border:1px solid #ddd5c6;border-radius:9px;background:#fff;cursor:pointer;overflow:hidden;transition:.16s ease}
+.variant-image-choice img{width:100%;height:100%;object-fit:contain;border-radius:6px}.variant-image-choice:hover{border-color:#b58a43;transform:translateY(-1px)}.variant-image-choice.is-selected{border:2px solid #b58a43;box-shadow:0 0 0 2px rgba(181,138,67,.12)}
+@media(max-width:760px){.inventory-variant-row{align-items:flex-start;flex-direction:column}.inventory-variant-row-actions{justify-content:flex-start;flex-wrap:wrap}.inventory-model-summary-actions{width:100%;justify-content:flex-start}}
