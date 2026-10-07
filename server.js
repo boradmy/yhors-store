@@ -3361,8 +3361,10 @@ function validateProduct(input, current = {}, allProducts = []) {
   const variantImageIndexRaw = input.variantImageIndex === undefined ? Number(current.variantImageIndex || 0) : Number(input.variantImageIndex);
   const variantImageIndex = Number.isInteger(variantImageIndexRaw) ? Math.max(0, Math.min(Math.max(0, finalImages.length - 1), variantImageIndexRaw)) : 0;
 
-  if (variantOfId && variantOfId === String(current.id || '')) {
-    return { error: 'Una variante no puede enlazarse consigo misma.' };
+  // En un modelo con variantes, la variante principal apunta a sí misma.
+  // Eso NO es un enlace inválido: identifica el SKU principal del grupo.
+  if (variantOfId && variantOfId === String(current.id || '') && !variantGroupId) {
+    return { error: 'Una variante no puede enlazarse consigo misma fuera de un modelo.' };
   }
   if (!Number.isFinite(purchasePriceRaw) || purchasePriceRaw < 0 || purchasePriceRaw > 100000000) {
     return { error: 'El precio de compra no es válido.' };
