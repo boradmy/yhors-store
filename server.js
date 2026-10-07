@@ -3438,18 +3438,19 @@ function normalizeProduct(product) {
 }
 
 function publicVariantOption(product) {
+  // Conserva SIEMPRE el orden real de la galería. variantImageIndex solo indica
+  // qué miniatura representa a esta variante; no debe reordenar las fotos.
   const normalized = normalizeProduct(product);
-  const preferred = Math.max(0, Math.min((normalized.images || []).length - 1, Number(normalized.variantImageIndex || 0)));
-  if (preferred > 0 && normalized.images?.[preferred]) {
-    normalized.images = [normalized.images[preferred], ...normalized.images.filter((_, index) => index !== preferred)];
-    normalized.image = normalized.images[0];
-  }
   const { purchasePrice, published, featured, hero, heroOrder, ...safe } = normalized;
   return { ...safe, inStock: Number(normalized.stock || 0) > 0, published: normalized.published !== false };
 }
 
 function publicProduct(product, variantOptions = []) {
   const normalized = normalizeProduct(product);
+  // En tarjetas/portada, la variante PRINCIPAL debe enseñar su foto asociada,
+  // sin alterar el orden de images que usará después la ficha del producto.
+  const preferred = Math.max(0, Math.min((normalized.images || []).length - 1, Number(normalized.variantImageIndex || 0)));
+  if (normalized.images?.[preferred]) normalized.image = normalized.images[preferred];
   const { stock, purchasePrice, published, ...safe } = normalized;
   return { ...safe, inStock: Array.isArray(variantOptions) && variantOptions.length ? variantOptions.some(item => item.inStock !== false) : stock > 0, variantOptions: Array.isArray(variantOptions) ? variantOptions : [] };
 }

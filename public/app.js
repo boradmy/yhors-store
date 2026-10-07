@@ -1340,6 +1340,8 @@ async function renderProductDetail(product, products, storefront) {
       wireImageFallback(thumbRow);
       thumbRow.querySelectorAll('[data-image-index]').forEach(bindThumb);
     }
+    // El marco dorado de la galería debe seguir SIEMPRE a la foto de la variante.
+    document.querySelectorAll('.thumb').forEach(item => item.classList.toggle('active', Number(item.dataset.imageIndex) === selected));
 
     const title = document.querySelector('#detailProductTitle');
     if (title) {
@@ -1382,16 +1384,22 @@ async function renderProductDetail(product, products, storefront) {
     }
   })); markPageEnter(); wireRelatedProducts(product, products); const bindThumb = button => button.addEventListener('click', () => {
     const nextIndex = Number(button.dataset.imageIndex);
-    if (!Number.isInteger(nextIndex) || !images[nextIndex] || nextIndex === selected) return;
-    selected = nextIndex;
-    const main = document.querySelector('#detailMainImage');
-    if (!main) return;
-    const nextSrc = images[selected];
+    if (!Number.isInteger(nextIndex) || !images[nextIndex]) return;
+    const nextSrc = images[nextIndex];
     const ownerId = variantImageOwners.get(nextSrc);
+    // Imagen -> variante: incluso si la miniatura ya tiene el marco, primero
+    // sincronizamos SKU, precio, botón de color y producto activo.
     if (ownerId && (!activeProduct || String(ownerId) !== String(activeProduct.id))) {
       const ownerButton = document.querySelector(`[data-detail-variant="${CSS.escape(String(ownerId))}"]`);
       if (ownerButton && !ownerButton.disabled) { ownerButton.click(); return; }
     }
+    if (nextIndex === selected) {
+      document.querySelectorAll('.thumb').forEach(item => item.classList.toggle('active', item === button));
+      return;
+    }
+    selected = nextIndex;
+    const main = document.querySelector('#detailMainImage');
+    if (!main) return;
     const preloader = new Image();
     main.classList.add('is-changing');
     preloader.onload = () => {
