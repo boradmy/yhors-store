@@ -36,6 +36,22 @@ function applyClassificationCategories(classifications = {}) {
 function setPublicCatalogProducts(products = []) {
   publicCatalogProducts = Array.isArray(products) ? products : [];
 }
+function catalogCreatedTime(product) {
+  const value = product?.publishedAt || product?.createdAt || product?.updatedAt || '';
+  const time = new Date(value).getTime();
+  return Number.isFinite(time) ? time : 0;
+}
+function sortProductsByBrandOrder(products = [], categoryKey = '', classifications = {}) {
+  const order = Array.isArray(classifications?.brandOrder?.[categoryKey]) ? classifications.brandOrder[categoryKey] : [];
+  if (!order.length) return [...products];
+  const rank = new Map(order.map((brand, index) => [String(brand).trim().toLocaleLowerCase('es'), index]));
+  return [...products].sort((a, b) => {
+    const ar = rank.get(String(a?.brand || '').trim().toLocaleLowerCase('es')) ?? Number.MAX_SAFE_INTEGER;
+    const br = rank.get(String(b?.brand || '').trim().toLocaleLowerCase('es')) ?? Number.MAX_SAFE_INTEGER;
+    if (ar !== br) return ar - br;
+    return catalogCreatedTime(b) - catalogCreatedTime(a);
+  });
+}
 function publicCategoryEntries(products = publicCatalogProducts) {
   const list = Array.isArray(products) ? products : [];
   const counts = new Map();
@@ -1043,7 +1059,7 @@ async function loadStoreData() {
     error.code = 'PUBLIC_CATALOG_UNAVAILABLE';
     throw error;
   }
-  const classifications = results[2].status === 'fulfilled' && results[2].value ? results[2].value : { brands: {}, productTypes: {}, categories: {} };
+  const classifications = results[2].status === 'fulfilled' && results[2].value ? results[2].value : { brands: {}, productTypes: {}, categories: {}, brandOrder: {} };
   applyClassificationCategories(classifications);
   return {
     products: productsResult.value,
@@ -1259,7 +1275,8 @@ async function renderCategoryPage(categoryKey) {
     console.warn('[YHORS SEO] Se conserva el HTML SSR de categoría:', error?.message || error);
     return;
   }
-  const categoryProducts = products.filter(product => categoryKey === 'all' || product.category === categoryKey);
+  const categoryProductsRaw = products.filter(product => categoryKey === 'all' || product.category === categoryKey);
+  const categoryProducts = categoryKey === 'all' ? categoryProductsRaw : sortProductsByBrandOrder(categoryProductsRaw, categoryKey, classifications);
   if (categoryKey !== 'all' && !categoryProducts.length) {
     history.replaceState({}, '', categoryHref('all'));
     return renderStore();
@@ -1645,7 +1662,9 @@ function classificationPanel(classifications) {
     <div class="classification-grid">
       <div><h3>Marcas</h3><div class="classification-add"><select id="classBrandCategory">${Object.entries(categories).filter(([k])=>k!=='all').map(([k,v])=>`<option value="${k}">${v}</option>`).join('')}</select><input id="newBrand" maxlength="50" placeholder="Ej. Infinix"><button class="button small" id="addBrand">Agregar</button></div><div id="brandLists"></div></div>
       <div><h3>Tipos de producto</h3><div class="classification-add"><select id="classTypeCategory">${Object.entries(categories).filter(([k])=>k!=='all').map(([k,v])=>`<option value="${k}">${v}</option>`).join('')}</select><input id="newType" maxlength="50" placeholder="Ej. Celular"><button class="button small" id="addType">Agregar</button></div><div id="typeLists"></div></div>
-    </div><span class="message" id="classificationMessage"></span>
+    </div>
+    <div class="brand-order-manager"><div class="brand-order-manager-head"><div><span class="eyebrow">Catálogo público</span><h3>Orden de marcas</h3><p>Define qué marcas aparecen primero dentro de cada universo. Dentro de cada marca se conserva primero lo más nuevo.</p></div><select id="brandOrderCategory">${Object.entries(categories).filter(([k])=>k!=='all').map(([k,v])=>`<option value="${k}">${v}</option>`).join('')}</select></div><div id="brandOrderList" class="brand-order-list"></div><small class="field-help">Usa las flechas para cambiar la prioridad. El orden se aplica al catálogo, no modifica inventario ni variantes.</small></div>
+    <span class="message" id="classificationMessage"></span>
   </section>`;
 }
 
@@ -5781,10 +5800,10 @@ async function renderAdminInventory() {
   };
   const saveInventoryClassifications = async () => {
     const confirmed = await showYhorsConfirm('¿Seguro que quieres guardar este cambio?', 'Se actualizarán las clasificaciones del catálogo.');
-    if (!confirmed) { const fresh=await request('/api/admin/classifications').catch(()=>classifications); classifications.brands=fresh.brands||{}; classifications.productTypes=fresh.productTypes||{}; renderInventoryClassifications(); return false; }
+    if (!confirmed) { const fresh=await request('/api/admin/classifications').catch(()=>classifications); classifications.brands=fresh.brands||{}; classifications.productTypes=fresh.productTypes||{}; classifications.brandOrder=fresh.brandOrder||{}; renderInventoryClassifications(); renderBrandOrderManager(); return false; }
     try {
       const saved=await request('/api/admin/classifications',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(classifications)});
-      classifications.brands=saved.brands||{}; classifications.productTypes=saved.productTypes||{}; renderInventoryClassifications(); draw();
+      classifications.brands=saved.brands||{}; classifications.productTypes=saved.productTypes||{}; classifications.brandOrder=saved.brandOrder||{}; renderInventoryClassifications(); renderBrandOrderManager(); draw();
       const message=document.querySelector('#classificationMessage'); if(message){message.className='message success';message.textContent='✓ Clasificaciones guardadas.';}
       return true;
     } catch(e) { const message=document.querySelector('#classificationMessage'); if(message){message.className='message error';message.textContent=e.message;} return false; }
@@ -5797,7 +5816,24 @@ async function renderAdminInventory() {
     });
     bind('#addBrand','#newBrand','#classBrandCategory','brands'); bind('#addType','#newType','#classTypeCategory','productTypes');
   };
+  const renderBrandOrderManager = () => {
+    const select = document.querySelector('#brandOrderCategory');
+    const list = document.querySelector('#brandOrderList');
+    if (!select || !list) return;
+    const category = select.value || 'tech';
+    classifications.brandOrder ||= {};
+    const available = [...new Set([...(classifications.brands?.[category] || []), ...products.filter(p => p.category === category).map(p => p.brand).filter(Boolean)])];
+    const saved = Array.isArray(classifications.brandOrder[category]) ? classifications.brandOrder[category] : [];
+    const ordered = [...saved.filter(v => available.some(a => a.toLocaleLowerCase('es') === String(v).toLocaleLowerCase('es'))), ...available.filter(v => !saved.some(a => String(a).toLocaleLowerCase('es') === String(v).toLocaleLowerCase('es')))];
+    classifications.brandOrder[category] = ordered;
+    list.innerHTML = ordered.length ? ordered.map((brand,index)=>`<div class="brand-order-row" data-brand-index="${index}"><span class="brand-order-number">${index+1}</span><strong>${escapeHTML(brand)}</strong><div class="brand-order-actions"><button type="button" class="button secondary small" data-brand-up="${index}" ${index===0?'disabled':''} aria-label="Subir ${escapeHTML(brand)}">↑</button><button type="button" class="button secondary small" data-brand-down="${index}" ${index===ordered.length-1?'disabled':''} aria-label="Bajar ${escapeHTML(brand)}">↓</button></div></div>`).join('') : '<div class="empty">No hay marcas registradas en este universo.</div>';
+    const move = async (from,to) => { if(to<0||to>=ordered.length)return; [ordered[from],ordered[to]]=[ordered[to],ordered[from]]; classifications.brandOrder[category]=ordered; renderBrandOrderManager(); await saveInventoryClassifications(); };
+    list.querySelectorAll('[data-brand-up]').forEach(btn=>btn.addEventListener('click',()=>move(Number(btn.dataset.brandUp),Number(btn.dataset.brandUp)-1)));
+    list.querySelectorAll('[data-brand-down]').forEach(btn=>btn.addEventListener('click',()=>move(Number(btn.dataset.brandDown),Number(btn.dataset.brandDown)+1)));
+  };
+  document.querySelector('#brandOrderCategory')?.addEventListener('change', renderBrandOrderManager);
   renderInventoryClassifications();
+  renderBrandOrderManager();
   bindInventoryClassificationEvents();
   const classificationModal = document.querySelector('#inventoryClassificationModal');
   const closeClassificationModal = () => { if (!classificationModal) return; classificationModal.classList.remove('is-open'); document.body.classList.remove('generate-modal-open'); setTimeout(() => { classificationModal.hidden = true; }, 180); };

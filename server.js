@@ -2575,18 +2575,23 @@ function refreshServerCategoryConfig() {
 function readClassifications() {
   try {
     const parsed = JSON.parse(fs.readFileSync(CLASSIFICATIONS_FILE, 'utf8'));
-    return { brands: parsed.brands || {}, productTypes: parsed.productTypes || {}, categories: parsed.categories || {} };
-  } catch { return { brands: {}, productTypes: {}, categories: {} }; }
+    return { brands: parsed.brands || {}, productTypes: parsed.productTypes || {}, categories: parsed.categories || {}, brandOrder: parsed.brandOrder || {} };
+  } catch { return { brands: {}, productTypes: {}, categories: {}, brandOrder: {} }; }
 }
 function writeClassifications(settings) {
   maybeAutoBackup();
-  const clean = { brands: {}, productTypes: {}, categories: {} };
+  const clean = { brands: {}, productTypes: {}, categories: {}, brandOrder: {} };
   for (const key of ['brands','productTypes']) {
     for (const [category, values] of Object.entries(settings?.[key] || {})) {
       if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(String(category || ''))) continue;
       if (String(category) === 'all' || String(category) === 'principal') continue;
       clean[key][category] = [...new Set((Array.isArray(values) ? values : []).map(v => cleanText(v, 50)).filter(Boolean))].slice(0, 100);
     }
+  }
+  for (const [category, values] of Object.entries(settings?.brandOrder || {})) {
+    const categoryKey = String(category || '').trim().toLowerCase();
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(categoryKey) || categoryKey === 'all' || categoryKey === 'principal') continue;
+    clean.brandOrder[categoryKey] = [...new Set((Array.isArray(values) ? values : []).map(v => cleanText(v, 50)).filter(Boolean))].slice(0, 100);
   }
   for (const [category, label] of Object.entries(settings?.categories || {})) {
     const key = String(category || '').trim().toLowerCase();

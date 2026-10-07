@@ -41,5 +41,15 @@
       "Marvel"
     ]
   },
-  "categories": {}
+  "categories": {},
+  "brandOrder": {
+    "tech": [
+      "Samsung",
+      "Xiaomi",
+      "Infinix",
+      "Lenovo",
+      "Amazon",
+      "Asus"
+    ]
+  }
 }
