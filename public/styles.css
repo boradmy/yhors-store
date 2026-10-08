@@ -6088,3 +6088,6 @@ html:has(.admin-web-shell),body:has(.admin-web-shell),#app:has(.admin-web-shell)
 /* YHORS: disponibilidad de compra; no mostrar para alquiler */
 .yh-detail-stock-notice:not([hidden]) { display:block; margin:12px 0 10px; color:#17763c; font-size:.85rem; font-weight:700; }
 .yh-detail-stock-notice[hidden] { display:none !important; }
+
+/* SKU y acabado visibles en el carrito */
+.cart-product-sku,.cart-product-variant{display:block;font-size:11px;line-height:1.5;color:#777;margin-top:3px}.cart-product-variant{color:#9b732d}

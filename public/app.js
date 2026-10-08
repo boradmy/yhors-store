@@ -557,7 +557,7 @@ function categoryBlocks(products = publicCatalogProducts) {
 function productCard(product) {
   const image = product.image || productImages(product)[0];
   const meta = productMeta(product);
-  const inStock = product.inStock === true;
+  const inStock = product.inStock === true && Number(product.stockAvailable) > 0;
   const availability = inStock ? `` : ``;
   const isCosplayRental = product.category === 'cosplay' && product.isRental === true && Number.isFinite(Number(product.rentalPrice));
   const rental = isCosplayRental ? `<small class="price-secondary">Alquiler: ${money(product.rentalPrice)}</small>` : '';
@@ -755,17 +755,17 @@ function wireCart(products, storefront) {
   const count = document.querySelector('#cartCount'); const area = document.querySelector('#cartItems');
   const updateCartCount = () => { if (count) count.textContent = cart.reduce((sum, line) => sum + Number(line.quantity || 0), 0); };
   const getProductForLine = line => products.find(item => item.id === (line.productId || line.id || line.cartKey));
-  // El catálogo público solo conoce si hay disponibilidad, nunca la cantidad exacta.
-  // La cantidad solicitada se valida nuevamente en el servidor al crear el pedido.
+  // Cada SKU (incluidas variantes) dispone de su propio stock real.
   const getAvailableStock = line => {
     const product = getProductForLine(line);
-    const available = product ? product.inStock === true : line.inStock === true;
-    return available ? Number.POSITIVE_INFINITY : 0;
+    const value = product?.stockAvailable ?? line.stockAvailable;
+    const units = Number(value);
+    return Number.isFinite(units) ? Math.max(0, Math.floor(units)) : 0;
   };
   const clampQuantity = (line, requested) => {
     const minimum = Math.max(1, Number.parseInt(requested, 10) || 1);
-    if (line.purchaseMode !== 'purchase') return minimum;
-    return getAvailableStock(line) > 0 ? minimum : 0;
+    if (line.purchaseMode === 'rental') return minimum;
+    return Math.min(minimum, getAvailableStock(line));
   };
   const drawCart = () => {
     if (!area) return;
@@ -778,7 +778,11 @@ function wireCart(products, storefront) {
       const isRental = line.purchaseMode === 'rental';
       const days = isRental ? rentalDaysValue(line.rentalDays) : 1;
       const quantity = Math.max(1, Number(line.quantity) || 1);
-      return `<div class="cart-item"><img data-fallback src="${escapeHTML(productImages(line)[0])}" alt=""><div class="cart-item-main"><h4>${escapeHTML(line.name)}</h4>${line.purchaseMode ? `<span class="cart-mode">${isRental ? `Alquiler · ${days} día${days === 1 ? '' : 's'}` : 'Compra'}</span>` : ''}${isRental ? `<label class="cart-rental-days">Días de alquiler<select data-rental-days="${escapeHTML(line.id)}">${Array.from({length:10},(_,i)=>i+1).map(day => `<option value="${day}" ${day === days ? 'selected' : ''}>${day} día${day === 1 ? '' : 's'}</option>`).join('')}</select></label>` : ''}<p class="cart-line-price">${money(Number(line.price) * (isRental ? days : 1))}${isRental ? ' <small>/ día × duración</small>' : ''}</p><div class="quantity-control"><button type="button" data-qty="${escapeHTML(line.id)}" data-change="-1" ${quantity <= 1 ? 'disabled' : ''}>−</button><input type="number" min="1" value="${quantity}" data-input="${escapeHTML(line.id)}"><button type="button" data-qty="${escapeHTML(line.id)}" data-change="1">+</button></div></div><button class="remove" data-remove="${escapeHTML(line.id)}">Quitar</button></div>`;
+      const limit = isRental ? Infinity : getAvailableStock(line);
+      const actual = getProductForLine(line) || line;
+      const sku = actual.sku || line.sku || "";
+      const variant = actual.variantLabel || line.variantLabel || "";
+      return `<div class="cart-item"><img data-fallback src="${escapeHTML(productImages(line)[0])}" alt=""><div class="cart-item-main"><h4>${escapeHTML(line.name)}</h4>${sku ? `<small class="cart-product-sku">SKU: ${escapeHTML(sku)}</small>` : ""}${variant ? `<small class="cart-product-variant">Color / acabado: ${escapeHTML(variant)}</small>` : ""}${line.purchaseMode ? `<span class="cart-mode">${isRental ? `Alquiler · ${days} día${days === 1 ? '' : 's'}` : 'Compra'}</span>` : ''}${isRental ? `<label class="cart-rental-days">Días de alquiler<select data-rental-days="${escapeHTML(line.id)}">${Array.from({length:10},(_,i)=>i+1).map(day => `<option value="${day}" ${day === days ? 'selected' : ''}>${day} día${day === 1 ? '' : 's'}</option>`).join('')}</select></label>` : ''}<p class="cart-line-price">${money(Number(line.price) * (isRental ? days : 1))}${isRental ? ' <small>/ día × duración</small>' : ''}</p><div class="quantity-control"><button type="button" data-qty="${escapeHTML(line.id)}" data-change="-1" ${quantity <= 1 ? 'disabled' : ''}>−</button><input type="number" min="1" ${Number.isFinite(limit) ? `max="${limit}"` : ""} value="${quantity}" data-input="${escapeHTML(line.id)}"><button type="button" data-qty="${escapeHTML(line.id)}" data-change="1" ${quantity >= limit ? "disabled" : ""}>+</button></div></div><button class="remove" data-remove="${escapeHTML(line.id)}">Quitar</button></div>`;
     }).join('') : '<div class="empty cart-empty">Tu carrito está vacío.<br><small>Agrega algo que te guste.</small></div>';
     const total = cart.reduce((sum, line) => sum + cartLineTotal(line), 0);
     const totalEl = document.querySelector('#cartTotal'); if (totalEl) totalEl.textContent = money(total);
@@ -815,9 +819,13 @@ function wireCart(products, storefront) {
       button.innerHTML = '<span>Agotado</span><span>—</span>';
       return;
     }
+    if (existing && purchaseMode === 'purchase' && Number(existing.quantity || 0) >= getAvailableStock(existing)) {
+      drawCart();
+      return;
+    }
     if (existing) {
       const currentQuantity = Number(existing.quantity) || 0;
-      existing.quantity = currentQuantity + 1;
+      existing.quantity = clampQuantity(existing, currentQuantity + 1);
     } else {
       cart.push({ ...product, id: cartKey, cartKey, productId: product.id, price, purchaseMode, rentalDays: days, quantity: 1 });
     }
@@ -1380,7 +1388,6 @@ async function renderProductDetail(product, products, storefront) {
 
     const price = document.querySelector('#detailPrice');
     if (price) price.textContent = productPriceLabel(activeProduct);
-    document.querySelector('#detailPurchaseStockNotice')?.replaceChildren();
     // El aviso se sincroniza también al cambiar de acabado.
     // Se invoca después de inicializar la función en el flujo normal de la página.
     if (typeof updatePurchaseStockNotice === 'function') updatePurchaseStockNotice();
@@ -1443,7 +1450,7 @@ async function renderProductDetail(product, products, storefront) {
   const updatePurchaseStockNotice = () => {
     const notice = document.querySelector('#detailPurchaseStockNotice');
     if (!notice) return;
-    const units = Number(activeProduct?.stock);
+    const units = Number(activeProduct?.stockAvailable);
     const show = purchaseMode === 'purchase' && activeProduct &&
       Number.isFinite(units) && units >= 1 && units <= 3;
     notice.hidden = !show;
