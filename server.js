@@ -3450,7 +3450,7 @@ function publicVariantOption(product) {
   // qué miniatura representa a esta variante; no debe reordenar las fotos.
   const normalized = normalizeProduct(product);
   const { purchasePrice, published, featured, hero, heroOrder, ...safe } = normalized;
-  return { ...safe, inStock: Number(normalized.stock || 0) > 0, published: normalized.published !== false };
+  return { ...safe, stockAvailable: Math.max(0, Number(normalized.stock || 0)), inStock: Number(normalized.stock || 0) > 0, published: normalized.published !== false };
 }
 
 function publicProduct(product, variantOptions = []) {
@@ -3460,7 +3460,7 @@ function publicProduct(product, variantOptions = []) {
   const preferred = Math.max(0, Math.min((normalized.images || []).length - 1, Number(normalized.variantImageIndex || 0)));
   if (normalized.images?.[preferred]) normalized.image = normalized.images[preferred];
   const { stock, purchasePrice, published, ...safe } = normalized;
-  return { ...safe, inStock: Array.isArray(variantOptions) && variantOptions.length ? variantOptions.some(item => item.inStock !== false) : stock > 0, variantOptions: Array.isArray(variantOptions) ? variantOptions : [] };
+  return { ...safe, stockAvailable: Math.max(0, Number(stock || 0)), inStock: Array.isArray(variantOptions) && variantOptions.length ? variantOptions.some(item => item.inStock !== false) : stock > 0, variantOptions: Array.isArray(variantOptions) ? variantOptions : [] };
 }
 
 app.get('/api/products', (_, res) => {

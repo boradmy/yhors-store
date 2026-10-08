@@ -6084,3 +6084,11 @@ html:has(.admin-web-shell),body:has(.admin-web-shell),#app:has(.admin-web-shell)
 
 /* YHORS · filtros inteligentes de existencias */
 .yh-stock-filter{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:14px 0 16px}.yh-stock-filter-btn{border:1px solid #ded5c8;background:#fff;color:#27231e;border-radius:9px;padding:10px 15px;font-weight:750;cursor:pointer;font:inherit;font-weight:750}.yh-stock-filter-btn.is-active{background:#b58a43;border-color:#b58a43;color:#15120d}.yh-stock-filter-btn:focus-visible{outline:3px solid #3284db;outline-offset:2px}.yh-stock-filter small{flex-basis:100%;color:#756d64;font-size:12px}.yh-stock-filter-btn span{font-size:12px;opacity:.8}
+
+/* Detalles de variante y disponibilidad real en carrito */
+.cart-product-sku,.cart-product-variant,.cart-low-stock{display:block;font-size:.72rem;line-height:1.5;margin:3px 0;color:#666}
+.cart-product-sku{font-size:.65rem;letter-spacing:.025em}
+.cart-product-variant{font-weight:700;color:#333}
+.cart-low-stock,.detail-stock-notice{color:#247347;font-weight:750}
+.detail-stock-notice{font-size:.82rem;margin:10px 0}
+.detail-stock-notice[hidden]{display:none}
