@@ -5002,6 +5002,12 @@ function inventoryPageMarkup(products = [], options = {}) {
 
       <section class="inventory-workflow-card inventory-products-card">
         <div class="inventory-products-heading"><div><span class="eyebrow">04 · Registro</span><h2>Productos ya registrados</h2></div><div class="inventory-products-heading-actions"><button class="button danger small" type="button" id="inventoryFindDuplicates">Revisar repetidos</button><span class="inventory-count inventory-count-large" id="inventoryPageCount">${products.length} productos</span></div></div>
+        <div class="yh-stock-filter" role="group" aria-label="Filtrar inventario por existencias">
+          <button type="button" class="yh-stock-filter-btn is-active" data-stock-filter="all" aria-pressed="true">Todos</button>
+          <button type="button" class="yh-stock-filter-btn" data-stock-filter="low" aria-pressed="false">Stock bajo <span id="yhStockLowCount"></span></button>
+          <button type="button" class="yh-stock-filter-btn" data-stock-filter="zero" aria-pressed="false">Agotados <span id="yhStockZeroCount"></span></button>
+          <small>Stock bajo: productos publicados con 3 unidades o menos. Se muestran las variantes por separado.</small>
+        </div>
         <div class="inventory-toolbar inventory-toolbar-extended">
           <label class="inventory-search"><span aria-hidden="true">⌕</span><input id="inventoryPageSearch" type="search" placeholder="Buscar por nombre, SKU, marca, tipo o etiqueta…" autocomplete="off"><button id="clearInventoryPageSearch" type="button" aria-label="Limpiar búsqueda">×</button></label>
           <label class="inventory-filter"><span>Tipo de producto</span><select id="inventoryPageTypeFilter"><option value="">Todos los tipos</option>${allValues('productTypes').map(v=>`<option value="${escapeHTML(v)}">${escapeHTML(v)}</option>`).join('')}</select></label>
@@ -5620,12 +5626,28 @@ async function renderAdminInventory() {
   const classifications = await request('/api/admin/classifications').catch(() => ({ brands: {}, productTypes: {}, categories: {} }));
   applyClassificationCategories(classifications);
   const fields = ['name','sku','brand','productType','category','purchasePrice','salePrice','rentalPrice','stock','image','description','featured','hero','heroOrder'];
+  const initialStockFilter = new URLSearchParams(window.location.search).get('stock');
+  let stockFilter = ['low', 'zero'].includes(initialStockFilter) ? initialStockFilter : 'all';
   const draw = () => {
     const query = (document.querySelector('#inventoryPageSearch')?.value || '').trim().toLowerCase();
     const categoryFilter = document.querySelector('#inventoryPageCategoryFilter')?.value || '';
     const typeFilter = document.querySelector('#inventoryPageTypeFilter')?.value || '';
     const brandFilter = document.querySelector('#inventoryPageBrandFilter')?.value || '';
+    const lowCount = products.filter(p => p.published !== false && Number(p.stock || 0) <= 3).length;
+    const zeroCount = products.filter(p => Number(p.stock || 0) <= 0).length;
+    const lowLabel = document.querySelector('#yhStockLowCount');
+    const zeroLabel = document.querySelector('#yhStockZeroCount');
+    if (lowLabel) lowLabel.textContent = `(${lowCount})`;
+    if (zeroLabel) zeroLabel.textContent = `(${zeroCount})`;
+    document.querySelectorAll('[data-stock-filter]').forEach(button => {
+      const active = button.dataset.stockFilter === stockFilter;
+      button.classList.toggle('is-active', active);
+      button.setAttribute('aria-pressed', String(active));
+    });
     const matches = products.filter(p => {
+      const stock = Number(p.stock || 0);
+      if (stockFilter === 'low' && (p.published === false || stock > 3)) return false;
+      if (stockFilter === 'zero' && stock > 0) return false;
       const haystack = [p.name, p.sku, p.brand, p.productType, p.category, categories[p.category], ...(Array.isArray(p.tags) ? p.tags : [])].filter(Boolean).join(' ').toLowerCase();
       const matchesQuery = !query || haystack.includes(query);
       const matchesCategory = !categoryFilter || p.category === categoryFilter;
@@ -5634,7 +5656,7 @@ async function renderAdminInventory() {
       return matchesQuery && matchesCategory && matchesType && matchesBrand;
     });
     const count = document.querySelector('#inventoryPageCount');
-    const filtered = Boolean(query || categoryFilter || typeFilter || brandFilter);
+    const filtered = Boolean(query || categoryFilter || typeFilter || brandFilter || stockFilter !== 'all');
     if (count) count.textContent = filtered ? `${matches.length} de ${products.length} productos` : `${products.length} productos`;
     const list = document.querySelector('#inventoryPageList');
     if (!list) return;
@@ -5642,7 +5664,14 @@ async function renderAdminInventory() {
     const inventoryTemplate = document.createElement('template');
     inventoryTemplate.innerHTML = inventoryMarkup.trim();
     const inventoryList = inventoryTemplate.content.querySelector('#inventoryPageList');
-    list.innerHTML = inventoryList ? inventoryList.innerHTML : '<div class="empty">No hay productos.</div>';
+    list.innerHTML = matches.length ? (inventoryList ? inventoryList.innerHTML : '<div class="empty">No hay productos.</div>') : '<div class="empty">No hay productos que coincidan con los filtros seleccionados.</div>';
+    if (stockFilter !== 'all') {
+      list.querySelectorAll('[data-model-variants]').forEach(variants => variants.classList.remove('is-collapsed'));
+      list.querySelectorAll('[data-model-toggle]').forEach(button => {
+        const isModel = button.closest('[data-model-group]')?.classList.contains('is-model');
+        button.textContent = isModel ? 'Ocultar variantes' : 'Ocultar producto';
+      });
+    }
     wireImageFallback(list);
     list.querySelectorAll('[data-model-toggle]').forEach(button => button.addEventListener('click', () => {
       const group = button.closest('[data-model-group]');
@@ -5966,6 +5995,14 @@ async function renderAdminInventory() {
   categoryModal?.querySelectorAll('[data-close-inventory-categories]').forEach(btn => btn.addEventListener('click', closeCategoryModal));
   document.querySelector('#inventoryAddProduct')?.addEventListener('click', () => openInventoryNewProductModal({ classifications, products, onSaved: async created => { products = [created, ...products]; draw(); } }));
   draw();
+  document.querySelectorAll('[data-stock-filter]').forEach(button => button.addEventListener('click', () => {
+    stockFilter = button.dataset.stockFilter || 'all';
+    const url = new URL(window.location.href);
+    if (stockFilter === 'all') url.searchParams.delete('stock');
+    else url.searchParams.set('stock', stockFilter);
+    history.replaceState(history.state, '', url.pathname + url.search + url.hash);
+    draw();
+  }));
   document.querySelector('#inventoryPageSearch')?.addEventListener('input', draw);
   document.querySelector('#inventoryPageCategoryFilter')?.addEventListener('change', draw);
   document.querySelector('#inventoryPageTypeFilter')?.addEventListener('change', draw);
@@ -6196,7 +6233,7 @@ async function renderYhorsInteligente() {
       ${cardLink(`${ADMIN_PATH}/pedidos`, 'Pedidos pendientes', 'OPERACIÓN', pending.length, `${readyToShip.length} listos para avanzar`, 'is-orders')}
       ${cardLink(`${ADMIN_PATH}/pedidos`, 'Por enviar', 'LOGÍSTICA', readyToShip.length, `${preparing.length} en Preparado`, 'is-shipping')}
       ${cardLink(`${ADMIN_PATH}/pedidos`, 'Sin vendedor', 'ATENCIÓN', unassigned.length, unassigned.length ? 'Requieren asignación' : 'Todo asignado', unassigned.length ? 'is-alert' : 'is-ok')}
-      ${cardLink(`${ADMIN_PATH}/inventario`, 'Stock bajo', 'INVENTARIO', lowStock.length, lowStock.length ? 'Productos con 3 o menos unidades' : 'Sin alertas de stock', lowStock.length ? 'is-alert' : 'is-ok')}
+      ${cardLink(`${ADMIN_PATH}/inventario?stock=low`, 'Stock bajo', 'INVENTARIO', lowStock.length, lowStock.length ? 'Productos con 3 o menos unidades' : 'Sin alertas de stock', lowStock.length ? 'is-alert' : 'is-ok')}
       ${cardLink(`${ADMIN_PATH}/pedidos`, 'En preparación', 'BODEGA', preparing.length, 'Órdenes con estado Preparado', 'is-prep')}
       ${cardLink(`${ADMIN_PATH}/clientes`, 'Clientes', 'EMPRESA', customerList.length, 'Fichero comercial de YHORS', 'is-customers')}
       ${cardLink(`${ADMIN_PATH}/dinero`, 'Cobros pendientes', 'DINERO · ATENCIÓN', money(receivableBalance), `${receivables.length} cuenta${receivables.length === 1 ? '' : 's'} con saldo${urgentReceivables ? ` · ${urgentReceivables} con antigüedad` : ''}`, receivables.length ? 'is-alert is-receivable' : 'is-ok is-receivable')}
