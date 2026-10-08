@@ -972,6 +972,7 @@ app.use('/api/admin', (req, res, next) => {
 // Open Graph y JSON-LD siempre apunten al dominio indexable de producción.
 const SITE_URL = 'https://yhors-store.onrender.com';
 const SITE_NAME = 'YHORS-STORE';
+const GLOBAL_SEO_DESCRIPTION = 'YHORS-STORE | Tecnología, moda, regalos, cosplays y experiencias. Una selección de calidad, diseñada para quienes buscan confianza, estilo y más.';
 const CORPORATE_NAME = 'YHORS-CORP';
 let CATEGORY_LABELS = {
   principal: 'Principal', elegant: 'Elegant', sports: 'Sports', tech: 'Tech', cosplay: 'Cosplay',
@@ -1032,19 +1033,19 @@ function jsonLd(value) { return JSON.stringify(value).replace(/</g, '\\u003c'); 
 function baseHead({ title, description, canonical, robots = 'index,follow', image = '', json = [] }) {
   const graph = Array.isArray(json) ? json : [json];
   return `
-    <meta name="description" content="${esc(description)}">
+    <meta name="description" content="${esc(GLOBAL_SEO_DESCRIPTION)}">
     <meta name="robots" content="${esc(robots)}">
     <link rel="canonical" href="${esc(canonical)}">
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="${SITE_NAME}">
     <meta property="og:locale" content="es_EC">
     <meta property="og:title" content="${esc(title)}">
-    <meta property="og:description" content="${esc(description)}">
+    <meta property="og:description" content="${esc(GLOBAL_SEO_DESCRIPTION)}">
     <meta property="og:url" content="${esc(canonical)}">
     ${image ? `<meta property="og:image" content="${esc(image)}">` : ''}
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="${esc(title)}">
-    <meta name="twitter:description" content="${esc(description)}">
+    <meta name="twitter:description" content="${esc(GLOBAL_SEO_DESCRIPTION)}">
     ${image ? `<meta name="twitter:image" content="${esc(image)}">` : ''}
     ${graph.map(item => `<script type="application/ld+json">${jsonLd(item)}</script>`).join('\n')}
   `;
@@ -1052,7 +1053,8 @@ function baseHead({ title, description, canonical, robots = 'index,follow', imag
 function layout({ title, description, canonical, body, robots, image, json }) {
   const template = fs.readFileSync(path.join(__dirname, 'public', 'index.html'), 'utf8');
   const head = baseHead({ title, description, canonical, robots, image, json });
-  return template.replace('<meta name="description" content="YHORS · piezas que cuentan tu historia.">', head)
+  // Replace the existing description regardless of its text; avoid duplicate metadata.
+  return template.replace(/<meta\s+name=["']description["'][^>]*>/i, () => head)
     .replace('<title>YHORS-STORE</title>', `<title>${esc(title)}</title>`)
     .replace('<div id="app"></div>', `<div id="app">${body}</div>`);
 }
@@ -2052,7 +2054,7 @@ app.get('/producto/:slug', (req, res) => {
     image: images.map(absoluteImage), description: stripText(product.description), sku: product.sku || undefined,
     brand: product.brand ? { '@type': 'Brand', name: product.brand } : undefined,
     category: CATEGORY_LABELS[product.category] || product.category,
-    offers: Number.isFinite(price) ? { '@type': 'Offer', url, priceCurrency: 'USD', price: price.toFixed(2), seller: { '@type': 'Organization', name: CORPORATE_NAME, url: `${SITE_URL}/yhors-corp` } } : undefined
+    offers: Number.isFinite(price) ? { '@type': 'Offer', url, priceCurrency: 'USD', price: price.toFixed(2), availability: 'https://schema.org/InStock', seller: { '@type': 'Organization', name: CORPORATE_NAME, url: `${SITE_URL}/yhors-corp` } } : undefined
   };
   Object.keys(productJson).forEach(k => productJson[k] === undefined && delete productJson[k]);
   const breadcrumb = { '@context':'https://schema.org', '@type':'BreadcrumbList', itemListElement:[
