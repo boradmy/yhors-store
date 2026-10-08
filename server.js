@@ -733,8 +733,9 @@ function upsertCustomerFromOrder(order, req = null) {
       ...base,
       identity,
       name: cleanText(source.name, 120), phone: cleanText(source.phone, 50), cedula: cleanText(source.cedula, 20),
-      email: cleanText(source.email, 160), city: cleanText(source.city, 80), address: cleanText(source.address, 240),
-      mapsUrl: cleanText(source.mapsUrl, 500), notes: cleanText(source.notes, 1000), updatedAt: now,
+      email: cleanText(source.email, 160) || base.email || '', city: cleanText(source.city, 80) || base.city || '',
+      address: cleanText(source.address, 240) || base.address || '',
+      mapsUrl: cleanText(source.mapsUrl, 500) || base.mapsUrl || '', notes: cleanText(source.notes, 1000) || base.notes || '', updatedAt: now,
       lastOrderAt: order.createdAt || now,
       orderCount: Number(base.orderCount || 0) + (index >= 0 ? 0 : 0)
     };
@@ -3069,7 +3070,7 @@ function validateOrder(input, options = {}) {
 
   return {
     order: {
-      customer: { name, phone, cedula, email, city, address: deliveryMethod === 'office' ? '' : address, mapsUrl, notes },
+      customer: { name, phone, cedula, email, city, address, mapsUrl, notes },
       delivery: { method: deliveryMethod, label: deliveryLabels[deliveryMethod], cost: shippingCost },
       items, subtotal, shippingCost, total
     },
