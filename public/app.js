@@ -5536,12 +5536,12 @@ function openInventoryNewProductModal({ classifications, product = null, product
       const clone = { ...product, id: undefined, sku: `${String(product.sku || 'YH-VAR').slice(0, 35)}-VAR`, stock: 0, published: false, hero: false, featured: false, variantGroupId: group, variantOfId: product?.variantOfId || product.id, variantLabel: '', images: Array.isArray(product.images) ? [...product.images] : (product.image ? [product.image] : []) };
       close();
       openInventoryNewProductModal({ classifications, products, product: clone, onSaved: async saved => {
-        let base = product;
-        if (saved.variantGroupId && !product.variantGroupId) {
-          base = await request(`/api/admin/products/${encodeURIComponent(product.id)}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ variantGroupId: saved.variantGroupId, variantOfId: product.id, variantLabel: product.variantLabel || 'Sin color asignado' }) });
-        }
-        products = products.map(item => item.id === base.id ? base : item);
-        await onSaved?.(saved, [base, saved]);
+        const linked = await request(`/api/admin/products/${encodeURIComponent(product.id)}/link-variant`, {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({ variantId:saved.id, variantLabel:saved.variantLabel || '' })
+        });
+        products = products.map(item => linked.variants.find(v => v.id === item.id) || item);
+        await onSaved?.(linked.variant, linked.variants);
       } });
     });
     modal.querySelector('#openVariantSearch')?.addEventListener('click', () => {
@@ -5787,12 +5787,12 @@ async function renderAdminInventory() {
         const group = product.variantGroupId || crypto.randomUUID();
         const clone = { ...product, id: undefined, sku: `${String(product.sku || 'YH-VAR').slice(0, 35)}-VAR`, stock: 0, published: false, hero: false, featured: false, variantGroupId: group, variantOfId: product.variantOfId || product.id, variantLabel: '', images: Array.isArray(product.images) ? [...product.images] : (product.image ? [product.image] : []) };
         openInventoryNewProductModal({ classifications, products, product: clone, onSaved: async created => {
-          let base = product;
-          if (!product.variantGroupId) {
-            base = await request(`/api/admin/products/${encodeURIComponent(product.id)}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ variantGroupId: group, variantOfId: product.id, variantLabel: product.variantLabel || 'Sin color asignado' }) });
-          }
-          products = products.map(p => p.id === base.id ? base : p);
-          products = [created, ...products.filter(p => p.id !== created.id)];
+          const linked = await request(`/api/admin/products/${encodeURIComponent(product.id)}/link-variant`, {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({ variantId:created.id, variantLabel:created.variantLabel || '' })
+          });
+          products = products.map(p => linked.variants.find(v => v.id === p.id) || p);
+          products = [linked.variant, ...products.filter(p => p.id !== linked.variant.id)];
           draw();
         }});
       });
