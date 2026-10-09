@@ -1313,12 +1313,22 @@ async function renderProductDetail(product, products, storefront) {
     : (product.variantGroupId ? products.filter(item => String(item.variantGroupId || '') === String(product.variantGroupId)) : []);
   const initialVariant = productVariants.find(item => String(item.id) === String(product.id) && item.inStock !== false) || productVariants.find(item => item.inStock !== false) || null;
   if (productVariants.length) {
+    // Las miniaturas principales respetan el orden del selector de acabados.
+    const extraVariantImages = [];
     productVariants.forEach(item => {
       const itemImages = productImages(item);
       const preferred = Math.max(0, Math.min(itemImages.length - 1, Number(item.variantImageIndex || 0)));
       const preferredSrc = itemImages[preferred];
-      if (preferredSrc) variantImageOwners.set(preferredSrc, item.id);
-      itemImages.forEach(src => { if (src && !fixedVariantGallery.includes(src)) fixedVariantGallery.push(src); });
+      if (preferredSrc) {
+        if (!fixedVariantGallery.includes(preferredSrc)) fixedVariantGallery.push(preferredSrc);
+        variantImageOwners.set(preferredSrc, item.id);
+      }
+      itemImages.forEach(src => {
+        if (src && src !== preferredSrc && !extraVariantImages.includes(src)) extraVariantImages.push(src);
+      });
+    });
+    extraVariantImages.forEach(src => {
+      if (!fixedVariantGallery.includes(src)) fixedVariantGallery.push(src);
     });
     if (fixedVariantGallery.length) images = fixedVariantGallery;
   }
