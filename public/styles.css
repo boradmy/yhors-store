@@ -6108,3 +6108,36 @@ html:has(.admin-web-shell),body:has(.admin-web-shell),#app:has(.admin-web-shell)
 .product-detail-page .yh-detail-share:hover{background:#fff;border-color:#b58a43}
 .product-detail-page .yh-detail-share span{margin-right:8px;font-size:18px;color:#ad813d}
 @media(max-width:420px){.product-detail-page .yh-detail-quantity{flex-basis:120px;padding:7px 5px}.product-detail-page .detail-add{font-size:.75rem}}
+
+/* YHORS: distribución visual del formulario de producto; no cambia datos ni eventos */
+#productForm .form-grid > .product-section-heading{grid-column:1/-1;display:block;padding:15px 0 7px;margin-top:10px;border-top:1px solid #e8e0d5;color:#aa813c;font-size:.77rem;font-weight:850;letter-spacing:.11em;text-transform:uppercase}
+#productForm .form-grid > .section-1{order:10;border-top:0;margin-top:0}
+#productForm .form-grid > .field:has(#category){order:11}
+#productForm .form-grid > .field:has(#brand){order:12}
+#productForm .form-grid > .field:has(#productType){order:13}
+#productForm .form-grid > .section-2{order:20}
+#productForm .form-grid > .field:has(#name){order:21}
+#productForm .form-grid > .field:has(#sku){order:22}
+#productForm .form-grid > .field:has(#variantLabel){order:23}
+#productForm .form-grid > input[type=hidden]{order:24}
+#productForm .form-grid > .section-3{order:30}
+#productForm .form-grid > .field:has(#purchasePrice){order:31}
+#productForm .form-grid > .field:has(#salePrice){order:32}
+#productForm .form-grid > .product-form-profit-field{order:33}
+#productForm .form-grid > .field:has(#rentalPrice){order:34}
+#productForm .form-grid > .section-4{order:40}
+#productForm .form-grid > .field:has(#stock){order:41}
+#productForm .form-grid > .field:has(#stockMin){order:42}
+#productForm .form-grid > .section-5{order:50}
+#productForm .form-grid > .field:has(.image-section-label){order:51}
+#productForm .form-grid > .product-image-slot{grid-column:auto;min-width:0;order:52}
+#productForm .product-image-slot-preview{height:125px}
+#productForm .form-grid > .section-6{order:60}
+#productForm .form-grid > .rich-description-field{order:61}
+#productForm .form-grid > .section-7{order:70}
+#productForm .form-grid > .field:has(#tags){order:71}
+#productForm .form-grid > .field:has(#heroTitle){order:72}
+#productForm .form-grid > .field:has(#heroDescription){order:73}
+#productForm .form-grid > .product-form-options{order:74}
+#productForm .form-grid > .featured-field{order:75}
+@media(max-width:650px){#productForm .form-grid > .product-image-slot{grid-column:1/-1}}
