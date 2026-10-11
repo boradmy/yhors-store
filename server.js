@@ -5691,12 +5691,8 @@ app.get('/api/admin/clientes', requireOrdersAccess, (req, res) => {
   const allPayments = readPayments();
   const q = cleanText(req.query?.q, 120).toLocaleLowerCase('es-EC');
   const rows = customers.map(customer => {
-    const visibleCustomerOrders = String(session.role || '').toLowerCase() === 'vendedor'
-      ? allOrders.filter(order => String(order.assignedSellerId || '') === String(session.accountId || ''))
-      : allOrders;
-    const visibleCustomerSales = String(session.role || '').toLowerCase() === 'vendedor'
-      ? allSales.filter(sale => String(sale.assignedSellerId || '') === String(session.accountId || ''))
-      : allSales;
+    const visibleCustomerOrders = allOrders;
+    const visibleCustomerSales = allSales;
     const tx = customerTransactions(customer, visibleCustomerOrders, visibleCustomerSales);
     const activeOrders = tx.filter(item => item.type === 'pedido' && item.status !== 'Cancelado').length;
     const customerSales = tx.filter(item => item.type === 'venta');
@@ -5719,8 +5715,14 @@ app.get('/api/admin/clientes/:id', requireOrdersAccess, (req, res) => {
   const identity = customer.identity || customerIdentity(customer);
   const customerOrders = allOrders.filter(o => customerIdentity(o.customer || {}) === identity);
   const customerSales = allSales.filter(s => customerIdentity(s.customer || {}) === identity);
-  const visibleOrders = isSellerRole(session.role) ? customerOrders.filter(o => String(o.assignedSellerId || '') === String(session.accountId || '')) : customerOrders;
-  const visibleSales = isSellerRole(session.role) ? customerSales.filter(s => String(s.assignedSellerId || '') === String(session.accountId || '')) : customerSales;
+  // El fichero es un historial del CLIENTE, no un informe de comisiones del vendedor.
+  // Solo permitir al vendedor consultar clientes vinculados a sus pedidos.
+  if (isSellerRole(session.role) && !customerOrders.some(o => String(o.assignedSellerId || '') === String(session.accountId || ''))
+      && !customerSales.some(s => String(s.assignedSellerId || '') === String(session.accountId || ''))) {
+    return res.status(403).json({ error: 'Este cliente no está vinculado a tu usuario.' });
+  }
+  const visibleOrders = customerOrders;
+  const visibleSales = customerSales;
   const finance = customerFinancialSummary(customer, visibleOrders, visibleSales, readPayments());
   const saleByOrder = new Map(visibleSales.filter(s => s.orderId).map(s => [String(s.orderId), s]));
   const obligations = [];
@@ -5779,6 +5781,32 @@ app.get('/api/admin/clientes/:id', requireOrdersAccess, (req, res) => {
   const tx=[...visibleOrders.map(o=>({type:'pedido',id:o.id,number:o.orderNumber,date:o.createdAt,status:o.status,total:Number(o.total||0),source:o.source==='admin_generated'?'Orden interna':'Pedido WEB'})),...visibleSales.map(s=>({type:'venta',id:s.id,number:s.orderNumber,date:s.notifiedAt||s.createdAt,status:s.status||'Vendida',total:Number(s.total||0),source:'Historial de ventas'}))];
   const uniqueTx=new Map(); tx.forEach(row=>uniqueTx.set(`${row.type}:${row.id}`,row));
   return res.json({customer,transactions:[...uniqueTx.values()].sort((a,b)=>new Date(b.date||0)-new Date(a.date||0)),statement,payments:payments.map(p=>decoratePayment(p,visibleSales,visibleOrders)),totals:{orders:visibleOrders.length,sales:visibleSales.length,salesTotal:Math.round(totalBought*100)/100,paidTotal:Math.round(paidTotal*100)/100,balance:Math.max(0,Math.round((totalBought-paidTotal)*100)/100),creditBalance,obligations:obligations.length}});
+});
+
+// Documentos del expediente: consulta únicamente, sin ampliar los permisos
+// de edición ni los listados generales de ventas del vendedor.
+app.get('/api/admin/clientes/:id/documento/:type/:documentId/pdf', requireOrdersAccess, (req, res) => {
+  const session = getSession(req);
+  const customer = buildCustomerDirectory().find(c => String(c.id) === String(req.params.id))
+    || readCustomers().find(c => String(c.id) === String(req.params.id));
+  if (!customer) return res.status(404).json({ error: 'Cliente no encontrado.' });
+  const identity = customer.identity || customerIdentity(customer);
+  const customerOrders = readOrders().filter(o => customerIdentity(o.customer || {}) === identity);
+  const customerSales = readSales().filter(s => customerIdentity(s.customer || {}) === identity);
+  if (isSellerRole(session.role) && !customerOrders.some(o => String(o.assignedSellerId || '') === String(session.accountId || ''))
+      && !customerSales.some(s => String(s.assignedSellerId || '') === String(session.accountId || ''))) {
+    return res.status(403).json({ error: 'No tienes acceso al expediente de este cliente.' });
+  }
+  const type = String(req.params.type);
+  if (type !== 'venta' && type !== 'orden') return res.status(404).json({ error: 'Documento no encontrado.' });
+  const document = (type === 'venta' ? customerSales : customerOrders).find(d => String(d.id) === String(req.params.documentId));
+  if (!document) return res.status(404).json({ error: 'Documento no encontrado.' });
+  const pdf = buildOrderPdf(decorateOrderAssignment(document));
+  const safeName = String(document.orderNumber || document.id).replace(/[^a-zA-Z0-9_-]/g, '_');
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `inline; filename="YHORS-${safeName}.pdf"`);
+  res.setHeader('Cache-Control', 'no-store');
+  res.end(pdf);
 });
 
 app.post('/api/admin/clientes', requireOrdersAccess, (req, res) => {
