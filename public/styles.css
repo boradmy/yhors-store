@@ -6180,3 +6180,32 @@ html:has(.admin-web-shell),body:has(.admin-web-shell),#app:has(.admin-web-shell)
 @media(max-height:650px){
   .product-image-picker-preview>div{height:clamp(180px,35dvh,300px)}
 }
+
+/* YHORS: imagen vertical completa en el selector (sin altura fija que la recorte).
+   Se permite desplazar el modal; nunca se oculta una parte de la foto. */
+.product-image-picker .product-image-picker-preview{flex:0 0 auto;min-height:0}
+.product-image-picker .product-image-picker-preview > div{
+  height:auto !important;
+  min-height:260px;
+  max-height:none;
+  overflow:visible;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  padding:10px;
+}
+.product-image-picker .product-image-picker-preview img{
+  display:block;
+  width:auto !important;
+  height:auto !important;
+  max-width:100% !important;
+  max-height:70dvh !important;
+  object-fit:contain !important;
+  object-position:center center;
+  flex-shrink:0;
+}
+.product-image-picker{overflow-y:auto;overscroll-behavior:contain}
+@media(max-width:650px){
+  .product-image-picker .product-image-picker-preview > div{min-height:180px}
+  .product-image-picker .product-image-picker-preview img{max-height:58dvh !important}
+}
