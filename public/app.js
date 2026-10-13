@@ -4979,7 +4979,7 @@ function inventoryPageMarkup(products = [], options = {}) {
     const requiresIdentifier = product.requiresDeviceIdentifier !== false && product.category === 'tech';
     const stockCount = Number(product.stock || 0);
     const webStatus = product.published === false ? 'SOLO INVENTARIO' : (stockCount > 0 ? 'PUBLICADO' : 'SIN STOCK · OCULTO EN WEB');
-    return `<article class="inventory-record inventory-record-compact" data-inventory-id="${escapeHTML(product.id)}">
+    return `<article class="inventory-record inventory-record-compact inventory-record-premium" data-inventory-id="${escapeHTML(product.id)}">
       <div class="inventory-record-media">
         ${hasImages ? `<img class="inventory-main-image" src="${escapeHTML(images[0])}" alt="${escapeHTML(product.name)}" data-fallback>` : `<div class="inventory-no-image" aria-label="Producto sin imagen"><span>⚠</span><strong>SIN IMAGEN</strong><small>Completar después</small></div>`}
         ${hasImages ? `<div class="inventory-thumbs">${images.slice(0,4).map((src,index)=>`<img src="${escapeHTML(src)}" alt="${escapeHTML(product.name)} imagen ${index+1}" data-fallback>`).join('')}</div>` : ''}
@@ -4991,7 +4991,7 @@ function inventoryPageMarkup(products = [], options = {}) {
             <h3>${escapeHTML(product.name)}</h3>
           </div>
           <div class="inventory-stock-wrap">
-            <strong class="inventory-stock-badge">${stockCount > 0 ? `${stockCount} en stock` : 'SIN STOCK'}</strong>
+            <strong class="inventory-stock-badge ${stockCount <= 0 ? 'inventory-stock-out' : stockCount <= stockMin ? 'inventory-stock-low' : ''}">${stockCount <= 0 ? 'SIN STOCK' : stockCount <= stockMin ? `${stockCount} · Stock mínimo` : `${stockCount} en stock`}</strong>
             <strong class="inventory-profit-badge ${profitClass}" data-profit-badge>${profitLabel}: ${money(Math.abs(profit))}</strong>
           </div>
         </div>
@@ -5002,6 +5002,14 @@ function inventoryPageMarkup(products = [], options = {}) {
           <div><span>TIPO</span><strong data-inventory-display="productType">${escapeHTML(product.productType || '—')}</strong></div>
         </div>
 
+        <div class="inventory-commerce-summary" aria-label="Resumen comercial">
+          <div><span>Precio de compra</span><strong>${money(Number(product.purchasePrice ?? 0))}</strong></div>
+          <div><span>Precio de venta</span><strong>${money(Number(product.salePrice ?? product.price ?? 0))}</strong></div>
+          <div class="${profitClass}"><span>${profitLabel} estimada</span><strong>${money(Math.abs(profit))}</strong></div>
+          ${isCosplay ? `<div><span>Alquiler por día</span><strong>${isRental ? money(Number(rentalValue)) : 'No disponible'}</strong></div>` : ''}
+        </div>
+        <div class="inventory-quick-status"><span>${stockCount} unidades disponibles · mínimo ${stockMin}</span><span>${product.published !== false ? '✓ Publicado en web' : 'Solo inventario'}</span>${isCosplay ? `<span>${isRental ? `✓ Alquiler disponible · ${escapeHTML(product.rentalDays ?? 1)} día(s)` : 'Alquiler desactivado'}</span>` : ''}${product.category === 'tech' ? `<span>${requiresIdentifier ? '✓ Serie / IMEI requerido' : 'Serie / IMEI opcional'}</span>` : ''}</div>
+        <details class="inventory-secondary-details"><summary>Ver información técnica y campos de consulta <span>▾</span></summary>
         <div class="inventory-edit-fields">
           <label><span>Precio de compra</span><div class="inventory-input-wrap"><span>$</span><input type="number" min="0" step="0.01" value="${escapeHTML(product.purchasePrice ?? 0)}" data-field="purchasePrice" disabled></div></label>
           <label><span>Precio de venta</span><div class="inventory-input-wrap"><span>$</span><input type="number" min="0" step="0.01" value="${escapeHTML(product.salePrice ?? product.price ?? 0)}" data-field="salePrice" disabled></div></label>
@@ -5023,6 +5031,7 @@ function inventoryPageMarkup(products = [], options = {}) {
 
         <div class="inventory-image-status ${hasImages ? 'has-images' : 'missing-images'}"><span>${hasImages ? '✓' : '⚠'}</span><strong>${hasImages ? `${images.length} imagen${images.length === 1 ? '' : 'es'} cargada${images.length === 1 ? '' : 's'}` : 'SIN IMAGEN'}</strong>${!hasImages ? '<small>Agrega las fotos desde la ficha del producto cuando tengas tiempo.</small>' : ''}</div>
 
+        </details>
         <div class="inventory-record-actions">${inventoryReadOnly ? '<span class="inventory-readonly-note">Solo consulta · stock disponible</span>' : `<button class="button secondary small" type="button" data-inventory-edit>Editar ficha</button><button class="button secondary small" type="button" data-inventory-variant>+ Añadir variante</button><button class="button danger small" type="button" data-inventory-delete>Eliminar producto</button><span class="inventory-edit-hint">Los cambios se realizan desde “Editar ficha”.</span><span class="message" data-inventory-message></span>`}</div>
       </div>
     </article>`;
