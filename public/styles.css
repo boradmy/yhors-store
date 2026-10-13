@@ -6141,3 +6141,42 @@ html:has(.admin-web-shell),body:has(.admin-web-shell),#app:has(.admin-web-shell)
 #productForm .form-grid > .product-form-options{order:74}
 #productForm .form-grid > .featured-field{order:75}
 @media(max-width:650px){#productForm .form-grid > .product-image-slot{grid-column:1/-1}}
+
+/* Selector de imágenes: vista previa completa y controles siempre accesibles. */
+.product-image-picker{
+  width:min(920px,calc(100vw - 28px));
+  max-height:calc(100dvh - 28px);
+  display:flex;
+  flex-direction:column;
+  overflow-y:auto;
+  overscroll-behavior:contain;
+}
+.product-image-picker-head,.product-image-picker-options,.product-image-picker-foot{flex-shrink:0}
+.product-image-picker-preview{display:flex;flex-direction:column;min-height:0;flex:1 0 auto}
+.product-image-picker-preview>div{
+  height:clamp(280px,46dvh,540px);
+  min-height:0;
+  background:#f5f2ec;
+  overflow:hidden;
+}
+.product-image-picker-preview img{
+  display:block;
+  width:100%;height:100%;
+  object-fit:contain;
+  object-position:center;
+}
+.product-image-picker-foot{
+  position:sticky;
+  bottom:-24px;
+  z-index:2;
+  background:#fff;
+  padding-bottom:10px;
+}
+@media(max-width:650px){
+  .product-image-picker{width:100%;max-height:calc(100dvh - 18px)}
+  .product-image-picker-preview>div{height:clamp(220px,36dvh,420px)}
+  .product-image-picker-foot{bottom:-17px;padding-bottom:8px}
+}
+@media(max-height:650px){
+  .product-image-picker-preview>div{height:clamp(180px,35dvh,300px)}
+}
