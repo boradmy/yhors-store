@@ -6238,3 +6238,7 @@ html:has(.admin-web-shell),body:has(.admin-web-shell),#app:has(.admin-web-shell)
 @media(max-width:1100px){.inventory-record-premium .inventory-commerce-summary{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:760px){.inventory-record-premium{grid-template-columns:1fr}.inventory-record-premium .inventory-record-media{max-width:360px}.inventory-record-premium .inventory-main-image{height:240px}.inventory-record-premium .inventory-record-title{flex-direction:column}.inventory-record-premium .inventory-record-meta{grid-template-columns:repeat(2,minmax(0,1fr))}.inventory-record-premium [data-inventory-delete]{margin-left:0}}
 @media(max-width:450px){.inventory-record-premium .inventory-commerce-summary,.inventory-record-premium .inventory-record-meta{grid-template-columns:1fr 1fr}.inventory-record-premium .inventory-commerce-summary strong{font-size:.98rem}}
+
+/* Edición rápida del nombre de variante */
+.variant-rename-button{border:1px solid #dfd5c6;background:#fff;color:#755927;border-radius:6px;padding:4px 8px;font-size:.72rem;font-weight:700;cursor:pointer;margin-left:8px;vertical-align:middle}
+.variant-rename-button:hover{background:#f7f0e4;border-color:#b38b47}

@@ -6514,6 +6514,15 @@ app.post('/api/admin/products/:id/manage-variant', requireAdmin, (req, res) => {
   } else if (action === 'published') {
     const value = req.body?.value === true || req.body?.value === 'true';
     updated = products.map(item => String(item.id) === String(target.id) ? normalizeProduct({ ...item, published: value, updatedAt: new Date().toISOString() }) : item);
+  } else if (action === 'label') {
+    if (typeof req.body?.value !== 'string') return res.status(400).json({ error: 'Nombre de variante inválido.' });
+    const label = cleanText(req.body.value, 80).trim();
+    if (!label || req.body.value.trim().length > 80) return res.status(400).json({ error: 'El color debe tener entre 1 y 80 caracteres.' });
+    if (products.some(item => String(item.variantGroupId || '') === groupId && String(item.id) !== String(target.id) && String(item.variantLabel || '').trim().toLocaleLowerCase() === label.toLocaleLowerCase())) {
+      return res.status(409).json({ error: 'Ya existe una variante con ese nombre en este modelo.' });
+    }
+    updated = products.map(item => String(item.id) === String(target.id) ? normalizeProduct({ ...item, variantLabel: label, updatedAt: new Date().toISOString() }) : item);
+    auditLog(req, 'Nombre de variante actualizado', 'Inventario', { productId: target.id, variantGroupId: groupId, previousLabel: target.variantLabel || '', newLabel: label });
   } else if (action === 'image') {
     const images = Array.isArray(target.images) ? target.images : [];
     const index = Math.max(0, Math.min(Math.max(0, images.length - 1), Number(req.body?.value || 0)));
