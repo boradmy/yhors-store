@@ -479,7 +479,7 @@ function compactHeroText(value, max = 180) {
 function yhEditorialCategories(products) {
   const entries=publicCategoryEntries(products).filter(([key])=>key!=='all').slice(0,4);
   if(!entries.length)return '';
-  return `<section class="yh-v3-editorial section" id="yh-explora"><div class="yh-v3-heading"><div><span class="eyebrow">DESCUBRE YHORS</span><h2>Universos que inspiran</h2></div><p>Una selección para cada estilo y cada momento.</p></div><div class="yh-v3-category-grid">${entries.map(([key,label],i)=>{const item=products.find(p=>p.category===key && (p.image||productImages(p)[0]));const photo=item?.image||(item?productImages(item)[0]:'');return `<a class="yh-v3-category-tile yh-v3-tile-${i}" href="${categoryHref(key)}">${photo?`<img src="${escapeHTML(photo)}" alt="" loading="lazy">`:''}<span class="yh-v3-tile-shade"></span><span class="yh-v3-tile-copy"><small>UNIVERSO YHORS</small><strong>${escapeHTML(label)}</strong><em>Explorar colección ↗</em></span></a>`;}).join('')}</div></section>`;
+  return `<section class="yh-v3-editorial section" id="categorias"><div class="yh-v3-heading"><div><span class="eyebrow">DESCUBRE YHORS</span><h2>Universos que inspiran</h2></div><p>Una selección para cada estilo y cada momento.</p></div><div class="yh-v3-category-grid">${entries.map(([key,label],i)=>{const item=products.find(p=>p.category===key && (p.image||productImages(p)[0]));const photo=item?.image||(item?productImages(item)[0]:'');return `<a class="yh-v3-category-tile yh-v3-tile-${i}" href="${categoryHref(key)}">${photo?`<img src="${escapeHTML(photo)}" alt="" loading="lazy">`:''}<span class="yh-v3-tile-shade"></span><span class="yh-v3-tile-copy"><small>UNIVERSO YHORS</small><strong>${escapeHTML(label)}</strong><em>Explorar colección ↗</em></span></a>`;}).join('')}</div></section>`;
 }
 function yhEditorialProducts(products,featured) {
   const chosen=(featured.length?featured:products).filter(p=>p.published!==false).slice(0,8);
@@ -1294,15 +1294,13 @@ async function renderHome() {
   const searchCatalog = searchTerm ? `<section class="catalog-shell section search-only" id="destacados"><div class="search-results-heading"><div><span class="eyebrow">Búsqueda YHORS</span><h1>Resultados para “${escapeHTML(searchTerm)}”</h1></div><p>Explora los productos relacionados con tu búsqueda.</p></div><div class="catalog-results"><div class="results-count" id="resultsCount"></div><div class="products" id="featuredProducts"></div></div></section>` : `<section class="section featured-section" id="destacados"><div class="section-heading"><div><span class="eyebrow">Edición YHORS</span><h2>Selección YHORS</h2></div><p>Tecnología, detalles y piezas elegidas para destacar.</p></div><div class="products" id="featuredProducts"></div></section>`;
   const sections = Array.isArray(storefront.homeSections) ? storefront.homeSections : ['banners','featured','statement','universes','about'];
   const carousels = (storefront.bannerCarousels || []).filter(c=>c.enabled && c.slides?.length);
-  const homeOrder = storefront.phase3Configured ? sections : [...sections];
-  if (!storefront.phase3Configured) { homeOrder.splice(Math.max(0,homeOrder.indexOf('banners')+1),0,'editorial','collection'); homeOrder.push('trust'); }
+  const homeOrder = [...sections].filter(key=>key!=='collection' && key!=='universes');
+  if (!storefront.phase3Configured) { homeOrder.splice(Math.max(0,homeOrder.indexOf('banners')+1),0,'editorial'); homeOrder.push('trust'); }
   const sectionHTML = {
     banners: carousels.length ? carousels.map((c,i)=>campaignBannerMarkup(c,i===0)).join('') : heroMarkup(heroSlides),
     featured: searchCatalog,
     statement: `<section class="statement-strip"><div><span class="eyebrow">YHORS-STORE</span><h2>Elegancia que también se encuentra en los detalles.</h2></div><a class="button" href="#categorias">Explorar universos <span>→</span></a></section>`,
-    universes: categoryBlocks(products),
     editorial: yhEditorialCategories(products),
-    collection: yhEditorialProducts(products,featured),
     trust: yhTrustBar(),
     about: `<section class="brand-section" id="nosotros"><div class="brand-section-inner"><span class="eyebrow">Sobre nosotros</span><h2>YHORS<br><em>más que un producto</em></h2><p>Un catálogo dividido por universos para que cada persona encuentre algo que conecte con su estilo, sus pasiones y sus momentos especiales.</p></div></section>`
   };
@@ -6412,9 +6410,9 @@ async function renderAdmin() {
   const formArea = document.querySelector('#formArea'); const listArea = document.querySelector('#adminProducts');
   function drawHomeDesigner() {
     const mount=document.querySelector('#homeDesignerMount');if(!mount)return;
-    const sections=Array.isArray(settings.homeSections)?[...settings.homeSections]:['banners','featured','statement','universes','about'];
-    if(!settings.phase3Configured) {sections.splice(Math.max(0,sections.indexOf('banners')+1),0,'editorial','collection');sections.push('trust');}
-    const labels={banners:'Banners y campañas',editorial:'Universos visuales · mosaico',collection:'Carrusel de favoritos',featured:'Selección de productos',statement:'Frase promocional',universes:'Universos / categorías',trust:'Beneficios de YHORS',about:'Sobre nosotros'};
+    const sections=(Array.isArray(settings.homeSections)?[...settings.homeSections]:['banners','featured','statement','about']).filter(key=>key!=='collection'&&key!=='universes');
+    if(!settings.phase3Configured) {sections.splice(Math.max(0,sections.indexOf('banners')+1),0,'editorial');sections.push('trust');}
+    const labels={banners:'Banners y campañas',editorial:'Universos visuales · mosaico',featured:'Selección de productos',statement:'Frase promocional',trust:'Beneficios de YHORS',about:'Sobre nosotros'};
     const banners=Array.isArray(settings.bannerCarousels)?settings.bannerCarousels:[];
     const hidden=new Set(settings.hiddenUniverses||[]);
     mount.innerHTML=`<section class="admin-panel yh-designer"><div class="yh-designer-head"><span class="eyebrow">PÁGINA WEB · DISEÑADOR DE INICIO</span><h2>Organizar portada y campañas</h2><p>Oculta universos sin borrar productos. Crea carruseles con imágenes propias, archivos o enlaces.</p></div>
