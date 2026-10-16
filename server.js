@@ -13,7 +13,7 @@ const { generateRegistrationOptions, verifyRegistrationResponse, generateAuthent
 
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
-const ADMIN_PATH = '/yhors/admin593';
+const ADMIN_PATH = '/panelyhorstore';
 
 // YHORS puede trabajar con almacenamiento persistente sin cambiar la lógica del catálogo.
 // En Render, configura YHORS_STORAGE_DIR=/var/data/yhors y monta un Persistent Disk en /var/data.
@@ -2024,7 +2024,7 @@ app.get('/robots.txt', (_, res) => {
   res.status(200)
     .set('Content-Type', 'text/plain; charset=utf-8')
     .set('Cache-Control', 'public, max-age=0, must-revalidate')
-    .send(`User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: ${ADMIN_PATH}\nDisallow: ${ADMIN_PATH}/\nDisallow: /panel\nDisallow: /panel/\nSitemap: ${SITE_URL}/sitemap.xml\n`);
+    .send(`User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: ${ADMIN_PATH}\nDisallow: ${ADMIN_PATH}/\nDisallow: /panel\nDisallow: /panel/\nDisallow: /yhors/admin593\nDisallow: /yhors/admin593/\nSitemap: ${SITE_URL}/sitemap.xml\n`);
 });
 
 app.get('/sitemap.xml', (_, res) => {
@@ -2164,17 +2164,22 @@ app.get('/', (req, res, next) => {
   return res.send(layout({ title:'YHORS-STORE | Tecnología, detalles, cosplay y más', description:'YHORS-STORE | Tecnología, moda, regalos, cosplays y experiencias. Una selección de calidad, diseñada para quienes buscan confianza, estilo y más.', canonical, json:[organization,website], body:homeSeoBody(products) }));
 });
 
-// La tienda y el panel comparten este servidor y sus datos.
-// /panel es una URL alternativa independiente dentro del mismo despliegue.
-app.use('/panel', (req, res, next) => {
+// YHORS PANEL Fase 2: acceso privado con entrada HTML independiente.
+// La ruta personalizada no sustituye la autenticación ni los permisos de la API.
+app.use(ADMIN_PATH, (req, res, next) => {
   res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
-  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
   next();
 });
-// Compatibilidad con enlaces anteriores: no exponer una segunda interfaz administrativa.
 app.get([ADMIN_PATH, `${ADMIN_PATH}/*path`], (req, res) => {
-  const suffix = req.originalUrl.slice(ADMIN_PATH.length);
-  return res.redirect(302, `/panel${suffix}`);
+  return res.sendFile(path.join(__dirname, 'public', 'panel.html'));
+});
+// Retirar las rutas administrativas anteriores para evitar entradas alternativas.
+app.all(['/panel', '/panel/*path', '/yhors/admin593', '/yhors/admin593/*path'], (_, res) => {
+  res.setHeader('X-Robots-Tag', 'noindex, nofollow');
+  res.setHeader('Cache-Control', 'no-store');
+  return res.status(404).send('Página no encontrada.');
 });
 
 // YHORS Flyer: la vista previa se abre en una pestaña independiente y se

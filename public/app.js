@@ -1,5 +1,5 @@
 const app = document.querySelector('#app');
-const ADMIN_PATH = '/panel';
+const ADMIN_PATH = '/panelyhorstore';
 const ORDER_STATUS_CLASS = { Pendiente:'pending', Confirmado:'confirmed', Preparado:'preparing', Enviado:'shipped', Entregado:'delivered', Cancelado:'cancelled' };
 const statusClass = value => ORDER_STATUS_CLASS[value] || 'pending';
 let categories = {
@@ -1022,11 +1022,6 @@ async function navigateToRoute(href, { replace = false } = {}) {
 
 async function renderCurrentRoute() {
   const path = window.location.pathname;
-  // Enlaces antiguos conservados: dirigir a la nueva dirección del panel.
-  if (path === '/yhors/admin593' || path.startsWith('/yhors/admin593/')) {
-    window.location.replace(path.replace(/^\/yhors\/admin593/, ADMIN_PATH) + window.location.search + window.location.hash);
-    return;
-  }
   if (path === `${ADMIN_PATH}/inteligente` || path === `${ADMIN_PATH}/inteligente/`) return renderYhorsInteligente();
   if (path === ADMIN_PATH || path === `${ADMIN_PATH}/`) {
     const session = await request('/api/admin/session').catch(() => ({ authenticated: false }));

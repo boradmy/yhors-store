@@ -6403,7 +6403,7 @@ body .yh-designer-note{color:#776f63;font-size:13px;line-height:1.5}
   .featured-section .add{font-size:.66rem;padding:7px 9px}
 }
 
-/* YHORS PANEL · consola modular independiente (/panel) */
+/* YHORS PANEL · consola modular independiente (/panelyhorstore) */
 @media(min-width:1050px){
  body:has(.admin-shell) {background:#f5f5f7!important}
  body:has(.admin-shell) .admin-shell {padding-left:252px!important;min-height:100vh!important;background:#f5f5f7!important}
