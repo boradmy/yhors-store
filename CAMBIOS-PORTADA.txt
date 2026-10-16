@@ -1,1 +1,0 @@
-Se eliminaron del inicio las secciones duplicadas «Descubre nuestros favoritos» y «Explora por universo / Encuentra tu estilo». Se conservan «Universos que inspiran» y «Selección YHORS». No se incluyen .env, .git, node_modules ni datos privados.
