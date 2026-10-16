@@ -501,12 +501,45 @@ function yhShopWindows(products, featuredIds = []) {
     ['coleccionables','Piezas para tu colección','Encuentra ese artículo especial']
   ];
   return groups.map(([key,title,note]) => {
-    const candidates = products.filter(p=>p.category===key && p.published!==false);
-    const items = [...candidates.filter(p=>!excluded.has(String(p.id))),...candidates.filter(p=>excluded.has(String(p.id)))].slice(0,8);
+    const items = products.filter(p=>p.category===key && p.published!==false && !excluded.has(String(p.id)));
     if (!items.length) return '';
+    const promoPhoto = items.find(p=>p.image||productImages(p)[0]);
+    const promoImage = promoPhoto ? (promoPhoto.image||productImages(promoPhoto)[0]) : '';
     const cards=items.map(p=>`<a class="yh-window-card" href="${escapeHTML(productHref(p))}"><span class="yh-window-photo"><img src="${escapeHTML(p.image||productImages(p)[0])}" alt="${escapeHTML(p.name)}" loading="lazy"></span><span class="yh-window-category">${escapeHTML(categories[p.category]||p.category)}</span><strong>${escapeHTML(p.name)}</strong><span class="yh-window-price">${productPriceLabel(p)}</span>${key==='cosplay' && p.isRental && Number(p.rentalPrice)>0?`<small class="yh-window-rental">Alquiler ${money(p.rentalPrice)} / día</small>`:''}<span class="yh-window-action">Ver producto ↗</span></a>`).join('');
-    return `<section class="yh-window-section yh-window-${key} section"><div class="yh-window-heading"><div><span class="eyebrow">DESCUBRE YHORS</span><h2>${title}</h2><p>${note}</p></div><a href="${categoryHref(key)}">Ver todo ↗</a></div><div class="yh-window-layout"><a class="yh-window-promo" href="${categoryHref(key)}"><span>YHORS STORE</span><strong>${escapeHTML(categories[key]||key)}</strong><em>Explorar colección ↗</em><span class="yh-window-promo-mark" aria-hidden="true">Y</span></a><div class="yh-window-scroll">${cards}</div></div></section>`;
+    return `<section class="yh-window-section yh-window-${key} section" data-yh-product-rail><div class="yh-window-heading"><div><span class="eyebrow">DESCUBRE YHORS</span><h2>${title}</h2><p>${note}</p></div><a href="${categoryHref(key)}">Ver todo ↗</a></div><div class="yh-window-layout"><a class="yh-window-promo" href="${categoryHref(key)}"><span class="yh-window-promo-image" style="background-image:url('${escapeHTML(promoImage)}')" aria-hidden="true"></span><span class="yh-window-promo-content"><small>COLECCIÓN YHORS</small><strong>${escapeHTML(categories[key]||key)}</strong><em>Explorar colección ↗</em></span></a><div class="yh-window-products"><div class="yh-window-scroll">${cards}</div><div class="yh-rail-controls"><button type="button" data-rail-prev aria-label="Productos anteriores">‹</button><span class="yh-rail-progress"><i></i></span><button type="button" data-rail-next aria-label="Productos siguientes">›</button></div></div></div></section>`;
   }).filter(Boolean).join('');
+}
+function wireProductRails() {
+  document.querySelectorAll('[data-yh-product-rail]').forEach(section => {
+    const rail = section.querySelector('.yh-window-scroll');
+    const prev = section.querySelector('[data-rail-prev]');
+    const next = section.querySelector('[data-rail-next]');
+    const progress = section.querySelector('.yh-rail-progress i');
+    if (!rail) return;
+    const step = () => Math.max(rail.querySelector('.yh-window-card')?.getBoundingClientRect().width || 200, 170) + 12;
+    const update = () => {
+      const max = Math.max(0, rail.scrollWidth - rail.clientWidth);
+      if (progress) { progress.style.width = `${max ? Math.max(15, 100 * rail.clientWidth / rail.scrollWidth) : 100}%`; progress.style.left = `${max ? (rail.scrollLeft / max) * (100 - 100 * rail.clientWidth / rail.scrollWidth) : 0}%`; }
+      if (prev) prev.disabled = rail.scrollLeft <= 3;
+      if (next) next.disabled = rail.scrollLeft >= max - 3;
+    };
+    prev?.addEventListener('click', () => rail.scrollBy({left:-step()*2,behavior:'smooth'}));
+    next?.addEventListener('click', () => rail.scrollBy({left:step()*2,behavior:'smooth'}));
+    rail.addEventListener('scroll',update,{passive:true});
+    window.addEventListener('resize',update,{passive:true});
+    update();
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    let paused=false;
+    section.addEventListener('mouseenter',()=>paused=true);
+    section.addEventListener('mouseleave',()=>paused=false);
+    section.addEventListener('focusin',()=>paused=true);
+    section.addEventListener('focusout',()=>paused=false);
+    const timer=setInterval(()=>{
+      if (paused || document.hidden || !section.isConnected || rail.scrollWidth <= rail.clientWidth + 5) { if (!section.isConnected) clearInterval(timer); return; }
+      const max=rail.scrollWidth-rail.clientWidth;
+      rail.scrollTo({left:rail.scrollLeft>=max-10?0:Math.min(max,rail.scrollLeft+step()),behavior:'smooth'});
+    },4700);
+  });
 }
 function yhTrustBar() {
  return `<section class="yh-v3-trust section" aria-label="Ventajas de YHORS"><div><span class="yh-v3-trust-icon">◇</span><strong>Selección cuidada</strong><small>Productos de calidad</small></div><div><span class="yh-v3-trust-icon">↗</span><strong>Envíos y entregas</strong><small>Opciones al finalizar tu pedido</small></div><div><span class="yh-v3-trust-icon">✧</span><strong>Compra o alquiler</strong><small>Opciones disponibles en cosplay</small></div><div><span class="yh-v3-trust-icon">♡</span><strong>Atención cercana</strong><small>Te acompañamos en tu compra</small></div></section>`;
@@ -521,6 +554,7 @@ function wireCampaignBanners() {
     const show=i=>{active=(i+slides.length)%slides.length;slides.forEach((x,n)=>x.classList.toggle('active',n===active));dots.forEach((x,n)=>x.classList.toggle('active',n===active));};
     root.querySelector('.yh-banner-prev')?.addEventListener('click',()=>show(active-1));root.querySelector('.yh-banner-next')?.addEventListener('click',()=>show(active+1));
     dots.forEach((dot,i)=>dot.addEventListener('click',()=>show(i)));
+    if(slides.length>1 && !window.matchMedia('(prefers-reduced-motion: reduce)').matches){let paused=false;root.addEventListener('mouseenter',()=>paused=true);root.addEventListener('mouseleave',()=>paused=false);root.addEventListener('focusin',()=>paused=true);root.addEventListener('focusout',()=>paused=false);const timer=setInterval(()=>{if(!root.isConnected){clearInterval(timer);return;}if(!paused&&!document.hidden)show(active+1);},5500);}
   });
 }
 function heroMarkup(slides, isCategory = false, categoryKey = 'all') {
@@ -1317,11 +1351,10 @@ async function renderHome() {
   const sections = Array.isArray(storefront.homeSections) ? storefront.homeSections : ['banners','featured','showcases','statement','universes','about'];
   const carousels = (storefront.bannerCarousels || []).filter(c=>c.enabled && c.slides?.length);
   const homeOrder = [...new Set(sections)].filter(key=>key!=='collection' && key!=='universes');
-  if (!storefront.showcasesConfigured && !homeOrder.includes('showcases')) homeOrder.splice(Math.max(0,homeOrder.indexOf('banners')+1),0,'showcases');
-  if (!storefront.phase3Configured) { if(!homeOrder.includes('trust'))homeOrder.push('trust'); }
-  // La portada comercial no duplica los accesos a universos ni la frase promocional.
-  if (homeOrder.includes('showcases')) { for(const redundant of ['editorial','statement']) { const i=homeOrder.indexOf(redundant);if(i>=0)homeOrder.splice(i,1); } }
-  if (homeOrder.includes('showcases')) {const i=homeOrder.indexOf('showcases');homeOrder.splice(i,1);homeOrder.splice(Math.max(0,homeOrder.indexOf('banners')+1),0,'showcases');}
+  // La selección principal tiene prioridad sobre las vitrinas por universo.
+  if(homeOrder.includes('featured') && homeOrder.includes('showcases') && homeOrder.indexOf('featured')>homeOrder.indexOf('showcases')){homeOrder.splice(homeOrder.indexOf('featured'),1);homeOrder.splice(homeOrder.indexOf('showcases'),0,'featured');}
+  if (!storefront.showcasesConfigured && !homeOrder.includes('showcases')) homeOrder.splice(Math.max(0,homeOrder.indexOf('featured')+1),0,'showcases');
+  if (!storefront.phase3Configured) { homeOrder.splice(Math.max(0,homeOrder.indexOf('banners')+1),0,'editorial'); homeOrder.splice(Math.max(0,homeOrder.indexOf('featured')+1),0,'showcases'); homeOrder.push('trust'); }
   const sectionHTML = {
     banners: carousels.length ? carousels.map((c,i)=>campaignBannerMarkup(c,i===0)).join('') : heroMarkup(heroSlides),
     featured: searchCatalog,
@@ -1332,7 +1365,7 @@ async function renderHome() {
     about: `<section class="brand-section" id="nosotros"><div class="brand-section-inner"><span class="eyebrow">Sobre nosotros</span><h2>YHORS<br><em>más que un producto</em></h2><p>Un catálogo dividido por universos para que cada persona encuentre algo que conecte con su estilo, sus pasiones y sus momentos especiales.</p></div></section>`
   };
   app.innerHTML = `${renderHeader('', products)}<main>${searchTerm ? searchCatalog : `<section class="promo-ribbon" aria-label="Beneficios YHORS"><div class="promo-item"><span>01</span><strong>DISEÑO CON IDENTIDAD</strong></div><div class="promo-item"><span>02</span><strong>PRODUCTOS DE CALIDAD</strong></div><div class="promo-item"><span>03</span><strong>ATENCIÓN DIRECTA</strong></div></section>${homeOrder.map(key=>sectionHTML[key]||'').join('')}`}</main>${renderFooter(products)}${cartMarkup()}</div>`;
-  wireCategoryNavigation(); wireMobileMenu(); wireSearch(); wireHero(heroSlides); wireCampaignBanners(); markPageEnter(); const cart = wireCart(products, storefront); const featuredArea = document.querySelector('#featuredProducts');
+  wireCategoryNavigation(); wireMobileMenu(); wireSearch(); wireHero(heroSlides); wireCampaignBanners(); wireProductRails(); markPageEnter(); const cart = wireCart(products, storefront); const featuredArea = document.querySelector('#featuredProducts');
   const renderSearchResults = (items) => { renderProductsInto(featuredArea, items, id => openProduct(id, products), (product, button) => cart.addToCart(product, button)); const count = document.querySelector('#resultsCount'); if (count) count.textContent = `${items.length} producto${items.length === 1 ? '' : 's'} encontrado${items.length === 1 ? '' : 's'}`; if (!items.length) featuredArea.innerHTML = '<div class="empty featured-empty">No encontramos productos con esa búsqueda.<br><small>Prueba con otra marca, categoría o nombre.</small></div>'; };
   if (searchTerm) { renderSearchResults(searchResults); } else { renderProductsInto(featuredArea, visibleFeatured, id => openProduct(id, products), (product, button) => cart.addToCart(product, button)); if (!visibleFeatured.length) featuredArea.innerHTML = '<div class="empty featured-empty">Todavía no has seleccionado productos destacados.<br><small>Entra a YHORS Administración y marca los productos que quieres mostrar aquí.</small></div>'; }
 }
@@ -6438,8 +6471,8 @@ async function renderAdmin() {
   function drawHomeDesigner() {
     const mount=document.querySelector('#homeDesignerMount');if(!mount)return;
     const sections=(Array.isArray(settings.homeSections)?[...settings.homeSections]:['banners','featured','showcases','statement','about']).filter(key=>key!=='collection'&&key!=='universes');
-    if (!settings.showcasesConfigured && !sections.includes('showcases')) sections.splice(Math.max(0,sections.indexOf('banners')+1),0,'showcases');
-    if(!settings.phase3Configured && !sections.includes('trust')) sections.push('trust');
+    if (!settings.showcasesConfigured && !sections.includes('showcases')) sections.splice(Math.max(0,sections.indexOf('featured')+1),0,'showcases');
+    if(!settings.phase3Configured) {sections.splice(Math.max(0,sections.indexOf('banners')+1),0,'editorial');sections.splice(Math.max(0,sections.indexOf('featured')+1),0,'showcases');sections.push('trust');}
     const labels={banners:'Banners y campañas',editorial:'Universos visuales · mosaico',featured:'Selección de productos',showcases:'Vitrinas comerciales por universo · productos automáticos',statement:'Frase promocional',trust:'Beneficios de YHORS',about:'Sobre nosotros'};
     const banners=Array.isArray(settings.bannerCarousels)?settings.bannerCarousels:[];
     const hidden=new Set(settings.hiddenUniverses||[]);
