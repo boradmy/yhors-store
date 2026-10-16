@@ -1,5 +1,5 @@
 const app = document.querySelector('#app');
-const ADMIN_PATH = '/yhors/admin593';
+const ADMIN_PATH = '/panel';
 const ORDER_STATUS_CLASS = { Pendiente:'pending', Confirmado:'confirmed', Preparado:'preparing', Enviado:'shipped', Entregado:'delivered', Cancelado:'cancelled' };
 const statusClass = value => ORDER_STATUS_CLASS[value] || 'pending';
 let categories = {
@@ -1022,6 +1022,11 @@ async function navigateToRoute(href, { replace = false } = {}) {
 
 async function renderCurrentRoute() {
   const path = window.location.pathname;
+  // Enlaces antiguos conservados: dirigir a la nueva dirección del panel.
+  if (path === '/yhors/admin593' || path.startsWith('/yhors/admin593/')) {
+    window.location.replace(path.replace(/^\/yhors\/admin593/, ADMIN_PATH) + window.location.search + window.location.hash);
+    return;
+  }
   if (path === `${ADMIN_PATH}/inteligente` || path === `${ADMIN_PATH}/inteligente/`) return renderYhorsInteligente();
   if (path === ADMIN_PATH || path === `${ADMIN_PATH}/`) {
     const session = await request('/api/admin/session').catch(() => ({ authenticated: false }));
@@ -2016,9 +2021,10 @@ function adminSectionNav(session = {}, active = '') {
     const limitedGroup = (label, items, isActive, extraClass = '') => `<details class="admin-nav-group admin-nav-group--limited ${extraClass}${isActive ? ' has-active' : ''}"><summary><span>${label}</span>${isActive ? '<i aria-hidden="true"></i>' : ''}</summary><div class="admin-nav-group-links admin-nav-group-links--limited">${items}</div></details>`;
     return `<div class="admin-navigation-stack admin-navigation-stack--limited"><nav class="admin-section-nav admin-section-nav--limited" id="adminSectionNav" aria-label="Navegación YHORS">${limitedGroup('AGENDAR VENTA', saleItems, saleActive, 'admin-nav-group--sales')}${limitedGroup('GESTIÓN', managementItems, managementActive, 'admin-nav-group--management')}</nav></div>`;
   }
-  const group = (label, activeKeys, items, open = false) => `<details class="admin-nav-group${activeKeys.includes(active) ? ' has-active' : ''}"${open ? ' open' : ''}><summary><span>${label}</span>${activeKeys.includes(active) ? '<i aria-hidden="true"></i>' : ''}</summary><div class="admin-nav-group-links">${items}</div></details>`;
+  const group = (label, activeKeys, items, open = true) => `<details class="admin-nav-group${activeKeys.includes(active) ? ' has-active' : ''}"${open ? ' open' : ''}><summary><span>${label}</span>${activeKeys.includes(active) ? '<i aria-hidden="true"></i>' : ''}</summary><div class="admin-nav-group-links">${items}</div></details>`;
   return `<div class="admin-navigation-stack">
     <nav class="admin-section-nav" id="adminSectionNav" aria-label="Administración YHORS">
+      <a href="${ADMIN_PATH}/inteligente" class="admin-section-link panel-home-link" data-smooth-route>⌂ &nbsp; INICIO / OVERVIEW</a>
       ${group('Operación', ['web','inventario','buscar-productos','pedidos','generar-orden','historial-ventas','compras'], `${link('web', `${ADMIN_PATH}/web`, 'PÁGINA WEB')}${link('buscar-productos', `${ADMIN_PATH}/buscar-productos`, 'BUSCAR PRODUCTOS')}${link('inventario', `${ADMIN_PATH}/inventario`, 'INVENTARIO')}${link('compras', `${ADMIN_PATH}/compras`, 'COMPRAS / PROVEEDORES')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('generar-orden', `${ADMIN_PATH}/generar-orden`, 'GENERAR ORDEN')}${link('historial-ventas', `${ADMIN_PATH}/historial-ventas`, 'HISTORIAL DE VENTAS')}`)}
       ${group('Gestión', ['usuarios','series-imeis','auditoria','backups'], `${link('usuarios', `${ADMIN_PATH}/usuarios`, 'USUARIOS')}${link('series-imeis', `${ADMIN_PATH}/series-imeis`, 'SERIES/IMEIS')}${link('auditoria', `${ADMIN_PATH}/auditoria`, 'AUDITORÍA')}${link('backups', `${ADMIN_PATH}/backups`, 'BACKUPS')}`)}
       ${group('Empresa', ['clientes','movimientos','reportes'], `${link('clientes', `${ADMIN_PATH}/clientes`, 'CLIENTES · FICHERO')}${link('movimientos', `${ADMIN_PATH}/movimientos`, 'MOVIMIENTOS DE INVENTARIO')}${link('reportes', `${ADMIN_PATH}/reportes`, 'REPORTES')}`)}

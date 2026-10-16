@@ -2024,7 +2024,7 @@ app.get('/robots.txt', (_, res) => {
   res.status(200)
     .set('Content-Type', 'text/plain; charset=utf-8')
     .set('Cache-Control', 'public, max-age=0, must-revalidate')
-    .send(`User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: ${ADMIN_PATH}\nDisallow: ${ADMIN_PATH}/\nSitemap: ${SITE_URL}/sitemap.xml\n`);
+    .send(`User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: ${ADMIN_PATH}\nDisallow: ${ADMIN_PATH}/\nDisallow: /panel\nDisallow: /panel/\nSitemap: ${SITE_URL}/sitemap.xml\n`);
 });
 
 app.get('/sitemap.xml', (_, res) => {
@@ -2164,7 +2164,18 @@ app.get('/', (req, res, next) => {
   return res.send(layout({ title:'YHORS-STORE | Tecnología, detalles, cosplay y más', description:'YHORS-STORE | Tecnología, moda, regalos, cosplays y experiencias. Una selección de calidad, diseñada para quienes buscan confianza, estilo y más.', canonical, json:[organization,website], body:homeSeoBody(products) }));
 });
 
-app.use(ADMIN_PATH, (req, res, next) => { res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive'); next(); });
+// La tienda y el panel comparten este servidor y sus datos.
+// /panel es una URL alternativa independiente dentro del mismo despliegue.
+app.use('/panel', (req, res, next) => {
+  res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
+  res.setHeader('Cache-Control', 'no-store');
+  next();
+});
+// Compatibilidad con enlaces anteriores: no exponer una segunda interfaz administrativa.
+app.get([ADMIN_PATH, `${ADMIN_PATH}/*path`], (req, res) => {
+  const suffix = req.originalUrl.slice(ADMIN_PATH.length);
+  return res.redirect(302, `/panel${suffix}`);
+});
 
 // YHORS Flyer: la vista previa se abre en una pestaña independiente y se
 // imprime/guarda como PDF desde el navegador, sin exponer el catálogo fuera

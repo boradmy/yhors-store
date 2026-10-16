@@ -6402,3 +6402,23 @@ body .yh-designer-note{color:#776f63;font-size:13px;line-height:1.5}
   .featured-section .price{font-size:.82rem}
   .featured-section .add{font-size:.66rem;padding:7px 9px}
 }
+
+/* YHORS PANEL · consola modular independiente (/panel) */
+@media(min-width:1050px){
+ body:has(.admin-shell) {background:#f5f5f7!important}
+ body:has(.admin-shell) .admin-shell {padding-left:252px!important;min-height:100vh!important;background:#f5f5f7!important}
+ body:has(.admin-shell) .admin-wrap {width:100%!important;max-width:none!important;margin:0!important;padding:28px 28px 70px!important}
+ body:has(.admin-shell) .admin-navigation-stack {position:fixed!important;top:0!important;left:0!important;bottom:0!important;width:252px!important;z-index:80!important;background:#15171c!important;overflow-y:auto!important;overflow-x:hidden!important;padding:80px 12px 22px!important;box-shadow:2px 0 16px #00000018!important}
+ body:has(.admin-shell) .admin-navigation-stack:before {content:'YHORS  /  PANEL';position:fixed;top:0;left:0;width:252px;height:64px;display:flex;align-items:center;padding-left:23px;box-sizing:border-box;background:#101116;color:#e6c17e;font-size:17px;font-weight:800;letter-spacing:1.8px;border-bottom:1px solid #ffffff20;z-index:82}
+ body:has(.admin-shell) .admin-section-nav,body:has(.admin-shell) .yh-intelligent-shell .admin-section-nav {display:flex!important;flex-direction:column!important;gap:8px!important;grid-template-columns:none!important;width:100%!important;max-width:none!important;background:transparent!important;border:0!important;padding:0!important;overflow:visible!important}
+ body:has(.admin-shell) .admin-nav-group {display:block!important;position:static!important;width:100%!important;min-width:0!important;background:transparent!important;border:0!important;box-shadow:none!important}
+ body:has(.admin-shell) .admin-nav-group>summary {color:#c5c6cf!important;font-size:12px!important;text-transform:uppercase!important;letter-spacing:1px!important;padding:13px 10px 7px!important;background:transparent!important;box-shadow:none!important;border:0!important;cursor:pointer!important}
+ body:has(.admin-shell) .admin-nav-group-links,body:has(.admin-shell) .yh-intelligent-shell .admin-nav-group-links {position:static!important;display:flex!important;flex-direction:column!important;visibility:visible!important;opacity:1!important;transform:none!important;min-width:0!important;width:100%!important;padding:0!important;margin:0!important;background:transparent!important;border:0!important;box-shadow:none!important;gap:2px!important}
+ body:has(.admin-shell) .admin-nav-group:not([open]) .admin-nav-group-links {display:none!important}
+ body:has(.admin-shell) .admin-section-link {display:flex!important;width:100%!important;min-height:38px!important;align-items:center!important;justify-content:flex-start!important;text-align:left!important;color:#e1e2e7!important;border:0!important;background:transparent!important;border-radius:8px!important;padding:9px 10px!important;box-sizing:border-box!important;font-size:12px!important;line-height:1.4!important;white-space:normal!important}
+ body:has(.admin-shell) .admin-section-link:hover {background:#ffffff15!important;color:#fff!important}
+ body:has(.admin-shell) .admin-section-link.active {background:#b78b40!important;color:#111!important;font-weight:750!important}
+ body:has(.admin-shell) .admin-nav-icon {color:inherit!important}
+ body:has(.admin-shell) .admin-top {margin-bottom:22px!important}
+}
+@media(max-width:1049px){body:has(.admin-shell) .panel-home-link{display:block!important}}
