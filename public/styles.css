@@ -6369,3 +6369,36 @@ body .yh-published-item strong{font-size:13px;line-height:1.25}
 body .yh-published-item small{color:#8c784f;font-size:11px}
 body .yh-designer-note{color:#776f63;font-size:13px;line-height:1.5}
 @media(max-width:760px){body .yh-v3-category-tile{min-height:165px}body .yh-v3-tile-copy{left:13px;bottom:14px}body .yh-v3-tile-copy strong{font-size:1.2rem}}
+
+/* YHORS 2026-10-16: vitrinas compactas exclusivamente en Selección YHORS.
+   No modifica las tarjetas de búsquedas, categorías ni administración. */
+.featured-section{padding-top:42px;padding-bottom:38px}
+.featured-section .section-heading{margin-bottom:20px}
+.featured-section .section-heading h2{font-size:clamp(1.65rem,2.8vw,2.25rem)}
+.featured-section .products{grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.featured-section .product{min-width:0;border-radius:9px}
+.featured-section .product-image{aspect-ratio:5/4;background:#f8f7f5}
+.featured-section .product-image img{padding:12px;object-fit:contain}
+.featured-section .product-info{padding:12px 13px 5px;gap:6px}
+.featured-section .product-category{font-size:.58rem}
+.featured-section .product-meta{display:block;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-size:.65rem}
+.featured-section .product h3{font-size:.83rem;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:2.6em}
+.featured-section .product-description{display:none}
+.featured-section .detail-link{font-size:.7rem}
+.featured-section .product-bottom{padding:10px 13px 13px;gap:8px}
+.featured-section .price{font-size:.94rem}
+.featured-section .add{min-width:0;padding:8px 10px;font-size:.7rem}
+@media(max-width:850px){
+  .featured-section .products{grid-template-columns:repeat(3,minmax(0,1fr));gap:11px}
+}
+@media(max-width:650px){
+  .featured-section{padding-top:34px;padding-bottom:30px}
+  .featured-section .products{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+  .featured-section .product-image{aspect-ratio:1/1}
+  .featured-section .product-image img{padding:9px}
+  .featured-section .product-info{padding:9px 10px 4px;gap:5px}
+  .featured-section .product h3{font-size:.76rem}
+  .featured-section .product-bottom{padding:8px 10px 10px;flex-wrap:wrap}
+  .featured-section .price{font-size:.82rem}
+  .featured-section .add{font-size:.66rem;padding:7px 9px}
+}
