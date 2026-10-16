@@ -6279,3 +6279,22 @@ html:has(.admin-web-shell),body:has(.admin-web-shell),#app:has(.admin-web-shell)
 @media(max-width:760px){.yh-v3-editorial,.yh-v3-collection,.yh-v3-trust{margin:32px auto;padding-left:15px;padding-right:15px}.yh-v3-category-grid{gap:9px}.yh-v3-category-tile{min-height:200px}.yh-v3-product-scroll{grid-auto-columns:minmax(180px,67%)}.yh-v3-trust{grid-template-columns:repeat(2,minmax(0,1fr))}.yh-v3-heading{align-items:start;flex-direction:column;gap:8px}.yh-v3-heading p{font-size:.82rem}}
 @media(max-width:440px){.yh-v3-category-grid{grid-template-columns:1fr}.yh-v3-category-tile{min-height:180px}.yh-v3-product-scroll{grid-auto-columns:78%}}
 @media(prefers-reduced-motion:reduce){.yh-v3-category-tile img,.yh-v3-product-card{transition:none}}
+
+/* Portada YHORS: universos compactos con ilustraciones editoriales propias */
+.yh-v3-editorial{margin-top:32px;margin-bottom:30px}
+.yh-v3-editorial .yh-v3-heading{margin-bottom:16px}
+.yh-v3-editorial .yh-v3-heading h2{font-size:clamp(1.45rem,2.2vw,2.15rem)}
+.yh-v3-category-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.yh-v3-category-tile{min-height:158px;border-radius:14px;isolation:isolate;background:linear-gradient(135deg,#191b22,#343b47)}
+.yh-v3-tile-1{background:linear-gradient(135deg,#2a202b,#6a5267)}
+.yh-v3-tile-2{background:linear-gradient(135deg,#322626,#755556)}
+.yh-v3-tile-3{background:linear-gradient(135deg,#252626,#545b55)}
+.yh-v3-tile-art{position:absolute;right:-10px;top:7px;width:60%;height:92%;opacity:.94;display:flex;align-items:center;justify-content:center;transition:transform .3s}
+.yh-v3-tile-art svg{width:100%;height:100%;filter:drop-shadow(0 12px 12px #0005)}
+.yh-v3-category-tile:hover .yh-v3-tile-art{transform:translateY(-4px) scale(1.04)}
+.yh-v3-tile-copy{left:17px;bottom:17px;gap:7px;max-width:62%;text-shadow:0 2px 8px #0008}
+.yh-v3-tile-copy strong{font-size:clamp(1.2rem,1.7vw,1.65rem)}
+.yh-v3-tile-copy small{font-size:.55rem}
+.yh-v3-tile-copy em{font-size:.73rem}
+@media(max-width:850px){.yh-v3-category-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.yh-v3-category-tile{min-height:148px}}
+@media(max-width:440px){.yh-v3-category-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.yh-v3-category-tile{min-height:135px}.yh-v3-tile-copy{left:11px;bottom:12px}.yh-v3-tile-copy strong{font-size:1.13rem}.yh-v3-tile-art{right:-17px;width:65%}}
