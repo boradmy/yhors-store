@@ -7237,7 +7237,7 @@ document.addEventListener('click', event => {
   if (!link || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
   const href = link.getAttribute('href');
   if (!href) return;
-  document.querySelectorAll('.admin-nav-group[open]').forEach(group => { group.open = false; });
+  // Mantener los grupos del menú lateral abiertos durante la navegación.
   const target = new URL(href, window.location.origin);
   if (target.origin !== window.location.origin) return;
   event.preventDefault();
