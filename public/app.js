@@ -18,6 +18,7 @@ let categoryDescriptions = {
 };
 let publicCategories = Object.entries(categories);
 let publicCatalogProducts = [];
+let hiddenPublicUniverses = new Set();
 
 const BUILTIN_CATEGORY_KEYS = new Set(['elegant','sports','tech','cosplay','pets','details','collectibles']);
 function applyClassificationCategories(classifications = {}) {
@@ -34,7 +35,7 @@ function applyClassificationCategories(classifications = {}) {
 }
 
 function setPublicCatalogProducts(products = []) {
-  publicCatalogProducts = Array.isArray(products) ? products : [];
+  publicCatalogProducts = Array.isArray(products) ? products.filter(p => !hiddenPublicUniverses.has(p.category)) : [];
 }
 function catalogCreatedTime(product) {
   const value = product?.publishedAt || product?.createdAt || product?.updatedAt || '';
@@ -59,7 +60,7 @@ function publicCategoryEntries(products = publicCatalogProducts) {
     const key = String(product?.category || '').trim();
     if (key && categories[key]) counts.set(key, (counts.get(key) || 0) + 1);
   });
-  return publicCategories.filter(([key]) => key === 'all' ? list.length > 0 : (counts.get(key) || 0) > 0);
+  return publicCategories.filter(([key]) => !hiddenPublicUniverses.has(key) && (key === 'all' ? list.length > 0 : (counts.get(key) || 0) > 0));
 }
 const placeholder = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="800" height="800"%3E%3Crect width="100%25" height="100%25" fill="%23e8e5de"/%3E%3Ctext x="50%25" y="50%25" dominant-baseline="middle" text-anchor="middle" fill="%23706d66" font-family="Arial" font-size="32"%3EYHORS%3C/text%3E%3C/svg%3E';
 
@@ -474,6 +475,18 @@ function compactHeroText(value, max = 180) {
   // (por ejemplo contenido importado de WooCommerce/Elementor). El hero es
   // texto plano: nunca debe mostrar etiquetas, atributos data-* ni widgets.
   return compactProductDescription(value, max);
+}
+function campaignBannerMarkup(carousel) {
+  if (!carousel?.enabled || !carousel.slides?.length) return '';
+  return `<section class="yh-campaign section" aria-label="${escapeHTML(carousel.title)}"><div class="yh-campaign-head"><span class="eyebrow">YHORS · CAMPAÑA</span><h2>${escapeHTML(carousel.title)}</h2></div><div class="yh-banner-slider" data-yh-banner><div class="yh-banner-track">${carousel.slides.map((slide,i)=>`<a class="yh-banner-slide ${i===0?'active':''}" href="${escapeHTML(slide.link||'/')}" ${/^https:\/\//.test(slide.link||'')?'rel="noopener noreferrer"':''}><img src="${escapeHTML(slide.image)}" alt="${escapeHTML(slide.alt||carousel.title)}" loading="${i===0?'eager':'lazy'}"></a>`).join('')}</div>${carousel.slides.length>1?`<button type="button" class="yh-banner-prev" aria-label="Banner anterior">‹</button><button type="button" class="yh-banner-next" aria-label="Banner siguiente">›</button><div class="yh-banner-dots">${carousel.slides.map((_,i)=>`<button type="button" data-banner-dot="${i}" aria-label="Banner ${i+1}" class="${i===0?'active':''}"></button>`).join('')}</div>`:''}</div></section>`;
+}
+function wireCampaignBanners() {
+  document.querySelectorAll('[data-yh-banner]').forEach(root=>{
+    const slides=[...root.querySelectorAll('.yh-banner-slide')], dots=[...root.querySelectorAll('[data-banner-dot]')]; let active=0;
+    const show=i=>{active=(i+slides.length)%slides.length;slides.forEach((x,n)=>x.classList.toggle('active',n===active));dots.forEach((x,n)=>x.classList.toggle('active',n===active));};
+    root.querySelector('.yh-banner-prev')?.addEventListener('click',()=>show(active-1));root.querySelector('.yh-banner-next')?.addEventListener('click',()=>show(active+1));
+    dots.forEach((dot,i)=>dot.addEventListener('click',()=>show(i)));
+  });
 }
 function heroMarkup(slides, isCategory = false, categoryKey = 'all') {
   const safeSlides = slides.length ? slides : [{ image: placeholder, name: categories[categoryKey] || 'YHORS', category: categoryKey, description: categoryDescriptions[categoryKey] }];
@@ -1247,6 +1260,8 @@ async function renderHome() {
     console.warn('[YHORS SEO] Se conserva el HTML SSR de inicio:', error?.message || error);
     return;
   }
+  hiddenPublicUniverses = new Set(storefront.hiddenUniverses || []);
+  products = products.filter(p => !hiddenPublicUniverses.has(p.category));
   setPublicCatalogProducts(products);
   const searchTerm = (new URLSearchParams(location.search).get('buscar') || '').trim().toLowerCase();
   const heroIds = storefront.heroProductIds || []; const featuredIds = storefront.featuredProductIds || [];
@@ -1264,13 +1279,17 @@ async function renderHome() {
   const featuredTitle = searchTerm ? `Resultados para “${escapeHTML(searchTerm)}”` : 'Selección YHORS';
   const featuredText = searchTerm ? `${searchResults.length} producto(s) encontrado(s) en nuestro catálogo.` : 'Tecnología, detalles y piezas elegidas para destacar.';
   const searchCatalog = searchTerm ? `<section class="catalog-shell section search-only" id="destacados"><div class="search-results-heading"><div><span class="eyebrow">Búsqueda YHORS</span><h1>Resultados para “${escapeHTML(searchTerm)}”</h1></div><p>Explora los productos relacionados con tu búsqueda.</p></div><div class="catalog-results"><div class="results-count" id="resultsCount"></div><div class="products" id="featuredProducts"></div></div></section>` : `<section class="section featured-section" id="destacados"><div class="section-heading"><div><span class="eyebrow">Edición YHORS</span><h2>Selección YHORS</h2></div><p>Tecnología, detalles y piezas elegidas para destacar.</p></div><div class="products" id="featuredProducts"></div></section>`;
-  app.innerHTML = `${renderHeader('', products)}<main>
-    ${searchTerm ? '' : `<section class="promo-ribbon" aria-label="Beneficios YHORS"><div class="promo-item"><span>01</span><strong>DISEÑO CON IDENTIDAD</strong><small>Una tienda pensada alrededor de YHORS.</small></div><div class="promo-item"><span>02</span><strong>PRODUCTOS DE CALIDAD</strong><small>Productos elegidos por estilo y utilidad.</small></div><div class="promo-item"><span>03</span><strong>ATENCIÓN DIRECTA</strong><small>Pedidos y consultas de forma personal.</small></div></section>${heroMarkup(heroSlides)}`}
-    ${searchCatalog}
-    ${!searchTerm ? `<section class="statement-strip"><div><span class="eyebrow">YHORS-STORE</span><h2>Elegancia que también se encuentra en los detalles.</h2></div><a class="button" href="#categorias">Explorar universos <span>→</span></a></section>${categoryBlocks(products)}` : ''}
-    <section class="brand-section" id="nosotros"><div class="brand-section-inner"><span class="eyebrow">Sobre nosotros</span><h2>YHORS<br><em>más que un producto</em></h2><p>Un catálogo dividido por universos para que cada persona encuentre algo que conecte con su estilo, sus pasiones y sus momentos especiales.</p></div></section>
-  </main>${renderFooter(products)}${cartMarkup()}</div>`;
-  wireCategoryNavigation(); wireMobileMenu(); wireSearch(); wireHero(heroSlides); markPageEnter(); const cart = wireCart(products, storefront); const featuredArea = document.querySelector('#featuredProducts');
+  const sections = Array.isArray(storefront.homeSections) ? storefront.homeSections : ['banners','featured','statement','universes','about'];
+  const carousels = (storefront.bannerCarousels || []).filter(c=>c.enabled && c.slides?.length);
+  const sectionHTML = {
+    banners: carousels.length ? carousels.map(campaignBannerMarkup).join('') : heroMarkup(heroSlides),
+    featured: searchCatalog,
+    statement: `<section class="statement-strip"><div><span class="eyebrow">YHORS-STORE</span><h2>Elegancia que también se encuentra en los detalles.</h2></div><a class="button" href="#categorias">Explorar universos <span>→</span></a></section>`,
+    universes: categoryBlocks(products),
+    about: `<section class="brand-section" id="nosotros"><div class="brand-section-inner"><span class="eyebrow">Sobre nosotros</span><h2>YHORS<br><em>más que un producto</em></h2><p>Un catálogo dividido por universos para que cada persona encuentre algo que conecte con su estilo, sus pasiones y sus momentos especiales.</p></div></section>`
+  };
+  app.innerHTML = `${renderHeader('', products)}<main>${searchTerm ? searchCatalog : `<section class="promo-ribbon" aria-label="Beneficios YHORS"><div class="promo-item"><span>01</span><strong>DISEÑO CON IDENTIDAD</strong></div><div class="promo-item"><span>02</span><strong>PRODUCTOS DE CALIDAD</strong></div><div class="promo-item"><span>03</span><strong>ATENCIÓN DIRECTA</strong></div></section>${sections.map(key=>sectionHTML[key]||'').join('')}`}</main>${renderFooter(products)}${cartMarkup()}</div>`;
+  wireCategoryNavigation(); wireMobileMenu(); wireSearch(); wireHero(heroSlides); wireCampaignBanners(); markPageEnter(); const cart = wireCart(products, storefront); const featuredArea = document.querySelector('#featuredProducts');
   const renderSearchResults = (items) => { renderProductsInto(featuredArea, items, id => openProduct(id, products), (product, button) => cart.addToCart(product, button)); const count = document.querySelector('#resultsCount'); if (count) count.textContent = `${items.length} producto${items.length === 1 ? '' : 's'} encontrado${items.length === 1 ? '' : 's'}`; if (!items.length) featuredArea.innerHTML = '<div class="empty featured-empty">No encontramos productos con esa búsqueda.<br><small>Prueba con otra marca, categoría o nombre.</small></div>'; };
   if (searchTerm) { renderSearchResults(searchResults); } else { renderProductsInto(featuredArea, visibleFeatured, id => openProduct(id, products), (product, button) => cart.addToCart(product, button)); if (!visibleFeatured.length) featuredArea.innerHTML = '<div class="empty featured-empty">Todavía no has seleccionado productos destacados.<br><small>Entra a YHORS Administración y marca los productos que quieres mostrar aquí.</small></div>'; }
 }
@@ -1284,6 +1303,8 @@ async function renderCategoryPage(categoryKey) {
     console.warn('[YHORS SEO] Se conserva el HTML SSR de categoría:', error?.message || error);
     return;
   }
+  hiddenPublicUniverses = new Set(storefront.hiddenUniverses || []);
+  products = products.filter(p => !hiddenPublicUniverses.has(p.category));
   const categoryProductsRaw = products.filter(product => categoryKey === 'all' || product.category === categoryKey);
   const categoryProducts = categoryKey === 'all' ? categoryProductsRaw : sortProductsByBrandOrder(categoryProductsRaw, categoryKey, classifications);
   if (categoryKey !== 'all' && !categoryProducts.length) {
@@ -5711,6 +5732,7 @@ async function renderAdminInventory() {
   if (session.role !== 'admin') return renderAdminOrders();
   window.__yhorsSession = session;
   const inventoryReadOnly = false;
+  // YHORS diseñador de inicio: panel independiente de inventario.
   let products = await request('/api/admin/products').catch(() => []);
   const classifications = await request('/api/admin/classifications').catch(() => ({ brands: {}, productTypes: {}, categories: {} }));
   applyClassificationCategories(classifications);
@@ -6368,8 +6390,32 @@ async function renderAdmin() {
   const session = await request('/api/admin/session').catch(() => ({ authenticated: false })); if (!session.authenticated) return renderLogin(); if (isSellerRole(session.role) || session.role === 'store_manager') return renderAdminOrders();
   let products = await request('/api/admin/products').catch(() => []); let classifications = await request('/api/admin/classifications').catch(() => ({ brands: {}, productTypes: {} })); let settings = await request('/api/admin/storefront').catch(() => ({ heroProductIds: [], featuredProductIds: [] })); let editing = null;
   document.documentElement.style.minHeight='0'; document.body.style.minHeight='0'; document.body.style.height='auto'; document.body.style.overflowY='auto'; app.style.minHeight='0'; app.style.height='auto';
-  app.innerHTML = `<main class="admin-shell admin-web-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand admin-brand" href="${ADMIN_PATH}/inteligente" data-smooth-route aria-label="YHORS · Panel Administrativo · Ir a YHORS Inteligente"><span class="admin-brand-mark" aria-hidden="true"><img src="/favicon.svg" alt=""></span><span class="admin-brand-word">YHORS</span><span class="admin-brand-divider" aria-hidden="true"></span><small>Panel Administrativo</small></a><h1 class="admin-title">Administración · Página Web</h1><p class="admin-subtitle">Gestiona la portada y productos destacados de la página pública de YHORS.</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>${adminSectionNav(session, 'web')}<div id="selectionPanelMount">${selectionPanel(products, settings)}</div><div id="categorySectionOrderMount">${categorySectionOrderPanel(products, settings)}</div></div></main>`;
+  app.innerHTML = `<main class="admin-shell admin-web-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand admin-brand" href="${ADMIN_PATH}/inteligente" data-smooth-route aria-label="YHORS · Panel Administrativo · Ir a YHORS Inteligente"><span class="admin-brand-mark" aria-hidden="true"><img src="/favicon.svg" alt=""></span><span class="admin-brand-word">YHORS</span><span class="admin-brand-divider" aria-hidden="true"></span><small>Panel Administrativo</small></a><h1 class="admin-title">Administración · Página Web</h1><p class="admin-subtitle">Gestiona la portada y productos destacados de la página pública de YHORS.</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>${adminSectionNav(session, 'web')}<div id="selectionPanelMount">${selectionPanel(products, settings)}</div><div id="categorySectionOrderMount">${categorySectionOrderPanel(products, settings)}</div><div id="homeDesignerMount"></div></div></main>`;
   const formArea = document.querySelector('#formArea'); const listArea = document.querySelector('#adminProducts');
+  function drawHomeDesigner() {
+    const mount=document.querySelector('#homeDesignerMount');if(!mount)return;
+    const sections=Array.isArray(settings.homeSections)?settings.homeSections:['banners','featured','statement','universes','about'];
+    const labels={banners:'Banners y campañas',featured:'Selección de productos',statement:'Frase promocional',universes:'Universos / categorías',about:'Sobre nosotros'};
+    const banners=Array.isArray(settings.bannerCarousels)?settings.bannerCarousels:[];
+    const hidden=new Set(settings.hiddenUniverses||[]);
+    mount.innerHTML=`<section class="admin-panel yh-designer"><div class="yh-designer-head"><span class="eyebrow">PÁGINA WEB · DISEÑADOR DE INICIO</span><h2>Organizar portada y campañas</h2><p>Oculta universos sin borrar productos. Crea carruseles con imágenes propias, archivos o enlaces.</p></div>
+      <h3>Secciones de inicio</h3><div id="yhDesignerSections">${Object.entries(labels).map(([id,label])=>`<label class="yh-designer-line"><input type="checkbox" data-home-section="${id}" ${sections.includes(id)?'checked':''}><span>${label}</span><button type="button" data-section-up="${id}" aria-label="Subir ${label}">↑</button><button type="button" data-section-down="${id}" aria-label="Bajar ${label}">↓</button></label>`).join('')}</div>
+      <h3>Visibilidad de universos</h3><p>Los productos de un universo oculto dejan de aparecer en el catálogo público, pero siguen en el inventario.</p><div class="yh-universe-grid">${Object.entries(categories).filter(([key])=>key!=='all').map(([key,label])=>`<label><input type="checkbox" data-universe-visible="${escapeHTML(key)}" ${hidden.has(key)?'':'checked'}> ${escapeHTML(label)}</label>`).join('')}</div>
+      <div class="yh-designer-row"><h3>Carruseles de banners</h3><button type="button" class="button secondary small" id="yhAddCarousel">+ Nuevo carrusel</button></div><div id="yhCarouselList">${banners.map((carousel,ci)=>`<div class="yh-carousel-editor" data-carousel-id="${escapeHTML(carousel.id)}"><div class="yh-designer-row"><input data-carousel-title="${ci}" aria-label="Nombre del carrusel" value="${escapeHTML(carousel.title)}"><label><input type="checkbox" data-carousel-enabled="${ci}" ${carousel.enabled!==false?'checked':''}> Visible</label><button type="button" data-remove-carousel="${ci}" class="button secondary small">Eliminar carrusel</button></div>${carousel.slides.map((slide,si)=>`<div class="yh-slide-editor" data-slide="${si}"><img src="${escapeHTML(slide.image)}" alt="Vista previa"><div><input data-slide-image="${ci}-${si}" aria-label="URL de imagen" placeholder="URL de imagen HTTPS" value="${escapeHTML(slide.image)}"><input data-slide-link="${ci}-${si}" aria-label="Enlace del banner" placeholder="Enlace destino /categoria/tech" value="${escapeHTML(slide.link||'')}"><input data-slide-alt="${ci}-${si}" aria-label="Texto alternativo" placeholder="Descripción de la imagen" value="${escapeHTML(slide.alt||'')}"><input type="file" accept="image/jpeg,image/png,image/webp,image/gif" data-banner-file="${ci}-${si}"></div><button type="button" data-remove-slide="${ci}-${si}" aria-label="Eliminar banner">×</button></div>`).join('')}<button type="button" class="button secondary small" data-add-slide="${ci}">+ Añadir banner</button></div>`).join('')}</div><div class="yh-designer-row"><button type="button" class="button" id="yhSaveDesigner">Guardar y publicar cambios</button><span id="yhDesignerMessage" role="status"></span></div></section>`;
+    const sectionOrder=[...new Set([...sections,...Object.keys(labels)])];
+    const drawOrder=()=>{const parent=mount.querySelector('#yhDesignerSections');parent.innerHTML=sectionOrder.map(id=>`<label class="yh-designer-line"><input type="checkbox" data-home-section="${id}" ${sections.includes(id)?'checked':''}><span>${labels[id]}</span><button type="button" data-section-up="${id}">↑</button><button type="button" data-section-down="${id}">↓</button></label>`).join('');};
+    mount.querySelectorAll('[data-section-up],[data-section-down]').forEach(()=>{});
+    mount.querySelector('#yhDesignerSections').addEventListener('click',e=>{const button=e.target.closest('[data-section-up],[data-section-down]');if(!button)return;e.preventDefault();const checked=new Set([...mount.querySelectorAll('[data-home-section]:checked')].map(x=>x.dataset.homeSection));const id=button.dataset.sectionUp||button.dataset.sectionDown;const i=sectionOrder.indexOf(id),j=i+(button.dataset.sectionUp?-1:1);if(j<0||j>=sectionOrder.length)return;[sectionOrder[i],sectionOrder[j]]=[sectionOrder[j],sectionOrder[i]];sections.splice(0,sections.length,...sectionOrder.filter(x=>checked.has(x)));drawOrder();});
+    const snapshot=()=>{const copy=JSON.parse(JSON.stringify(settings.bannerCarousels||[]));copy.forEach((c,ci)=>{c.title=mount.querySelector(`[data-carousel-title="${ci}"]`)?.value||c.title;c.enabled=!!mount.querySelector(`[data-carousel-enabled="${ci}"]`)?.checked;c.slides.forEach((sl,si)=>{sl.image=mount.querySelector(`[data-slide-image="${ci}-${si}"]`)?.value.trim()||'';sl.link=mount.querySelector(`[data-slide-link="${ci}-${si}"]`)?.value.trim()||'';sl.alt=mount.querySelector(`[data-slide-alt="${ci}-${si}"]`)?.value.trim()||'';});});return copy;};
+    const redrawWith=next=>{settings.bannerCarousels=next;settings.homeSections=[...mount.querySelectorAll('[data-home-section]:checked')].map(x=>x.dataset.homeSection);settings.hiddenUniverses=[...mount.querySelectorAll('[data-universe-visible]')].filter(x=>!x.checked).map(x=>x.dataset.universeVisible);drawHomeDesigner();};
+    mount.querySelector('#yhAddCarousel')?.addEventListener('click',()=>{const b=snapshot();if(b.length>=8)return alert('Máximo 8 carruseles');b.push({id:'carousel-'+Date.now(),title:'Nueva campaña YHORS',enabled:true,slides:[]});redrawWith(b);});
+    mount.querySelectorAll('[data-add-slide]').forEach(btn=>btn.addEventListener('click',()=>{const b=snapshot(),i=Number(btn.dataset.addSlide);if(b[i].slides.length>=12)return alert('Máximo 12 banners');b[i].slides.push({image:'',link:'',alt:''});redrawWith(b);}));
+    mount.querySelectorAll('[data-remove-carousel]').forEach(btn=>btn.addEventListener('click',()=>{const b=snapshot();b.splice(Number(btn.dataset.removeCarousel),1);redrawWith(b);}));
+    mount.querySelectorAll('[data-remove-slide]').forEach(btn=>btn.addEventListener('click',()=>{const b=snapshot(),[ci,si]=btn.dataset.removeSlide.split('-').map(Number);b[ci].slides.splice(si,1);redrawWith(b);}));
+    mount.querySelectorAll('[data-banner-file]').forEach(input=>input.addEventListener('change',async()=>{const file=input.files?.[0];if(!file)return;if(file.size>5*1024*1024)return alert('Máximo 5 MB');const [ci,si]=input.dataset.bannerFile.split('-').map(Number);const form=new FormData();form.append('image',file);try{const response=await request('/api/admin/upload',{method:'POST',body:form});const b=snapshot();b[ci].slides[si].image=response.image;redrawWith(b);}catch(e){alert(e.message)}}));
+    mount.querySelector('#yhSaveDesigner')?.addEventListener('click',async()=>{const msg=mount.querySelector('#yhDesignerMessage');const ordered=sectionOrder.filter(id=>!!mount.querySelector(`[data-home-section="${id}"]:checked`));const payload={homeSections:ordered,hiddenUniverses:[...mount.querySelectorAll('[data-universe-visible]')].filter(x=>!x.checked).map(x=>x.dataset.universeVisible),bannerCarousels:snapshot()};try{const result=await request('/api/admin/storefront',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});settings={...settings,...result};msg.textContent='✓ Cambios publicados';msg.style.color='#267449';}catch(e){msg.textContent=e.message;msg.style.color='#b62d2d';}});
+  }
+  drawHomeDesigner();
   function drawList() {
     // En Página Web ya no existe el listado de inventario dentro de esta vista.
     // Algunas acciones de portada reutilizan este renderer después de guardar;

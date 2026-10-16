@@ -2099,6 +2099,7 @@ app.get('/producto/:slug', (req, res) => {
 
 app.get('/categoria/:category', (req, res, next) => {
   const key = String(req.params.category || '').toLowerCase();
+  if ((readStorefront().hiddenUniverses || []).includes(key)) return res.status(404).send('Universo temporalmente oculto');
   if (key === 'principal') return next();
   if (!VALID_PUBLIC_CATEGORIES.includes(key)) return next();
   const products = readProducts().map(normalizeProduct).filter(product => product.published !== false && Number(product.stock || 0) > 0);
@@ -2559,10 +2560,13 @@ function readStorefront() {
     return {
       heroProductIds: Array.isArray(parsed.heroProductIds) ? parsed.heroProductIds.filter(Boolean).slice(0, 8) : [],
       featuredProductIds: Array.isArray(parsed.featuredProductIds) ? parsed.featuredProductIds.filter(Boolean).slice(0, 12) : [],
-      categorySectionOrder: normalizedOrder
+      categorySectionOrder: normalizedOrder,
+      hiddenUniverses: Array.isArray(parsed.hiddenUniverses) ? parsed.hiddenUniverses.filter(x => typeof x === "string" && /^[a-z0-9-]{1,60}$/.test(x)).slice(0,100) : [],
+      homeSections: Array.isArray(parsed.homeSections) ? parsed.homeSections.filter(x => ["banners","featured","universes","statement","about"].includes(x)).slice(0,10) : ["banners","featured","statement","universes","about"],
+      bannerCarousels: Array.isArray(parsed.bannerCarousels) ? parsed.bannerCarousels.slice(0,8) : []
     };
   } catch {
-    return { heroProductIds: [], featuredProductIds: [], categorySectionOrder: {} };
+    return { heroProductIds: [], featuredProductIds: [], categorySectionOrder: {}, hiddenUniverses: [], homeSections: ["banners","featured","statement","universes","about"], bannerCarousels: [] };
   }
 }
 
@@ -3495,7 +3499,8 @@ function publicProduct(product, variantOptions = []) {
 }
 
 app.get('/api/products', (_, res) => {
-  const all = readProducts().map(normalizeProduct);
+  const hidden = new Set(readStorefront().hiddenUniverses || []);
+  const all = readProducts().map(normalizeProduct).filter(product => !hidden.has(product.category));
   const singles = all.filter(product => !product.variantGroupId && product.published !== false && Number(product.stock || 0) > 0);
   const groups = new Map();
   all.filter(product => product.variantGroupId).forEach(product => {
@@ -6410,7 +6415,26 @@ app.put('/api/admin/storefront', requireAdmin, (req, res) => {
     if (!Array.isArray(values)) return;
     categorySectionOrder[category] = [...new Set(values.map(value => String(value || '').trim()).filter(Boolean))].slice(0, 100);
   });
-  const settings = { heroProductIds, featuredProductIds, categorySectionOrder };
+  const hiddenUniverses = Array.isArray(req.body?.hiddenUniverses) ? [...new Set(req.body.hiddenUniverses.filter(x => typeof x === 'string' && /^[a-z0-9-]{1,60}$/.test(x)))].slice(0,100) : currentStorefront.hiddenUniverses;
+  const allowedSections = ['banners','featured','universes','statement','about'];
+  const homeSections = Array.isArray(req.body?.homeSections) ? [...new Set(req.body.homeSections.filter(x => allowedSections.includes(x)))].slice(0,10) : currentStorefront.homeSections;
+  const imageOK = value => typeof value === 'string' && (/^\/uploads\/[a-zA-Z0-9._-]+$/.test(value) || /^https:\/\/[a-zA-Z0-9./?&=_:%#-]+$/.test(value));
+  const linkOK = value => typeof value === 'string' && (value === '' || (/^\/(?!\/)[a-zA-Z0-9/_?#=&%.-]*$/.test(value) || /^https:\/\/[a-zA-Z0-9./?&=_:%#-]+$/.test(value)));
+  let bannerCarousels = currentStorefront.bannerCarousels;
+  if (req.body?.bannerCarousels !== undefined) {
+    if (!Array.isArray(req.body.bannerCarousels) || req.body.bannerCarousels.length > 8) return res.status(400).json({ error: 'Máximo 8 carruseles.' });
+    bannerCarousels = [];
+    for (const item of req.body.bannerCarousels) {
+      if (!item || !Array.isArray(item.slides) || item.slides.length > 12) return res.status(400).json({ error: 'Máximo 12 imágenes por carrusel.' });
+      const slides = [];
+      for (const slide of item.slides) {
+        if (!imageOK(slide?.image) || !linkOK(slide?.link || '')) return res.status(400).json({ error: 'Imagen o enlace de banner no válido. Usa HTTPS o una imagen subida a YHORS.' });
+        slides.push({ image: slide.image.slice(0,1200), link: (slide.link || '').slice(0,1200), alt: String(slide.alt || '').slice(0,120) });
+      }
+      bannerCarousels.push({ id: String(item.id || crypto.randomUUID()).slice(0,80), title: String(item.title || 'Campaña YHORS').slice(0,90), enabled: item.enabled !== false, slides });
+    }
+  }
+  const settings = { heroProductIds, featuredProductIds, categorySectionOrder, hiddenUniverses, homeSections, bannerCarousels };
   writeStorefront(settings);
   const heroSet = new Set(heroProductIds);
   const featuredSet = new Set(featuredProductIds);
