@@ -501,7 +501,8 @@ function yhShopWindows(products, featuredIds = []) {
     ['coleccionables','Piezas para tu colección','Encuentra ese artículo especial']
   ];
   return groups.map(([key,title,note]) => {
-    const items = products.filter(p=>p.category===key && p.published!==false && !excluded.has(String(p.id))).slice(0,8);
+    const candidates = products.filter(p=>p.category===key && p.published!==false);
+    const items = [...candidates.filter(p=>!excluded.has(String(p.id))),...candidates.filter(p=>excluded.has(String(p.id)))].slice(0,8);
     if (!items.length) return '';
     const cards=items.map(p=>`<a class="yh-window-card" href="${escapeHTML(productHref(p))}"><span class="yh-window-photo"><img src="${escapeHTML(p.image||productImages(p)[0])}" alt="${escapeHTML(p.name)}" loading="lazy"></span><span class="yh-window-category">${escapeHTML(categories[p.category]||p.category)}</span><strong>${escapeHTML(p.name)}</strong><span class="yh-window-price">${productPriceLabel(p)}</span>${key==='cosplay' && p.isRental && Number(p.rentalPrice)>0?`<small class="yh-window-rental">Alquiler ${money(p.rentalPrice)} / día</small>`:''}<span class="yh-window-action">Ver producto ↗</span></a>`).join('');
     return `<section class="yh-window-section yh-window-${key} section"><div class="yh-window-heading"><div><span class="eyebrow">DESCUBRE YHORS</span><h2>${title}</h2><p>${note}</p></div><a href="${categoryHref(key)}">Ver todo ↗</a></div><div class="yh-window-layout"><a class="yh-window-promo" href="${categoryHref(key)}"><span>YHORS STORE</span><strong>${escapeHTML(categories[key]||key)}</strong><em>Explorar colección ↗</em><span class="yh-window-promo-mark" aria-hidden="true">Y</span></a><div class="yh-window-scroll">${cards}</div></div></section>`;
@@ -1315,9 +1316,12 @@ async function renderHome() {
   const searchCatalog = searchTerm ? `<section class="catalog-shell section search-only" id="destacados"><div class="search-results-heading"><div><span class="eyebrow">Búsqueda YHORS</span><h1>Resultados para “${escapeHTML(searchTerm)}”</h1></div><p>Explora los productos relacionados con tu búsqueda.</p></div><div class="catalog-results"><div class="results-count" id="resultsCount"></div><div class="products" id="featuredProducts"></div></div></section>` : `<section class="section featured-section" id="destacados"><div class="section-heading"><div><span class="eyebrow">Edición YHORS</span><h2>Selección YHORS</h2></div><p>Tecnología, detalles y piezas elegidas para destacar.</p></div><div class="products" id="featuredProducts"></div></section>`;
   const sections = Array.isArray(storefront.homeSections) ? storefront.homeSections : ['banners','featured','showcases','statement','universes','about'];
   const carousels = (storefront.bannerCarousels || []).filter(c=>c.enabled && c.slides?.length);
-  const homeOrder = [...sections].filter(key=>key!=='collection' && key!=='universes');
-  if (!storefront.showcasesConfigured && !homeOrder.includes('showcases')) homeOrder.splice(Math.max(0,homeOrder.indexOf('featured')+1),0,'showcases');
-  if (!storefront.phase3Configured) { homeOrder.splice(Math.max(0,homeOrder.indexOf('banners')+1),0,'editorial'); homeOrder.splice(Math.max(0,homeOrder.indexOf('featured')+1),0,'showcases'); homeOrder.push('trust'); }
+  const homeOrder = [...new Set(sections)].filter(key=>key!=='collection' && key!=='universes');
+  if (!storefront.showcasesConfigured && !homeOrder.includes('showcases')) homeOrder.splice(Math.max(0,homeOrder.indexOf('banners')+1),0,'showcases');
+  if (!storefront.phase3Configured) { if(!homeOrder.includes('trust'))homeOrder.push('trust'); }
+  // La portada comercial no duplica los accesos a universos ni la frase promocional.
+  if (homeOrder.includes('showcases')) { for(const redundant of ['editorial','statement']) { const i=homeOrder.indexOf(redundant);if(i>=0)homeOrder.splice(i,1); } }
+  if (homeOrder.includes('showcases')) {const i=homeOrder.indexOf('showcases');homeOrder.splice(i,1);homeOrder.splice(Math.max(0,homeOrder.indexOf('banners')+1),0,'showcases');}
   const sectionHTML = {
     banners: carousels.length ? carousels.map((c,i)=>campaignBannerMarkup(c,i===0)).join('') : heroMarkup(heroSlides),
     featured: searchCatalog,
@@ -6434,8 +6438,8 @@ async function renderAdmin() {
   function drawHomeDesigner() {
     const mount=document.querySelector('#homeDesignerMount');if(!mount)return;
     const sections=(Array.isArray(settings.homeSections)?[...settings.homeSections]:['banners','featured','showcases','statement','about']).filter(key=>key!=='collection'&&key!=='universes');
-    if (!settings.showcasesConfigured && !sections.includes('showcases')) sections.splice(Math.max(0,sections.indexOf('featured')+1),0,'showcases');
-    if(!settings.phase3Configured) {sections.splice(Math.max(0,sections.indexOf('banners')+1),0,'editorial');sections.splice(Math.max(0,sections.indexOf('featured')+1),0,'showcases');sections.push('trust');}
+    if (!settings.showcasesConfigured && !sections.includes('showcases')) sections.splice(Math.max(0,sections.indexOf('banners')+1),0,'showcases');
+    if(!settings.phase3Configured && !sections.includes('trust')) sections.push('trust');
     const labels={banners:'Banners y campañas',editorial:'Universos visuales · mosaico',featured:'Selección de productos',showcases:'Vitrinas comerciales por universo · productos automáticos',statement:'Frase promocional',trust:'Beneficios de YHORS',about:'Sobre nosotros'};
     const banners=Array.isArray(settings.bannerCarousels)?settings.bannerCarousels:[];
     const hidden=new Set(settings.hiddenUniverses||[]);
