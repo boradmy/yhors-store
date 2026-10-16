@@ -476,9 +476,22 @@ function compactHeroText(value, max = 180) {
   // texto plano: nunca debe mostrar etiquetas, atributos data-* ni widgets.
   return compactProductDescription(value, max);
 }
-function campaignBannerMarkup(carousel) {
+function yhEditorialCategories(products) {
+  const entries=publicCategoryEntries(products).filter(([key])=>key!=='all').slice(0,4);
+  if(!entries.length)return '';
+  return `<section class="yh-v3-editorial section" id="yh-explora"><div class="yh-v3-heading"><div><span class="eyebrow">DESCUBRE YHORS</span><h2>Universos que inspiran</h2></div><p>Una selección para cada estilo y cada momento.</p></div><div class="yh-v3-category-grid">${entries.map(([key,label],i)=>{const item=products.find(p=>p.category===key && (p.image||productImages(p)[0]));const photo=item?.image||(item?productImages(item)[0]:'');return `<a class="yh-v3-category-tile yh-v3-tile-${i}" href="${categoryHref(key)}">${photo?`<img src="${escapeHTML(photo)}" alt="" loading="lazy">`:''}<span class="yh-v3-tile-shade"></span><span class="yh-v3-tile-copy"><small>UNIVERSO YHORS</small><strong>${escapeHTML(label)}</strong><em>Explorar colección ↗</em></span></a>`;}).join('')}</div></section>`;
+}
+function yhEditorialProducts(products,featured) {
+  const chosen=(featured.length?featured:products).filter(p=>p.published!==false).slice(0,8);
+  if(!chosen.length)return '';
+  return `<section class="yh-v3-collection section"><div class="yh-v3-heading"><div><span class="eyebrow">SELECCIÓN ESPECIAL</span><h2>Descubre nuestros favoritos</h2></div><a href="/categoria/principal">Ver colección <span>↗</span></a></div><div class="yh-v3-product-scroll">${chosen.map(p=>`<a class="yh-v3-product-card" href="${escapeHTML(productHref(p))}"><span class="yh-v3-product-photo"><img src="${escapeHTML(p.image||productImages(p)[0])}" alt="${escapeHTML(p.name)}" loading="lazy"></span><span class="yh-v3-product-type">${escapeHTML(categories[p.category]||p.category)}</span><strong>${escapeHTML(p.name)}</strong><span class="yh-v3-product-price">${productPriceLabel(p)}</span><span class="yh-v3-product-cta">Descubrir producto ↗</span></a>`).join('')}</div></section>`;
+}
+function yhTrustBar() {
+ return `<section class="yh-v3-trust section" aria-label="Ventajas de YHORS"><div><span class="yh-v3-trust-icon">◇</span><strong>Selección cuidada</strong><small>Productos de calidad</small></div><div><span class="yh-v3-trust-icon">↗</span><strong>Envíos y entregas</strong><small>Opciones al finalizar tu pedido</small></div><div><span class="yh-v3-trust-icon">✧</span><strong>Compra o alquiler</strong><small>Opciones disponibles en cosplay</small></div><div><span class="yh-v3-trust-icon">♡</span><strong>Atención cercana</strong><small>Te acompañamos en tu compra</small></div></section>`;
+}
+function campaignBannerMarkup(carousel, isPrimary = false) {
   if (!carousel?.enabled || !carousel.slides?.length) return '';
-  return `<section class="yh-campaign section" aria-label="${escapeHTML(carousel.title)}"><div class="yh-campaign-head"><span class="eyebrow">YHORS · CAMPAÑA</span><h2>${escapeHTML(carousel.title)}</h2></div><div class="yh-banner-slider" data-yh-banner><div class="yh-banner-track">${carousel.slides.map((slide,i)=>`<a class="yh-banner-slide ${i===0?'active':''}" href="${escapeHTML(slide.link||'/')}" ${/^https:\/\//.test(slide.link||'')?'rel="noopener noreferrer"':''}><img src="${escapeHTML(slide.image)}" alt="${escapeHTML(slide.alt||carousel.title)}" loading="${i===0?'eager':'lazy'}"></a>`).join('')}</div>${carousel.slides.length>1?`<button type="button" class="yh-banner-prev" aria-label="Banner anterior">‹</button><button type="button" class="yh-banner-next" aria-label="Banner siguiente">›</button><div class="yh-banner-dots">${carousel.slides.map((_,i)=>`<button type="button" data-banner-dot="${i}" aria-label="Banner ${i+1}" class="${i===0?'active':''}"></button>`).join('')}</div>`:''}</div></section>`;
+  return `<section class="yh-campaign section ${isPrimary?'yh-campaign-primary':''}" aria-label="${escapeHTML(carousel.title)}">${isPrimary?'':`<div class="yh-campaign-head"><span class="eyebrow">YHORS · CAMPAÑA</span><h2>${escapeHTML(carousel.title)}</h2></div>`}<div class="yh-banner-slider" data-yh-banner><div class="yh-banner-track">${carousel.slides.map((slide,i)=>`<a class="yh-banner-slide ${i===0?'active':''}" href="${escapeHTML(slide.link||'/')}" ${/^https:\/\//.test(slide.link||'')?'rel="noopener noreferrer"':''}><img src="${escapeHTML(slide.image)}" alt="${escapeHTML(slide.alt||carousel.title)}" loading="${i===0?'eager':'lazy'}"></a>`).join('')}</div>${carousel.slides.length>1?`<button type="button" class="yh-banner-prev" aria-label="Banner anterior">‹</button><button type="button" class="yh-banner-next" aria-label="Banner siguiente">›</button><div class="yh-banner-dots">${carousel.slides.map((_,i)=>`<button type="button" data-banner-dot="${i}" aria-label="Banner ${i+1}" class="${i===0?'active':''}"></button>`).join('')}</div>`:''}</div></section>`;
 }
 function wireCampaignBanners() {
   document.querySelectorAll('[data-yh-banner]').forEach(root=>{
@@ -1281,14 +1294,19 @@ async function renderHome() {
   const searchCatalog = searchTerm ? `<section class="catalog-shell section search-only" id="destacados"><div class="search-results-heading"><div><span class="eyebrow">Búsqueda YHORS</span><h1>Resultados para “${escapeHTML(searchTerm)}”</h1></div><p>Explora los productos relacionados con tu búsqueda.</p></div><div class="catalog-results"><div class="results-count" id="resultsCount"></div><div class="products" id="featuredProducts"></div></div></section>` : `<section class="section featured-section" id="destacados"><div class="section-heading"><div><span class="eyebrow">Edición YHORS</span><h2>Selección YHORS</h2></div><p>Tecnología, detalles y piezas elegidas para destacar.</p></div><div class="products" id="featuredProducts"></div></section>`;
   const sections = Array.isArray(storefront.homeSections) ? storefront.homeSections : ['banners','featured','statement','universes','about'];
   const carousels = (storefront.bannerCarousels || []).filter(c=>c.enabled && c.slides?.length);
+  const homeOrder = storefront.phase3Configured ? sections : [...sections];
+  if (!storefront.phase3Configured) { homeOrder.splice(Math.max(0,homeOrder.indexOf('banners')+1),0,'editorial','collection'); homeOrder.push('trust'); }
   const sectionHTML = {
-    banners: carousels.length ? carousels.map(campaignBannerMarkup).join('') : heroMarkup(heroSlides),
+    banners: carousels.length ? carousels.map((c,i)=>campaignBannerMarkup(c,i===0)).join('') : heroMarkup(heroSlides),
     featured: searchCatalog,
     statement: `<section class="statement-strip"><div><span class="eyebrow">YHORS-STORE</span><h2>Elegancia que también se encuentra en los detalles.</h2></div><a class="button" href="#categorias">Explorar universos <span>→</span></a></section>`,
     universes: categoryBlocks(products),
+    editorial: yhEditorialCategories(products),
+    collection: yhEditorialProducts(products,featured),
+    trust: yhTrustBar(),
     about: `<section class="brand-section" id="nosotros"><div class="brand-section-inner"><span class="eyebrow">Sobre nosotros</span><h2>YHORS<br><em>más que un producto</em></h2><p>Un catálogo dividido por universos para que cada persona encuentre algo que conecte con su estilo, sus pasiones y sus momentos especiales.</p></div></section>`
   };
-  app.innerHTML = `${renderHeader('', products)}<main>${searchTerm ? searchCatalog : `<section class="promo-ribbon" aria-label="Beneficios YHORS"><div class="promo-item"><span>01</span><strong>DISEÑO CON IDENTIDAD</strong></div><div class="promo-item"><span>02</span><strong>PRODUCTOS DE CALIDAD</strong></div><div class="promo-item"><span>03</span><strong>ATENCIÓN DIRECTA</strong></div></section>${sections.map(key=>sectionHTML[key]||'').join('')}`}</main>${renderFooter(products)}${cartMarkup()}</div>`;
+  app.innerHTML = `${renderHeader('', products)}<main>${searchTerm ? searchCatalog : `<section class="promo-ribbon" aria-label="Beneficios YHORS"><div class="promo-item"><span>01</span><strong>DISEÑO CON IDENTIDAD</strong></div><div class="promo-item"><span>02</span><strong>PRODUCTOS DE CALIDAD</strong></div><div class="promo-item"><span>03</span><strong>ATENCIÓN DIRECTA</strong></div></section>${homeOrder.map(key=>sectionHTML[key]||'').join('')}`}</main>${renderFooter(products)}${cartMarkup()}</div>`;
   wireCategoryNavigation(); wireMobileMenu(); wireSearch(); wireHero(heroSlides); wireCampaignBanners(); markPageEnter(); const cart = wireCart(products, storefront); const featuredArea = document.querySelector('#featuredProducts');
   const renderSearchResults = (items) => { renderProductsInto(featuredArea, items, id => openProduct(id, products), (product, button) => cart.addToCart(product, button)); const count = document.querySelector('#resultsCount'); if (count) count.textContent = `${items.length} producto${items.length === 1 ? '' : 's'} encontrado${items.length === 1 ? '' : 's'}`; if (!items.length) featuredArea.innerHTML = '<div class="empty featured-empty">No encontramos productos con esa búsqueda.<br><small>Prueba con otra marca, categoría o nombre.</small></div>'; };
   if (searchTerm) { renderSearchResults(searchResults); } else { renderProductsInto(featuredArea, visibleFeatured, id => openProduct(id, products), (product, button) => cart.addToCart(product, button)); if (!visibleFeatured.length) featuredArea.innerHTML = '<div class="empty featured-empty">Todavía no has seleccionado productos destacados.<br><small>Entra a YHORS Administración y marca los productos que quieres mostrar aquí.</small></div>'; }
@@ -6395,7 +6413,8 @@ async function renderAdmin() {
   function drawHomeDesigner() {
     const mount=document.querySelector('#homeDesignerMount');if(!mount)return;
     const sections=Array.isArray(settings.homeSections)?[...settings.homeSections]:['banners','featured','statement','universes','about'];
-    const labels={banners:'Banners y campañas',featured:'Selección de productos',statement:'Frase promocional',universes:'Universos / categorías',about:'Sobre nosotros'};
+    if(!settings.phase3Configured) {sections.splice(Math.max(0,sections.indexOf('banners')+1),0,'editorial','collection');sections.push('trust');}
+    const labels={banners:'Banners y campañas',editorial:'Universos visuales · mosaico',collection:'Carrusel de favoritos',featured:'Selección de productos',statement:'Frase promocional',universes:'Universos / categorías',trust:'Beneficios de YHORS',about:'Sobre nosotros'};
     const banners=Array.isArray(settings.bannerCarousels)?settings.bannerCarousels:[];
     const hidden=new Set(settings.hiddenUniverses||[]);
     mount.innerHTML=`<section class="admin-panel yh-designer"><div class="yh-designer-head"><span class="eyebrow">PÁGINA WEB · DISEÑADOR DE INICIO</span><h2>Organizar portada y campañas</h2><p>Oculta universos sin borrar productos. Crea carruseles con imágenes propias, archivos o enlaces.</p></div>
