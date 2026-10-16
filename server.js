@@ -2562,12 +2562,13 @@ function readStorefront() {
       featuredProductIds: Array.isArray(parsed.featuredProductIds) ? parsed.featuredProductIds.filter(Boolean).slice(0, 12) : [],
       categorySectionOrder: normalizedOrder,
       hiddenUniverses: Array.isArray(parsed.hiddenUniverses) ? parsed.hiddenUniverses.filter(x => typeof x === "string" && /^[a-z0-9-]{1,60}$/.test(x)).slice(0,100) : [],
-      homeSections: Array.isArray(parsed.homeSections) ? parsed.homeSections.filter(x => ["banners","featured","universes","statement","about","editorial","collection","trust"].includes(x)).slice(0,10) : ["banners","featured","statement","universes","about"],
+      homeSections: Array.isArray(parsed.homeSections) ? parsed.homeSections.filter(x => ["banners","featured","universes","statement","about","editorial","collection","trust","showcases"].includes(x)).slice(0,10) : ["banners","featured","statement","universes","about"],
       phase3Configured: parsed.phase3Configured === true,
+      showcasesConfigured: parsed.showcasesConfigured === true,
       bannerCarousels: Array.isArray(parsed.bannerCarousels) ? parsed.bannerCarousels.slice(0,8) : []
     };
   } catch {
-    return { heroProductIds: [], featuredProductIds: [], categorySectionOrder: {}, hiddenUniverses: [], homeSections: ["banners","featured","statement","universes","about"], phase3Configured: false, bannerCarousels: [] };
+    return { heroProductIds: [], featuredProductIds: [], categorySectionOrder: {}, hiddenUniverses: [], homeSections: ["banners","featured","statement","universes","about"], phase3Configured: false, showcasesConfigured: false, bannerCarousels: [] };
   }
 }
 
@@ -6417,7 +6418,7 @@ app.put('/api/admin/storefront', requireAdmin, (req, res) => {
     categorySectionOrder[category] = [...new Set(values.map(value => String(value || '').trim()).filter(Boolean))].slice(0, 100);
   });
   const hiddenUniverses = Array.isArray(req.body?.hiddenUniverses) ? [...new Set(req.body.hiddenUniverses.filter(x => typeof x === 'string' && /^[a-z0-9-]{1,60}$/.test(x)))].slice(0,100) : currentStorefront.hiddenUniverses;
-  const allowedSections = ['banners','featured','universes','statement','about','editorial','collection','trust'];
+  const allowedSections = ['banners','featured','universes','statement','about','editorial','collection','trust','showcases'];
   const homeSections = Array.isArray(req.body?.homeSections) ? [...new Set(req.body.homeSections.filter(x => allowedSections.includes(x)))].slice(0,10) : currentStorefront.homeSections;
   const imageOK = value => typeof value === 'string' && (/^\/uploads\/[a-zA-Z0-9._-]+$/.test(value) || /^https:\/\/[a-zA-Z0-9./?&=_:%#-]+$/.test(value));
   const linkOK = value => typeof value === 'string' && (value === '' || (/^\/(?!\/)[a-zA-Z0-9/_?#=&%.-]*$/.test(value) || /^https:\/\/[a-zA-Z0-9./?&=_:%#-]+$/.test(value)));
@@ -6435,7 +6436,7 @@ app.put('/api/admin/storefront', requireAdmin, (req, res) => {
       bannerCarousels.push({ id: String(item.id || crypto.randomUUID()).slice(0,80), title: String(item.title || 'Campaña YHORS').slice(0,90), enabled: item.enabled !== false, slides });
     }
   }
-  const settings = { heroProductIds, featuredProductIds, categorySectionOrder, hiddenUniverses, homeSections, bannerCarousels, phase3Configured: Array.isArray(req.body?.homeSections) ? true : currentStorefront.phase3Configured };
+  const settings = { heroProductIds, featuredProductIds, categorySectionOrder, hiddenUniverses, homeSections, bannerCarousels, phase3Configured: Array.isArray(req.body?.homeSections) ? true : currentStorefront.phase3Configured, showcasesConfigured: Array.isArray(req.body?.homeSections) ? true : currentStorefront.showcasesConfigured };
   writeStorefront(settings);
   const heroSet = new Set(heroProductIds);
   const featuredSet = new Set(featuredProductIds);
