@@ -6576,3 +6576,47 @@ body:has(.admin-shell) .admin-navigation-stack::before{padding-left:88px!importa
  body:has(.admin-shell) .admin-navigation-stack{transition:transform .22s ease!important}
  body.yh-panel-sidebar-hidden:has(.admin-shell) .admin-navigation-stack{display:none!important}
 }
+
+/* YHORS PANEL · corrección menú lateral 2026-10-17.
+   Evita que el grid reparta verticalmente los grupos cerrados. */
+@media (min-width:1100px) {
+ body:has(.admin-shell) .admin-shell > .admin-wrap > .admin-navigation-stack {
+   display:flex!important;flex-direction:column!important;justify-content:flex-start!important;
+   align-items:stretch!important;align-content:flex-start!important;gap:4px!important;
+ }
+ body:has(.admin-shell) .admin-navigation-stack .admin-section-nav,
+ body:has(.admin-shell) .admin-navigation-stack .yh-intelligent-shell .admin-section-nav {
+   display:flex!important;flex:0 0 auto!important;flex-direction:column!important;
+   justify-content:flex-start!important;align-content:flex-start!important;align-items:stretch!important;
+   height:auto!important;min-height:0!important;gap:4px!important;
+ }
+ body:has(.admin-shell) .admin-navigation-stack .admin-nav-group {
+   flex:0 0 auto!important;height:auto!important;min-height:0!important;margin:0!important;
+ }
+ body:has(.admin-shell) .admin-navigation-stack .admin-nav-group > summary {
+   min-height:0!important;margin:0!important;
+ }
+ body:has(.admin-shell) .admin-navigation-stack .admin-nav-group:not([open]) > .admin-nav-group-links {
+   display:none!important;
+ }
+ body:has(.admin-shell) .yh-panel-sidebar-toggle {
+   top:14px!important;left:202px!important;width:36px!important;height:36px!important;
+   padding:0!important;border-radius:9px!important;box-shadow:none!important;
+ }
+ body:has(.admin-shell) .yh-panel-sidebar-toggle .yh-panel-toggle-label{display:none!important}
+ body:has(.admin-shell) .admin-navigation-stack::before {
+   padding-left:22px!important;padding-right:55px!important;
+   font-size:13px!important;letter-spacing:.09em!important;
+ }
+ body.yh-panel-sidebar-hidden:has(.admin-shell) .yh-panel-sidebar-toggle {
+   left:14px!important;box-shadow:0 3px 12px #0002!important;
+ }
+}
+@media (max-width:1099px) {
+ body:has(.admin-shell) .yh-panel-sidebar-toggle {
+   top:10px!important;left:auto!important;right:12px!important;
+   width:38px!important;height:38px!important;padding:0!important;
+ }
+ body:has(.admin-shell) .yh-panel-sidebar-toggle .yh-panel-toggle-label{display:none!important}
+ body:has(.admin-shell) .admin-navigation-stack .admin-nav-group:not([open]) .admin-nav-group-links{display:none!important}
+}
