@@ -6554,3 +6554,25 @@ body .yh-designer-note{color:#776f63;font-size:13px;line-height:1.5}
     max-width: none !important;
   }
 }
+
+
+/* YHORS PANEL · menú contraíble, adaptable y sin interferir con STORE */
+body:has(.admin-shell) .yh-panel-sidebar-toggle {
+  position:fixed;top:13px;left:13px;z-index:120;display:flex;align-items:center;justify-content:center;gap:7px;
+  background:#b99453;color:#151515;border:1px solid #d6b675;border-radius:10px;
+  font:700 12px/1.2 system-ui,sans-serif;cursor:pointer;padding:10px 12px;box-shadow:0 4px 16px #0003;
+}
+body:has(.admin-shell) .yh-panel-sidebar-toggle:focus-visible{outline:3px solid #b99453;outline-offset:3px}
+body:has(.admin-shell) .admin-navigation-stack::before{padding-left:88px!important;content:'YHORS  /  PANEL'!important}
+@media(min-width:1050px){
+ body.yh-panel-sidebar-hidden:has(.admin-shell) .admin-shell{padding-left:0!important}
+ body.yh-panel-sidebar-hidden:has(.admin-shell) .admin-shell>.admin-wrap>.admin-navigation-stack{transform:translateX(-105%)!important;pointer-events:none!important}
+ body.yh-panel-sidebar-hidden:has(.admin-shell) .admin-navigation-stack::before{transform:translateX(-105%)!important}
+ body:has(.admin-shell) .admin-shell>.admin-wrap>.admin-navigation-stack{transition:transform .22s ease!important}
+ body:has(.admin-shell) .admin-shell{transition:padding-left .22s ease!important}
+}
+@media(max-width:1049px){
+ body:has(.admin-shell) .yh-panel-sidebar-toggle{top:10px;left:10px}
+ body:has(.admin-shell) .admin-navigation-stack{transition:transform .22s ease!important}
+ body.yh-panel-sidebar-hidden:has(.admin-shell) .admin-navigation-stack{display:none!important}
+}

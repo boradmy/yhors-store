@@ -2016,7 +2016,7 @@ function adminSectionNav(session = {}, active = '') {
     const limitedGroup = (label, items, isActive, extraClass = '') => `<details class="admin-nav-group admin-nav-group--limited ${extraClass}${isActive ? ' has-active' : ''}"><summary><span>${label}</span>${isActive ? '<i aria-hidden="true"></i>' : ''}</summary><div class="admin-nav-group-links admin-nav-group-links--limited">${items}</div></details>`;
     return `<div class="admin-navigation-stack admin-navigation-stack--limited"><nav class="admin-section-nav admin-section-nav--limited" id="adminSectionNav" aria-label="Navegación YHORS">${limitedGroup('AGENDAR VENTA', saleItems, saleActive, 'admin-nav-group--sales')}${limitedGroup('GESTIÓN', managementItems, managementActive, 'admin-nav-group--management')}</nav></div>`;
   }
-  const group = (label, activeKeys, items, open = true) => `<details class="admin-nav-group${activeKeys.includes(active) ? ' has-active' : ''}"${open ? ' open' : ''}><summary><span>${label}</span>${activeKeys.includes(active) ? '<i aria-hidden="true"></i>' : ''}</summary><div class="admin-nav-group-links">${items}</div></details>`;
+  const group = (label, activeKeys, items) => `<details class="admin-nav-group${activeKeys.includes(active) ? ' has-active' : ''}"><summary><span>${label}</span>${activeKeys.includes(active) ? '<i aria-hidden="true"></i>' : ''}</summary><div class="admin-nav-group-links">${items}</div></details>`;
   return `<div class="admin-navigation-stack">
     <nav class="admin-section-nav" id="adminSectionNav" aria-label="Administración YHORS">
       <a href="${ADMIN_PATH}/inteligente" class="admin-section-link panel-home-link" data-smooth-route>⌂ &nbsp; INICIO / OVERVIEW</a>
@@ -7318,3 +7318,49 @@ document.addEventListener('click', (event) => {
     button.textContent = originalText;
   }, 800);
 });
+
+
+/* YHORS PANEL · controles de navegación, persistentes entre vistas SPA. */
+(function setupPanelSidebarControls(){
+  if (!location.pathname.startsWith(ADMIN_PATH)) return;
+  const KEY = 'yhors-panel-sidebar-collapsed';
+  let collapsed = false;
+  try { collapsed = localStorage.getItem(KEY) === '1'; } catch (_) {}
+  const apply = () => {
+    document.body.classList.toggle('yh-panel-sidebar-hidden', collapsed);
+    const button = document.getElementById('yhPanelSidebarToggle');
+    if (button) {
+      button.setAttribute('aria-expanded', String(!collapsed));
+      button.setAttribute('aria-label', collapsed ? 'Mostrar menú lateral' : 'Ocultar menú lateral');
+      button.title = collapsed ? 'Mostrar menú lateral' : 'Ocultar menú lateral';
+      button.innerHTML = collapsed ? '<span aria-hidden="true">☰</span><span class="yh-panel-toggle-label"> Menú</span>' : '<span aria-hidden="true">✕</span><span class="yh-panel-toggle-label"> Ocultar menú</span>';
+    }
+  };
+  const sync = () => {
+    const shell = document.querySelector('.admin-shell');
+    const sidebar = shell?.querySelector('.admin-navigation-stack');
+    if (!sidebar) return;
+    if (!document.getElementById('yhPanelSidebarToggle')) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.id = 'yhPanelSidebarToggle';
+      button.className = 'yh-panel-sidebar-toggle';
+      button.addEventListener('click', () => {
+        collapsed = !collapsed;
+        try { localStorage.setItem(KEY, collapsed ? '1' : '0'); } catch (_) {}
+        apply();
+      });
+      document.body.appendChild(button);
+    }
+    // El estado inicial es siempre cerrado: abrir cada grupo únicamente al pulsarlo.
+    sidebar.querySelectorAll('.admin-nav-group[open]').forEach(group => { group.open = false; });
+    apply();
+  };
+  let previousSidebar = null;
+  const observer = new MutationObserver(() => {
+    const sidebar = document.querySelector('.admin-shell .admin-navigation-stack');
+    if (sidebar !== previousSidebar) { previousSidebar = sidebar; if (sidebar) sync(); }
+  });
+  observer.observe(document.getElementById('app') || document.body, {childList:true, subtree:true});
+  sync();
+})();
