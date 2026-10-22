@@ -7330,7 +7330,7 @@ document.addEventListener('click', (event) => {
     document.body.classList.toggle('yh-panel-sidebar-hidden', collapsed);
     document.body.classList.toggle('yh-panel-mobile-open', !collapsed && window.matchMedia('(max-width: 1099px)').matches);
     const backdrop = document.getElementById('yhPanelSidebarBackdrop');
-    if (backdrop) { backdrop.hidden = collapsed || !window.matchMedia('(max-width: 1099px)').matches; }
+    if (backdrop) backdrop.hidden = true;
     const button = document.getElementById('yhPanelSidebarToggle');
     if (button) {
       button.setAttribute('aria-expanded', String(!collapsed));
@@ -7343,15 +7343,8 @@ document.addEventListener('click', (event) => {
     const shell = document.querySelector('.admin-shell');
     const sidebar = shell?.querySelector('.admin-navigation-stack');
     if (!sidebar) return;
-    if (!document.getElementById('yhPanelSidebarBackdrop')) {
-      const backdrop = document.createElement('button');
-      backdrop.type = 'button'; backdrop.id = 'yhPanelSidebarBackdrop'; backdrop.className = 'yh-panel-sidebar-backdrop';
-      backdrop.setAttribute('aria-label', 'Cerrar menú');
-      backdrop.addEventListener('click', () => { collapsed = true; apply(); });
-      sidebar.parentElement.insertBefore(backdrop, sidebar);
-    }
-    const currentBackdrop = document.getElementById('yhPanelSidebarBackdrop');
-    if (currentBackdrop && currentBackdrop.parentElement !== sidebar.parentElement) sidebar.parentElement.insertBefore(currentBackdrop, sidebar);
+    // Sin backdrop: en Android la capa anterior interceptaba los toques del menú.
+    document.getElementById('yhPanelSidebarBackdrop')?.remove();
     if (!document.getElementById('yhPanelSidebarToggle')) {
       const button = document.createElement('button');
       button.type = 'button';

@@ -6717,3 +6717,21 @@ body:has(.admin-shell) .yh-panel-sidebar-toggle svg{display:block;width:18px;hei
  }
  body.yh-panel-sidebar-hidden:has(.admin-shell) .admin-shell > .admin-wrap > .admin-navigation-stack{pointer-events:none!important}
 }
+
+/* FIX DEFINITIVO 2026-10-22: menú móvil sin velo ni capas interceptando toques. */
+.yh-panel-sidebar-backdrop, .yh-panel-sidebar-backdrop:not([hidden]) {display:none!important;pointer-events:none!important;visibility:hidden!important;}
+@media (max-width:1099px) {
+  body:has(.admin-shell) .admin-shell > .admin-wrap > .admin-navigation-stack {
+    z-index:2147483000!important; isolation:isolate!important;
+    background:#15171c!important; opacity:1!important;
+    filter:none!important;backdrop-filter:none!important;
+    pointer-events:auto!important;
+  }
+  body:has(.admin-shell) .admin-shell > .admin-wrap > .admin-navigation-stack .admin-section-nav,
+  body:has(.admin-shell) .admin-shell > .admin-wrap > .admin-navigation-stack summary,
+  body:has(.admin-shell) .admin-shell > .admin-wrap > .admin-navigation-stack a,
+  body:has(.admin-shell) .admin-shell > .admin-wrap > .admin-navigation-stack button {
+    pointer-events:auto!important; opacity:1!important; filter:none!important;
+  }
+  body.yh-panel-mobile-open:has(.admin-shell) .yh-panel-sidebar-toggle {z-index:2147483001!important;}
+}
