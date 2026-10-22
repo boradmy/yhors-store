@@ -6620,3 +6620,30 @@ body:has(.admin-shell) .admin-navigation-stack::before{padding-left:88px!importa
  body:has(.admin-shell) .yh-panel-sidebar-toggle .yh-panel-toggle-label{display:none!important}
  body:has(.admin-shell) .admin-navigation-stack .admin-nav-group:not([open]) .admin-nav-group-links{display:none!important}
 }
+
+/* YHORS PANEL · menú lateral tipo aplicación para móvil/tablet */
+.yh-panel-sidebar-backdrop[hidden]{display:none!important}
+@media(max-width:1099px){
+ body:has(.admin-shell) .admin-shell{padding-left:0!important}
+ body:has(.admin-shell) .admin-shell .admin-wrap{width:100%!important;max-width:none!important;margin:0!important}
+ body:has(.admin-shell) .admin-navigation-stack{
+   display:flex!important;flex-direction:column!important;justify-content:flex-start!important;align-items:stretch!important;gap:5px!important;
+   position:fixed!important;top:0!important;bottom:0!important;left:0!important;right:auto!important;
+   width:min(310px,86vw)!important;max-width:86vw!important;height:100dvh!important;max-height:100dvh!important;
+   overflow-y:auto!important;overflow-x:hidden!important;padding:78px 12px 22px!important;box-sizing:border-box!important;
+   background:#15171c!important;border-radius:0!important;z-index:201!important;box-shadow:12px 0 36px #0006!important;
+   transform:translateX(0)!important;transition:transform .24s ease!important;
+ }
+ body.yh-panel-sidebar-hidden:has(.admin-shell) .admin-navigation-stack{display:flex!important;transform:translateX(-110%)!important;pointer-events:none!important}
+ body:has(.admin-shell) .admin-navigation-stack::before{content:'YHORS / PANEL'!important;position:absolute!important;top:0!important;left:0!important;width:100%!important;height:64px!important;display:flex!important;align-items:center!important;box-sizing:border-box!important;padding:0 64px 0 18px!important;background:#101116!important;color:#e6c17e!important;font-size:13px!important;letter-spacing:.09em!important;border-bottom:1px solid #ffffff22!important}
+ body:has(.admin-shell) .admin-navigation-stack .admin-section-nav{display:flex!important;flex-direction:column!important;align-items:stretch!important;justify-content:flex-start!important;gap:5px!important;height:auto!important;min-height:0!important}
+ body:has(.admin-shell) .admin-navigation-stack .admin-nav-group{display:block!important;flex:0 0 auto!important;height:auto!important;min-height:0!important;margin:0!important}
+ body:has(.admin-shell) .admin-navigation-stack .admin-nav-group:not([open]) .admin-nav-group-links{display:none!important}
+ body:has(.admin-shell) .admin-navigation-stack .admin-nav-group-links{position:static!important;display:flex!important;flex-direction:column!important;gap:3px!important;width:100%!important;min-width:0!important;transform:none!important;visibility:visible!important;opacity:1!important}
+ body:has(.admin-shell) .admin-navigation-stack .admin-section-link{width:100%!important;min-height:40px!important;box-sizing:border-box!important;text-align:left!important}
+ body:has(.admin-shell) .yh-panel-sidebar-toggle{position:fixed!important;z-index:220!important;top:12px!important;left:12px!important;right:auto!important;width:40px!important;height:40px!important;padding:0!important;border-radius:10px!important}
+ body.yh-panel-mobile-open:has(.admin-shell) .yh-panel-sidebar-toggle{left:min(254px,calc(86vw - 56px))!important}
+ body:has(.admin-shell) .yh-panel-sidebar-backdrop:not([hidden]){display:block!important;position:fixed!important;inset:0!important;z-index:190!important;border:0!important;background:#0009!important;cursor:pointer!important}
+ body.yh-panel-mobile-open:has(.admin-shell){overflow:hidden!important}
+}
+@media(min-width:1100px){.yh-panel-sidebar-backdrop{display:none!important}}

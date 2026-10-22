@@ -7324,10 +7324,13 @@ document.addEventListener('click', (event) => {
 (function setupPanelSidebarControls(){
   if (!location.pathname.startsWith(ADMIN_PATH)) return;
   const KEY = 'yhors-panel-sidebar-collapsed';
-  let collapsed = false;
-  try { collapsed = localStorage.getItem(KEY) === '1'; } catch (_) {}
+  let collapsed = window.matchMedia('(max-width: 1099px)').matches;
+  try { const saved = localStorage.getItem(KEY); if (saved !== null && !window.matchMedia('(max-width: 1099px)').matches) collapsed = saved === '1'; } catch (_) {}
   const apply = () => {
     document.body.classList.toggle('yh-panel-sidebar-hidden', collapsed);
+    document.body.classList.toggle('yh-panel-mobile-open', !collapsed && window.matchMedia('(max-width: 1099px)').matches);
+    const backdrop = document.getElementById('yhPanelSidebarBackdrop');
+    if (backdrop) { backdrop.hidden = collapsed || !window.matchMedia('(max-width: 1099px)').matches; }
     const button = document.getElementById('yhPanelSidebarToggle');
     if (button) {
       button.setAttribute('aria-expanded', String(!collapsed));
@@ -7340,6 +7343,13 @@ document.addEventListener('click', (event) => {
     const shell = document.querySelector('.admin-shell');
     const sidebar = shell?.querySelector('.admin-navigation-stack');
     if (!sidebar) return;
+    if (!document.getElementById('yhPanelSidebarBackdrop')) {
+      const backdrop = document.createElement('button');
+      backdrop.type = 'button'; backdrop.id = 'yhPanelSidebarBackdrop'; backdrop.className = 'yh-panel-sidebar-backdrop';
+      backdrop.setAttribute('aria-label', 'Cerrar menú');
+      backdrop.addEventListener('click', () => { collapsed = true; apply(); });
+      document.body.appendChild(backdrop);
+    }
     if (!document.getElementById('yhPanelSidebarToggle')) {
       const button = document.createElement('button');
       button.type = 'button';
@@ -7354,6 +7364,9 @@ document.addEventListener('click', (event) => {
     }
     // El estado inicial es siempre cerrado: abrir cada grupo únicamente al pulsarlo.
     sidebar.querySelectorAll('.admin-nav-group[open]').forEach(group => { group.open = false; });
+    sidebar.querySelectorAll('.admin-section-link').forEach(link => {
+      link.addEventListener('click', () => { if (window.matchMedia('(max-width: 1099px)').matches) { collapsed = true; apply(); } });
+    });
     apply();
   };
   let previousSidebar = null;
@@ -7362,5 +7375,7 @@ document.addEventListener('click', (event) => {
     if (sidebar !== previousSidebar) { previousSidebar = sidebar; if (sidebar) sync(); }
   });
   observer.observe(document.getElementById('app') || document.body, {childList:true, subtree:true});
+  window.addEventListener('keydown', event => { if (event.key === 'Escape' && window.matchMedia('(max-width: 1099px)').matches && !collapsed) { collapsed = true; apply(); } });
+  window.addEventListener('resize', apply);
   sync();
 })();
