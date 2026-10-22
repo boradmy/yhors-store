@@ -6667,3 +6667,33 @@ body:has(.admin-shell) .yh-panel-sidebar-toggle svg{display:block;width:18px;hei
  body:has(.admin-shell) .admin-navigation-stack .admin-section-nav{opacity:1!important;filter:none!important}
 }
 @media(min-width:1100px){body:has(.admin-shell) .yh-panel-sidebar-toggle{left:202px!important;top:14px!important}body.yh-panel-sidebar-hidden:has(.admin-shell) .yh-panel-sidebar-toggle{left:14px!important}}
+
+/* YHORS · móvil: el velo queda detrás del panel, nunca sobre sus controles.
+   Prioridad explícita para evitar conflictos con reglas antiguas. */
+@media (max-width:1099px) {
+  body:has(.admin-shell) .yh-panel-sidebar-backdrop:not([hidden]) {
+    z-index: 10 !important;
+    background: rgba(0,0,0,.50) !important;
+    pointer-events: auto !important;
+  }
+  body:has(.admin-shell) .admin-shell,
+  body:has(.admin-shell) .admin-wrap {
+    isolation: auto !important;
+  }
+  body.yh-panel-mobile-open:has(.admin-shell) .admin-navigation-stack {
+    z-index: 1100 !important;
+    pointer-events: auto !important;
+    opacity: 1 !important;
+    filter: none !important;
+  }
+  body.yh-panel-mobile-open:has(.admin-shell) .admin-navigation-stack .admin-section-nav,
+  body.yh-panel-mobile-open:has(.admin-shell) .admin-navigation-stack .admin-nav-group,
+  body.yh-panel-mobile-open:has(.admin-shell) .admin-navigation-stack summary,
+  body.yh-panel-mobile-open:has(.admin-shell) .admin-navigation-stack a,
+  body.yh-panel-mobile-open:has(.admin-shell) .admin-navigation-stack button {
+    pointer-events: auto !important;
+    opacity: 1 !important;
+    filter: none !important;
+  }
+  body:has(.admin-shell) .yh-panel-sidebar-toggle { z-index: 1200 !important; }
+}

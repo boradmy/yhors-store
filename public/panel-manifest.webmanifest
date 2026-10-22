@@ -2,7 +2,7 @@
   "name": "YHORS PANEL · Administración",
   "short_name": "YHORS PANEL",
   "description": "Centro de administración privado de YHORS",
-  "id": "/panelyhorstore",
+  "id": "/yhors-panel-app",
   "start_url": "/panelyhorstore",
   "scope": "/panelyhorstore",
   "display": "standalone",

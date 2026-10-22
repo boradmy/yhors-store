@@ -2,7 +2,7 @@
   "name": "YHORS STORE",
   "short_name": "YHORS",
   "description": "Tecnología, moda, detalles y más en YHORS STORE",
-  "id": "/",
+  "id": "/yhors-store-app",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
