@@ -6697,3 +6697,23 @@ body:has(.admin-shell) .yh-panel-sidebar-toggle svg{display:block;width:18px;hei
   }
   body:has(.admin-shell) .yh-panel-sidebar-toggle { z-index: 1200 !important; }
 }
+
+/* 2026-10-22: backdrop and navigation share the same stacking context.
+   Previously the backdrop lived under BODY and covered the nested navigation. */
+@media(max-width:1099px){
+ body:has(.admin-shell) .admin-shell > .admin-wrap > .yh-panel-sidebar-backdrop:not([hidden]){
+   position:fixed!important;inset:0!important;z-index:1000!important;
+   display:block!important;width:100vw!important;height:100dvh!important;
+   padding:0!important;margin:0!important;background:rgba(0,0,0,.5)!important;
+   border:0!important;pointer-events:auto!important;
+ }
+ body:has(.admin-shell) .admin-shell > .admin-wrap > .admin-navigation-stack{
+   z-index:1002!important;opacity:1!important;filter:none!important;
+   pointer-events:auto!important;
+ }
+ body:has(.admin-shell) .admin-shell > .admin-wrap > .admin-navigation-stack .admin-section-nav,
+ body:has(.admin-shell) .admin-shell > .admin-wrap > .admin-navigation-stack .admin-nav-group{
+   position:relative!important;z-index:1!important;
+ }
+ body.yh-panel-sidebar-hidden:has(.admin-shell) .admin-shell > .admin-wrap > .admin-navigation-stack{pointer-events:none!important}
+}

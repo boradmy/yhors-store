@@ -7348,8 +7348,10 @@ document.addEventListener('click', (event) => {
       backdrop.type = 'button'; backdrop.id = 'yhPanelSidebarBackdrop'; backdrop.className = 'yh-panel-sidebar-backdrop';
       backdrop.setAttribute('aria-label', 'Cerrar menú');
       backdrop.addEventListener('click', () => { collapsed = true; apply(); });
-      document.body.appendChild(backdrop);
+      sidebar.parentElement.insertBefore(backdrop, sidebar);
     }
+    const currentBackdrop = document.getElementById('yhPanelSidebarBackdrop');
+    if (currentBackdrop && currentBackdrop.parentElement !== sidebar.parentElement) sidebar.parentElement.insertBefore(currentBackdrop, sidebar);
     if (!document.getElementById('yhPanelSidebarToggle')) {
       const button = document.createElement('button');
       button.type = 'button';
