@@ -7370,6 +7370,16 @@ document.addEventListener('click', (event) => {
     if (sidebar !== previousSidebar) { previousSidebar = sidebar; if (sidebar) sync(); }
   });
   observer.observe(document.getElementById('app') || document.body, {childList:true, subtree:true});
+  // Cerrar al pulsar FUERA del menú. Los toques dentro siguen funcionando.
+  // pointerdown soporta ratón y pantallas táctiles sin interceptar el click.
+  document.addEventListener('pointerdown', (event) => {
+    if (collapsed || !window.matchMedia('(max-width: 1099px)').matches) return;
+    const sidebar = document.querySelector('.admin-shell .admin-navigation-stack');
+    const toggle = document.getElementById('yhPanelSidebarToggle');
+    if (!sidebar || sidebar.contains(event.target) || toggle?.contains(event.target)) return;
+    collapsed = true;
+    apply();
+  }, { passive: true });
   window.addEventListener('keydown', event => { if (event.key === 'Escape' && window.matchMedia('(max-width: 1099px)').matches && !collapsed) { collapsed = true; apply(); } });
   window.addEventListener('resize', apply);
   sync();
