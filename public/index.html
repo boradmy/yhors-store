@@ -7,6 +7,11 @@
     <meta name="description" content="YHORS-STORE | Tecnología, moda, regalos, cosplays y experiencias. Una selección de calidad, diseñada para quienes buscan confianza, estilo y más.">
     <title>YHORS-STORE</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <link rel="manifest" href="/store-manifest.webmanifest">
+    <link rel="apple-touch-icon" href="/store-icon-192.png">
+    <meta name="application-name" content="YHORS STORE">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="alternate" type="text/markdown" href="/llms.txt" title="LLM instructions">
     <link rel="alternate" type="application/json" href="/.well-known/ai-catalog.json" title="AI catalog">
     <link rel="alternate" type="application/json" href="/.well-known/ard.json" title="Agentic Resource Discovery">
@@ -15,5 +20,10 @@
   <body>
     <div id="app"></div>
     <script src="/app.js?v=16.3.0-panel" defer></script>
+    <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => navigator.serviceWorker.register('/store-sw.js', {scope:'/'}).catch(() => {}));
+    }
+  </script>
   </body>
 </html>

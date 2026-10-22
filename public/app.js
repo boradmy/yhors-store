@@ -7336,7 +7336,7 @@ document.addEventListener('click', (event) => {
       button.setAttribute('aria-expanded', String(!collapsed));
       button.setAttribute('aria-label', collapsed ? 'Mostrar menú lateral' : 'Ocultar menú lateral');
       button.title = collapsed ? 'Mostrar menú lateral' : 'Ocultar menú lateral';
-      button.innerHTML = collapsed ? '<span aria-hidden="true">☰</span><span class="yh-panel-toggle-label"> Menú</span>' : '<span aria-hidden="true">✕</span><span class="yh-panel-toggle-label"> Ocultar menú</span>';
+      button.innerHTML = collapsed ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>' : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
     }
   };
   const sync = () => {
