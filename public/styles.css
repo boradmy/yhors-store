@@ -6810,3 +6810,67 @@ body:has(.admin-shell) .admin-navigation-stack::before {padding-right:64px!impor
  body:has(.admin-shell) .admin-navigation-stack > .yh-panel-sidebar-close {position:fixed!important;top:12px!important;right:auto!important;left:calc(min(86vw,320px) - 51px)!important;}
  body:has(.admin-shell) .yh-panel-sidebar-backdrop {display:none!important;pointer-events:none!important;}
 }
+
+/* 2026-10-23 · YHORS PANEL: perfil anclado en la esquina superior derecha.
+   El botón de menú integrado no debe empujar el perfil a una segunda fila. */
+body:has(.admin-shell) .admin-top {
+  position:relative!important;
+  align-items:flex-start!important;
+  flex-wrap:nowrap!important;
+  padding-right:70px!important;
+  min-height:64px!important;
+  overflow:visible!important;
+}
+body:has(.admin-shell) .admin-top > .admin-top-actions {
+  position:absolute!important;
+  top:12px!important;
+  right:8px!important;
+  left:auto!important;
+  width:auto!important;
+  min-width:0!important;
+  margin:0!important;
+  padding:0!important;
+  flex:0 0 auto!important;
+  z-index:150!important;
+}
+body:has(.admin-shell) .admin-top > .admin-top-actions .account-menu-wrap {
+  position:relative!important;
+  margin:0!important;
+}
+body:has(.admin-shell) .admin-top > .admin-top-actions .account-menu {
+  position:absolute!important;
+  top:calc(100% + 8px)!important;
+  right:0!important;
+  left:auto!important;
+  z-index:160!important;
+}
+@media (max-width:1099px) {
+  body:has(.admin-shell) .admin-top {
+    flex-wrap:nowrap!important;
+    gap:10px!important;
+    padding-right:70px!important;
+  }
+  body:has(.admin-shell) .admin-top > .yh-panel-sidebar-toggle {
+    flex:0 0 44px!important;
+    align-self:flex-start!important;
+  }
+  body:has(.admin-shell) .admin-top > div:first-of-type {
+    flex:1 1 auto!important;
+    min-width:0!important;
+    width:auto!important;
+  }
+  body:has(.admin-shell) .admin-top > .admin-top-actions {
+    top:12px!important;
+    right:8px!important;
+  }
+  body:has(.admin-shell) .admin-top > .admin-top-actions .account-menu-trigger {
+    width:50px!important;
+    min-width:50px!important;
+    max-width:50px!important;
+    height:50px!important;
+    padding:5px!important;
+  }
+  body:has(.admin-shell) .admin-top > .admin-top-actions .account-menu {
+    max-width:calc(100vw - 24px)!important;
+  }
+}
