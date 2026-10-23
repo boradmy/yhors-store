@@ -7320,67 +7320,75 @@ document.addEventListener('click', (event) => {
 });
 
 
-/* YHORS PANEL · controles de navegación, persistentes entre vistas SPA. */
+/* YHORS PANEL · botón de navegación integrado en la cabecera (PC y móvil). */
 (function setupPanelSidebarControls(){
   if (!location.pathname.startsWith(ADMIN_PATH)) return;
   const KEY = 'yhors-panel-sidebar-collapsed';
-  let collapsed = window.matchMedia('(max-width: 1099px)').matches;
-  try { const saved = localStorage.getItem(KEY); if (saved !== null && !window.matchMedia('(max-width: 1099px)').matches) collapsed = saved === '1'; } catch (_) {}
-  const apply = () => {
+  const mobile = () => window.matchMedia('(max-width: 1099px)').matches;
+  let collapsed = mobile();
+  try { if (!mobile()) collapsed = localStorage.getItem(KEY) === '1'; } catch (_) {}
+  const menuIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>';
+  const closeIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+  function apply(){
     document.body.classList.toggle('yh-panel-sidebar-hidden', collapsed);
-    document.body.classList.toggle('yh-panel-mobile-open', !collapsed && window.matchMedia('(max-width: 1099px)').matches);
-    const backdrop = document.getElementById('yhPanelSidebarBackdrop');
-    if (backdrop) backdrop.hidden = true;
-    const button = document.getElementById('yhPanelSidebarToggle');
-    if (button) {
-      button.setAttribute('aria-expanded', String(!collapsed));
-      button.setAttribute('aria-label', collapsed ? 'Mostrar menú lateral' : 'Ocultar menú lateral');
-      button.title = collapsed ? 'Mostrar menú lateral' : 'Ocultar menú lateral';
-      button.innerHTML = collapsed ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>' : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
-    }
-  };
-  const sync = () => {
-    const shell = document.querySelector('.admin-shell');
-    const sidebar = shell?.querySelector('.admin-navigation-stack');
-    if (!sidebar) return;
-    // Sin backdrop: en Android la capa anterior interceptaba los toques del menú.
+    document.body.classList.toggle('yh-panel-mobile-open', !collapsed && mobile());
+    const toggle = document.getElementById('yhPanelSidebarToggle');
+    if(toggle){ toggle.setAttribute('aria-expanded',String(!collapsed)); toggle.setAttribute('aria-label',collapsed?'Abrir menú de administración':'Menú de administración'); toggle.title='Menú de administración'; }
+    const close = document.getElementById('yhPanelSidebarClose');
+    if(close) close.setAttribute('aria-hidden',String(collapsed));
+  }
+  function setCollapsed(next){
+    collapsed = next;
+    if(!mobile()) try { localStorage.setItem(KEY, collapsed?'1':'0'); } catch (_) {}
+    apply();
+  }
+  function sync(){
+    const shell=document.querySelector('.admin-shell');
+    const sidebar=shell?.querySelector('.admin-navigation-stack');
+    const header=shell?.querySelector('.admin-top');
+    if(!sidebar || !header) return;
     document.getElementById('yhPanelSidebarBackdrop')?.remove();
-    if (!document.getElementById('yhPanelSidebarToggle')) {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.id = 'yhPanelSidebarToggle';
-      button.className = 'yh-panel-sidebar-toggle';
-      button.addEventListener('click', () => {
-        collapsed = !collapsed;
-        try { localStorage.setItem(KEY, collapsed ? '1' : '0'); } catch (_) {}
-        apply();
-      });
-      document.body.appendChild(button);
+    let toggle=document.getElementById('yhPanelSidebarToggle');
+    if(!toggle){
+      toggle=document.createElement('button'); toggle.type='button'; toggle.id='yhPanelSidebarToggle';
+      toggle.className='yh-panel-sidebar-toggle'; toggle.innerHTML=menuIcon;
+      toggle.addEventListener('click',()=>setCollapsed(!collapsed));
     }
-    // El estado inicial es siempre cerrado: abrir cada grupo únicamente al pulsarlo.
-    sidebar.querySelectorAll('.admin-nav-group[open]').forEach(group => { group.open = false; });
-    sidebar.querySelectorAll('.admin-section-link').forEach(link => {
-      link.addEventListener('click', () => { if (window.matchMedia('(max-width: 1099px)').matches) { collapsed = true; apply(); } });
+    // Inserción real en el flujo del encabezado, nunca flotando sobre el logo.
+    if(toggle.parentElement!==header) header.insertBefore(toggle,header.firstChild);
+    let close=document.getElementById('yhPanelSidebarClose');
+    if(!close){
+      close=document.createElement('button'); close.type='button'; close.id='yhPanelSidebarClose';
+      close.className='yh-panel-sidebar-close'; close.innerHTML=closeIcon;
+      close.setAttribute('aria-label','Cerrar menú lateral');
+      close.addEventListener('click',()=>setCollapsed(true));
+    }
+    if(close.parentElement!==sidebar) sidebar.insertBefore(close,sidebar.firstChild);
+    sidebar.querySelectorAll('.admin-nav-group[open]').forEach(group=>{group.open=false;});
+    sidebar.querySelectorAll('.admin-section-link').forEach(link=>{
+      if(link.dataset.yhPanelCloseBound) return;
+      link.dataset.yhPanelCloseBound='1';
+      link.addEventListener('click',()=>{if(mobile()) setCollapsed(true);});
     });
     apply();
-  };
-  let previousSidebar = null;
-  const observer = new MutationObserver(() => {
-    const sidebar = document.querySelector('.admin-shell .admin-navigation-stack');
-    if (sidebar !== previousSidebar) { previousSidebar = sidebar; if (sidebar) sync(); }
+  }
+  let previousSidebar=null,previousHeader=null;
+  const observer=new MutationObserver(()=>{
+    const sidebar=document.querySelector('.admin-shell .admin-navigation-stack');
+    const header=document.querySelector('.admin-shell .admin-top');
+    if(sidebar && header && (sidebar!==previousSidebar || header!==previousHeader)){
+      previousSidebar=sidebar;previousHeader=header;sync();
+    }
   });
-  observer.observe(document.getElementById('app') || document.body, {childList:true, subtree:true});
-  // Cerrar al pulsar FUERA del menú. Los toques dentro siguen funcionando.
-  // pointerdown soporta ratón y pantallas táctiles sin interceptar el click.
-  document.addEventListener('pointerdown', (event) => {
-    if (collapsed || !window.matchMedia('(max-width: 1099px)').matches) return;
-    const sidebar = document.querySelector('.admin-shell .admin-navigation-stack');
-    const toggle = document.getElementById('yhPanelSidebarToggle');
-    if (!sidebar || sidebar.contains(event.target) || toggle?.contains(event.target)) return;
-    collapsed = true;
-    apply();
-  }, { passive: true });
-  window.addEventListener('keydown', event => { if (event.key === 'Escape' && window.matchMedia('(max-width: 1099px)').matches && !collapsed) { collapsed = true; apply(); } });
-  window.addEventListener('resize', apply);
+  observer.observe(document.getElementById('app')||document.body,{childList:true,subtree:true});
+  document.addEventListener('pointerdown',event=>{
+    if(collapsed || !mobile()) return;
+    const sidebar=document.querySelector('.admin-shell .admin-navigation-stack');
+    const toggle=document.getElementById('yhPanelSidebarToggle');
+    if(sidebar?.contains(event.target)||toggle?.contains(event.target)) return;
+    setCollapsed(true);
+  },{passive:true});
+  window.addEventListener('keydown',event=>{if(event.key==='Escape'&&!collapsed)setCollapsed(true);});
+  window.addEventListener('resize',()=>{if(mobile()&&!document.body.classList.contains('yh-panel-mobile-open'))collapsed=true;apply();});
   sync();
-})();
+})();;

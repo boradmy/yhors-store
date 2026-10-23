@@ -6778,3 +6778,35 @@ body:has(.admin-shell) .admin-navigation-stack::before {
     pointer-events:none!important;
   }
 }
+
+/* YHORS 2026 · navegación integrada al encabezado, sin botón flotante. */
+body:has(.admin-shell) .admin-top { position:relative!important; display:flex!important; align-items:flex-start!important; gap:12px!important; }
+body:has(.admin-shell) .admin-top > .yh-panel-sidebar-toggle {
+  position:relative!important; inset:auto!important; top:auto!important; left:auto!important; right:auto!important;
+  flex:0 0 44px!important; width:44px!important; height:44px!important; margin:0!important;
+  display:flex!important; align-items:center!important; justify-content:center!important;
+  padding:0!important; border:1px solid #c7b99c!important; border-radius:12px!important;
+  background:#151515!important; color:#f8f4ec!important; box-shadow:none!important;
+  transform:none!important; z-index:2!important; cursor:pointer!important;
+}
+body:has(.admin-shell) .admin-top > .yh-panel-sidebar-toggle:hover { background:#30291e!important; border-color:#b99553!important; }
+body:has(.admin-shell) .admin-top > .yh-panel-sidebar-toggle svg {width:23px!important;height:23px!important;stroke:currentColor!important;stroke-width:2.4!important;}
+body:has(.admin-shell) .admin-top > div:first-of-type {min-width:0!important; flex:1 1 auto!important;}
+body:has(.admin-shell) .admin-navigation-stack {position:relative;}
+body:has(.admin-shell) .admin-navigation-stack > .yh-panel-sidebar-close {
+  position:absolute!important; top:12px!important; right:12px!important; left:auto!important;
+  z-index:1300!important; display:flex!important; align-items:center!important; justify-content:center!important;
+  width:38px!important; height:38px!important; padding:0!important; border-radius:50%!important;
+  border:1px solid #b99553!important; background:#24211d!important; color:#f7f0e5!important;
+  cursor:pointer!important;
+}
+body:has(.admin-shell) .admin-navigation-stack > .yh-panel-sidebar-close svg {width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;}
+body.yh-panel-sidebar-hidden:has(.admin-shell) .admin-navigation-stack > .yh-panel-sidebar-close {pointer-events:none!important;}
+body:has(.admin-shell) .admin-navigation-stack::before {padding-right:64px!important;}
+@media(max-width:1099px){
+ body:has(.admin-shell) .admin-top {align-items:flex-start!important;flex-wrap:wrap!important;}
+ body:has(.admin-shell) .admin-top > .yh-panel-sidebar-toggle {flex-basis:44px!important;}
+ body:has(.admin-shell) .admin-top > div:first-of-type {flex:1 1 calc(100% - 60px)!important;}
+ body:has(.admin-shell) .admin-navigation-stack > .yh-panel-sidebar-close {position:fixed!important;top:12px!important;right:auto!important;left:calc(min(86vw,320px) - 51px)!important;}
+ body:has(.admin-shell) .yh-panel-sidebar-backdrop {display:none!important;pointer-events:none!important;}
+}
