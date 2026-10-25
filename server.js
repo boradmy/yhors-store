@@ -2581,10 +2581,11 @@ function readStorefront() {
       homeSections: Array.isArray(parsed.homeSections) ? parsed.homeSections.filter(x => ["banners","featured","universes","statement","about","editorial","collection","trust","showcases"].includes(x)).slice(0,10) : ["banners","featured","statement","universes","about"],
       phase3Configured: parsed.phase3Configured === true,
       showcasesConfigured: parsed.showcasesConfigured === true,
-      bannerCarousels: Array.isArray(parsed.bannerCarousels) ? parsed.bannerCarousels.slice(0,8) : []
+      bannerCarousels: Array.isArray(parsed.bannerCarousels) ? parsed.bannerCarousels.slice(0,8) : [],
+      quickPromos: Array.isArray(parsed.quickPromos) ? parsed.quickPromos.slice(0,2) : []
     };
   } catch {
-    return { heroProductIds: [], featuredProductIds: [], categorySectionOrder: {}, hiddenUniverses: [], homeSections: ["banners","featured","statement","universes","about"], phase3Configured: false, showcasesConfigured: false, bannerCarousels: [] };
+    return { heroProductIds: [], featuredProductIds: [], categorySectionOrder: {}, hiddenUniverses: [], homeSections: ["banners","featured","statement","universes","about"], phase3Configured: false, showcasesConfigured: false, bannerCarousels: [], quickPromos: [] };
   }
 }
 
@@ -6452,7 +6453,14 @@ app.put('/api/admin/storefront', requireAdmin, (req, res) => {
       bannerCarousels.push({ id: String(item.id || crypto.randomUUID()).slice(0,80), title: String(item.title || 'Campaña YHORS').slice(0,90), enabled: item.enabled !== false, slides });
     }
   }
-  const settings = { heroProductIds, featuredProductIds, categorySectionOrder, hiddenUniverses, homeSections, bannerCarousels, phase3Configured: Array.isArray(req.body?.homeSections) ? true : currentStorefront.phase3Configured, showcasesConfigured: Array.isArray(req.body?.homeSections) ? true : currentStorefront.showcasesConfigured };
+  const quickPromos = Array.isArray(req.body?.quickPromos) ? req.body.quickPromos.slice(0,2).map(p=>({
+    eyebrow: String(p?.eyebrow||'COLECCIÓN YHORS').slice(0,60),
+    title: String(p?.title||'Descubre más').slice(0,100),
+    action: String(p?.action||'Explorar').slice(0,50),
+    link: linkOK(p?.link||'') ? (p.link||'/categoria/tech').slice(0,1200) : '/categoria/tech',
+    image: imageOK(p?.image||'') ? p.image.slice(0,1200) : ''
+  })) : (currentStorefront.quickPromos||[]);
+  const settings = { heroProductIds, featuredProductIds, categorySectionOrder, hiddenUniverses, homeSections, bannerCarousels, quickPromos, phase3Configured: Array.isArray(req.body?.homeSections) ? true : currentStorefront.phase3Configured, showcasesConfigured: Array.isArray(req.body?.homeSections) ? true : currentStorefront.showcasesConfigured };
   writeStorefront(settings);
   const heroSet = new Set(heroProductIds);
   const featuredSet = new Set(featuredProductIds);

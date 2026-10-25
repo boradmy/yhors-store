@@ -6960,3 +6960,37 @@ body:has(.admin-shell) .admin-top > .admin-top-actions .account-menu {
 .yh26-studio .yh-designer-head h2{font-size:clamp(25px,3vw,40px);letter-spacing:-.04em}
 @media(max-width:980px){.yh26-hero-area{grid-template-columns:1fr}.yh26-hero-aside{grid-template-columns:1fr 1fr;grid-template-rows:auto}.yh26-aside-tile{min-height:170px}.yh26-category-grid{grid-template-columns:repeat(2,1fr)}.yh26-value-strip{grid-template-columns:repeat(2,1fr)}.yh26-value-strip>div:nth-child(2){border:0}.yh26-rail{grid-auto-columns:minmax(205px,35%)}}
 @media(max-width:600px){.yh26-utility{font-size:9px;justify-content:center;text-align:center}.yh26-utility span:nth-child(2){display:none}.yh26-hero-area{padding:12px 12px 0;gap:10px}.yh26-main-campaign .hero-slider,.yh26-main-campaign .hero-slide,.yh26-main-campaign .yh-campaign,.yh26-main-campaign .yh-banner-slider{min-height:400px}.yh26-main-campaign .hero-content{padding:28px!important}.yh26-main-campaign .hero-content h1{font-size:38px}.yh26-hero-aside{gap:10px}.yh26-aside-tile{min-height:150px;padding:18px}.yh26-aside-tile strong{font-size:22px}.yh26-aside-tile>span{font-size:8px}.yh26-value-strip{margin:12px 12px 0;padding:12px;gap:5px}.yh26-value-strip>div{padding:8px 4px;gap:7px}.yh26-value-strip b{font-size:17px}.yh26-value-strip strong{font-size:10px}.yh26-value-strip small{font-size:9px}.yh26-block{padding:44px 12px 0}.yh26-block-head{align-items:start;flex-direction:column;gap:12px}.yh26-block-head h2{font-size:34px}.yh26-category-grid{gap:9px}.yh26-category{height:240px}.yh26-category-label{padding:14px}.yh26-category-label strong{font-size:24px}.yh26-featured-wrap{margin-top:45px;padding:38px 12px}.yh26-rail{grid-auto-columns:minmax(185px,64%);gap:10px}.yh26-product-photo{height:165px}.yh26-product{padding:10px}.yh26-editorial{margin:35px 12px 0;padding:28px;min-height:250px}.yh26-editorial h2{font-size:43px}.yh26-studio-intro{padding:23px;flex-direction:column;align-items:start}.yh26-studio-tabs{display:grid;grid-template-columns:1fr}.yh26-studio-tabs button{text-align:left}}
+/* YHORS · campaña editorial redondeada y carruseles administrables */
+.yh27-home{background:#f7f5f0;color:#1a1917}
+.yh27-hero{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(270px,.85fr);gap:16px;padding:20px clamp(14px,3.5vw,70px) 0}
+.yh27-hero-main{min-width:0;overflow:hidden;border-radius:24px;background:#20201f}
+.yh27-hero-main .hero-slider,.yh27-hero-main .hero-slide,.yh27-hero-main .yh-campaign,.yh27-hero-main .yh-banner-slider{min-height:480px}
+.yh27-promos{display:grid;grid-template-rows:1fr 1fr;gap:16px;min-width:0}
+.yh27-promo{position:relative;isolation:isolate;display:flex;align-items:flex-end;min-height:225px;overflow:hidden;border-radius:24px;text-decoration:none;background:#292b2b;color:white;transition:transform .2s ease}
+.yh27-promo:hover{transform:translateY(-3px)}
+.yh27-promo-1{background:#c6a56b;color:#181818}
+.yh27-promo img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:-2}
+.yh27-promo-shade{position:absolute;inset:0;z-index:-1;background:linear-gradient(0deg,rgba(0,0,0,.65),rgba(0,0,0,.04))}
+.yh27-promo:not(:has(img)) .yh27-promo-shade{display:none}
+.yh27-promo:has(img){color:white}
+.yh27-promo-content{display:flex;flex-direction:column;align-items:flex-start;gap:12px;padding:clamp(20px,3vw,35px)}
+.yh27-promo-content small{font-size:10px;font-weight:800;letter-spacing:.18em}
+.yh27-promo-content strong{font-size:clamp(24px,2.8vw,40px);line-height:1.05;letter-spacing:-.04em;max-width:360px}
+.yh27-promo-content em{font-size:13px;font-weight:750;font-style:normal}
+.yh27-carousel{position:relative;display:flex;align-items:center;gap:10px;min-width:0}
+.yh27-carousel-track{flex:1;min-width:0;scrollbar-width:none;scroll-snap-type:x mandatory;scroll-behavior:smooth;padding:5px 0 15px}
+.yh27-carousel-track::-webkit-scrollbar{display:none}
+.yh27-carousel .yh27-arrow{flex:0 0 40px;width:40px;height:40px;border-radius:50%;border:1px solid #ded5c7;background:#fff;color:#24211d;font-size:30px;line-height:1;cursor:pointer;box-shadow:0 3px 12px #0000000d}
+.yh27-carousel .yh27-arrow:hover{background:#1d1c1a;color:white}
+.yh27-home .yh26-category,.yh27-home .yh26-product,.yh27-home .yh26-editorial{border-radius:22px}
+.yh27-about{margin:40px clamp(14px,3.5vw,70px);padding:35px 20px;border-top:1px solid #ded5c7;text-align:center;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.yh27-about strong{letter-spacing:.35em;font-size:20px}.yh27-about span{letter-spacing:.13em;font-size:10px}
+.yh27-admin-promos{margin:26px 0;padding:24px;border:1px solid #e7dfd3;border-radius:18px;background:#faf8f4}
+.yh27-admin-promos>p{color:#777;font-size:13px}
+.yh27-promo-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;padding:18px 0;border-top:1px solid #e6ddd1}
+.yh27-promo-form h4{grid-column:1/-1;margin:0;font-size:16px}
+.yh27-promo-form label{display:flex;flex-direction:column;gap:5px;font-size:12px;font-weight:700}
+.yh27-promo-form input{width:100%;min-width:0;padding:12px;border:1px solid #d8cec0;border-radius:9px;background:#fff;font:inherit}
+@media(max-width:850px){.yh27-hero{grid-template-columns:1fr}.yh27-promos{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:auto}.yh27-promo{min-height:200px}}
+@media(max-width:600px){.yh27-hero{padding:12px 12px 0;gap:10px}.yh27-promos{gap:10px}.yh27-promo{min-height:190px;border-radius:16px}.yh27-promo-content{padding:16px;gap:9px}.yh27-promo-content strong{font-size:21px}.yh27-promo-content small{font-size:8px}.yh27-promo-content em{font-size:10px}.yh27-hero-main{border-radius:18px}.yh27-carousel{gap:5px}.yh27-carousel .yh27-arrow{width:30px;height:30px;flex-basis:30px;font-size:22px}.yh27-promo-form{grid-template-columns:1fr}.yh27-about{flex-direction:column}}
+@media(prefers-reduced-motion:reduce){.yh27-carousel-track{scroll-behavior:auto}.yh27-promo{transition:none}}
