@@ -6460,7 +6460,9 @@ app.put('/api/admin/storefront', requireAdmin, (req, res) => {
     link: linkOK(p?.link||'') ? (p.link||'/categoria/tech').slice(0,1200) : '/categoria/tech',
     image: imageOK(p?.image||'') ? p.image.slice(0,1200) : ''
   })) : (currentStorefront.quickPromos||[]);
-  const settings = { heroProductIds, featuredProductIds, categorySectionOrder, hiddenUniverses, homeSections, bannerCarousels, quickPromos, phase3Configured: Array.isArray(req.body?.homeSections) ? true : currentStorefront.phase3Configured, showcasesConfigured: Array.isArray(req.body?.homeSections) ? true : currentStorefront.showcasesConfigured };
+  const allowedThemes = ['none','halloween','navidad','quito','guayaquil','ano-nuevo','carnaval','san-valentin','dia-madre','dia-padre','independencia'];
+  const siteTheme = req.body?.siteTheme !== undefined && allowedThemes.includes(req.body.siteTheme) ? req.body.siteTheme : (currentStorefront.siteTheme || 'none');
+  const settings = { siteTheme, heroProductIds, featuredProductIds, categorySectionOrder, hiddenUniverses, homeSections, bannerCarousels, quickPromos, phase3Configured: Array.isArray(req.body?.homeSections) ? true : currentStorefront.phase3Configured, showcasesConfigured: Array.isArray(req.body?.homeSections) ? true : currentStorefront.showcasesConfigured };
   writeStorefront(settings);
   const heroSet = new Set(heroProductIds);
   const featuredSet = new Set(featuredProductIds);

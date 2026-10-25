@@ -7038,3 +7038,36 @@ body:has(.admin-shell) .admin-top > .admin-top-actions .account-menu {
     font-size: 10px; padding-top: 9px;
   }
 }
+
+
+/* YHORS seasonal storefront themes · contained to the homepage */
+.yh-season-editor{margin:18px 0 25px;padding:22px;border:1px solid #e3d8c6;border-radius:18px;background:linear-gradient(135deg,#fcfaf6,#f2ece2);display:grid;gap:12px}
+.yh-season-editor h3{font-size:1.25rem;margin:5px 0}.yh-season-editor p{font-size:.85rem;color:#77716a;max-width:650px}.yh-season-editor>label{font-size:.75rem;font-weight:800}.yh-season-editor select{width:min(100%,480px);padding:12px 14px;border:1px solid #cbbda8;border-radius:9px;background:#fff;color:#1b1b1b}
+.yh-season-preview{--season-a:#b9914c;--season-b:#1b1b1b;--season-emoji:'✦';border-radius:15px;min-height:125px;padding:20px 25px;color:white;background:radial-gradient(circle at 85% 30%,var(--season-a),transparent 45%),linear-gradient(115deg,var(--season-b),#181818);display:flex;flex-direction:column;justify-content:center;gap:5px;position:relative;overflow:hidden}
+.yh-season-preview:after{content:var(--season-emoji);position:absolute;right:6%;top:12%;font-size:58px;opacity:.8}.yh-season-preview>span{font-size:.65rem;letter-spacing:.16em;font-weight:800;color:#eac98c}.yh-season-preview>strong{font-size:1.7rem;letter-spacing:.16em}.yh-season-preview>small{color:#e5dcd0;font-size:.72rem}
+.yh-season-halloween{--season-a:#ff7417;--season-b:#1d0b21;--season-emoji:'🎃'}
+.yh-season-navidad{--season-a:#a8242a;--season-b:#06392b;--season-emoji:'🎄'}
+.yh-season-quito{--season-a:#e53935;--season-b:#183c79;--season-emoji:'🏙️'}
+.yh-season-guayaquil{--season-a:#64b9f4;--season-b:#134b79;--season-emoji:'🎉'}
+.yh-season-ano-nuevo{--season-a:#caa052;--season-b:#191531;--season-emoji:'✨'}
+.yh-season-carnaval{--season-a:#e549a0;--season-b:#34249a;--season-emoji:'🎭'}
+.yh-season-san-valentin{--season-a:#f26a89;--season-b:#5e1937;--season-emoji:'❤'}
+.yh-season-dia-madre{--season-a:#ee9db5;--season-b:#6b395d;--season-emoji:'🌷'}
+.yh-season-dia-padre{--season-a:#527fc1;--season-b:#192e45;--season-emoji:'🎁'}
+.yh-season-independencia{--season-a:#f5c73e;--season-b:#1c376c;--season-emoji:'🇪🇨'}
+.yh27-home.yh-season:not(.yh-season-none){--season-glow:var(--season-a);background:linear-gradient(180deg,color-mix(in srgb,var(--season-a) 9%,#faf8f4),#faf8f4 47%)}
+.yh27-home.yh-season:not(.yh-season-none) .yh26-utility{background:var(--season-b);color:#fff;border-color:var(--season-a)}
+.yh27-home.yh-season:not(.yh-season-none) .yh27-hero{position:relative}
+.yh27-home.yh-season:not(.yh-season-none) .yh27-hero-main,.yh27-home.yh-season:not(.yh-season-none) .yh27-promo{box-shadow:0 7px 26px color-mix(in srgb,var(--season-a) 25%,transparent);outline:1px solid color-mix(in srgb,var(--season-a) 58%,transparent);outline-offset:-1px}
+.yh27-home.yh-season:not(.yh-season-none) .yh27-hero-main:after{content:var(--season-emoji);pointer-events:none;position:absolute;right:25px;top:12px;font-size:clamp(28px,4vw,57px);filter:drop-shadow(0 4px 12px var(--season-a));z-index:3}
+.yh27-home.yh-season:not(.yh-season-none) .yh26-kicker{color:color-mix(in srgb,var(--season-a) 78%,#6d4b00)}
+.yh27-home.yh-season:not(.yh-season-none) .yh26-featured-wrap{background:linear-gradient(135deg,var(--season-b),#191919);border-top:3px solid var(--season-a)}
+.yh27-home.yh-season:not(.yh-season-none) .yh26-featured-wrap .yh26-kicker{color:var(--season-a)}
+.yh27-home.yh-season:not(.yh-season-none) .yh26-category{box-shadow:0 7px 22px color-mix(in srgb,var(--season-a) 15%,transparent)}
+.yh27-home.yh-season:not(.yh-season-none) .yh26-text-link{border-bottom-color:var(--season-a)}
+.yh27-home.yh-season-halloween .yh27-hero{background:radial-gradient(ellipse at top right,#441d12,transparent 60%)}
+.yh27-home.yh-season-halloween .yh27-hero-main:before{content:'🦇   ✦   🕸';position:absolute;left:24px;top:12px;color:#ffac52;letter-spacing:12px;font-size:18px;z-index:3;pointer-events:none;text-shadow:0 0 12px #ff761f}
+.yh27-home.yh-season-navidad .yh27-hero-main:before{content:'✦  ✧  ❄  ✧  ✦';position:absolute;left:22px;top:10px;color:#fff5b8;letter-spacing:8px;font-size:18px;z-index:3;pointer-events:none;text-shadow:0 0 12px #e7c45d}
+.yh27-home.yh-season-ano-nuevo .yh27-hero-main:before{content:'✦ ✧ ✦ ✧ ✦';position:absolute;left:24px;top:10px;color:#f6db9e;letter-spacing:13px;font-size:22px;z-index:3;pointer-events:none}
+@media(max-width:600px){.yh-season-editor{padding:14px}.yh27-home.yh-season:not(.yh-season-none) .yh27-hero-main:after{right:10px;top:8px;font-size:27px}.yh27-home.yh-season-halloween .yh27-hero-main:before,.yh27-home.yh-season-navidad .yh27-hero-main:before{font-size:12px;letter-spacing:3px;left:10px}}
+@media(prefers-reduced-motion:no-preference){.yh27-home.yh-season-halloween .yh27-hero-main:after,.yh27-home.yh-season-navidad .yh27-hero-main:after{animation:yhSeasonFloat 5s ease-in-out infinite}@keyframes yhSeasonFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(5px)}}}
