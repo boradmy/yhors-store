@@ -2581,11 +2581,10 @@ function readStorefront() {
       homeSections: Array.isArray(parsed.homeSections) ? parsed.homeSections.filter(x => ["banners","featured","universes","statement","about","editorial","collection","trust","showcases"].includes(x)).slice(0,10) : ["banners","featured","statement","universes","about"],
       phase3Configured: parsed.phase3Configured === true,
       showcasesConfigured: parsed.showcasesConfigured === true,
-      seasonalTheme: typeof parsed.seasonalTheme === 'string' && ['none','navidad','quito','guayaquil','halloween','carnaval','amor','madre','padre','patrias','black-friday','nuevo-ano'].includes(parsed.seasonalTheme) ? parsed.seasonalTheme : 'none',
       bannerCarousels: Array.isArray(parsed.bannerCarousels) ? parsed.bannerCarousels.slice(0,8) : []
     };
   } catch {
-    return { heroProductIds: [], featuredProductIds: [], categorySectionOrder: {}, hiddenUniverses: [], homeSections: ["banners","featured","statement","universes","about"], phase3Configured: false, showcasesConfigured: false, seasonalTheme: 'none', bannerCarousels: [] };
+    return { heroProductIds: [], featuredProductIds: [], categorySectionOrder: {}, hiddenUniverses: [], homeSections: ["banners","featured","statement","universes","about"], phase3Configured: false, showcasesConfigured: false, bannerCarousels: [] };
   }
 }
 
@@ -6453,8 +6452,7 @@ app.put('/api/admin/storefront', requireAdmin, (req, res) => {
       bannerCarousels.push({ id: String(item.id || crypto.randomUUID()).slice(0,80), title: String(item.title || 'Campaña YHORS').slice(0,90), enabled: item.enabled !== false, slides });
     }
   }
-  const seasonalTheme = typeof req.body?.seasonalTheme === 'string' && ['none','navidad','quito','guayaquil','halloween','carnaval','amor','madre','padre','patrias','black-friday','nuevo-ano'].includes(req.body.seasonalTheme) ? req.body.seasonalTheme : (currentStorefront.seasonalTheme || 'none');
-  const settings = { heroProductIds, featuredProductIds, categorySectionOrder, hiddenUniverses, homeSections, bannerCarousels, seasonalTheme, phase3Configured: Array.isArray(req.body?.homeSections) ? true : currentStorefront.phase3Configured, showcasesConfigured: Array.isArray(req.body?.homeSections) ? true : currentStorefront.showcasesConfigured };
+  const settings = { heroProductIds, featuredProductIds, categorySectionOrder, hiddenUniverses, homeSections, bannerCarousels, phase3Configured: Array.isArray(req.body?.homeSections) ? true : currentStorefront.phase3Configured, showcasesConfigured: Array.isArray(req.body?.homeSections) ? true : currentStorefront.showcasesConfigured };
   writeStorefront(settings);
   const heroSet = new Set(heroProductIds);
   const featuredSet = new Set(featuredProductIds);

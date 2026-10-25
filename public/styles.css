@@ -6875,46 +6875,88 @@ body:has(.admin-shell) .admin-top > .admin-top-actions .account-menu {
   }
 }
 
-/* YHORS 2026 · rediseño comercial de portada (solo home público) */
-body:has(.yh-commerce-home) { --yh-gold:#b89250; --yh-ink:#17191d; background:#f6f5f1; }
-.yh-commerce-home { background:#f6f5f1; color:#1c1e21; overflow:hidden; }
-.yh-commerce-home .yh-commercial-intro { max-width:1500px; margin:0 auto; padding:24px clamp(16px,3vw,48px) 14px; }
-.yh-commerce-home .yh-commercial-intro h1 {font-size:clamp(25px,3.3vw,48px);line-height:1.08;letter-spacing:-.045em;margin:6px 0 10px;font-weight:850;color:#1b1b1c;}
-.yh-commerce-home .yh-commercial-intro p {font-size:clamp(13px,1.2vw,16px);color:#666;max-width:750px;margin:0;}
-.yh-commerce-home .yh-commerce-eyebrow {font-size:11px;letter-spacing:.22em;text-transform:uppercase;font-weight:850;color:#a57a32;}
-.yh-commerce-home .yh-commerce-links {display:flex;gap:9px;overflow-x:auto;scrollbar-width:none;padding:16px 0 4px;}
-.yh-commerce-home .yh-commerce-links::-webkit-scrollbar {display:none;}
-.yh-commerce-home .yh-commerce-links a {white-space:nowrap;flex:0 0 auto;display:inline-flex;align-items:center;gap:8px;padding:11px 16px;border-radius:100px;background:#fff;border:1px solid #e6e0d6;color:#292725;text-decoration:none;font-weight:700;font-size:13px;transition:transform .2s,border-color .2s,box-shadow .2s;}
-.yh-commerce-home .yh-commerce-links a:hover {border-color:#bd9655;transform:translateY(-2px);box-shadow:0 8px 24px #0000000b;}
-.yh-commerce-home .promo-ribbon {max-width:1500px;margin:0 auto 18px;padding:12px clamp(16px,3vw,48px);border:0;background:transparent;display:flex;gap:10px;}
-.yh-commerce-home .promo-ribbon .promo-item {flex:1;background:#fff;border:1px solid #e9e3d9;border-radius:12px;padding:12px 16px;display:flex;gap:10px;align-items:center;justify-content:center;min-width:0;}
-.yh-commerce-home .promo-ribbon .promo-item span {font-size:13px;color:#b38c4d;}
-.yh-commerce-home .promo-ribbon .promo-item strong {font-size:11px;letter-spacing:.08em;color:#34302a;}
-.yh-commerce-home .hero-slider,.yh-commerce-home .yh-campaign-carousel {max-width:calc(1500px - 96px);margin:0 auto 28px;border-radius:22px;overflow:hidden;box-shadow:0 16px 50px #16161612;}
-.yh-commerce-home .featured-section,.yh-commerce-home .yh-shop-windows,.yh-commerce-home .yh-editorial-categories {max-width:1500px;margin-left:auto;margin-right:auto;padding-left:clamp(16px,3vw,48px);padding-right:clamp(16px,3vw,48px);}
-.yh-commerce-home .featured-section {padding-top:34px;padding-bottom:36px;}
-.yh-commerce-home .featured-section .section-heading {border-bottom:1px solid #e5ded2;padding-bottom:20px;margin-bottom:22px;}
-.yh-commerce-home .featured-section .section-heading h2 {font-size:clamp(27px,3vw,42px);letter-spacing:-.035em;}
-.yh-commerce-home .featured-section .products {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:15px;}
-.yh-commerce-home .featured-section .product-card {min-width:0;border:1px solid #ebe5dd;border-radius:16px;background:#fff;overflow:hidden;box-shadow:0 4px 18px #00000008;transition:transform .2s,box-shadow .2s;}
-.yh-commerce-home .featured-section .product-card:hover {transform:translateY(-3px);box-shadow:0 12px 35px #00000012;}
-.yh-commerce-home .statement-strip {background:#191919;color:#fff;}
-.yh-season-strip {display:flex;align-items:center;justify-content:center;gap:24px;min-height:40px;padding:8px 14px;text-align:center;background:#1e2227;color:#f6e6c6;font-size:12px;font-weight:750;letter-spacing:.08em;}
-.yh-season-deco {opacity:.75;white-space:nowrap;}
-body[data-yh-season="navidad"] .yh-season-strip {background:linear-gradient(95deg,#123c30,#235340,#123c30);color:#fff6e5;}
-body[data-yh-season="quito"] .yh-season-strip {background:linear-gradient(90deg,#164b8b,#a51f35);color:white;}
-body[data-yh-season="guayaquil"] .yh-season-strip {background:linear-gradient(90deg,#186b9b,#61b6df);color:white;}
-body[data-yh-season="halloween"] .yh-season-strip {background:linear-gradient(90deg,#24162e,#a65719);color:white;}
-body[data-yh-season="carnaval"] .yh-season-strip {background:linear-gradient(90deg,#9b368e,#287eab,#e4a52c);color:white;}
-body[data-yh-season="amor"],body[data-yh-season="madre"] {--yh-gold:#c47791;}
-body[data-yh-season="amor"] .yh-season-strip,body[data-yh-season="madre"] .yh-season-strip {background:#a74265;color:white;}
-body[data-yh-season="padre"] .yh-season-strip {background:#1d3c55;color:white;}
-body[data-yh-season="patrias"] .yh-season-strip {background:linear-gradient(90deg,#e8c127 0 50%,#24539e 50% 75%,#bd343b 75%);color:#171717;}
-body[data-yh-season="black-friday"] .yh-season-strip {background:#0f0f10;color:#e9bd62;}
-body[data-yh-season="nuevo-ano"] .yh-season-strip {background:#252032;color:#e9bd62;}
-.yh-season-admin {background:#fbf8f1;border:1px solid #e8d8bc;border-radius:16px;padding:22px;margin:22px 0;}
-.yh-season-admin select {display:block;width:min(100%,460px);padding:12px;border:1px solid #d7cbb8;border-radius:9px;background:white;margin:9px 0 12px;}
-.yh-season-admin label {font-weight:750;font-size:13px;}
-@media(max-width:1000px){.yh-commerce-home .featured-section .products{grid-template-columns:repeat(3,minmax(0,1fr));}}
-@media(max-width:700px){.yh-commerce-home .yh-commercial-intro{padding-top:17px}.yh-commerce-home .featured-section .products{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.yh-commerce-home .promo-ribbon{gap:5px;padding:8px 12px}.yh-commerce-home .promo-ribbon .promo-item{padding:10px 5px;flex-direction:column;gap:2px;text-align:center}.yh-commerce-home .promo-ribbon .promo-item strong{font-size:9px;letter-spacing:0}.yh-commerce-home .hero-slider,.yh-commerce-home .yh-campaign-carousel{border-radius:14px;margin-left:12px;margin-right:12px}.yh-season-deco{display:none}.yh-commerce-home .featured-section{padding-top:20px;}}
-@media(prefers-reduced-motion:reduce){.yh-commerce-home *{scroll-behavior:auto!important;transition:none!important;animation:none!important;}}
+/* ================================================================
+   YHORS 2026 · NUEVA EXPERIENCIA COMERCIAL
+   Alcance: portada y estudio web. No modifica fichas, carrito ni inventario.
+   ================================================================ */
+.yh26-main{background:#f5f3ee;color:#181818;overflow:hidden}
+.yh26-home{--yh26-gold:#b99452;--yh26-black:#171717;max-width:100%;font-family:inherit}
+.yh26-home *{box-sizing:border-box}
+.yh26-utility{min-height:39px;padding:10px clamp(20px,4vw,80px);display:flex;justify-content:space-between;align-items:center;gap:20px;background:#191919;color:#f2eadc;font-size:10px;font-weight:750;letter-spacing:.15em}
+.yh26-hero-area{padding:22px clamp(16px,3.5vw,70px) 0;display:grid;grid-template-columns:minmax(0,2.15fr) minmax(260px,.85fr);gap:16px;min-height:480px}
+.yh26-main-campaign{min-width:0;position:relative;overflow:hidden;border-radius:20px;background:#242424}
+.yh26-main-campaign .hero-slider,.yh26-main-campaign .yh-campaign,.yh26-main-campaign .yh-banner-slider{height:100%;min-height:460px;margin:0!important;max-width:none!important;border-radius:0!important}
+.yh26-main-campaign .hero-slide{height:100%;min-height:460px}
+.yh26-main-campaign .hero-content{max-width:620px;padding:clamp(30px,5vw,80px)!important;z-index:2}
+.yh26-main-campaign .hero-content h1{font-size:clamp(36px,4.5vw,76px);line-height:1.02;letter-spacing:-.055em}
+.yh26-main-campaign .hero-overlay{background:linear-gradient(90deg,rgba(0,0,0,.86),rgba(0,0,0,.28) 75%)!important}
+.yh26-main-campaign .yh-banner-slide img{width:100%;height:100%;object-fit:cover}
+.yh26-main-campaign .yh-banner-slide::after{content:'';position:absolute;inset:0;background:linear-gradient(0deg,rgba(0,0,0,.25),transparent);pointer-events:none}
+.yh26-hero-aside{display:grid;grid-template-rows:1fr 1fr;gap:16px}
+.yh26-aside-tile{display:flex;flex-direction:column;align-items:flex-start;justify-content:flex-end;padding:clamp(24px,3vw,40px);border-radius:20px;text-decoration:none;min-height:215px;transition:transform .25s ease,box-shadow .25s ease;overflow:hidden;position:relative}
+.yh26-aside-tile:hover{transform:translateY(-3px);box-shadow:0 12px 35px #0002}
+.yh26-aside-dark{background:radial-gradient(circle at 90% 0%,#64605a,#242424 65%);color:white}
+.yh26-aside-gold{background:radial-gradient(circle at 95% 0%,#f7e8c4,#bd9c60 90%);color:#191919}
+.yh26-aside-tile>span{font-size:10px;font-weight:800;letter-spacing:.17em;opacity:.85}
+.yh26-aside-tile strong{font-size:clamp(25px,2.4vw,38px);line-height:1.05;max-width:290px;margin:13px 0 18px;letter-spacing:-.04em}
+.yh26-aside-tile em{font-style:normal;font-size:13px;font-weight:700}
+.yh26-value-strip{margin:18px clamp(16px,3.5vw,70px) 0;padding:23px 24px;background:white;border:1px solid #e8e2d7;border-radius:15px;display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.yh26-value-strip>div{display:flex;align-items:center;gap:14px;border-right:1px solid #eee7dc;padding:5px 10px}
+.yh26-value-strip>div:last-child{border:0}
+.yh26-value-strip b{font-size:24px;color:#b99452;font-weight:500;font-family:Georgia,serif}
+.yh26-value-strip span{display:grid;gap:4px}
+.yh26-value-strip strong{font-size:12px;font-weight:800}
+.yh26-value-strip small{font-size:11px;color:#777}
+.yh26-block{padding:clamp(50px,6vw,90px) clamp(16px,3.5vw,70px) 0}
+.yh26-block-head{display:flex;align-items:end;justify-content:space-between;gap:24px;margin-bottom:25px}
+.yh26-kicker{display:block;color:#aa7d32;font-size:11px;font-weight:850;letter-spacing:.17em;margin-bottom:11px;text-transform:uppercase}
+.yh26-block-head h2,.yh26-editorial h2{font-size:clamp(31px,3.7vw,58px);letter-spacing:-.055em;line-height:1.08;font-weight:800;margin:0 0 10px;color:#181818}
+.yh26-block-head p{color:#6b6b6b;font-size:14px;margin:0}
+.yh26-text-link{font-weight:800;font-size:13px;color:#242424;text-decoration:none;white-space:nowrap;border-bottom:1px solid #b99452;padding-bottom:7px}
+.yh26-category-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:15px}
+.yh26-category{height:clamp(245px,26vw,390px);border-radius:17px;overflow:hidden;position:relative;display:block;background:#2c2c2c;color:#fff;text-decoration:none}
+.yh26-category img{width:100%;height:100%;object-fit:cover;transition:transform .55s ease}
+.yh26-category:hover img{transform:scale(1.055)}
+.yh26-category-shade{position:absolute;inset:0;background:linear-gradient(0deg,rgba(0,0,0,.86),transparent 75%)}
+.yh26-category-label{position:absolute;bottom:0;left:0;right:0;padding:26px;display:flex;flex-direction:column;gap:8px}
+.yh26-category-label small{font-size:9px;letter-spacing:.17em;font-weight:800;color:#e6c38a}
+.yh26-category-label strong{font-size:clamp(25px,2.3vw,36px);line-height:1.05;letter-spacing:-.04em}
+.yh26-category-label em{font-size:11px;font-style:normal;color:#eee}
+.yh26-featured-wrap{background:#191919;margin-top:clamp(50px,6vw,90px);padding:clamp(45px,5vw,75px) clamp(16px,3.5vw,70px)}
+.yh26-featured-wrap .yh26-block-head h2{color:white}
+.yh26-featured-wrap .yh26-block-head p{color:#c7c2b9}
+.yh26-featured-wrap .yh26-text-link{color:white}
+.yh26-rail{display:grid;grid-auto-columns:minmax(215px,23%);grid-auto-flow:column;gap:14px;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;padding:2px 0 12px}
+.yh26-rail::-webkit-scrollbar{display:none}
+.yh26-product{display:flex;flex-direction:column;background:#fff;border:1px solid #e8e3d9;border-radius:14px;padding:14px;color:#191919;text-decoration:none;min-width:0;scroll-snap-align:start;transition:transform .2s ease,box-shadow .2s ease}
+.yh26-product:hover{transform:translateY(-3px);box-shadow:0 12px 24px #00000015}
+.yh26-product-photo{height:220px;display:flex;align-items:center;justify-content:center;background:#f6f5f2;border-radius:10px;overflow:hidden}
+.yh26-product-photo img{width:100%;height:100%;object-fit:contain;mix-blend-mode:multiply}
+.yh26-product-meta{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#a47d40;font-weight:850;margin-top:17px}
+.yh26-product>strong{font-size:15px;line-height:1.4;min-height:43px;margin-top:7px;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+.yh26-product-price{font-size:20px;font-weight:800;margin-top:13px}
+.yh26-product>small{color:#797979;margin-top:5px}
+.yh26-product-link{display:flex;justify-content:space-between;border-top:1px solid #ece8e0;margin-top:auto;padding-top:14px;font-size:12px;font-weight:800}
+.yh26-editorial{margin:clamp(30px,4vw,60px) clamp(16px,3.5vw,70px) 0;background:#d3b57b;border-radius:18px;padding:clamp(35px,6vw,85px);min-height:290px;display:flex;align-items:center}
+.yh26-editorial>div{max-width:640px}
+.yh26-editorial h2{font-size:clamp(42px,5vw,72px)}
+.yh26-editorial p{font-size:16px;color:#3d3325;line-height:1.6}
+.yh26-editorial a{display:inline-block;margin-top:12px;background:#191919;color:white;padding:15px 24px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:800}
+.yh26-results{min-height:50vh}
+.yh26-results .products{margin-top:30px}
+.yh26-results-count{margin-top:20px;color:#777}
+/* Nuevo estudio web, sin modificar las funciones de guardado existentes. */
+.yh26-studio{margin:20px 0 60px}
+.yh26-studio-intro{padding:30px 34px;border-radius:18px;background:linear-gradient(120deg,#191919,#35302a);color:white;display:flex;align-items:center;justify-content:space-between;gap:20px}
+.yh26-studio-intro h2{font-size:clamp(24px,3vw,40px);color:#fff;line-height:1.1;margin:5px 0 12px;letter-spacing:-.04em}
+.yh26-studio-intro p{margin:0;color:#ded5c7}
+.yh26-studio-tabs{display:flex;gap:9px;flex-wrap:wrap;margin:22px 0;border-bottom:1px solid #e5ddd0;padding-bottom:12px}
+.yh26-studio-tabs button{background:white;border:1px solid #ddd5c8;border-radius:10px;padding:13px 18px;font:inherit;font-weight:750;color:#3c3c3c;cursor:pointer}
+.yh26-studio-tabs button.active{background:#1c1c1c;border-color:#1c1c1c;color:#fff;box-shadow:inset 0 -3px #b99452}
+.yh26-studio-pane{display:none}
+.yh26-studio-pane.active{display:block}
+.yh26-studio .admin-panel{border-radius:16px}
+.yh26-studio .yh-designer-head{padding:15px 0 25px}
+.yh26-studio .yh-designer-head h2{font-size:clamp(25px,3vw,40px);letter-spacing:-.04em}
+@media(max-width:980px){.yh26-hero-area{grid-template-columns:1fr}.yh26-hero-aside{grid-template-columns:1fr 1fr;grid-template-rows:auto}.yh26-aside-tile{min-height:170px}.yh26-category-grid{grid-template-columns:repeat(2,1fr)}.yh26-value-strip{grid-template-columns:repeat(2,1fr)}.yh26-value-strip>div:nth-child(2){border:0}.yh26-rail{grid-auto-columns:minmax(205px,35%)}}
+@media(max-width:600px){.yh26-utility{font-size:9px;justify-content:center;text-align:center}.yh26-utility span:nth-child(2){display:none}.yh26-hero-area{padding:12px 12px 0;gap:10px}.yh26-main-campaign .hero-slider,.yh26-main-campaign .hero-slide,.yh26-main-campaign .yh-campaign,.yh26-main-campaign .yh-banner-slider{min-height:400px}.yh26-main-campaign .hero-content{padding:28px!important}.yh26-main-campaign .hero-content h1{font-size:38px}.yh26-hero-aside{gap:10px}.yh26-aside-tile{min-height:150px;padding:18px}.yh26-aside-tile strong{font-size:22px}.yh26-aside-tile>span{font-size:8px}.yh26-value-strip{margin:12px 12px 0;padding:12px;gap:5px}.yh26-value-strip>div{padding:8px 4px;gap:7px}.yh26-value-strip b{font-size:17px}.yh26-value-strip strong{font-size:10px}.yh26-value-strip small{font-size:9px}.yh26-block{padding:44px 12px 0}.yh26-block-head{align-items:start;flex-direction:column;gap:12px}.yh26-block-head h2{font-size:34px}.yh26-category-grid{gap:9px}.yh26-category{height:240px}.yh26-category-label{padding:14px}.yh26-category-label strong{font-size:24px}.yh26-featured-wrap{margin-top:45px;padding:38px 12px}.yh26-rail{grid-auto-columns:minmax(185px,64%);gap:10px}.yh26-product-photo{height:165px}.yh26-product{padding:10px}.yh26-editorial{margin:35px 12px 0;padding:28px;min-height:250px}.yh26-editorial h2{font-size:43px}.yh26-studio-intro{padding:23px;flex-direction:column;align-items:start}.yh26-studio-tabs{display:grid;grid-template-columns:1fr}.yh26-studio-tabs button{text-align:left}}
