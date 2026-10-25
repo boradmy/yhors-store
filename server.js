@@ -2582,7 +2582,8 @@ function readStorefront() {
       phase3Configured: parsed.phase3Configured === true,
       showcasesConfigured: parsed.showcasesConfigured === true,
       bannerCarousels: Array.isArray(parsed.bannerCarousels) ? parsed.bannerCarousels.slice(0,8) : [],
-      quickPromos: Array.isArray(parsed.quickPromos) ? parsed.quickPromos.slice(0,2) : []
+      quickPromos: Array.isArray(parsed.quickPromos) ? parsed.quickPromos.slice(0,2) : [],
+      siteTheme: typeof parsed.siteTheme === "string" ? parsed.siteTheme : "none"
     };
   } catch {
     return { heroProductIds: [], featuredProductIds: [], categorySectionOrder: {}, hiddenUniverses: [], homeSections: ["banners","featured","statement","universes","about"], phase3Configured: false, showcasesConfigured: false, bannerCarousels: [], quickPromos: [] };

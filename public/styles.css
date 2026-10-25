@@ -7071,3 +7071,10 @@ body:has(.admin-shell) .admin-top > .admin-top-actions .account-menu {
 .yh27-home.yh-season-ano-nuevo .yh27-hero-main:before{content:'✦ ✧ ✦ ✧ ✦';position:absolute;left:24px;top:10px;color:#f6db9e;letter-spacing:13px;font-size:22px;z-index:3;pointer-events:none}
 @media(max-width:600px){.yh-season-editor{padding:14px}.yh27-home.yh-season:not(.yh-season-none) .yh27-hero-main:after{right:10px;top:8px;font-size:27px}.yh27-home.yh-season-halloween .yh27-hero-main:before,.yh27-home.yh-season-navidad .yh27-hero-main:before{font-size:12px;letter-spacing:3px;left:10px}}
 @media(prefers-reduced-motion:no-preference){.yh27-home.yh-season-halloween .yh27-hero-main:after,.yh27-home.yh-season-navidad .yh27-hero-main:after{animation:yhSeasonFloat 5s ease-in-out infinite}@keyframes yhSeasonFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(5px)}}}
+
+/* Admin web: draggable commercial blocks and theme save */
+.yh-designer-line[draggable="true"]{cursor:grab;user-select:none;touch-action:pan-y}
+.yh-designer-line.yh-dragging{opacity:.45;border:1px dashed #b8924b}
+.yh-drag-handle{color:#b28d49;font-size:22px;line-height:1;flex:0 0 22px;text-align:center}
+.yh-theme-save{margin:12px 0;display:inline-flex;max-width:max-content}
+#yhThemeMessage{display:inline-block;margin-left:12px;font-weight:600}
