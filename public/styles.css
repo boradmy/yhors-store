@@ -6994,3 +6994,8 @@ body:has(.admin-shell) .admin-top > .admin-top-actions .account-menu {
 @media(max-width:850px){.yh27-hero{grid-template-columns:1fr}.yh27-promos{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:auto}.yh27-promo{min-height:200px}}
 @media(max-width:600px){.yh27-hero{padding:12px 12px 0;gap:10px}.yh27-promos{gap:10px}.yh27-promo{min-height:190px;border-radius:16px}.yh27-promo-content{padding:16px;gap:9px}.yh27-promo-content strong{font-size:21px}.yh27-promo-content small{font-size:8px}.yh27-promo-content em{font-size:10px}.yh27-hero-main{border-radius:18px}.yh27-carousel{gap:5px}.yh27-carousel .yh27-arrow{width:30px;height:30px;flex-basis:30px;font-size:22px}.yh27-promo-form{grid-template-columns:1fr}.yh27-about{flex-direction:column}}
 @media(prefers-reduced-motion:reduce){.yh27-carousel-track{scroll-behavior:auto}.yh27-promo{transition:none}}
+
+/* Subtle gap below universe cards so the following section/footer does not touch them. */
+.yh27-home .yh26-categories{padding-bottom:clamp(24px,3vw,42px)}
+.yh27-home .yh27-carousel-track{direction:ltr}
+.yh27-home .yh27-carousel .yh27-arrow{touch-action:manipulation}

@@ -550,8 +550,9 @@ function wireYh27Carousels() {
     const move=dir=>{
       const max=rail.scrollWidth-rail.clientWidth;
       if(max<4)return;
-      const next=rail.scrollLeft+dir*step();
-      rail.scrollTo({left:next>max-4?0:next<0?max:next,behavior:'smooth'});
+      // Respect arrow direction: never jump to the opposite end on manual clicks.
+      const next=Math.max(0,Math.min(max,rail.scrollLeft+dir*step()));
+      rail.scrollTo({left:next,behavior:'smooth'});
     };
     wrapper.querySelector('[data-yh27-prev]')?.addEventListener('click',()=>move(-1));
     wrapper.querySelector('[data-yh27-next]')?.addEventListener('click',()=>move(1));
