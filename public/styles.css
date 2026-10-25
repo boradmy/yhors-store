@@ -6999,3 +6999,42 @@ body:has(.admin-shell) .admin-top > .admin-top-actions .account-menu {
 .yh27-home .yh26-categories{padding-bottom:clamp(24px,3vw,42px)}
 .yh27-home .yh27-carousel-track{direction:ltr}
 .yh27-home .yh27-carousel .yh27-arrow{touch-action:manipulation}
+
+
+/* YHORS · compact mobile product carousels (2 visible cards). */
+@media (max-width: 600px) {
+  .yh27-home .yh27-carousel { gap: 4px; }
+  .yh27-home .yh27-carousel .yh27-arrow {
+    flex: 0 0 26px; width: 26px; height: 30px;
+    font-size: 19px; padding: 0;
+  }
+  .yh27-home .yh26-rail {
+    grid-auto-columns: calc((100% - 9px) / 2);
+    gap: 9px;
+    padding-bottom: 8px;
+  }
+  .yh27-home .yh26-product {
+    padding: 7px;
+    border-radius: 13px;
+  }
+  .yh27-home .yh26-product-photo {
+    height: clamp(105px, 31vw, 155px);
+    border-radius: 9px;
+  }
+  .yh27-home .yh26-product-meta {
+    font-size: 9px; margin-top: 9px;
+  }
+  .yh27-home .yh26-product > strong {
+    font-size: 12px; line-height: 1.3;
+    min-height: 32px; margin-top: 5px;
+  }
+  .yh27-home .yh26-product-price {
+    font-size: 16px; margin-top: 8px;
+  }
+  .yh27-home .yh26-product > small {
+    font-size: 10px; line-height: 1.3;
+  }
+  .yh27-home .yh26-product-link {
+    font-size: 10px; padding-top: 9px;
+  }
+}
