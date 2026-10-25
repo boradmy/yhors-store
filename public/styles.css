@@ -7078,3 +7078,15 @@ body:has(.admin-shell) .admin-top > .admin-top-actions .account-menu {
 .yh-drag-handle{color:#b28d49;font-size:22px;line-height:1;flex:0 0 22px;text-align:center}
 .yh-theme-save{margin:12px 0;display:inline-flex;max-width:max-content}
 #yhThemeMessage{display:inline-block;margin-left:12px;font-weight:600}
+
+/* YHORS: saludo festivo y ambientación de todas las vitrinas, sin alterar sus dimensiones. */
+.yh27-home .yh-season-greeting{margin:0;padding:11px 16px;display:flex;align-items:center;justify-content:center;gap:14px;text-align:center;background:linear-gradient(100deg,var(--season-b),color-mix(in srgb,var(--season-b) 75%,var(--season-a)));color:#fff;border-bottom:2px solid var(--season-a)}
+.yh-season-greeting>span{font-size:20px;flex-shrink:0}.yh-season-greeting>div{display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap}.yh-season-greeting strong{font-size:clamp(12px,1.15vw,16px);letter-spacing:.02em}.yh-season-greeting small{font-size:11px;color:#f4e8d6}
+.yh27-home.yh-season:not(.yh-season-none) .yh26-showcase{background:linear-gradient(130deg,color-mix(in srgb,var(--season-b) 92%,#171717),#191919);border-top:2px solid var(--season-a)}
+.yh27-home.yh-season:not(.yh-season-none) .yh26-showcase .yh26-block-head h2{color:#fff}
+.yh27-home.yh-season:not(.yh-season-none) .yh26-showcase .yh26-block-head p{color:#e5dfda}
+.yh27-home.yh-season:not(.yh-season-none) .yh26-showcase .yh26-text-link{color:#fff}
+.yh27-home.yh-season:not(.yh-season-none) .yh26-showcase .yh26-kicker{color:var(--season-a)}
+.yh27-home.yh-season:not(.yh-season-none) .yh26-showcase .yh26-product,.yh27-home.yh-season:not(.yh-season-none) .yh26-featured-wrap .yh26-product{box-shadow:0 3px 18px color-mix(in srgb,var(--season-a) 16%,transparent);border-color:color-mix(in srgb,var(--season-a) 35%,#ddd)}
+.yh27-home.yh-season:not(.yh-season-none) .yh27-carousel .yh27-arrow{border-color:var(--season-a)}
+@media(max-width:600px){.yh27-home .yh-season-greeting{padding:9px 8px;gap:8px}.yh-season-greeting>span{font-size:15px}.yh-season-greeting>div{gap:3px;flex-direction:column}.yh-season-greeting small{font-size:9px}}

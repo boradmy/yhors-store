@@ -545,22 +545,56 @@ function wireProductRails() {
 function wireYh27Carousels() {
   document.querySelectorAll('[data-yh27-carousel]').forEach(wrapper=>{
     const rail=wrapper.querySelector('.yh27-carousel-track');
-    if(!rail)return;
-    const step=()=>Math.max(180,(rail.firstElementChild?.getBoundingClientRect().width||220)+14);
-    const move=dir=>{
-      const max=rail.scrollWidth-rail.clientWidth;
-      if(max<4)return;
-      // Respect arrow direction: never jump to the opposite end on manual clicks.
-      const next=Math.max(0,Math.min(max,rail.scrollLeft+dir*step()));
-      rail.scrollTo({left:next,behavior:'smooth'});
+    if(!rail || rail.dataset.loopReady)return;
+    rail.dataset.loopReady='1';
+    const originals=Array.from(rail.children);
+    if(originals.length<2)return;
+    // Duplicate the original sequence on either side, so the rail can wrap
+    // without ever displaying a blank end or reversing arrow direction.
+    const makeCopy=(node)=>{const clone=node.cloneNode(true);clone.setAttribute('data-loop-clone','');return clone;};
+    const left=document.createDocumentFragment(),right=document.createDocumentFragment();
+    originals.forEach(el=>{left.appendChild(makeCopy(el));right.appendChild(makeCopy(el));});
+    rail.prepend(left);rail.append(right);
+    let sequenceWidth=0, ready=false, adjusting=false, userPauseUntil=0;
+    const measure=()=>{
+      const first=rail.children[originals.length],after=rail.children[originals.length*2];
+      if(!first||!after)return;
+      const start=first.offsetLeft,end=after.offsetLeft;
+      sequenceWidth=end-start;
+      if(!ready && sequenceWidth>0){rail.scrollLeft=start;ready=true;}
     };
-    wrapper.querySelector('[data-yh27-prev]')?.addEventListener('click',()=>move(-1));
-    wrapper.querySelector('[data-yh27-next]')?.addEventListener('click',()=>move(1));
+    const normalize=()=>{
+      if(!ready||!sequenceWidth||adjusting)return;
+      const origin=rail.children[originals.length].offsetLeft;
+      const x=rail.scrollLeft;
+      if(x<origin-2||x>=origin+sequenceWidth-2){
+        adjusting=true;
+        const target=origin+(((x-origin)%sequenceWidth)+sequenceWidth)%sequenceWidth;
+        const old=rail.style.scrollBehavior;
+        rail.style.scrollBehavior='auto';rail.scrollLeft=target;
+        rail.style.scrollBehavior=old;
+        adjusting=false;
+      }
+    };
+    // Start with the center copy. Wrap after smooth movement has settled.
+    requestAnimationFrame(()=>{measure();requestAnimationFrame(measure);});
+    window.addEventListener('resize',()=>{ready=false;measure();},{passive:true});
+    let settle;
+    rail.addEventListener('scroll',()=>{clearTimeout(settle);settle=setTimeout(normalize,180);},{passive:true});
+    const step=()=>Math.max(100,(originals[0]?.getBoundingClientRect().width||220)+parseFloat(getComputedStyle(rail).columnGap||14));
+    const move=dir=>{if(!ready)measure();if(!ready)return;rail.scrollBy({left:dir*step(),behavior:'smooth'});};
+    const pause=()=>{userPauseUntil=Date.now()+6500;};
+    wrapper.querySelector('[data-yh27-prev]')?.addEventListener('click',()=>{pause();move(-1);});
+    wrapper.querySelector('[data-yh27-next]')?.addEventListener('click',()=>{pause();move(1);});
+    ['touchstart','pointerdown','focusin','wheel'].forEach(ev=>wrapper.addEventListener(ev,pause,{passive:true}));
     if(window.matchMedia('(prefers-reduced-motion: reduce)').matches)return;
-    let paused=false;
-    ['mouseenter','focusin','touchstart'].forEach(ev=>wrapper.addEventListener(ev,()=>paused=true,{passive:true}));
-    ['mouseleave','focusout','touchend'].forEach(ev=>wrapper.addEventListener(ev,()=>paused=false,{passive:true}));
-    const timer=setInterval(()=>{if(!wrapper.isConnected){clearInterval(timer);return;}if(!paused&&!document.hidden)move(1);},4300);
+    let hovered=false;
+    wrapper.addEventListener('mouseenter',()=>hovered=true);
+    wrapper.addEventListener('mouseleave',()=>hovered=false);
+    const timer=setInterval(()=>{
+      if(!wrapper.isConnected){clearInterval(timer);return;}
+      if(!hovered&&!document.hidden&&Date.now()>userPauseUntil)move(1);
+    },4300);
   });
 }
 function yhTrustBar() {
@@ -1412,7 +1446,21 @@ async function renderHome() {
   const configured=Array.isArray(storefront.homeSections)&&storefront.phase3Configured;
   const sectionOrder=configured?storefront.homeSections:defaultOrder;
   const activeTheme=['none','halloween','navidad','quito','guayaquil','ano-nuevo','carnaval','san-valentin','dia-madre','dia-padre','independencia'].includes(storefront.siteTheme)?storefront.siteTheme:'none';
-  const home=`<div class="yh26-home yh27-home yh-season yh-season-${activeTheme}"><div class="yh26-utility"><span>YHORS · PRODUCTOS DE CALIDAD</span><span>ECUADOR · EXPERIENCIAS QUE INSPIRAN</span></div>${sectionOrder.map(key=>sectionsMarkup[key]||'').join('')}</div>`;
+  const seasonalGreetings={
+    halloween:['🎃','YHORS te desea un feliz Halloween','Una temporada llena de sorpresas'],
+    navidad:['🎄','YHORS te desea una feliz Navidad','Momentos especiales para compartir'],
+    quito:['🎉','¡Viva Quito! YHORS celebra contigo','Celebramos nuestras tradiciones'],
+    guayaquil:['🎊','¡Viva Guayaquil!','Celebramos juntos a la Perla del Pacífico'],
+    'ano-nuevo':['✨','YHORS te desea un próspero Año Nuevo','Nuevos comienzos, nuevas experiencias'],
+    carnaval:['🎭','¡Feliz Carnaval te desea YHORS!','Color y alegría para celebrar'],
+    'san-valentin':['❤️','YHORS te desea un feliz San Valentín','Detalles para quienes más quieres'],
+    'dia-madre':['🌷','¡Feliz Día de la Madre!','Celebramos a mamá'],
+    'dia-padre':['🎁','¡Feliz Día del Padre!','Momentos para celebrar a papá'],
+    independencia:['🇪🇨','¡Felices fiestas patrias, Ecuador!','Orgullosos de nuestras raíces']
+  };
+  const greeting=seasonalGreetings[activeTheme];
+  const greetingMarkup=greeting?`<div class="yh-season-greeting" role="status"><span aria-hidden="true">${greeting[0]}</span><div><strong>${escapeHTML(greeting[1])}</strong><small>${escapeHTML(greeting[2])}</small></div><span aria-hidden="true">${greeting[0]}</span></div>`:'';
+  const home=`<div class="yh26-home yh27-home yh-season yh-season-${activeTheme}"><div class="yh26-utility"><span>YHORS · PRODUCTOS DE CALIDAD</span><span>ECUADOR · EXPERIENCIAS QUE INSPIRAN</span></div>${greetingMarkup}${sectionOrder.map(key=>sectionsMarkup[key]||'').join('')}</div>`;
 
   app.innerHTML = `${renderHeader('',products)}<main class="yh26-main">${searchTerm ? searchCatalog : home}</main>${renderFooter(products)}${cartMarkup()}`;
   wireCategoryNavigation(); wireMobileMenu(); wireSearch(); wireHero(heroSlides); wireCampaignBanners(); wireProductRails(); wireYh27Carousels(); markPageEnter(); const cart = wireCart(products, storefront); const featuredArea = document.querySelector('#featuredProducts');
