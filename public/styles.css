@@ -7117,3 +7117,30 @@ body.yh-public-season-san-valentin{--season-a:#d75883;--season-b:#98334f}
 body.yh-public-season-dia-madre{--season-a:#c86c9d;--season-b:#8d4a76}
 body.yh-public-season-dia-padre{--season-a:#527fc1;--season-b:#192e45}
 body.yh-public-season-independencia{--season-a:#f5c73e;--season-b:#1c376c}
+
+/* YHORS: editor de universos con guardado cercano y vista previa inmediata */
+.yh-universe-editor-head{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:8px}
+.yh-universe-editor-head h3{margin:0}.yh-save-universes{white-space:nowrap}
+/* Ambientación estacional en categorías y publicaciones: no interfiere con botones ni fotografías */
+body.yh-public-season-halloween{--yh-season-decor:'🎃  🦇  🕸️  ✦  🎃';--yh-season-decor-right:'🦇  ✦  🎃';--yh-season-ink:#ed974e}
+body.yh-public-season-navidad{--yh-season-decor:'❄️  ✨  🎄  ✨  ❄️';--yh-season-decor-right:'🎁  ❄️  ✨';--yh-season-ink:#d4b76c}
+body.yh-public-season-quito{--yh-season-decor:'🎉  ✨  🏙️  ✨  🎉';--yh-season-decor-right:'🎊  ✨';--yh-season-ink:#e6a95b}
+body.yh-public-season-guayaquil{--yh-season-decor:'🎉  🎊  ✨  🎉';--yh-season-decor-right:'✨  🎊';--yh-season-ink:#63c6d8}
+body.yh-public-season-ano-nuevo{--yh-season-decor:'✨  🎆  ✨  🥂  ✨';--yh-season-decor-right:'🎇  ✨';--yh-season-ink:#ebca80}
+body.yh-public-season-carnaval{--yh-season-decor:'🎭  🎊  ✨  🎭';--yh-season-decor-right:'🎉  ✨';--yh-season-ink:#ce8ee7}
+body.yh-public-season-san-valentin{--yh-season-decor:'💗  ✨  💝  ✨';--yh-season-decor-right:'💗  ✨';--yh-season-ink:#dc6e91}
+body.yh-public-season-dia-madre{--yh-season-decor:'🌷  ✨  🌸  ✨';--yh-season-decor-right:'🌷  ✨';--yh-season-ink:#db91b6}
+body.yh-public-season-dia-padre{--yh-season-decor:'✨  🎁  ✨';--yh-season-decor-right:'🎁  ✨';--yh-season-ink:#83b0ed}
+body.yh-public-season-independencia{--yh-season-decor:'🇪🇨  ✨  🇪🇨';--yh-season-decor-right:'✨  🇪🇨';--yh-season-ink:#e7c35e}
+body[class*="yh-public-season-"]:not(.yh-public-season-none) main{position:relative;isolation:isolate}
+body[class*="yh-public-season-"]:not(.yh-public-season-none) .category-page-section,
+body[class*="yh-public-season-"]:not(.yh-public-season-none) .product-page,
+body[class*="yh-public-season-"]:not(.yh-public-season-none) .product-detail{position:relative;isolation:isolate}
+body[class*="yh-public-season-"]:not(.yh-public-season-none) .category-page-section::before,
+body[class*="yh-public-season-"]:not(.yh-public-season-none) .product-page::before,
+body[class*="yh-public-season-"]:not(.yh-public-season-none) .product-detail::before{content:var(--yh-season-decor);display:block;text-align:center;letter-spacing:1.1em;font-size:clamp(13px,1.6vw,23px);line-height:1.7;padding:8px 15px;background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--season-a) 12%,transparent),transparent);border-bottom:1px solid color-mix(in srgb,var(--season-a) 32%,transparent);pointer-events:none;white-space:normal}
+body[class*="yh-public-season-"]:not(.yh-public-season-none) .category-intro h1,
+body[class*="yh-public-season-"]:not(.yh-public-season-none) .product-info h1{ text-shadow:0 2px 22px color-mix(in srgb,var(--season-a) 15%,transparent)}
+body[class*="yh-public-season-"]:not(.yh-public-season-none) .product-card{border-color:color-mix(in srgb,var(--season-a) 25%,#e2dcd2)}
+@media(max-width:600px){.yh-universe-editor-head{align-items:stretch}.yh-save-universes{width:100%}body[class*="yh-public-season-"]:not(.yh-public-season-none) .category-page-section::before,body[class*="yh-public-season-"]:not(.yh-public-season-none) .product-page::before,body[class*="yh-public-season-"]:not(.yh-public-season-none) .product-detail::before{letter-spacing:.35em;font-size:15px;padding:7px 4px}}
+@media(prefers-reduced-motion:no-preference){body.yh-public-season-halloween .category-page-section::before,body.yh-public-season-halloween .product-page::before,body.yh-public-season-halloween .product-detail::before{animation:yhSeasonGlow 4s ease-in-out infinite alternate}@keyframes yhSeasonGlow{from{filter:brightness(.85)}to{filter:brightness(1.25)}}}
