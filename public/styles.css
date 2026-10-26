@@ -7287,3 +7287,34 @@ body.yh-public-season-halloween .product-detail-page .detail-copy h1{color:#221d
   body.yh-public-season-halloween .category-intro::after{font-size:11px;right:8px}
   body.yh-public-season-halloween .catalog-results .product::before{font-size:14px}
 }
+
+/* Halloween escenografico 2026: ilustraciones locales, sin emojis ni cambios de datos. */
+body.yh-public-season-halloween main{background:#f8f5ef!important;background-image:none!important}
+body.yh-public-season-halloween .category-page-section::before,
+body.yh-public-season-halloween .product-page::before,
+body.yh-public-season-halloween .product-detail::before{content:none!important;display:none!important}
+body.yh-public-season-halloween .category-page-section{position:relative;overflow:visible;border:0!important;background:transparent!important}
+body.yh-public-season-halloween .category-page-section::after{content:"";position:absolute;inset:0 0 auto 0;height:370px;background:url('/assets/seasonal/halloween-scene.svg') right top/auto 370px no-repeat;pointer-events:none;opacity:.9;z-index:0}
+body.yh-public-season-halloween .category-page-section>*{position:relative;z-index:1}
+body.yh-public-season-halloween .category-intro{position:relative;background:linear-gradient(100deg,#1b191b 0%,#252024 65%,#34241e 100%)!important;border:0!important;border-radius:12px!important;overflow:hidden;padding:24px 28px!important}
+body.yh-public-season-halloween .category-intro::before{content:"";position:absolute;inset:0;background:url('/assets/seasonal/halloween-scene.svg') right center/auto 230px no-repeat;opacity:.6;pointer-events:none}
+body.yh-public-season-halloween .category-intro::after{content:""!important;position:absolute;right:0;top:0;width:110px;height:110px;background:url('/assets/seasonal/halloween-web.svg') top right/contain no-repeat;opacity:.8;pointer-events:none}
+body.yh-public-season-halloween .category-intro h1,body.yh-public-season-halloween .category-intro p,body.yh-public-season-halloween .category-intro .eyebrow{position:relative;z-index:1}
+body.yh-public-season-halloween .catalog-sidebar{position:relative;background:#211e20!important;border:1px solid #9b744b!important;border-radius:12px!important}
+body.yh-public-season-halloween .catalog-sidebar::before{content:"";position:absolute;right:0;top:0;width:85px;height:85px;background:url('/assets/seasonal/halloween-web.svg') top right/contain no-repeat;pointer-events:none;opacity:.65;z-index:2}
+body.yh-public-season-halloween .catalog-results{position:relative}
+body.yh-public-season-halloween .catalog-results::after{content:"";position:absolute;left:-230px;bottom:-25px;width:210px;height:180px;background:url('/assets/seasonal/halloween-pumpkins.svg') center/contain no-repeat;opacity:.72;pointer-events:none}
+body.yh-public-season-halloween .catalog-results .product{background:#211e20!important;border:1px solid #7b5c3e!important;color:#f8f3ea!important;border-radius:12px!important;box-shadow:0 5px 18px #241a1814}
+body.yh-public-season-halloween .catalog-results .product::before{content:""!important;position:absolute;right:0;top:0;width:60px;height:60px;background:url('/assets/seasonal/halloween-web.svg') top right/contain no-repeat;opacity:.75;pointer-events:none;z-index:3}
+body.yh-public-season-halloween .catalog-results .product::after{content:"";position:absolute;top:9px;left:9px;width:19px;height:19px;background:url('/assets/seasonal/halloween-pumpkins.svg') left top/contain no-repeat;pointer-events:none;z-index:3}
+body.yh-public-season-halloween .catalog-results .product h3,body.yh-public-season-halloween .catalog-results .product strong{color:#f8f3ea!important}
+body.yh-public-season-halloween .catalog-results .product img{background:#fff!important}
+body.yh-public-season-halloween .product-detail-page .detail-layout::before{content:none!important}
+body.yh-public-season-halloween .product-detail-page{position:relative}
+body.yh-public-season-halloween .product-detail-page::before{content:"";position:absolute;right:0;top:0;width:min(420px,45%);height:230px;background:url('/assets/seasonal/halloween-scene.svg') right top/contain no-repeat;opacity:.4;pointer-events:none}
+body.yh-public-season-halloween .product-detail-page .detail-copy{position:relative}
+body.yh-public-season-halloween .product-detail-page .detail-copy::after{content:"";position:absolute;right:0;top:0;width:72px;height:72px;background:url('/assets/seasonal/halloween-web.svg') right top/contain no-repeat;opacity:.45;pointer-events:none}
+body.yh-public-season-halloween .yh27-home .yh27-hero-main::before{content:none!important}
+body.yh-public-season-halloween .yh27-home .yh27-hero-main::after{content:none!important}
+body.yh-public-season-halloween .yh27-home{background-image:url('/assets/seasonal/halloween-scene.svg');background-repeat:no-repeat;background-position:right top;background-size:min(650px,70vw) auto}
+@media(max-width:760px){body.yh-public-season-halloween .category-page-section::after{height:220px;background-size:auto 220px;opacity:.55}body.yh-public-season-halloween .category-intro{padding:20px 16px!important}body.yh-public-season-halloween .category-intro::before{background-size:auto 180px;opacity:.35}body.yh-public-season-halloween .catalog-results::after{display:none}body.yh-public-season-halloween .product-detail-page::before{opacity:.2}}
