@@ -7375,13 +7375,7 @@ body.yh-public-season-halloween .yh27-home .yh27-hero-main::after{content:none!i
  body.yh-public-season-halloween .product-detail-page::before{height:160px;opacity:.45}
 }
 
-/* ============================================================================
-   YHORS · Colección de temporada editorial (2026)
-   ÚNICA CAPA FINAL DE AMBIENTACIÓN. No cambia componentes de compra, variantes,
-   precios o tamaños; solo ilustraciones del fondo y acentos discretos.
-   Cada temporada tiene paisajes y detalles SVG propios (sin emojis sobre texto).
-   ============================================================================ */
-
+/* ==== YHORS FINAL SEASONAL OVERRIDES · rich scenic themes, no emoji rows ==== */
 body.yh-public-season-halloween,.yh-season-halloween{--yh-season-scene:url('/assets/seasonal/halloween-landscape-v3.svg');--yh-season-corner:url('/assets/seasonal/halloween-web.svg');--yh-season-accent:#b27642;--season-a:#b27642;}
 body.yh-public-season-navidad,.yh-season-navidad{--yh-season-scene:url('/assets/seasonal/navidad-landscape.svg');--yh-season-corner:url('/assets/seasonal/navidad-corner.svg');--yh-season-accent:#9b7854;--season-a:#9b7854;}
 body.yh-public-season-quito,.yh-season-quito{--yh-season-scene:url('/assets/seasonal/quito-landscape.svg');--yh-season-corner:url('/assets/seasonal/quito-corner.svg');--yh-season-accent:#b35b61;--season-a:#b35b61;}
@@ -7393,236 +7387,73 @@ body.yh-public-season-dia-madre,.yh-season-dia-madre{--yh-season-scene:url('/ass
 body.yh-public-season-dia-padre,.yh-season-dia-padre{--yh-season-scene:url('/assets/seasonal/dia-padre-landscape.svg');--yh-season-corner:url('/assets/seasonal/dia-padre-corner.svg');--yh-season-accent:#60788c;--season-a:#60788c;}
 body.yh-public-season-independencia,.yh-season-independencia{--yh-season-scene:url('/assets/seasonal/independencia-landscape.svg');--yh-season-corner:url('/assets/seasonal/independencia-corner.svg');--yh-season-accent:#b68e43;--season-a:#b68e43;}
 
-/* Mantener el fondo, el catálogo y los precios como en la composición aprobada. */
-body[class*="yh-public-season-"]:not(.yh-public-season-none) main{
-  background:#faf7f1!important;background-image:none!important;
-}
+body[class*="yh-public-season-"]:not(.yh-public-season-none) main{background:#faf7f1!important;background-image:none!important}
 body[class*="yh-public-season-"]:not(.yh-public-season-none) .category-page-section,
 body[class*="yh-public-season-"]:not(.yh-public-season-none) .product-page,
-body[class*="yh-public-season-"]:not(.yh-public-season-none) .product-detail{
-  border-top:0!important;
-}
-/* No hay bandas de emojis ni decoración textual superpuesta. */
+body[class*="yh-public-season-"]:not(.yh-public-season-none) .product-detail{border-top:0!important}
 body[class*="yh-public-season-"]:not(.yh-public-season-none) .category-page-section::before,
 body[class*="yh-public-season-"]:not(.yh-public-season-none) .product-page::before,
-body[class*="yh-public-season-"]:not(.yh-public-season-none) .product-detail::before{
-  content:none!important;display:none!important;animation:none!important;
-}
-/* La escena vive en el fondo del encabezado, fuera del flujo del contenido. */
-body[class*="yh-public-season-"]:not(.yh-public-season-none) .category-page-section{
-  position:relative;isolation:isolate;overflow:visible!important;
-  padding-top:45px;background:transparent!important;
-}
-body[class*="yh-public-season-"]:not(.yh-public-season-none) .category-page-section::after{
-  content:""!important;display:block!important;position:absolute;
-  top:0;left:50%;transform:translateX(-50%);
-  width:100vw;height:285px;pointer-events:none;z-index:0;
-  background-image:var(--yh-season-scene)!important;
-  background-position:center top!important;background-repeat:no-repeat!important;
-  background-size:cover!important;opacity:1!important;
-}
-body[class*="yh-public-season-"]:not(.yh-public-season-none) .category-intro{
-  position:relative;z-index:1;display:flex;align-items:end;
-  justify-content:space-between;gap:30px;min-height:115px;
-  margin-bottom:26px;padding:0 0 16px!important;
-  border:0!important;border-radius:0!important;
-  background:transparent!important;box-shadow:none!important;
-  color:#211d19!important;overflow:visible!important;
-}
+body[class*="yh-public-season-"]:not(.yh-public-season-none) .product-detail::before{content:none!important;display:none!important;animation:none!important}
+
+body[class*="yh-public-season-"]:not(.yh-public-season-none) .category-page-section{position:relative;isolation:isolate;overflow:visible!important;padding-top:45px;background:transparent!important}
+body[class*="yh-public-season-"]:not(.yh-public-season-none) .category-page-section::after{content:""!important;display:block!important;position:absolute;top:0;left:50%;transform:translateX(-50%);width:100vw;height:285px;pointer-events:none;z-index:0;background-image:var(--yh-season-scene)!important;background-position:center top!important;background-repeat:no-repeat!important;background-size:cover!important;opacity:1!important}
+body[class*="yh-public-season-"]:not(.yh-public-season-none) .category-intro{position:relative;z-index:1;display:flex;align-items:end;justify-content:space-between;gap:30px;min-height:115px;margin-bottom:26px;padding:0 0 16px!important;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;color:#211d19!important;overflow:visible!important}
 body[class*="yh-public-season-"]:not(.yh-public-season-none) .category-intro::before,
-body[class*="yh-public-season-"]:not(.yh-public-season-none) .category-intro::after{
-  content:none!important;display:none!important;
-}
-body[class*="yh-public-season-"]:not(.yh-public-season-none) .category-intro h1{
-  color:#171514!important;text-shadow:none!important;
-}
-body[class*="yh-public-season-"]:not(.yh-public-season-none) .category-intro p{
-  color:#625d58!important;padding:0!important;max-width:370px;
-}
-body[class*="yh-public-season-"]:not(.yh-public-season-none) .category-intro .eyebrow{
-  color:var(--yh-season-accent)!important;
-}
-body[class*="yh-public-season-"]:not(.yh-public-season-none) .catalog-layout{
-  position:relative;z-index:1;
-}
-body[class*="yh-public-season-"]:not(.yh-public-season-none) .catalog-sidebar{
-  background:#fff!important;border:1px solid #e3d9ce!important;
-  border-radius:8px!important;box-shadow:0 6px 24px #37271a0b!important;
-  overflow:hidden;
-}
-body[class*="yh-public-season-"]:not(.yh-public-season-none) .catalog-sidebar::before{
-  content:none!important;display:none!important;
-}
+body[class*="yh-public-season-"]:not(.yh-public-season-none) .category-intro::after{content:none!important;display:none!important}
+body[class*="yh-public-season-"]:not(.yh-public-season-none) .category-intro h1{color:#171514!important;text-shadow:none!important}
+body[class*="yh-public-season-"]:not(.yh-public-season-none) .category-intro p{color:#625d58!important;padding:0!important;max-width:370px}
+body[class*="yh-public-season-"]:not(.yh-public-season-none) .category-intro .eyebrow{color:var(--yh-season-accent)!important}
+body[class*="yh-public-season-"]:not(.yh-public-season-none) .catalog-layout{position:relative;z-index:1}
+body[class*="yh-public-season-"]:not(.yh-public-season-none) .catalog-sidebar{background:#fff!important;border:1px solid #e3d9ce!important;border-radius:8px!important;box-shadow:0 6px 24px rgba(55,39,26,.04)!important;overflow:hidden}
+body[class*="yh-public-season-"]:not(.yh-public-season-none) .catalog-sidebar::before{content:none!important;display:none!important}
 body[class*="yh-public-season-"]:not(.yh-public-season-none) .sidebar-head,
-body[class*="yh-public-season-"]:not(.yh-public-season-none) .filter-accordion{
-  border-bottom-color:#e7ded3!important;
-}
-body[class*="yh-public-season-"]:not(.yh-public-season-none) .sidebar-head h2{
-  color:#191716!important;
-}
+body[class*="yh-public-season-"]:not(.yh-public-season-none) .filter-accordion{border-bottom-color:#e7ded3!important}
+body[class*="yh-public-season-"]:not(.yh-public-season-none) .sidebar-head h2{color:#191716!important}
 body[class*="yh-public-season-"]:not(.yh-public-season-none) .sidebar-head .eyebrow,
-body[class*="yh-public-season-"]:not(.yh-public-season-none) .clear-filters{
-  color:var(--yh-season-accent)!important;
-}
-body[class*="yh-public-season-"]:not(.yh-public-season-none) .filter-title{
-  color:#211e1b!important;background:#fff!important;
-}
-body[class*="yh-public-season-"]:not(.yh-public-season-none) .filter-title span:last-child{
-  color:#847c75!important;
-}
-body[class*="yh-public-season-"]:not(.yh-public-season-none) .filter-check{
-  color:#544c45!important;
-}
-body[class*="yh-public-season-"]:not(.yh-public-season-none) .filter-empty{
-  color:#8d847c!important;
-}
-body[class*="yh-public-season-"]:not(.yh-public-season-none) .catalog-results .product{
-  position:relative;background:#fff!important;color:#211d19!important;
-  border:1px solid #e5dcd1!important;border-radius:10px!important;
-  box-shadow:0 5px 17px #46311c0a!important;overflow:hidden;
-}
-body[class*="yh-public-season-"]:not(.yh-public-season-none) .catalog-results .product::before{
-  content:none!important;display:none!important;
-}
-/* Tiny ornamental art in product-card corner; never overlaps the image subject/text. */
-body[class*="yh-public-season-"]:not(.yh-public-season-none) .catalog-results .product::after{
-  content:""!important;display:block!important;position:absolute;top:0;right:0;
-  width:64px;height:62px;z-index:2;pointer-events:none;opacity:.73;
-  background:var(--yh-season-corner) right top/contain no-repeat!important;
-}
-body[class*="yh-public-season-"]:not(.yh-public-season-none) .catalog-results .product:hover{
-  border-color:color-mix(in srgb,var(--yh-season-accent) 55%,#ded7cc)!important;
-  box-shadow:0 9px 22px #46311c15!important;
-}
+body[class*="yh-public-season-"]:not(.yh-public-season-none) .clear-filters{color:var(--yh-season-accent)!important}
+body[class*="yh-public-season-"]:not(.yh-public-season-none) .filter-title{color:#211e1b!important;background:#fff!important}
+body[class*="yh-public-season-"]:not(.yh-public-season-none) .filter-title span:last-child{color:#847c75!important}
+body[class*="yh-public-season-"]:not(.yh-public-season-none) .filter-check{color:#544c45!important}
+body[class*="yh-public-season-"]:not(.yh-public-season-none) .filter-empty{color:#8d847c!important}
+body[class*="yh-public-season-"]:not(.yh-public-season-none) .catalog-results .product{position:relative;background:#fff!important;color:#211d19!important;border:1px solid #e5dcd1!important;border-radius:10px!important;box-shadow:0 5px 17px rgba(70,49,28,.04)!important;overflow:hidden}
+body[class*="yh-public-season-"]:not(.yh-public-season-none) .catalog-results .product::before{content:none!important;display:none!important}
+body[class*="yh-public-season-"]:not(.yh-public-season-none) .catalog-results .product::after{content:""!important;display:block!important;position:absolute;top:0;right:0;width:64px;height:62px;z-index:2;pointer-events:none;opacity:.73;background:var(--yh-season-corner) right top/contain no-repeat!important}
+body[class*="yh-public-season-"]:not(.yh-public-season-none) .catalog-results .product:hover{border-color:color-mix(in srgb,var(--yh-season-accent) 55%,#ded7cc)!important;box-shadow:0 9px 22px rgba(70,49,28,.08)!important}
 body[class*="yh-public-season-"]:not(.yh-public-season-none) .catalog-results .product h3,
 body[class*="yh-public-season-"]:not(.yh-public-season-none) .catalog-results .product .product-name,
 body[class*="yh-public-season-"]:not(.yh-public-season-none) .catalog-results .product .product-price,
-body[class*="yh-public-season-"]:not(.yh-public-season-none) .catalog-results .product strong{
-  color:#211d19!important;text-shadow:none!important;
-}
+body[class*="yh-public-season-"]:not(.yh-public-season-none) .catalog-results .product strong{color:#211d19!important;text-shadow:none!important}
 body[class*="yh-public-season-"]:not(.yh-public-season-none) .catalog-results .product p,
-body[class*="yh-public-season-"]:not(.yh-public-season-none) .catalog-results .product small{
-  color:#77716c!important;
-}
-body[class*="yh-public-season-"]:not(.yh-public-season-none) .catalog-results .product img{
-  background:#fff!important;
-}
-body[class*="yh-public-season-"]:not(.yh-public-season-none) .catalog-results .product .product-category{
-  color:var(--yh-season-accent)!important;
-}
-/* Página de producto: paisaje detrás de la cabecera, sin alterar galerías ni acciones. */
-body[class*="yh-public-season-"]:not(.yh-public-season-none) .product-detail-page{
-  position:relative;isolation:isolate;background:transparent!important;
-}
-body[class*="yh-public-season-"]:not(.yh-public-season-none) .product-detail-page::before{
-  content:""!important;display:block!important;position:absolute;inset:0 0 auto 0;
-  height:255px;z-index:0;pointer-events:none;opacity:.72;
-  background:var(--yh-season-scene) center top/cover no-repeat!important;
-}
-body[class*="yh-public-season-"]:not(.yh-public-season-none) .product-detail-page > *{
-  position:relative;z-index:1;
-}
+body[class*="yh-public-season-"]:not(.yh-public-season-none) .catalog-results .product small{color:#77716c!important}
+body[class*="yh-public-season-"]:not(.yh-public-season-none) .catalog-results .product img{background:#fff!important}
+body[class*="yh-public-season-"]:not(.yh-public-season-none) .catalog-results .product .product-category{color:var(--yh-season-accent)!important}
+body[class*="yh-public-season-"]:not(.yh-public-season-none) .product-detail-page{position:relative;isolation:isolate;background:transparent!important}
+body[class*="yh-public-season-"]:not(.yh-public-season-none) .product-detail-page::before{content:""!important;display:block!important;position:absolute;inset:0 0 auto 0;height:255px;z-index:0;pointer-events:none;opacity:.72;background:var(--yh-season-scene) center top/cover no-repeat!important}
+body[class*="yh-public-season-"]:not(.yh-public-season-none) .product-detail-page > *{position:relative;z-index:1}
 body[class*="yh-public-season-"]:not(.yh-public-season-none) .product-detail-page .detail-layout::before,
-body[class*="yh-public-season-"]:not(.yh-public-season-none) .product-detail-page .detail-copy::after{
-  content:none!important;display:none!important;
-}
-body[class*="yh-public-season-"]:not(.yh-public-season-none) .product-detail-page .detail-copy h1{
-  color:#211d19!important;text-shadow:none!important;
-}
-/* Inicio: colores siempre negro, blanco y dorado; la temporada se ve como arte,
-   sin recolorear fotos ni colocar iconos grandes en los banners. */
-body[class*="yh-public-season-"]:not(.yh-public-season-none) .yh27-home{
-  background:#faf7f1!important;background-image:none!important;
-}
-body[class*="yh-public-season-"]:not(.yh-public-season-none) .yh27-home .yh26-utility{
-  background:#1b1919!important;color:#f8f1e4!important;
-}
+body[class*="yh-public-season-"]:not(.yh-public-season-none) .product-detail-page .detail-copy::after{content:none!important;display:none!important}
+body[class*="yh-public-season-"]:not(.yh-public-season-none) .product-detail-page .detail-copy h1{color:#211d19!important;text-shadow:none!important}
+body[class*="yh-public-season-"]:not(.yh-public-season-none) .yh27-home{background:#faf7f1!important;background-image:none!important}
+body[class*="yh-public-season-"]:not(.yh-public-season-none) .yh27-home .yh26-utility{background:#1b1919!important;color:#f8f1e4!important}
 body[class*="yh-public-season-"]:not(.yh-public-season-none) .yh27-home .yh27-hero-main::before,
-body[class*="yh-public-season-"]:not(.yh-public-season-none) .yh27-home .yh27-hero-main::after{
-  content:none!important;display:none!important;animation:none!important;
-}
-body[class*="yh-public-season-"]:not(.yh-public-season-none) .yh27-home .yh27-hero-main,
-body[class*="yh-public-season-"]:not(.yh-public-season-none) .yh27-home .yh27-promo{
-  outline:none!important;box-shadow:none!important;
-}
+body[class*="yh-public-season-"]:not(.yh-public-season-none) .yh27-home .yh27-hero-main::after{content:none!important;display:none!important;animation:none!important}
 body[class*="yh-public-season-"]:not(.yh-public-season-none) .yh27-home .yh26-featured-wrap,
-body[class*="yh-public-season-"]:not(.yh-public-season-none) .yh27-home .yh26-showcase{
-  background:#1c1b1b!important;border-top:1px solid var(--yh-season-accent)!important;
-}
+body[class*="yh-public-season-"]:not(.yh-public-season-none) .yh27-home .yh26-showcase{background:#1c1b1b!important;border-top:1px solid var(--yh-season-accent)!important}
 body[class*="yh-public-season-"]:not(.yh-public-season-none) .yh27-home .yh26-showcase .yh26-block-head h2,
-body[class*="yh-public-season-"]:not(.yh-public-season-none) .yh27-home .yh26-featured-wrap .yh26-block-head h2{
-  color:#fff!important;
-}
-body[class*="yh-public-season-"]:not(.yh-public-season-none) .yh27-home .yh26-showcase .yh26-block-head p{
-  color:#d5d0c9!important;
-}
+body[class*="yh-public-season-"]:not(.yh-public-season-none) .yh27-home .yh26-featured-wrap .yh26-block-head h2{color:#fff!important}
+body[class*="yh-public-season-"]:not(.yh-public-season-none) .yh27-home .yh26-showcase .yh26-block-head p{color:#d5d0c9!important}
 body[class*="yh-public-season-"]:not(.yh-public-season-none) .yh27-home .yh26-featured-wrap .yh26-product,
-body[class*="yh-public-season-"]:not(.yh-public-season-none) .yh27-home .yh26-showcase .yh26-product{
-  border-color:#e8e3d9!important;box-shadow:none!important;
-}
-/* Una pequeña franja editorial con arte real a la derecha para cada tema. */
-body[class*="yh-public-season-"]:not(.yh-public-season-none) .yh27-home .yh-season-greeting-art{
-  display:flex;gap:20px;align-items:center;justify-content:center;
-  min-height:66px;padding:10px 20px;background:#f9f6ef!important;
-  color:#191919!important;border-top:1px solid #ede7da;
-  border-bottom:1px solid color-mix(in srgb,var(--yh-season-accent) 45%,#e7ded5);
-  position:relative;overflow:hidden;
-}
-body[class*="yh-public-season-"]:not(.yh-public-season-none) .yh27-home .yh-season-greeting-art::before{
-  content:"";position:absolute;inset:0;pointer-events:none;opacity:.5;
-  background:var(--yh-season-scene) center 29%/cover no-repeat;
-}
+body[class*="yh-public-season-"]:not(.yh-public-season-none) .yh27-home .yh26-showcase .yh26-product{border-color:#e8e3d9!important;box-shadow:none!important}
+body[class*="yh-public-season-"]:not(.yh-public-season-none) .yh27-home .yh-season-greeting-art{display:flex;gap:20px;align-items:center;justify-content:center;min-height:66px;padding:10px 20px;background:#f9f6ef!important;color:#191919!important;border-top:1px solid #ede7da;border-bottom:1px solid color-mix(in srgb,var(--yh-season-accent) 45%,#e7ded5);position:relative;overflow:hidden}
+body[class*="yh-public-season-"]:not(.yh-public-season-none) .yh27-home .yh-season-greeting-art::before{content:"";position:absolute;inset:0;pointer-events:none;opacity:.5;background:var(--yh-season-scene) center 29%/cover no-repeat}
 body[class*="yh-public-season-"]:not(.yh-public-season-none) .yh-season-greeting-art>div,
-body[class*="yh-public-season-"]:not(.yh-public-season-none) .yh-season-greeting-emblem{
-  position:relative;z-index:1;
-}
-body[class*="yh-public-season-"]:not(.yh-public-season-none) .yh-season-greeting-art strong{
-  color:#241f1a!important;font-size:clamp(13px,1.4vw,17px);
-}
-body[class*="yh-public-season-"]:not(.yh-public-season-none) .yh-season-greeting-art small{
-  color:#73685c!important;
-}
-body[class*="yh-public-season-"]:not(.yh-public-season-none) .yh-season-greeting-emblem{
-  display:block;flex:0 0 40px;width:40px;height:40px;opacity:.8;
-  background:var(--yh-season-corner) center/contain no-repeat;
-}
-/* El administrador muestra una vista previa real de la ilustración (no emoji gigante). */
-.yh-season-preview.yh-season:not(.yh-season-none){
-  background:var(--yh-season-scene) center/cover no-repeat,#faf7f1!important;
-  border:1px solid #e6dfd1;box-shadow:0 6px 15px #2920160c;
-  color:#241e1a!important;isolation:isolate;
-}
-.yh-season-preview.yh-season:not(.yh-season-none)::after{
-  content:none!important;display:none!important;
-}
+body[class*="yh-public-season-"]:not(.yh-public-season-none) .yh-season-greeting-emblem{position:relative;z-index:1}
+body[class*="yh-public-season-"]:not(.yh-public-season-none) .yh-season-greeting-art strong{color:#241f1a!important;font-size:clamp(13px,1.4vw,17px)}
+body[class*="yh-public-season-"]:not(.yh-public-season-none) .yh-season-greeting-art small{color:#73685c!important}
+body[class*="yh-public-season-"]:not(.yh-public-season-none) .yh-season-greeting-emblem{display:block;flex:0 0 40px;width:40px;height:40px;opacity:.8;background:var(--yh-season-corner) center/contain no-repeat}
+.yh-season-preview.yh-season:not(.yh-season-none){background:var(--yh-season-scene) center/cover no-repeat,#faf7f1!important;border:1px solid #e6dfd1;box-shadow:0 6px 15px rgba(41,32,22,.05);color:#241e1a!important;isolation:isolate}
+.yh-season-preview.yh-season:not(.yh-season-none)::after{content:none!important;display:none!important}
 .yh-season-preview.yh-season:not(.yh-season-none)>strong{color:#241e1a!important}
 .yh-season-preview.yh-season:not(.yh-season-none)>span{color:var(--yh-season-accent)!important}
 .yh-season-preview.yh-season:not(.yh-season-none)>small{color:#6b5e52!important}
-/* Ninguno sigue exactamente como antes: nada de escenas ni detalles de temporada. */
-@media(max-width:760px){
-  body[class*="yh-public-season-"]:not(.yh-public-season-none) .category-page-section{padding-top:25px}
-  body[class*="yh-public-season-"]:not(.yh-public-season-none) .category-page-section::after{
-    height:215px;background-position:58% top!important;opacity:.83!important;
-  }
-  body[class*="yh-public-season-"]:not(.yh-public-season-none) .category-intro{
-    display:block;min-height:110px;padding:0 0 12px!important;
-  }
-  body[class*="yh-public-season-"]:not(.yh-public-season-none) .category-intro p{margin-top:10px}
-  body[class*="yh-public-season-"]:not(.yh-public-season-none) .product-detail-page::before{
-    height:175px;opacity:.43;
-  }
-  body[class*="yh-public-season-"]:not(.yh-public-season-none) .yh-season-greeting-art{
-    gap:7px;padding:9px 8px;
-  }
-  body[class*="yh-public-season-"]:not(.yh-public-season-none) .yh-season-greeting-emblem{
-    width:25px;height:28px;flex-basis:25px;
-  }
-  body[class*="yh-public-season-"]:not(.yh-public-season-none) .catalog-results .product::after{
-    width:44px;height:42px;opacity:.48;
-  }
-}
-@media(prefers-reduced-motion:reduce){
-  body[class*="yh-public-season-"]:not(.yh-public-season-none) .yh-season-greeting-art::before{
-    animation:none!important;
-  }
-}
+@media(max-width:760px){body[class*="yh-public-season-"]:not(.yh-public-season-none) .category-page-section{padding-top:25px}body[class*="yh-public-season-"]:not(.yh-public-season-none) .category-page-section::after{height:215px;background-position:58% top!important;opacity:.83!important}body[class*="yh-public-season-"]:not(.yh-public-season-none) .category-intro{display:block;min-height:110px;padding:0 0 12px!important}body[class*="yh-public-season-"]:not(.yh-public-season-none) .category-intro p{margin-top:10px}body[class*="yh-public-season-"]:not(.yh-public-season-none) .product-detail-page::before{height:175px;opacity:.43}body[class*="yh-public-season-"]:not(.yh-public-season-none) .yh-season-greeting-art{gap:7px;padding:9px 8px}body[class*="yh-public-season-"]:not(.yh-public-season-none) .yh-season-greeting-emblem{width:25px;height:28px;flex-basis:25px}body[class*="yh-public-season-"]:not(.yh-public-season-none) .catalog-results .product::after{width:44px;height:42px;opacity:.48}}
