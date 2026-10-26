@@ -7223,3 +7223,67 @@ body.yh-public-season-halloween .product-detail-page .detail-layout::before{
   content:'✦  🦇';position:absolute;right:0;top:-23px;font-size:13px;letter-spacing:.35em;
   color:#9f754d;opacity:.7;pointer-events:none;
 }
+
+/* YHORS Halloween 2026 · catálogo boutique, solo cuando Halloween está activo.
+   Mantiene las tarjetas legibles y la misma estructura/responsividad. */
+body.yh-public-season-halloween{
+  --yh-halloween-orange:#d18b43;
+  --yh-halloween-gold:#c49b5b;
+}
+body.yh-public-season-halloween main{
+  background:#f8f4ec;
+  background-image:radial-gradient(ellipse 65% 300px at 95% 4%,rgba(207,148,89,.16),transparent 80%),linear-gradient(180deg,#fbf7f0 0%,#f7f2e9 100%);
+}
+body.yh-public-season-halloween .category-intro{
+  background:linear-gradient(105deg,rgba(21,19,20,.97),rgba(39,32,29,.96) 68%,rgba(66,43,28,.94));
+  border:1px solid rgba(194,149,89,.34);
+  border-radius:15px;
+  box-shadow:0 12px 30px rgba(34,24,20,.12);
+}
+body.yh-public-season-halloween .category-intro::after{
+  content:'☾    🦇    ✦';font-size:16px;letter-spacing:.35em;opacity:.7;
+}
+body.yh-public-season-halloween .category-page-section::before,
+body.yh-public-season-halloween .product-page::before,
+body.yh-public-season-halloween .product-detail::before{
+  content:'🕸️   ✦   🦇';font-size:13px;letter-spacing:.55em;
+  background:linear-gradient(90deg,rgba(194,149,89,.05),rgba(194,149,89,.15),rgba(194,149,89,.05));
+  color:#8d6238;animation:none!important;
+}
+body.yh-public-season-halloween .catalog-sidebar{
+  background:#201d1d;border:1px solid #8d714e;border-radius:13px;
+  box-shadow:0 10px 25px rgba(32,22,19,.1);
+}
+body.yh-public-season-halloween .catalog-results .product{
+  position:relative;background:#211e1e;border:1px solid #6e5843;
+  color:#f7f3ec;border-radius:12px;overflow:hidden;
+  box-shadow:0 6px 18px rgba(31,22,20,.11);
+}
+body.yh-public-season-halloween .catalog-results .product::before{
+  content:'🕸';position:absolute;top:6px;right:9px;z-index:2;
+  font-size:18px;opacity:.45;pointer-events:none;
+}
+body.yh-public-season-halloween .catalog-results .product:hover{
+  border-color:#cb975d;box-shadow:0 12px 27px rgba(44,28,22,.18);
+}
+body.yh-public-season-halloween .catalog-results .product h3,
+body.yh-public-season-halloween .catalog-results .product .product-name,
+body.yh-public-season-halloween .catalog-results .product .product-price,
+body.yh-public-season-halloween .catalog-results .product strong{color:#faf6ee}
+body.yh-public-season-halloween .catalog-results .product .product-category,
+body.yh-public-season-halloween .catalog-results .product .eyebrow{color:#d9a45d}
+body.yh-public-season-halloween .catalog-results .product p,
+body.yh-public-season-halloween .catalog-results .product small{color:#c6bcb1}
+body.yh-public-season-halloween .catalog-results .product button{border-radius:6px}
+body.yh-public-season-halloween .catalog-results .product img{background:#faf9f6}
+body.yh-public-season-halloween .product-detail-page .detail-layout::before{
+  content:'☾  ✦  🦇';opacity:.62;letter-spacing:.4em;
+}
+body.yh-public-season-halloween .product-detail-page .detail-copy,
+body.yh-public-season-halloween .product-detail-page .detail-gallery{isolation:isolate}
+body.yh-public-season-halloween .product-detail-page .detail-copy h1{color:#221d1b}
+@media(max-width:760px){
+  body.yh-public-season-halloween .category-intro{padding:18px 16px}
+  body.yh-public-season-halloween .category-intro::after{font-size:11px;right:8px}
+  body.yh-public-season-halloween .catalog-results .product::before{font-size:14px}
+}
