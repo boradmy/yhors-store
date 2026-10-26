@@ -7090,3 +7090,30 @@ body:has(.admin-shell) .admin-top > .admin-top-actions .account-menu {
 .yh27-home.yh-season:not(.yh-season-none) .yh26-showcase .yh26-product,.yh27-home.yh-season:not(.yh-season-none) .yh26-featured-wrap .yh26-product{box-shadow:0 3px 18px color-mix(in srgb,var(--season-a) 16%,transparent);border-color:color-mix(in srgb,var(--season-a) 35%,#ddd)}
 .yh27-home.yh-season:not(.yh-season-none) .yh27-carousel .yh27-arrow{border-color:var(--season-a)}
 @media(max-width:600px){.yh27-home .yh-season-greeting{padding:9px 8px;gap:8px}.yh-season-greeting>span{font-size:15px}.yh-season-greeting>div{gap:3px;flex-direction:column}.yh-season-greeting small{font-size:9px}}
+
+/* YHORS: portadas editoriales personalizadas y ambientación en páginas interiores */
+.yh26-category-no-image{background:linear-gradient(145deg,#27231d,#111 70%)!important;}
+.yh26-category-no-image .yh26-category-shade{background:linear-gradient(0deg,rgba(0,0,0,.7),rgba(0,0,0,.08))}
+.yh-universe-image-editor{padding:20px;border:1px solid #e4d9c7;border-radius:18px;background:#faf8f4;margin:22px 0}
+.yh-universe-image-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,310px),1fr));gap:12px}
+.yh-universe-image-row{padding:14px;background:#fff;border:1px solid #e8e0d4;border-radius:12px;min-width:0}
+.yh-universe-image-row>strong{display:block;margin-bottom:10px}.yh-universe-image-controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.yh-universe-image-controls>input{flex:1 1 180px;min-width:0;padding:10px;border:1px solid #d9cfbf;border-radius:8px}
+.yh-universe-file-button{cursor:pointer}.yh-universe-image-row>small{display:block;margin:6px 0;color:#766b5c}
+.yh-universe-image-preview{width:100%;max-height:150px;object-fit:cover;border-radius:10px}
+body[class*="yh-public-season-"]:not(.yh-public-season-none) .category-page-section,
+body[class*="yh-public-season-"]:not(.yh-public-season-none) .product-page,
+body[class*="yh-public-season-"]:not(.yh-public-season-none) .product-detail{border-top:3px solid var(--season-a,#b58a43)}
+body[class*="yh-public-season-"]:not(.yh-public-season-none) main{background-image:radial-gradient(ellipse at 95% 0%,color-mix(in srgb,var(--season-a) 12%,transparent),transparent 48%)}
+body[class*="yh-public-season-"]:not(.yh-public-season-none) .category-intro .eyebrow,
+body[class*="yh-public-season-"]:not(.yh-public-season-none) .product-info .eyebrow{color:var(--season-b,#8b6b35)}
+body.yh-public-season-halloween{--season-a:#e68a39;--season-b:#57316c}
+body.yh-public-season-navidad{--season-a:#c59d4b;--season-b:#28644b}
+body.yh-public-season-quito{--season-a:#df4d52;--season-b:#315a9a}
+body.yh-public-season-guayaquil{--season-a:#5dbbd0;--season-b:#346aa0}
+body.yh-public-season-ano-nuevo{--season-a:#dfc17d;--season-b:#30344b}
+body.yh-public-season-carnaval{--season-a:#b04ad8;--season-b:#277fba}
+body.yh-public-season-san-valentin{--season-a:#d75883;--season-b:#98334f}
+body.yh-public-season-dia-madre{--season-a:#c86c9d;--season-b:#8d4a76}
+body.yh-public-season-dia-padre{--season-a:#527fc1;--season-b:#192e45}
+body.yh-public-season-independencia{--season-a:#f5c73e;--season-b:#1c376c}

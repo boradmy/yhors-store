@@ -1214,6 +1214,17 @@ async function loadStoreData() {
     classifications
   };
 }
+function applyPublicSeason(theme = 'none') {
+  const allowed = ['none','halloween','navidad','quito','guayaquil','ano-nuevo','carnaval','san-valentin','dia-madre','dia-padre','independencia'];
+  const selected = allowed.includes(theme) ? theme : 'none';
+  document.body.classList.forEach(name => { if (name.startsWith('yh-public-season-')) document.body.classList.remove(name); });
+  document.body.classList.add('yh-public-season-' + selected);
+}
+function catalogFilterKey(category) { return 'yhors:catalog-filters:' + category; }
+function readCatalogFilters(category) {
+  try { const data = JSON.parse(sessionStorage.getItem(catalogFilterKey(category)) || '{}'); return data && typeof data === 'object' ? data : {}; }
+  catch { return {}; }
+}
 function productPriceLabel(product) {
   return product.category === 'cosplay' && Number.isFinite(Number(product.salePrice)) ? money(product.salePrice) : money(product.price);
 }
@@ -1314,7 +1325,8 @@ function productPriceValue(product) {
 function wireCatalogFilters(products, classifications, initial = {}, renderResults) {
   const sidebar = document.querySelector('.catalog-sidebar');
   if (!sidebar) return;
-  const active = { ...initial };
+  const scope = initial.category || 'all';
+  const active = { ...initial, ...readCatalogFilters(scope) };
   const categoryControl = sidebar.querySelector('[data-filter-category]');
   const contextualCategory = initial.category || '';
   const draw = () => {
@@ -1328,6 +1340,7 @@ function wireCatalogFilters(products, classifications, initial = {}, renderResul
     const selectedCount = [categoryControl ? active.category : '', active.brand, active.type, active.sort].filter(Boolean).filter(value => value !== contextualCategory).length;
     const mobileLabel = sidebar.querySelector('.mobile-filter-count');
     if (mobileLabel && !sidebar.classList.contains('mobile-open')) mobileLabel.textContent = selectedCount ? `${selectedCount} filtro${selectedCount === 1 ? '' : 's'} activo${selectedCount === 1 ? '' : 's'}` : 'Abrir opciones';
+    try { sessionStorage.setItem(catalogFilterKey(scope), JSON.stringify(active)); } catch {}
     renderResults(applyCatalogFilters(products, active), active);
   };
   sidebar.querySelectorAll('[data-filter-category],[data-filter-brand],[data-filter-type]').forEach(input => input.addEventListener('change', () => {
@@ -1361,9 +1374,14 @@ function wireCatalogFilters(products, classifications, initial = {}, renderResul
     const mobileLabel = sidebar.querySelector('.mobile-filter-count');
     if (mobileLabel) mobileLabel.textContent = 'Abrir opciones';
   });
+  // Reinstala los filtros guardados tras regresar desde una ficha de producto.
+  for (const [group, value] of [['category',active.category],['brand',active.brand],['type',active.type]]) {
+    sidebar.querySelectorAll(`[data-filter-${group}]`).forEach(input => { input.checked = !!value && input.value === value; });
+  }
+  sidebar.querySelectorAll('input[name="catalogPriceSort"]').forEach(input => { input.checked = input.value === (active.sort || ''); });
   draw();
 }
-function openProduct(id, products) { const product = getProduct(id, products); if (!product) return; history.pushState({ product: id }, '', productHref(product)); renderStore(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+function openProduct(id, products) { const product = getProduct(id, products); if (!product) return; try { sessionStorage.setItem('yhors:catalog-scroll:' + location.pathname, String(window.scrollY)); } catch {} history.pushState({ product: id }, '', productHref(product)); renderStore(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
 
 function updateSeoMeta({ title, description, canonical, image = '', robots = 'index,follow' }) {
   document.title = title;
@@ -1385,6 +1403,7 @@ async function renderHome() {
     console.warn('[YHORS SEO] Se conserva el HTML SSR de inicio:', error?.message || error);
     return;
   }
+  applyPublicSeason(storefront.siteTheme);
   hiddenPublicUniverses = new Set(storefront.hiddenUniverses || []);
   products = products.filter(p => !hiddenPublicUniverses.has(p.category));
   setPublicCatalogProducts(products);
@@ -1406,11 +1425,12 @@ async function renderHome() {
   const campaign = (storefront.bannerCarousels || []).filter(c=>c.enabled && c.slides?.some(sl=>sl.image));
   const safeImage = p => escapeHTML(p?.image || productImages(p || {})[0] || placeholder);
   const categoryKeys = ['tech','cosplay','details','coleccionables','pets','elegant','sports'].filter(k=>!hiddenPublicUniverses.has(k));
+  const universeImages = storefront.universeImages || {};
   const categoryTiles = categoryKeys.map((key,i)=>{
     const list=products.filter(p=>p.category===key && p.published!==false);
     if(!list.length)return '';
-    const photo=list.find(p=>p.image||productImages(p)[0]);
-    return `<a class="yh26-category yh26-category-${i%4}" href="${categoryHref(key)}"><img loading="lazy" src="${safeImage(photo)}" alt=""><span class="yh26-category-shade"></span><span class="yh26-category-label"><small>EXPLORA LA COLECCIÓN</small><strong>${escapeHTML(categories[key]||key)}</strong><em>${list.length} productos · Descubrir ↗</em></span></a>`;
+    const configuredImage = String(universeImages[key] || '').trim();
+    return `<a class="yh26-category yh26-category-${i%4}${configuredImage ? '' : ' yh26-category-no-image'}" href="${categoryHref(key)}">${configuredImage ? `<img loading="lazy" src="${escapeHTML(configuredImage)}" alt="${escapeHTML(categories[key] || key)}">` : ''}<span class="yh26-category-shade"></span><span class="yh26-category-label"><small>EXPLORA LA COLECCIÓN</small><strong>${escapeHTML(categories[key]||key)}</strong><em>${list.length} productos · Descubrir ↗</em></span></a>`;
   }).filter(Boolean).join('');
   const productTile = p => `<a class="yh26-product" href="${escapeHTML(productHref(p))}"><span class="yh26-product-photo"><img loading="lazy" src="${safeImage(p)}" alt="${escapeHTML(p.name)}"></span><span class="yh26-product-meta">${escapeHTML(categories[p.category]||p.category||'YHORS')}</span><strong>${escapeHTML(p.name)}</strong><span class="yh26-product-price">${productPriceLabel(p)}</span>${p.isRental && Number(p.rentalPrice)>0?`<small>Alquiler disponible · ${money(p.rentalPrice)}</small>`:''}<span class="yh26-product-link">Ver detalles <span>↗</span></span></a>`;
   const showcase = (key,title,subtitle) => {
@@ -1477,6 +1497,7 @@ async function renderCategoryPage(categoryKey) {
     console.warn('[YHORS SEO] Se conserva el HTML SSR de categoría:', error?.message || error);
     return;
   }
+  applyPublicSeason(storefront.siteTheme);
   hiddenPublicUniverses = new Set(storefront.hiddenUniverses || []);
   products = products.filter(p => !hiddenPublicUniverses.has(p.category));
   const categoryProductsRaw = products.filter(product => categoryKey === 'all' || product.category === categoryKey);
@@ -1487,13 +1508,15 @@ async function renderCategoryPage(categoryKey) {
   }
   setPublicCatalogProducts(products);
   const slides = categoryProducts.slice(0, 4).map(product => ({ ...product, image: product.image || productImages(product)[0], heroTitle: product.heroTitle || product.name, heroDescription: product.heroDescription || product.description }));
-  app.innerHTML = `${renderHeader(categoryKey, products)}<main>${heroMarkup(slides, true, categoryKey)}<section class="section category-page-section" id="productos-categoria"><div class="category-intro"><div><span class="eyebrow">Colección independiente</span><h1>${escapeHTML(categories[categoryKey])}</h1></div><p>${escapeHTML(categoryDescriptions[categoryKey])}</p></div><div class="catalog-layout">${catalogFilters(classifications, categoryKey, { category: categoryKey }, categoryProducts)}<div class="catalog-results"><div class="results-count" id="resultsCount"></div><div class="products product-type-container" id="categoryProducts"></div></div></div></section></main>${renderFooter(products)}${cartMarkup()}`;
+  app.innerHTML = `${renderHeader(categoryKey, products)}<main>${heroMarkup(slides, true, categoryKey)}<section class="section category-page-section" id="productos-categoria"><div class="category-intro"><div><span class="eyebrow">Colección independiente</span><h1>${escapeHTML(categories[categoryKey])}</h1></div><p>${escapeHTML(categoryDescriptions[categoryKey])}</p></div><div class="catalog-layout">${catalogFilters(classifications, categoryKey, { category: categoryKey, ...readCatalogFilters(categoryKey) }, categoryProducts)}<div class="catalog-results"><div class="results-count" id="resultsCount"></div><div class="products product-type-container" id="categoryProducts"></div></div></div></section></main>${renderFooter(products)}${cartMarkup()}`;
   wireCategoryNavigation(); wireMobileMenu(); wireSearch(); wireHero(slides); markPageEnter(); const cart = wireCart(products, storefront); const area = document.querySelector('#categoryProducts');
   const renderCategoryResults = (items) => { const orderedItems = categoryKey === 'all' ? [...items] : sortProductsByBrandOrder(items, categoryKey, classifications); renderProductsInto(area, orderedItems, id => openProduct(id, products), (product, button) => cart.addToCart(product, button), { groupByType: true, groupOrder: storefront.categorySectionOrder?.[categoryKey] || [] }); const count = document.querySelector('#resultsCount'); if (count) count.textContent = `${orderedItems.length} producto${orderedItems.length === 1 ? '' : 's'} en ${escapeHTML(categories[categoryKey])}`; if (!orderedItems.length) area.innerHTML = '<div class="empty">No hay productos que coincidan con estos filtros.</div>'; };
   wireCatalogFilters(categoryProducts, classifications, { category: categoryKey }, renderCategoryResults);
+  try { const saved = sessionStorage.getItem('yhors:catalog-scroll:' + location.pathname); if (saved !== null) { sessionStorage.removeItem('yhors:catalog-scroll:' + location.pathname); requestAnimationFrame(() => requestAnimationFrame(() => window.scrollTo({top: Number(saved) || 0, behavior: 'instant'}))); } } catch {}
 }
 
 async function renderProductDetail(product, products, storefront) {
+  applyPublicSeason(storefront.siteTheme);
   setPublicCatalogProducts(products);
   let activeProduct = product;
   let images = productImages(product);
@@ -6562,6 +6585,7 @@ async function renderAdminBackups() {
 }
 
 async function renderAdmin() {
+  applyPublicSeason('none');
   const session = await request('/api/admin/session').catch(() => ({ authenticated: false })); if (!session.authenticated) return renderLogin(); if (isSellerRole(session.role) || session.role === 'store_manager') return renderAdminOrders();
   let products = await request('/api/admin/products').catch(() => []); let classifications = await request('/api/admin/classifications').catch(() => ({ brands: {}, productTypes: {} })); let settings = await request('/api/admin/storefront').catch(() => ({ heroProductIds: [], featuredProductIds: [] })); let editing = null;
   document.documentElement.style.minHeight='0'; document.body.style.minHeight='0'; document.body.style.height='auto'; document.body.style.overflowY='auto'; app.style.minHeight='0'; app.style.height='auto';
@@ -6584,9 +6608,19 @@ async function renderAdmin() {
       <div class="yh-designer-row"><h3>Bloques comerciales</h3><button type="button" class="button secondary small" id="yhPreviewHome">Vista previa de inicio ↗</button></div><div id="yhDesignerSections">${Object.entries(labels).map(([id,label])=>`<label class="yh-designer-line" draggable="true" data-drag-section="${id}"><span class="yh-drag-handle" aria-hidden="true">⠿</span><input type="checkbox" data-home-section="${id}" ${sections.includes(id)?'checked':''}><span>${label}</span><button type="button" data-section-up="${id}" aria-label="Subir ${label}">↑</button><button type="button" data-section-down="${id}" aria-label="Bajar ${label}">↓</button></label>`).join('')}</div>
       <div class="yh27-admin-promos"><h3>Accesos rápidos de portada</h3><p>Personaliza las dos tarjetas comerciales: texto, enlace y fotografía opcional. Puedes cambiarlas cuando quieras.</p>${[0,1].map(i=>{const p=(settings.quickPromos||[])[i]||[{eyebrow:'NOVEDADES TECH',title:'Lo que viene te espera.',action:'Explorar tecnología',link:'/categoria/tech',image:''},{eyebrow:'REGALOS Y DETALLES',title:'Sorprende a tu manera.',action:'Descubrir detalles',link:'/categoria/details',image:''}][i];return `<div class="yh27-promo-form"><h4>Tarjeta ${i+1}</h4><label>Etiqueta<input data-promo-field="eyebrow" data-promo-index="${i}" value="${escapeHTML(p.eyebrow||'')}"></label><label>Título<input data-promo-field="title" data-promo-index="${i}" value="${escapeHTML(p.title||'')}"></label><label>Botón<input data-promo-field="action" data-promo-index="${i}" value="${escapeHTML(p.action||'')}"></label><label>Destino<input data-promo-field="link" data-promo-index="${i}" value="${escapeHTML(p.link||'')}"></label><label>Imagen HTTPS o /uploads/ (opcional)<input data-promo-field="image" data-promo-index="${i}" value="${escapeHTML(p.image||'')}"></label><div class="yh-promo-upload"><label>O subir imagen desde tu dispositivo <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" data-promo-upload="${i}"></label><small data-promo-upload-status="${i}" role="status">JPG, PNG, WEBP o GIF · máximo 5 MB</small></div></div>`;}).join('')}</div>
       <h3>Visibilidad de universos</h3><p>Los productos de un universo oculto dejan de aparecer en el catálogo público, pero siguen en el inventario.</p><div class="yh-universe-grid">${Object.entries(categories).filter(([key])=>key!=='all').map(([key,label])=>`<label><input type="checkbox" data-universe-visible="${escapeHTML(key)}" ${hidden.has(key)?'':'checked'}> ${escapeHTML(label)}</label>`).join('')}</div>
+      <div class="yh-universe-image-editor"><h3>Fotografías de «Explora nuestros universos»</h3><p class="yh-designer-note">Elige tu propia portada para cada universo. Sin imagen se mostrará una tarjeta tipográfica, nunca una foto aleatoria de producto.</p><div class="yh-universe-image-grid">${Object.entries(categories).filter(([key])=>key!=='all').map(([key,label])=>`<div class="yh-universe-image-row"><strong>${escapeHTML(label)}</strong><div class="yh-universe-image-controls"><input data-universe-image="${escapeHTML(key)}" aria-label="URL de imagen de ${escapeHTML(label)}" placeholder="URL HTTPS o /uploads/" value="${escapeHTML(settings.universeImages?.[key]||'')}"><label class="button secondary small yh-universe-file-button">Subir imagen<input type="file" accept="image/jpeg,image/png,image/webp,image/gif" data-universe-file="${escapeHTML(key)}" hidden></label><button type="button" class="button secondary small" data-universe-clear="${escapeHTML(key)}">Quitar</button></div><small data-universe-status="${escapeHTML(key)}"></small>${settings.universeImages?.[key]?`<img class="yh-universe-image-preview" src="${escapeHTML(settings.universeImages[key])}" alt="Portada de ${escapeHTML(label)}">`:''}</div>`).join('')}</div></div>
       <div class="yh-designer-row"><h3>Portada de productos</h3></div><p class="yh-designer-note">La portada puede mostrar imágenes de productos elegidos en «Slider de portada», o campañas gráficas creadas aquí. Los productos del slider original se gestionan en la sección de selección superior.</p><div class="yh-published-hero">${(settings.heroProductIds||[]).map(id=>products.find(p=>String(p.id)===String(id))).filter(Boolean).map(p=>`<div class="yh-published-item"><img src="${escapeHTML(p.image||productImages(p)[0]||'')}" alt=""><div><strong>${escapeHTML(p.name)}</strong><small>Slider original · Producto</small></div></div>`).join('')||'<p>No hay productos asignados al slider original. Se utilizarán los destacados o los primeros productos disponibles si no publicas campañas propias.</p>'}</div><button type="button" class="button secondary small" id="yhManageHero">Editar productos del slider original ↑</button>
       <div class="yh-designer-row"><h3>Banners y campañas publicadas</h3><button type="button" class="button secondary small" id="yhAddCarousel">+ Nuevo carrusel</button></div><p class="yh-designer-note">${banners.length} campaña(s) guardada(s). Aquí puedes editar imágenes y enlaces, desactivar «Visible» sin borrar o eliminar campañas. Los cambios se publican al guardar.</p><div id="yhCarouselList">${banners.map((carousel,ci)=>`<div class="yh-carousel-editor" data-carousel-id="${escapeHTML(carousel.id)}"><div class="yh-designer-row"><input data-carousel-title="${ci}" aria-label="Nombre del carrusel" value="${escapeHTML(carousel.title)}"><label><input type="checkbox" data-carousel-enabled="${ci}" ${carousel.enabled!==false?'checked':''}> Visible</label><button type="button" data-remove-carousel="${ci}" class="button secondary small">Eliminar carrusel</button></div>${carousel.slides.map((slide,si)=>`<div class="yh-slide-editor" data-slide="${si}"><img src="${escapeHTML(slide.image)}" alt="Vista previa"><div><input data-slide-image="${ci}-${si}" aria-label="URL de imagen" placeholder="URL de imagen HTTPS" value="${escapeHTML(slide.image)}"><input data-slide-link="${ci}-${si}" aria-label="Enlace del banner" placeholder="Enlace destino /categoria/tech" value="${escapeHTML(slide.link||'')}"><input data-slide-alt="${ci}-${si}" aria-label="Texto alternativo" placeholder="Descripción de la imagen" value="${escapeHTML(slide.alt||'')}"><input type="file" accept="image/jpeg,image/png,image/webp,image/gif" data-banner-file="${ci}-${si}"><div class="yh-banner-controls"><button type="button" data-slide-up="${ci}-${si}" ${si===0?'disabled':''}>↑ Subir</button><button type="button" data-slide-down="${ci}-${si}" ${si===carousel.slides.length-1?'disabled':''}>↓ Bajar</button><button type="button" data-slide-preview="${ci}-${si}">Vista previa</button></div></div><button type="button" data-remove-slide="${ci}-${si}" aria-label="Eliminar banner">×</button></div>`).join('')}<button type="button" class="button secondary small" data-add-slide="${ci}">+ Añadir banner</button></div>`).join('')}</div><div id="yhDesignerPreview" class="yh-designer-preview" hidden></div><div class="yh-designer-row"><button type="button" class="button" id="yhSaveDesigner">Guardar y publicar cambios</button><span id="yhDesignerMessage" role="status"></span></div></section>`;
     const themeSelect=mount.querySelector('#yhSiteTheme');const themePreview=mount.querySelector('#yhSeasonPreview');const updateThemePreview=()=>{themePreview.className='yh-season-preview yh-season yh-season-'+themeSelect.value;themePreview.querySelector('small').textContent=themeSelect.value==='none'?'Diseño original sin decoración.':'Decoración de temporada · Publica para verla en la tienda.';};themeSelect?.addEventListener('change',updateThemePreview);updateThemePreview();
+    mount.querySelectorAll('[data-universe-file]').forEach(input=>input.addEventListener('change',async()=>{
+      const file=input.files?.[0]; if(!file)return;
+      const key=input.dataset.universeFile, status=mount.querySelector(`[data-universe-status="${key}"]`), field=mount.querySelector(`[data-universe-image="${key}"]`);
+      if(!['image/jpeg','image/png','image/webp','image/gif'].includes(file.type)||file.size>5*1024*1024){status.textContent='Usa JPG, PNG, WEBP o GIF de hasta 5 MB.';input.value='';return;}
+      status.textContent='Subiendo…';input.disabled=true;
+      try {const data=new FormData();data.append('image',file);const result=await request('/api/admin/upload',{method:'POST',body:data});field.value=result.image;status.textContent='✓ Subida. Pulsa Guardar y publicar cambios.';}
+      catch(e){status.textContent='Error: '+e.message;}finally{input.disabled=false;input.value='';}
+    }));
+    mount.querySelectorAll('[data-universe-clear]').forEach(button=>button.addEventListener('click',()=>{const key=button.dataset.universeClear;mount.querySelector(`[data-universe-image="${key}"]`).value='';mount.querySelector(`[data-universe-status="${key}"]`).textContent='Se quitará al guardar.';}));
     mount.querySelector('#yhManageHero')?.addEventListener('click',()=>{document.querySelector('#selectionPanelMount')?.scrollIntoView({behavior:'smooth',block:'start'});});
     mount.querySelector('#yhSaveTheme')?.addEventListener('click',async()=>{const theme=themeSelect.value;if(!window.confirm('¿Deseas guardar y publicar el tema seleccionado?'))return;const msg=mount.querySelector('#yhThemeMessage');try{const result=await request('/api/admin/storefront',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({siteTheme:theme})});settings={...settings,...result};msg.textContent='✓ Tema guardado y publicado';msg.style.color='#267449';}catch(e){msg.textContent=e.message;msg.style.color='#b62d2d';}});
     let sectionOrder=[...new Set([...sections,...Object.keys(labels)])];
@@ -6598,7 +6632,7 @@ async function renderAdmin() {
     sectionsEl.addEventListener('dragend',()=>{dragging=null;sectionsEl.querySelectorAll('.yh-dragging').forEach(x=>x.classList.remove('yh-dragging'));});
     mount.querySelector('#yhDesignerSections').addEventListener('click',e=>{const button=e.target.closest('[data-section-up],[data-section-down]');if(!button)return;e.preventDefault();const checked=new Set([...mount.querySelectorAll('[data-home-section]:checked')].map(x=>x.dataset.homeSection));const id=button.dataset.sectionUp||button.dataset.sectionDown;const i=sectionOrder.indexOf(id),j=i+(button.dataset.sectionUp?-1:1);if(j<0||j>=sectionOrder.length)return;[sectionOrder[i],sectionOrder[j]]=[sectionOrder[j],sectionOrder[i]];drawOrder(checked);});
     const snapshot=()=>{const copy=JSON.parse(JSON.stringify(settings.bannerCarousels||[]));copy.forEach((c,ci)=>{c.title=mount.querySelector(`[data-carousel-title="${ci}"]`)?.value||c.title;c.enabled=!!mount.querySelector(`[data-carousel-enabled="${ci}"]`)?.checked;c.slides.forEach((sl,si)=>{sl.image=mount.querySelector(`[data-slide-image="${ci}-${si}"]`)?.value.trim()||'';sl.link=mount.querySelector(`[data-slide-link="${ci}-${si}"]`)?.value.trim()||'';sl.alt=mount.querySelector(`[data-slide-alt="${ci}-${si}"]`)?.value.trim()||'';});});return copy;};
-    const redrawWith=next=>{settings.siteTheme=mount.querySelector('#yhSiteTheme')?.value||'none';settings.bannerCarousels=next;settings.homeSections=sectionOrder.filter(id=>!!mount.querySelector(`[data-home-section="${id}"]:checked`));settings.quickPromos=[0,1].map(i=>Object.fromEntries([...mount.querySelectorAll(`[data-promo-index="${i}"]`)].map(el=>[el.dataset.promoField,el.value.trim()])));settings.hiddenUniverses=[...mount.querySelectorAll('[data-universe-visible]')].filter(x=>!x.checked).map(x=>x.dataset.universeVisible);drawHomeDesigner();};
+    const redrawWith=next=>{settings.siteTheme=mount.querySelector('#yhSiteTheme')?.value||'none';settings.bannerCarousels=next;settings.homeSections=sectionOrder.filter(id=>!!mount.querySelector(`[data-home-section="${id}"]:checked`));settings.quickPromos=[0,1].map(i=>Object.fromEntries([...mount.querySelectorAll(`[data-promo-index="${i}"]`)].map(el=>[el.dataset.promoField,el.value.trim()])));settings.universeImages=Object.fromEntries([...mount.querySelectorAll('[data-universe-image]')].map(el=>[el.dataset.universeImage,el.value.trim()]));settings.hiddenUniverses=[...mount.querySelectorAll('[data-universe-visible]')].filter(x=>!x.checked).map(x=>x.dataset.universeVisible);drawHomeDesigner();};
     mount.querySelector('#yhPreviewHome')?.addEventListener('click',()=>{
       const preview=mount.querySelector('#yhDesignerPreview');
       const enabled=sectionOrder.filter(id=>!!mount.querySelector(`[data-home-section="${id}"]:checked`));
@@ -6658,7 +6692,7 @@ async function renderAdmin() {
       finally{input.disabled=false;input.value='';}
     }));
     mount.querySelectorAll('[data-banner-file]').forEach(input=>input.addEventListener('change',async()=>{const file=input.files?.[0];if(!file)return;if(file.size>5*1024*1024)return alert('Máximo 5 MB');const [ci,si]=input.dataset.bannerFile.split('-').map(Number);const form=new FormData();form.append('image',file);try{const response=await request('/api/admin/upload',{method:'POST',body:form});const b=snapshot();b[ci].slides[si].image=response.image;redrawWith(b);}catch(e){alert(e.message)}}));
-    mount.querySelector('#yhSaveDesigner')?.addEventListener('click',async()=>{if(!window.confirm('¿Deseas guardar y publicar los cambios en la página web?'))return;const msg=mount.querySelector('#yhDesignerMessage');const ordered=sectionOrder.filter(id=>!!mount.querySelector(`[data-home-section="${id}"]:checked`));const quickPromos=[0,1].map(i=>Object.fromEntries([...mount.querySelectorAll(`[data-promo-index="${i}"]`)].map(el=>[el.dataset.promoField,el.value.trim()])));const payload={siteTheme:mount.querySelector('#yhSiteTheme')?.value||'none',quickPromos,homeSections:ordered,hiddenUniverses:[...mount.querySelectorAll('[data-universe-visible]')].filter(x=>!x.checked).map(x=>x.dataset.universeVisible),bannerCarousels:snapshot()};if(payload.bannerCarousels.some(c=>c.slides.some(sl=>!sl.image))){msg.textContent='Completa o elimina los banners sin imagen antes de publicar.';msg.style.color='#b62d2d';return;}try{const result=await request('/api/admin/storefront',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});settings={...settings,...result};msg.textContent='✓ Cambios guardados y publicados';msg.style.color='#267449';}catch(e){msg.textContent=e.message;msg.style.color='#b62d2d';}});
+    mount.querySelector('#yhSaveDesigner')?.addEventListener('click',async()=>{if(!window.confirm('¿Deseas guardar y publicar los cambios en la página web?'))return;const msg=mount.querySelector('#yhDesignerMessage');const ordered=sectionOrder.filter(id=>!!mount.querySelector(`[data-home-section="${id}"]:checked`));const quickPromos=[0,1].map(i=>Object.fromEntries([...mount.querySelectorAll(`[data-promo-index="${i}"]`)].map(el=>[el.dataset.promoField,el.value.trim()])));const universeImages=Object.fromEntries([...mount.querySelectorAll('[data-universe-image]')].map(el=>[el.dataset.universeImage,el.value.trim()]));const payload={siteTheme:mount.querySelector('#yhSiteTheme')?.value||'none',universeImages,quickPromos,homeSections:ordered,hiddenUniverses:[...mount.querySelectorAll('[data-universe-visible]')].filter(x=>!x.checked).map(x=>x.dataset.universeVisible),bannerCarousels:snapshot()};if(payload.bannerCarousels.some(c=>c.slides.some(sl=>!sl.image))){msg.textContent='Completa o elimina los banners sin imagen antes de publicar.';msg.style.color='#b62d2d';return;}try{const result=await request('/api/admin/storefront',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});settings={...settings,...result};msg.textContent='✓ Cambios guardados y publicados';msg.style.color='#267449';}catch(e){msg.textContent=e.message;msg.style.color='#b62d2d';}});
   }
   drawHomeDesigner();
   function drawList() {

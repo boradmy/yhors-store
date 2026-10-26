@@ -2583,6 +2583,7 @@ function readStorefront() {
       showcasesConfigured: parsed.showcasesConfigured === true,
       bannerCarousels: Array.isArray(parsed.bannerCarousels) ? parsed.bannerCarousels.slice(0,8) : [],
       quickPromos: Array.isArray(parsed.quickPromos) ? parsed.quickPromos.slice(0,2) : [],
+      universeImages: parsed.universeImages && typeof parsed.universeImages === "object" ? parsed.universeImages : {},
       siteTheme: typeof parsed.siteTheme === "string" ? parsed.siteTheme : "none"
     };
   } catch {
@@ -6463,7 +6464,10 @@ app.put('/api/admin/storefront', requireAdmin, (req, res) => {
   })) : (currentStorefront.quickPromos||[]);
   const allowedThemes = ['none','halloween','navidad','quito','guayaquil','ano-nuevo','carnaval','san-valentin','dia-madre','dia-padre','independencia'];
   const siteTheme = req.body?.siteTheme !== undefined && allowedThemes.includes(req.body.siteTheme) ? req.body.siteTheme : (currentStorefront.siteTheme || 'none');
-  const settings = { siteTheme, heroProductIds, featuredProductIds, categorySectionOrder, hiddenUniverses, homeSections, bannerCarousels, quickPromos, phase3Configured: Array.isArray(req.body?.homeSections) ? true : currentStorefront.phase3Configured, showcasesConfigured: Array.isArray(req.body?.homeSections) ? true : currentStorefront.showcasesConfigured };
+  const universeImages = req.body?.universeImages && typeof req.body.universeImages === 'object' && !Array.isArray(req.body.universeImages)
+    ? Object.fromEntries(Object.entries(req.body.universeImages).filter(([key])=>/^[a-z0-9-]{1,60}$/.test(key)).slice(0,30).map(([key,url])=>[key,imageOK(url||'')?String(url||'').slice(0,1200):'']))
+    : (currentStorefront.universeImages || {});
+  const settings = { universeImages, siteTheme, heroProductIds, featuredProductIds, categorySectionOrder, hiddenUniverses, homeSections, bannerCarousels, quickPromos, phase3Configured: Array.isArray(req.body?.homeSections) ? true : currentStorefront.phase3Configured, showcasesConfigured: Array.isArray(req.body?.homeSections) ? true : currentStorefront.showcasesConfigured };
   writeStorefront(settings);
   const heroSet = new Set(heroProductIds);
   const featuredSet = new Set(featuredProductIds);
