@@ -483,7 +483,7 @@ function yhEditorialCategories(products) {
     tech:'<svg viewBox="0 0 210 130" aria-hidden="true"><rect x="28" y="19" width="151" height="88" rx="9" fill="#272e38" stroke="#a6aeb7" stroke-width="3"/><rect x="36" y="27" width="135" height="72" rx="3" fill="#687e91"/><path d="M19 112h171l-13 9H32z" fill="#d6dbe0"/><circle cx="105" cy="62" r="22" fill="none" stroke="#e6c787" stroke-width="2"/></svg>',
     cosplay:'<svg viewBox="0 0 210 130" aria-hidden="true"><path d="M83 19l-28 12-22 40 25 13 15-25v54h64V59l15 25 25-13-22-40-28-12-9 21H92z" fill="#b19aa9" stroke="#f1dbe7" stroke-width="3"/><path d="M92 39l13 14 13-14M88 76h34" fill="none" stroke="#4a334c" stroke-width="4"/><circle cx="105" cy="81" r="7" fill="#e7c587"/></svg>',
     details:'<svg viewBox="0 0 210 130" aria-hidden="true"><rect x="46" y="54" width="118" height="65" rx="7" fill="#b88d90"/><rect x="39" y="44" width="132" height="20" rx="5" fill="#e9c7c8"/><path d="M101 45c-46-8-34-41-13-30 12 7 17 30 17 30s5-23 17-30c21-11 33 22-13 30M105 46v72" fill="none" stroke="#f5e3cb" stroke-width="9"/></svg>',
-    coleccionables:'<svg viewBox="0 0 210 130" aria-hidden="true"><rect x="54" y="15" width="102" height="105" rx="13" fill="#d4c8b5"/><rect x="65" y="26" width="80" height="80" rx="7" fill="#343b43"/><circle cx="105" cy="58" r="23" fill="#bfa98a"/><path d="M77 102c0-31 56-31 56 0" fill="#bfa98a"/><circle cx="97" cy="56" r="3"/><circle cx="113" cy="56" r="3"/></svg>'
+    collectibles:'<svg viewBox="0 0 210 130" aria-hidden="true"><rect x="54" y="15" width="102" height="105" rx="13" fill="#d4c8b5"/><rect x="65" y="26" width="80" height="80" rx="7" fill="#343b43"/><circle cx="105" cy="58" r="23" fill="#bfa98a"/><path d="M77 102c0-31 56-31 56 0" fill="#bfa98a"/><circle cx="97" cy="56" r="3"/><circle cx="113" cy="56" r="3"/></svg>'
   };
   return `<section class="yh-v3-editorial section" id="categorias"><div class="yh-v3-heading"><div><span class="eyebrow">DESCUBRE YHORS</span><h2>Colecciones para descubrir</h2></div><p>Explora tecnología, creatividad y detalles elegidos para ti.</p></div><div class="yh-v3-category-grid">${entries.map(([key,label],i)=>`<a class="yh-v3-category-tile yh-v3-tile-${i}" href="${categoryHref(key)}"><span class="yh-v3-tile-art">${(()=>{const photo=products.find(p=>p.category===key&&(p.image||productImages(p)[0]));const src=photo&&(photo.image||productImages(photo)[0]);return src?`<img src="${escapeHTML(src)}" alt="${escapeHTML(label)}" loading="lazy">`:art[key]||art.tech;})()}</span><span class="yh-v3-tile-copy"><small>EXPLORA YHORS</small><strong>${escapeHTML(label)}</strong><em>Ver colección ↗</em></span></a>`).join('')}</div></section>`;
 }
@@ -498,7 +498,7 @@ function yhShopWindows(products, featuredIds = []) {
     ['tech','Tecnología para tu día a día','Gadgets y dispositivos para descubrir'],
     ['cosplay','Personajes que cobran vida','Compra y alquiler según disponibilidad'],
     ['details','Regalos con intención','Detalles para cada ocasión'],
-    ['coleccionables','Piezas para tu colección','Encuentra ese artículo especial']
+    ['collectibles','Piezas para tu colección','Encuentra ese artículo especial']
   ];
   return groups.map(([key,title,note]) => {
     const items = products.filter(p=>p.category===key && p.published!==false && !excluded.has(String(p.id)));
@@ -1424,7 +1424,7 @@ async function renderHome() {
   const featureItems = featured.length ? featured : products.filter(p => p.published !== false).slice(0,8);
   const campaign = (storefront.bannerCarousels || []).filter(c=>c.enabled && c.slides?.some(sl=>sl.image));
   const safeImage = p => escapeHTML(p?.image || productImages(p || {})[0] || placeholder);
-  const categoryKeys = ['tech','cosplay','details','coleccionables','pets','elegant','sports'].filter(k=>!hiddenPublicUniverses.has(k));
+  const categoryKeys = ['tech','cosplay','details','collectibles','pets','elegant','sports'].filter(k=>!hiddenPublicUniverses.has(k));
   const universeImages = storefront.universeImages || {};
   const categoryTiles = categoryKeys.map((key,i)=>{
     const list=products.filter(p=>p.category===key && p.published!==false);
@@ -1457,7 +1457,7 @@ async function renderHome() {
     banners:`<section class="yh27-hero"><div class="yh27-hero-main">${campaignHero}</div><div class="yh27-promos">${quickCards}</div></section>${secondaryCampaigns}`,
     editorial:`<section class="yh26-block yh26-categories" id="categorias"><div class="yh26-block-head"><div><span class="yh26-kicker">DESCUBRE YHORS</span><h2>Explora nuestros universos.</h2><p>Un espacio para cada pasión.</p></div><a class="yh26-text-link" href="${categoryHref('all')}">Todo el catálogo ↗</a></div><div class="yh26-category-grid">${categoryTiles}</div></section>`,
     featured:`<section class="yh26-block yh26-featured-wrap" id="destacados"><div class="yh26-block-head"><div><span class="yh26-kicker">ELEGIDOS PARA TI</span><h2>Selección YHORS.</h2><p>Productos para descubrir hoy.</p></div><a class="yh26-text-link" href="${categoryHref('all')}">Ver productos ↗</a></div>${carousel(featureItems,'destacados')}</section>`,
-    showcases:`${showcaseCarousel('tech','Tecnología que inspira','Lo mejor de nuestro universo tecnológico.')}${showcaseCarousel('cosplay','Dale vida a tu personaje','Compra o alquiler según disponibilidad.')}${showcaseCarousel('details','Detalles con intención','Regalos para cada ocasión.')}${showcaseCarousel('coleccionables','Tu próxima pieza favorita','Artículos especiales para coleccionar.')}`,
+    showcases:`${showcaseCarousel('tech','Tecnología que inspira','Lo mejor de nuestro universo tecnológico.')}${showcaseCarousel('cosplay','Dale vida a tu personaje','Compra o alquiler según disponibilidad.')}${showcaseCarousel('details','Detalles con intención','Regalos para cada ocasión.')}${showcaseCarousel('collectibles','Tu próxima pieza favorita','Artículos especiales para coleccionar.')}`,
     statement:`<section class="yh26-editorial"><div><span class="yh26-kicker">EL UNIVERSO YHORS</span><h2>Mucho más que comprar.</h2><p>Tecnología, creatividad y detalles con personalidad.</p><a href="${categoryHref('all')}">Descubre YHORS ↗</a></div></section>`,
     trust:`<section class="yh26-value-strip" aria-label="Beneficios de comprar en YHORS"><div><b>01</b><span><strong>Calidad</strong><small>Productos seleccionados</small></span></div><div><b>02</b><span><strong>Confianza</strong><small>Atención directa</small></span></div><div><b>03</b><span><strong>Entregas</strong><small>Opciones disponibles</small></span></div><div><b>04</b><span><strong>Compra o alquiler</strong><small>Según el producto</small></span></div></section>`,
     about:`<section class="yh27-about"><strong>Y H O R S</strong><span>TECNOLOGÍA · ESTILO · EXPERIENCIAS</span></section>`
