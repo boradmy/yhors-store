@@ -7467,3 +7467,46 @@ body[class*="yh-public-season-"]:not(.yh-public-season-none) .yh-season-greeting
 .catalog-sidebar .sidebar-head .clear-filters:is(:hover,:focus,:focus-visible,:active){color:#5c3f1d!important;background:transparent!important;opacity:1!important;visibility:visible!important;text-decoration:underline;text-underline-offset:3px;transform:none!important;text-shadow:none!important}
 .catalog-sidebar .filter-title,.catalog-sidebar .filter-title:hover,.catalog-sidebar .filter-title:focus-visible{color:#211e1b!important;opacity:1!important}
 @media(max-width:760px){.catalog-sidebar.mobile-open .sidebar-head{display:grid!important;grid-template-columns:minmax(0,1fr) auto;gap:8px!important;padding:16px!important}.catalog-sidebar .sidebar-head h2{font-size:1.12rem!important}.catalog-sidebar .sidebar-head .clear-filters{font-size:.6rem!important}}
+
+
+/* YHORS — filtros: contraste estable en mouse, teclado y pantallas táctiles.
+   Se limita al catálogo público; no altera los estilos del panel de administración. */
+.catalog-sidebar .filter-title,
+.catalog-sidebar .filter-title:is(:hover,:focus,:focus-visible,:active),
+.catalog-sidebar .filter-accordion:is(:hover,:focus-within) .filter-title{
+  color:#211e1b!important;
+  background-color:#fff!important;
+  opacity:1!important;
+  text-shadow:none!important;
+  -webkit-text-fill-color:#211e1b!important;
+}
+.catalog-sidebar .filter-title span:first-child,
+.catalog-sidebar .filter-title:is(:hover,:focus,:focus-visible,:active) span:first-child,
+.catalog-sidebar .filter-accordion:is(:hover,:focus-within) .filter-title span:first-child{
+  color:#211e1b!important;
+  opacity:1!important;
+  -webkit-text-fill-color:#211e1b!important;
+}
+.catalog-sidebar .filter-title span:last-child,
+.catalog-sidebar .filter-title:is(:hover,:focus,:focus-visible,:active) span:last-child{
+  color:#77716c!important;
+  opacity:1!important;
+  -webkit-text-fill-color:#77716c!important;
+}
+.catalog-sidebar .filter-check,
+.catalog-sidebar .filter-check:is(:hover,:focus-within,:active),
+.catalog-sidebar .filter-check span,
+.catalog-sidebar .filter-check:is(:hover,:focus-within,:active) span{
+  color:#544c45!important;
+  -webkit-text-fill-color:#544c45!important;
+  background-color:transparent!important;
+  opacity:1!important;
+}
+.catalog-sidebar .sidebar-head .clear-filters:is(:hover,:focus,:focus-visible,:active){
+  color:#5c3f1d!important;
+  -webkit-text-fill-color:#5c3f1d!important;
+  background:transparent!important;
+}
+@media (hover:hover){
+  .catalog-sidebar .filter-title:hover{background-color:#f8f5f0!important;}
+}
