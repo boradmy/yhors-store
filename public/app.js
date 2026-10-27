@@ -1220,11 +1220,8 @@ function applyPublicSeason(theme = 'none') {
   document.body.classList.forEach(name => { if (name.startsWith('yh-public-season-')) document.body.classList.remove(name); });
   document.body.classList.add('yh-public-season-' + selected);
 }
-function catalogFilterKey(category) { return 'yhors:catalog-filters:' + category; }
-function readCatalogFilters(category) {
-  try { const data = JSON.parse(sessionStorage.getItem(catalogFilterKey(category)) || '{}'); return data && typeof data === 'object' ? data : {}; }
-  catch { return {}; }
-}
+// Filtros solo en la vista actual: no se restauran al regresar ni al recargar.
+function readCatalogFilters() { return {}; }
 function productPriceLabel(product) {
   return product.category === 'cosplay' && Number.isFinite(Number(product.salePrice)) ? money(product.salePrice) : money(product.price);
 }
@@ -1326,7 +1323,7 @@ function wireCatalogFilters(products, classifications, initial = {}, renderResul
   const sidebar = document.querySelector('.catalog-sidebar');
   if (!sidebar) return;
   const scope = initial.category || 'all';
-  const active = { ...initial, ...readCatalogFilters(scope) };
+  const active = { ...initial };
   const categoryControl = sidebar.querySelector('[data-filter-category]');
   const contextualCategory = initial.category || '';
   const draw = () => {
@@ -1340,7 +1337,6 @@ function wireCatalogFilters(products, classifications, initial = {}, renderResul
     const selectedCount = [categoryControl ? active.category : '', active.brand, active.type, active.sort].filter(Boolean).filter(value => value !== contextualCategory).length;
     const mobileLabel = sidebar.querySelector('.mobile-filter-count');
     if (mobileLabel && !sidebar.classList.contains('mobile-open')) mobileLabel.textContent = selectedCount ? `${selectedCount} filtro${selectedCount === 1 ? '' : 's'} activo${selectedCount === 1 ? '' : 's'}` : 'Abrir opciones';
-    try { sessionStorage.setItem(catalogFilterKey(scope), JSON.stringify(active)); } catch {}
     renderResults(applyCatalogFilters(products, active), active);
   };
   sidebar.querySelectorAll('[data-filter-category],[data-filter-brand],[data-filter-type]').forEach(input => input.addEventListener('change', () => {
@@ -1374,7 +1370,7 @@ function wireCatalogFilters(products, classifications, initial = {}, renderResul
     const mobileLabel = sidebar.querySelector('.mobile-filter-count');
     if (mobileLabel) mobileLabel.textContent = 'Abrir opciones';
   });
-  // Reinstala los filtros guardados tras regresar desde una ficha de producto.
+  // Inicialización limpia de los filtros de esta visita.
   for (const [group, value] of [['category',active.category],['brand',active.brand],['type',active.type]]) {
     sidebar.querySelectorAll(`[data-filter-${group}]`).forEach(input => { input.checked = !!value && input.value === value; });
   }
@@ -1508,7 +1504,7 @@ async function renderCategoryPage(categoryKey) {
   }
   setPublicCatalogProducts(products);
   const slides = categoryProducts.slice(0, 4).map(product => ({ ...product, image: product.image || productImages(product)[0], heroTitle: product.heroTitle || product.name, heroDescription: product.heroDescription || product.description }));
-  app.innerHTML = `${renderHeader(categoryKey, products)}<main>${heroMarkup(slides, true, categoryKey)}<section class="section category-page-section" id="productos-categoria"><div class="category-intro"><div><span class="eyebrow">Colección independiente</span><h1>${escapeHTML(categories[categoryKey])}</h1></div><p>${escapeHTML(categoryDescriptions[categoryKey])}</p></div><div class="catalog-layout">${catalogFilters(classifications, categoryKey, { category: categoryKey, ...readCatalogFilters(categoryKey) }, categoryProducts)}<div class="catalog-results"><div class="results-count" id="resultsCount"></div><div class="products product-type-container" id="categoryProducts"></div></div></div></section></main>${renderFooter(products)}${cartMarkup()}`;
+  app.innerHTML = `${renderHeader(categoryKey, products)}<main>${heroMarkup(slides, true, categoryKey)}<section class="section category-page-section" id="productos-categoria"><div class="category-intro"><div><span class="eyebrow">Colección independiente</span><h1>${escapeHTML(categories[categoryKey])}</h1></div><p>${escapeHTML(categoryDescriptions[categoryKey])}</p></div><div class="catalog-layout">${catalogFilters(classifications, categoryKey, { category: categoryKey }, categoryProducts)}<div class="catalog-results"><div class="results-count" id="resultsCount"></div><div class="products product-type-container" id="categoryProducts"></div></div></div></section></main>${renderFooter(products)}${cartMarkup()}`;
   wireCategoryNavigation(); wireMobileMenu(); wireSearch(); wireHero(slides); markPageEnter(); const cart = wireCart(products, storefront); const area = document.querySelector('#categoryProducts');
   const renderCategoryResults = (items) => { const orderedItems = categoryKey === 'all' ? [...items] : sortProductsByBrandOrder(items, categoryKey, classifications); renderProductsInto(area, orderedItems, id => openProduct(id, products), (product, button) => cart.addToCart(product, button), { groupByType: true, groupOrder: storefront.categorySectionOrder?.[categoryKey] || [] }); const count = document.querySelector('#resultsCount'); if (count) count.textContent = `${orderedItems.length} producto${orderedItems.length === 1 ? '' : 's'} en ${escapeHTML(categories[categoryKey])}`; if (!orderedItems.length) area.innerHTML = '<div class="empty">No hay productos que coincidan con estos filtros.</div>'; };
   wireCatalogFilters(categoryProducts, classifications, { category: categoryKey }, renderCategoryResults);
