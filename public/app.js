@@ -549,51 +549,96 @@ function wireYh27Carousels() {
     rail.dataset.loopReady='1';
     const originals=Array.from(rail.children);
     if(originals.length<2)return;
-    // Duplicate the original sequence on either side, so the rail can wrap
-    // without ever displaying a blank end or reversing arrow direction.
-    const makeCopy=(node)=>{const clone=node.cloneNode(true);clone.setAttribute('data-loop-clone','');return clone;};
+    const clone=(el)=>{const copy=el.cloneNode(true);copy.dataset.loopClone='';return copy;};
     const left=document.createDocumentFragment(),right=document.createDocumentFragment();
-    originals.forEach(el=>{left.appendChild(makeCopy(el));right.appendChild(makeCopy(el));});
+    originals.forEach(el=>{left.appendChild(clone(el));right.appendChild(clone(el));});
     rail.prepend(left);rail.append(right);
-    let sequenceWidth=0, ready=false, adjusting=false, userPauseUntil=0;
-    const measure=()=>{
-      const first=rail.children[originals.length],after=rail.children[originals.length*2];
-      if(!first||!after)return;
-      const start=first.offsetLeft,end=after.offsetLeft;
-      sequenceWidth=end-start;
-      if(!ready && sequenceWidth>0){rail.scrollLeft=start;ready=true;}
-    };
-    const normalize=()=>{
-      if(!ready||!sequenceWidth||adjusting)return;
-      const origin=rail.children[originals.length].offsetLeft;
-      const x=rail.scrollLeft;
-      if(x<origin-2||x>=origin+sequenceWidth-2){
-        adjusting=true;
-        const target=origin+(((x-origin)%sequenceWidth)+sequenceWidth)%sequenceWidth;
-        const old=rail.style.scrollBehavior;
-        rail.style.scrollBehavior='auto';rail.scrollLeft=target;
-        rail.style.scrollBehavior=old;
-        adjusting=false;
+
+    let origin=0, sequenceWidth=0, initialized=false, interacting=false;
+    let lastInteraction=Date.now(), normalizationTimer=0, resizeTimer=0;
+    let settling=false, inView=false;
+    const reducedMotion=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const pause=(ms=7500)=>{lastInteraction=Date.now()+ms;};
+    const geometry=()=>{
+      const first=rail.children[originals.length], next=rail.children[originals.length*2];
+      if(!first||!next)return false;
+      origin=first.offsetLeft;sequenceWidth=next.offsetLeft-origin;
+      if(!(sequenceWidth>0))return false;
+      if(!initialized){
+        // Disable snap while positioning at the center set of real products.
+        const behavior=rail.style.scrollBehavior,snap=rail.style.scrollSnapType;
+        rail.style.scrollBehavior='auto';rail.style.scrollSnapType='none';
+        rail.scrollLeft=origin;
+        rail.style.scrollSnapType=snap;rail.style.scrollBehavior=behavior;
+        initialized=true;
       }
+      return true;
     };
-    // Start with the center copy. Wrap after smooth movement has settled.
-    requestAnimationFrame(()=>{measure();requestAnimationFrame(measure);});
-    window.addEventListener('resize',()=>{ready=false;measure();},{passive:true});
-    let settle;
-    rail.addEventListener('scroll',()=>{clearTimeout(settle);settle=setTimeout(normalize,180);},{passive:true});
+    const wrap=()=>{
+      if(interacting||settling||!initialized||sequenceWidth<=0)return;
+      const x=rail.scrollLeft;
+      if(x>=origin-2&&x<origin+sequenceWidth-2)return;
+      // Reposition only after an idle period; never during a live touch/drag.
+      settling=true;
+      const target=origin+(((x-origin)%sequenceWidth)+sequenceWidth)%sequenceWidth;
+      const behavior=rail.style.scrollBehavior,snap=rail.style.scrollSnapType;
+      rail.style.scrollBehavior='auto';rail.style.scrollSnapType='none';
+      rail.scrollLeft=target;
+      // Restore scroll snapping after the browser has applied the teleport.
+      requestAnimationFrame(()=>requestAnimationFrame(()=>{
+        if(rail.isConnected){rail.style.scrollSnapType=snap;rail.style.scrollBehavior=behavior;}
+        settling=false;
+      }));
+    };
+    const scheduleWrap=()=>{
+      clearTimeout(normalizationTimer);
+      if(!interacting)normalizationTimer=setTimeout(wrap,420);
+    };
     const step=()=>Math.max(100,(originals[0]?.getBoundingClientRect().width||220)+parseFloat(getComputedStyle(rail).columnGap||14));
-    const move=dir=>{if(!ready)measure();if(!ready)return;rail.scrollBy({left:dir*step(),behavior:'smooth'});};
-    const pause=()=>{userPauseUntil=Date.now()+6500;};
+    const move=(dir)=>{
+      if(!initialized&&!geometry())return;
+      if(interacting||settling)return;
+      rail.scrollBy({left:dir*step(),behavior:reducedMotion?'auto':'smooth'});
+      scheduleWrap();
+    };
+    const begin=()=>{interacting=true;pause();clearTimeout(normalizationTimer);};
+    const end=()=>{interacting=false;pause();scheduleWrap();};
     wrapper.querySelector('[data-yh27-prev]')?.addEventListener('click',()=>{pause();move(-1);});
     wrapper.querySelector('[data-yh27-next]')?.addEventListener('click',()=>{pause();move(1);});
-    ['touchstart','pointerdown','focusin','wheel'].forEach(ev=>wrapper.addEventListener(ev,pause,{passive:true}));
-    if(window.matchMedia('(prefers-reduced-motion: reduce)').matches)return;
-    let hovered=false;
-    wrapper.addEventListener('mouseenter',()=>hovered=true);
-    wrapper.addEventListener('mouseleave',()=>hovered=false);
+    rail.addEventListener('touchstart',begin,{passive:true});
+    rail.addEventListener('touchend',end,{passive:true});
+    rail.addEventListener('touchcancel',end,{passive:true});
+    rail.addEventListener('pointerdown',e=>{if(e.pointerType==='mouse'||e.pointerType==='pen')begin();},{passive:true});
+    window.addEventListener('pointerup',()=>{if(interacting)end();},{passive:true});
+    rail.addEventListener('wheel',()=>pause(),{passive:true});
+    wrapper.addEventListener('focusin',()=>pause(),{passive:true});
+    rail.addEventListener('scroll',scheduleWrap,{passive:true});
+    // A page scroll must not trigger automatic carousel motion on mobile.
+    window.addEventListener('scroll',()=>pause(2500),{passive:true});
+    window.addEventListener('resize',()=>{
+      clearTimeout(resizeTimer);
+      resizeTimer=setTimeout(()=>{
+        if(!rail.isConnected)return;
+        const previous=sequenceWidth>0?(rail.scrollLeft-origin)/sequenceWidth:0;
+        initialized=false;
+        geometry();
+        const behavior=rail.style.scrollBehavior,snap=rail.style.scrollSnapType;
+        rail.style.scrollBehavior='auto';rail.style.scrollSnapType='none';
+        rail.scrollLeft=origin+((((previous%1)+1)%1)*sequenceWidth);
+        requestAnimationFrame(()=>{rail.style.scrollSnapType=snap;rail.style.scrollBehavior=behavior;});
+        pause(4500);
+      },220);
+    },{passive:true});
+    if('IntersectionObserver' in window){
+      const observer=new IntersectionObserver(entries=>{inView=entries[0]?.isIntersecting||false;},{threshold:0.2});
+      observer.observe(wrapper);
+    }else inView=true;
+    requestAnimationFrame(()=>requestAnimationFrame(geometry));
+    if(reducedMotion)return;
     const timer=setInterval(()=>{
       if(!wrapper.isConnected){clearInterval(timer);return;}
-      if(!hovered&&!document.hidden&&Date.now()>userPauseUntil)move(1);
+      if(document.hidden||!inView||interacting||settling||Date.now()<lastInteraction)return;
+      move(1);
     },4300);
   });
 }
