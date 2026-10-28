@@ -2578,16 +2578,17 @@ function readStorefront() {
       featuredProductIds: Array.isArray(parsed.featuredProductIds) ? parsed.featuredProductIds.filter(Boolean).slice(0, 12) : [],
       categorySectionOrder: normalizedOrder,
       hiddenUniverses: Array.isArray(parsed.hiddenUniverses) ? parsed.hiddenUniverses.filter(x => typeof x === "string" && /^[a-z0-9-]{1,60}$/.test(x)).slice(0,100) : [],
-      homeSections: Array.isArray(parsed.homeSections) ? parsed.homeSections.filter(x => ["banners","featured","universes","statement","about","editorial","collection","trust","showcases"].includes(x)).slice(0,10) : ["banners","featured","statement","universes","about"],
+      homeSections: Array.isArray(parsed.homeSections) ? parsed.homeSections.filter(x => ["banners","featured","universes","statement","about","editorial","collection","trust","showcases","news"].includes(x)).slice(0,10) : ["banners","featured","statement","universes","about"],
       phase3Configured: parsed.phase3Configured === true,
       showcasesConfigured: parsed.showcasesConfigured === true,
       bannerCarousels: Array.isArray(parsed.bannerCarousels) ? parsed.bannerCarousels.slice(0,8) : [],
+      newsBanners: Array.isArray(parsed.newsBanners) ? parsed.newsBanners.slice(0,12) : [],
       quickPromos: Array.isArray(parsed.quickPromos) ? parsed.quickPromos.slice(0,2) : [],
       universeImages: parsed.universeImages && typeof parsed.universeImages === "object" ? parsed.universeImages : {},
       siteTheme: typeof parsed.siteTheme === "string" ? parsed.siteTheme : "none"
     };
   } catch {
-    return { heroProductIds: [], featuredProductIds: [], categorySectionOrder: {}, hiddenUniverses: [], homeSections: ["banners","featured","statement","universes","about"], phase3Configured: false, showcasesConfigured: false, bannerCarousels: [], quickPromos: [] };
+    return { heroProductIds: [], featuredProductIds: [], categorySectionOrder: {}, hiddenUniverses: [], homeSections: ["banners","featured","statement","universes","about"], phase3Configured: false, showcasesConfigured: false, bannerCarousels: [], newsBanners: [], quickPromos: [] };
   }
 }
 
@@ -6437,7 +6438,7 @@ app.put('/api/admin/storefront', requireAdmin, (req, res) => {
     categorySectionOrder[category] = [...new Set(values.map(value => String(value || '').trim()).filter(Boolean))].slice(0, 100);
   });
   const hiddenUniverses = Array.isArray(req.body?.hiddenUniverses) ? [...new Set(req.body.hiddenUniverses.filter(x => typeof x === 'string' && /^[a-z0-9-]{1,60}$/.test(x)))].slice(0,100) : currentStorefront.hiddenUniverses;
-  const allowedSections = ['banners','featured','universes','statement','about','editorial','collection','trust','showcases'];
+  const allowedSections = ['banners','featured','universes','statement','about','editorial','collection','trust','showcases','news'];
   const homeSections = Array.isArray(req.body?.homeSections) ? [...new Set(req.body.homeSections.filter(x => allowedSections.includes(x)))].slice(0,10) : currentStorefront.homeSections;
   const imageOK = value => typeof value === 'string' && (/^\/uploads\/[a-zA-Z0-9._-]+$/.test(value) || /^https:\/\/[a-zA-Z0-9./?&=_:%#-]+$/.test(value));
   const linkOK = value => typeof value === 'string' && (value === '' || (/^\/(?!\/)[a-zA-Z0-9/_?#=&%.-]*$/.test(value) || /^https:\/\/[a-zA-Z0-9./?&=_:%#-]+$/.test(value)));
@@ -6455,6 +6456,15 @@ app.put('/api/admin/storefront', requireAdmin, (req, res) => {
       bannerCarousels.push({ id: String(item.id || crypto.randomUUID()).slice(0,80), title: String(item.title || 'Campaña YHORS').slice(0,90), enabled: item.enabled !== false, slides });
     }
   }
+  let newsBanners = currentStorefront.newsBanners || [];
+  if (req.body?.newsBanners !== undefined) {
+    if (!Array.isArray(req.body.newsBanners) || req.body.newsBanners.length > 12) return res.status(400).json({error:'Máximo 12 anuncios.'});
+    newsBanners=[];
+    for (const item of req.body.newsBanners) {
+      if (!imageOK(item?.image) || !linkOK(item?.link || '')) return res.status(400).json({error:'Revisa las imágenes y enlaces de noticias. Solo HTTPS o imágenes /uploads/.'});
+      newsBanners.push({id:String(item.id||crypto.randomUUID()).slice(0,80),image:item.image.slice(0,1200),link:String(item.link||'').slice(0,1200),title:String(item.title||'Anuncio YHORS').slice(0,100),enabled:item.enabled!==false});
+    }
+  }
   const quickPromos = Array.isArray(req.body?.quickPromos) ? req.body.quickPromos.slice(0,2).map(p=>({
     eyebrow: String(p?.eyebrow||'COLECCIÓN YHORS').slice(0,60),
     title: String(p?.title||'Descubre más').slice(0,100),
@@ -6467,7 +6477,7 @@ app.put('/api/admin/storefront', requireAdmin, (req, res) => {
   const universeImages = req.body?.universeImages && typeof req.body.universeImages === 'object' && !Array.isArray(req.body.universeImages)
     ? Object.fromEntries(Object.entries(req.body.universeImages).filter(([key])=>/^[a-z0-9-]{1,60}$/.test(key)).slice(0,30).map(([key,url])=>[key,imageOK(url||'')?String(url||'').slice(0,1200):'']))
     : (currentStorefront.universeImages || {});
-  const settings = { universeImages, siteTheme, heroProductIds, featuredProductIds, categorySectionOrder, hiddenUniverses, homeSections, bannerCarousels, quickPromos, phase3Configured: Array.isArray(req.body?.homeSections) ? true : currentStorefront.phase3Configured, showcasesConfigured: Array.isArray(req.body?.homeSections) ? true : currentStorefront.showcasesConfigured };
+  const settings = { universeImages, siteTheme, heroProductIds, featuredProductIds, categorySectionOrder, hiddenUniverses, homeSections, bannerCarousels, newsBanners, quickPromos, phase3Configured: Array.isArray(req.body?.homeSections) ? true : currentStorefront.phase3Configured, showcasesConfigured: Array.isArray(req.body?.homeSections) ? true : currentStorefront.showcasesConfigured };
   writeStorefront(settings);
   const heroSet = new Set(heroProductIds);
   const featuredSet = new Set(featuredProductIds);
