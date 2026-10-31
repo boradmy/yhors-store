@@ -15,60 +15,9 @@
     <link rel="alternate" type="text/markdown" href="/llms.txt" title="LLM instructions">
     <link rel="alternate" type="application/json" href="/.well-known/ai-catalog.json" title="AI catalog">
     <link rel="alternate" type="application/json" href="/.well-known/ard.json" title="Agentic Resource Discovery">
-    <!-- El HTML de productos continúa en #app para SEO y acceso sin JavaScript.
-         Solo los navegadores con JS muestran esta transición visual. -->
-    <script>
-      document.documentElement.classList.add('yh-store-booting');
-      (function () {
-        var completed = false;
-        var slowTimer;
-        var actionTimer;
-        function get(id) { return document.getElementById(id); }
-        function finish() {
-          if (completed) return;
-          completed = true;
-          clearTimeout(slowTimer);
-          clearTimeout(actionTimer);
-          document.documentElement.classList.remove('yh-store-booting');
-          var screen = get('yhBootScreen');
-          if (screen) {
-            screen.setAttribute('aria-hidden', 'true');
-            screen.classList.add('yh-boot-finished');
-            setTimeout(function () { screen.remove(); }, 650);
-          }
-        }
-        function showRecovery(message) {
-          if (completed) return;
-          var status = get('yhBootStatus');
-          if (status) status.textContent = message || 'La tienda está tardando más de lo habitual.';
-          var recovery = get('yhBootRecovery');
-          if (recovery) recovery.hidden = false;
-        }
-        window.yhorsBootComplete = finish;
-        window.yhorsBootFailed = function () {
-          showRecovery('No pudimos completar la carga del catálogo.');
-        };
-        window.yhorsBootShowCatalog = finish;
-        window.addEventListener('DOMContentLoaded', function () {
-          var retry = get('yhBootRetry');
-          var catalog = get('yhBootBasicCatalog');
-          if (retry) retry.addEventListener('click', function () { location.reload(); });
-          if (catalog) catalog.addEventListener('click', finish);
-          slowTimer = setTimeout(function () {
-            var status = get('yhBootStatus');
-            if (!completed && status) status.textContent = 'Preparando tus productos y promociones…';
-          }, 7000);
-          actionTimer = setTimeout(function () {
-            showRecovery('La conexión está tardando. Puedes reintentar o abrir el catálogo básico.');
-          }, 20000);
-        });
-        window.addEventListener('error', function (event) {
-          if (event.target && event.target.tagName === 'SCRIPT' && /app\.js/.test(event.target.src || '')) {
-            showRecovery('No se pudo cargar la tienda. Prueba a actualizar la página.');
-          }
-        }, true);
-      }());
-    </script>
+    <!-- El HTML indexable sigue disponible como respaldo y para rastreadores.
+         El arranque externo está permitido por la CSP script-src 'self'. -->
+    <script src="/boot.js?v=16.8.4-csp-fix"></script>
     <style>
       html.yh-store-booting, html.yh-store-booting body { overflow: hidden !important; }
       /* El HTML SSR permanece en el DOM para buscadores y lectores; una cubierta opaca impide verlo durante la carga. */
@@ -123,7 +72,7 @@
       .yh-ssr-categories{background:#faf8f4}.yh-ssr-universes{display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:12px;margin-top:26px}.yh-ssr-universe{min-height:116px;padding:18px;border:1px solid #ddd4c8;border-radius:14px;text-decoration:none;color:#1a1a1a;font-size:19px;font-weight:700;display:flex;flex-direction:column;justify-content:space-between}.yh-ssr-universe span{font-size:12px;color:#9b743e}
       @media(max-width:680px){.yh-ssr-top{justify-content:center}.yh-ssr-top nav{justify-content:center;gap:12px}.yh-ssr-intro{min-height:270px}.yh-ssr-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
     </style>
-    <link rel="stylesheet" href="/styles.css?v=16.8.3-arranque-estable">
+    <link rel="stylesheet" href="/styles.css?v=16.8.4-csp-fix">
   </head>
   <body>
     <div id="app"></div>
@@ -142,11 +91,7 @@
         </div>
       </div>
     </div>
-    <script src="/app.js?v=16.8.3-arranque-estable" defer></script>
-    <script>
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => navigator.serviceWorker.register('/store-sw.js', {scope:'/'}).catch(() => {}));
-    }
-  </script>
+    <script src="/app.js?v=16.8.4-csp-fix" defer></script>
+
   </body>
 </html>
