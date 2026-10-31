@@ -7610,3 +7610,6 @@ body[class*="yh-public-season-"]:not(.yh-public-season-none) .yh-season-greeting
 .yh-detail-rental-unavailable{font-size:.76rem;line-height:1.5;margin:10px 0 0;color:#6b6258}
 .purchase-option:hover:not(:disabled),.purchase-option:focus-visible:not(:disabled){color:#171513}
 .purchase-option.active:hover,.purchase-option.active:focus-visible{color:#fff}
+
+/* La garantía de cosplay nunca aparece durante la compra. */
+.yh-detail-rental-guarantee[hidden], .purchase-choice .yh-detail-rental-guarantee.hidden {display:none!important;}
