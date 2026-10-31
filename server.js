@@ -6461,8 +6461,8 @@ app.put('/api/admin/storefront', requireAdmin, (req, res) => {
     if (!Array.isArray(req.body.newsBanners) || req.body.newsBanners.length > 12) return res.status(400).json({error:'Máximo 12 anuncios.'});
     newsBanners=[];
     for (const item of req.body.newsBanners) {
-      if (!imageOK(item?.image) || !linkOK(item?.link || '')) return res.status(400).json({error:'Revisa las imágenes y enlaces de noticias. Solo HTTPS o imágenes /uploads/.'});
-      newsBanners.push({id:String(item.id||crypto.randomUUID()).slice(0,80),image:item.image.slice(0,1200),link:String(item.link||'').slice(0,1200),title:String(item.title||'Anuncio YHORS').slice(0,100),enabled:item.enabled!==false});
+      if (!imageOK(item?.image) || (item?.mobileImage && !imageOK(item.mobileImage)) || !linkOK(item?.link || '')) return res.status(400).json({error:'Revisa las imágenes y enlaces de noticias. Solo HTTPS o imágenes /uploads/.'});
+      newsBanners.push({id:String(item.id||crypto.randomUUID()).slice(0,80),image:item.image.slice(0,1200),mobileImage:String(item.mobileImage||'').slice(0,1200),displayMode:item.displayMode==='cover'?'cover':'contain',link:String(item.link||'').slice(0,1200),title:String(item.title||'Anuncio YHORS').slice(0,100),enabled:item.enabled!==false});
     }
   }
   const quickPromos = Array.isArray(req.body?.quickPromos) ? req.body.quickPromos.slice(0,2).map(p=>({
