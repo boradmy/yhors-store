@@ -1195,6 +1195,7 @@ function buildOrderPdf(order) {
   const subtotal = Number(order?.subtotal ?? order?.total ?? 0);
   const shipping = Number(order?.shippingCost ?? order?.delivery?.cost ?? 0);
   const total = Number(order?.total ?? 0);
+  const depositTotal = Number(order?.depositTotal ?? 0);
   const status = String(order?.status || 'Pendiente');
   const deliveryLabel = String(order?.delivery?.label || 'No especificada');
   const customerNotes = String(customer?.notes || '');
@@ -1401,15 +1402,17 @@ function buildOrderPdf(order) {
       const totalsX = right - totalsW;
       drawText(ops, 'RESUMEN', totalsX, y, 8, boldFont);
       y -= 7;
-      rect(ops, totalsX, y - 73, totalsW, 73, 0.8);
+      rect(ops, totalsX, y - 91, totalsW, 91, 0.8);
       drawText(ops, 'SUBTOTAL', totalsX + 9, y - 16, 8, normalFont);
       drawText(ops, moneyPdf(subtotal), right - 9, y - 16, 8, normalFont, 'right');
       drawText(ops, 'ENVIO', totalsX + 9, y - 31, 8, normalFont);
       drawText(ops, moneyPdf(shipping), right - 9, y - 31, 8, normalFont, 'right');
-      line(ops, totalsX + 8, y - 39, right - 8, y - 39, 0.5);
-      drawText(ops, 'TOTAL', totalsX + 9, y - 57, 10, boldFont);
-      drawText(ops, moneyPdf(total), right - 9, y - 57, 11, boldFont, 'right');
-      y -= 87;
+      drawText(ops, 'GARANTIA REEMB.', totalsX + 9, y - 46, 7.5, normalFont);
+      drawText(ops, moneyPdf(depositTotal), right - 9, y - 46, 8, normalFont, 'right');
+      line(ops, totalsX + 8, y - 54, right - 8, y - 54, 0.5);
+      drawText(ops, 'TOTAL A COBRAR', totalsX + 9, y - 75, 8.5, boldFont);
+      drawText(ops, moneyPdf(total), right - 9, y - 75, 11, boldFont, 'right');
+      y -= 105;
 
       const noteText = customerNotes || internalNote;
       if (noteText) {
@@ -2703,9 +2706,10 @@ function orderStatusUsesStock(status) {
 }
 
 function getPurchaseItems(order) {
+  // Para pedidos anteriores, alquileres NO se reservaron; nunca inventar una salida retroactiva.
   return (Array.isArray(order?.items) ? order.items : []).filter(item => {
     const mode = String(item?.purchaseMode || 'purchase').toLowerCase();
-    return mode !== 'rental' && mode !== 'alquiler';
+    return (mode !== 'rental' && mode !== 'alquiler') || (order.rentalStockTracked === true && !order.rentalReturn?.stockRestored);
   });
 }
 
@@ -2818,7 +2822,7 @@ function paymentAccessAllowed(session, sale) {
 function paymentMovementAmount(payment) {
   if (String(payment?.status || '').toLowerCase() === 'anulada' || payment?.annulledAt) return 0;
   const amount = Math.abs(Number(payment?.amount || 0));
-  return String(payment?.sourceType || '').toLowerCase() === 'refund' ? -amount : amount;
+  return ['refund','rental_deposit_refund'].includes(String(payment?.sourceType || '').toLowerCase()) ? -amount : amount;
 }
 
 function paymentTotalsForSales(sales = [], payments = []) {
@@ -2826,6 +2830,7 @@ function paymentTotalsForSales(sales = [], payments = []) {
   const saleByOrder = new Map(sales.filter(s => s.orderId).map(s => [String(s.orderId), s]));
   const totals = new Map();
   for (const payment of payments) {
+    if (payment.sourceType === 'rental_deposit_refund') continue;
     const sale = payment.saleId ? saleMap.get(String(payment.saleId)) : (payment.orderId ? saleByOrder.get(String(payment.orderId)) : null);
     if (!sale) continue;
     totals.set(String(sale.id), (totals.get(String(sale.id)) || 0) + paymentMovementAmount(payment));
@@ -2836,6 +2841,7 @@ function paymentTotalsForOrders(orders = [], payments = []) {
   const orderMap = new Map(orders.map(o => [String(o.id), o]));
   const totals = new Map();
   for (const payment of payments) {
+    if (payment.sourceType === 'rental_deposit_refund') continue;
     if (!payment.orderId || !orderMap.has(String(payment.orderId))) continue;
     totals.set(String(payment.orderId), (totals.get(String(payment.orderId)) || 0) + paymentMovementAmount(payment));
   }
@@ -2859,13 +2865,13 @@ function decoratePayment(payment, sales = null, orders = null) {
     sellerName: source?.assignedSellerName || payment.sellerName || 'Sin vendedor',
     totalSale: Number(source?.total ?? payment.totalSale ?? 0),
     saleStatus: source?.status || payment.saleStatus || '—',
-    sourceType: sale ? 'venta' : order ? 'orden' : payment.sourceType || 'venta',
+    sourceType: ['refund','rental_deposit_refund'].includes(payment.sourceType) ? payment.sourceType : (sale ? 'venta' : order ? 'orden' : payment.sourceType || 'venta'),
     note: payment.note || ''
   };
 }
 function getSalesHistoryRecord(order, req) {
   const now = new Date().toISOString();
-  return { id: crypto.randomUUID(), orderId: order.id, orderNumber: order.orderNumber, notifiedAt: now, notifiedBy: getSession(req)?.accountId || null, status: String(order.status || 'Enviado'), assignedSellerId: order.assignedSellerId || null, assignedSellerName: order.assignedSellerName || null, createdAt: order.createdAt, updatedAt: now, customer: order.customer || {}, delivery: order.delivery || {}, shippingCost: Number(order.shippingCost ?? order.delivery?.cost ?? 0) || 0, subtotal: Number(order.subtotal || 0) || 0, total: Number(order.total || 0) || 0, items: Array.isArray(order.items) ? order.items : [], internalNote: order.internalNote || '' };
+  return { id: crypto.randomUUID(), orderId: order.id, orderNumber: order.orderNumber, notifiedAt: now, notifiedBy: getSession(req)?.accountId || null, status: String(order.status || 'Enviado'), assignedSellerId: order.assignedSellerId || null, assignedSellerName: order.assignedSellerName || null, createdAt: order.createdAt, updatedAt: now, customer: order.customer || {}, delivery: order.delivery || {}, shippingCost: Number(order.shippingCost ?? order.delivery?.cost ?? 0) || 0, subtotal: Number(order.subtotal || 0) || 0, depositTotal: Number(order.depositTotal||0)||0, rentalStockTracked:order.rentalStockTracked===true, rentalReturn:order.rentalReturn||null, total: Number(order.total || 0) || 0, items: Array.isArray(order.items) ? order.items : [], internalNote: order.internalNote || '' };
 }
 
 function readExpenses() {
@@ -3076,9 +3082,8 @@ function validateOrder(input, options = {}) {
       return { error: `Selecciona entre 1 y 10 días de alquiler para “${product.name}”.` };
     }
 
-    // Las compras descuentan stock. Los alquileres mantienen el stock porque
-    // el sistema todavía no tiene un flujo de devolución de prendas.
-    if (purchaseMode === 'purchase') {
+    // Compra y alquiler reservan el MISMO stock físico; se valida el total combinado.
+    if (purchaseMode === 'purchase' || purchaseMode === 'rental') {
       purchaseDemand.set(product.id, (purchaseDemand.get(product.id) || 0) + quantity);
     }
 
@@ -3110,6 +3115,7 @@ function validateOrder(input, options = {}) {
       category: product.category,
       purchaseMode,
       rentalDays,
+      rentalDeposit: purchaseMode === 'rental' ? Math.round(Math.max(0, Number(product.rentalDeposit) || 0) * 100) / 100 : 0,
       quantity,
       deviceIdentifiers,
       unitPrice: Math.round(price * 100) / 100,
@@ -3133,14 +3139,15 @@ function validateOrder(input, options = {}) {
   try { validateDeviceIdentifiersAcrossOrder(items); } catch (error) { return { error: error.message }; }
 
   const subtotal = Math.round(items.reduce((sum, item) => sum + item.subtotal, 0) * 100) / 100;
+  const depositTotal = Math.round(items.reduce((sum,item) => sum + (item.purchaseMode === 'rental' ? Number(item.rentalDeposit||0)*Number(item.quantity||0) : 0), 0)*100)/100;
   const shippingCost = shippingCosts[deliveryMethod];
-  const total = Math.round((subtotal + shippingCost) * 100) / 100;
+  const total = Math.round((subtotal + shippingCost + depositTotal) * 100) / 100;
 
   return {
     order: {
       customer: { name, phone, cedula, email, city, address, mapsUrl, notes },
       delivery: { method: deliveryMethod, label: deliveryLabels[deliveryMethod], cost: shippingCost },
-      items, subtotal, shippingCost, total
+      items, subtotal, shippingCost, depositTotal, total
     },
     stockProducts: products,
     purchaseDemand
@@ -3312,6 +3319,7 @@ async function sendOrderConfirmationEmail(order) {
       <hr style="border:0;border-top:1px solid #ddd">
       <p><strong>Subtotal:</strong> $${Number(order.subtotal || 0).toFixed(2)}</p>
       <p><strong>Envío:</strong> $${Number(order.shippingCost || 0).toFixed(2)}</p>
+      ${Number(order.depositTotal||0)>0 ? `<p><strong>Garantía reembolsable (no es costo de alquiler):</strong> $${Number(order.depositTotal).toFixed(2)}</p>` : ''}
       <p style="text-align:right;font-size:18px"><strong>Total: $${Number(order.total || 0).toFixed(2)}</strong></p>
     </div>
     <p><strong>Cédula / RUC:</strong> ${escapeEmailHtml(order.customer.cedula || '—')}</p>
@@ -3431,6 +3439,7 @@ function validateProduct(input, current = {}, allProducts = []) {
     ? (input.isRental === undefined ? current.isRental === true : (input.isRental === true || input.isRental === 'true'))
     : false;
   const rentalDaysRaw = category === 'cosplay' ? Number(input.rentalDays ?? current.rentalDays ?? 1) : null;
+  const rentalDepositRaw = category === 'cosplay' ? Number(input.rentalDeposit ?? current.rentalDeposit ?? 0) : 0;
   const variantGroupId = cleanText(input.variantGroupId ?? current.variantGroupId, 80);
   const variantOfId = cleanText(input.variantOfId ?? current.variantOfId, 80);
   const variantLabel = cleanText(input.variantLabel ?? current.variantLabel, 80);
@@ -3451,6 +3460,9 @@ function validateProduct(input, current = {}, allProducts = []) {
   if (!Number.isInteger(stockMinRaw) || stockMinRaw < 0 || stockMinRaw > 100000000) {
     return { error: 'El stock mínimo debe ser un número entero igual o mayor que 0.' };
   }
+  if (category === 'cosplay' && (!Number.isFinite(rentalDepositRaw) || rentalDepositRaw < 0 || rentalDepositRaw > 100000000)) {
+    return { error: 'La garantía reembolsable de alquiler debe ser un importe positivo o cero.' };
+  }
   if (category === 'cosplay' && (!Number.isInteger(rentalDaysRaw) || rentalDaysRaw < 1 || rentalDaysRaw > 10)) {
     return { error: 'Los días de alquiler deben estar entre 1 y 10.' };
   }
@@ -3466,6 +3478,7 @@ function validateProduct(input, current = {}, allProducts = []) {
     isRental,
     rentalDays: category === 'cosplay' ? rentalDaysRaw : null,
     rentalPrice: category === 'cosplay' ? Math.round(rentalPrice * 100) / 100 : null,
+    rentalDeposit: category === 'cosplay' ? Math.round(rentalDepositRaw * 100) / 100 : 0,
     price: Math.round(salePrice * 100) / 100,
     image: finalImages[0] || '', images: finalImages,
     published: input.published === undefined ? (current.published !== false) : (input.published === true || input.published === 'true'),
@@ -3504,6 +3517,7 @@ function normalizeProduct(product) {
     tags: Array.isArray(product.tags) ? [...new Set(product.tags.map(value => String(value || '').trim()).filter(Boolean))].slice(0, 30) : [],
     isRental: String(product.category || '').toLowerCase() === 'cosplay' ? (product.isRental === true || (product.rentalPrice !== null && product.rentalPrice !== undefined && product.rentalPrice !== '')) : false,
     rentalDays: String(product.category || '').toLowerCase() === 'cosplay' ? Math.max(1, Math.min(10, Number(product.rentalDays || 1))) : null,
+    rentalDeposit: String(product.category || '').toLowerCase() === 'cosplay' && Number.isFinite(Number(product.rentalDeposit)) ? Math.max(0, Math.round(Number(product.rentalDeposit) * 100) / 100) : 0,
     // Para productos TEC existentes conservamos el comportamiento anterior: solicitar identificación.
     // El Gestor de Series/IMEIS puede desactivarlo individualmente.
     requiresDeviceIdentifier: isTechProduct(product)
@@ -3949,6 +3963,8 @@ app.post('/api/orders', async (req, res) => {
     // El stock se descuenta al crear el pedido, por lo que dejamos una marca
     // explícita para que una futura eliminación pueda devolverlo de forma segura.
     stockReservedAt: new Date().toISOString(),
+    rentalStockTracked: true,
+    rentalReturn: { status:'pendiente', stockRestored:false, refundedAmount:0 },
     ...result.order
   };
 
@@ -4019,7 +4035,7 @@ app.post('/api/admin/generar-orden', requireOrdersAccess, async (req, res) => {
   }
 
   const orders = readOrders();
-  const order = { id: crypto.randomUUID(), orderNumber: nextOrderNumber(orders), status: 'Pendiente', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), assignedSellerId, source: 'admin_generated', stockReservedAt: new Date().toISOString(), ...(selectedCustomer ? { customerId: selectedCustomer.id } : {}), ...result.order };
+  const order = { id: crypto.randomUUID(), orderNumber: nextOrderNumber(orders), status: 'Pendiente', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), assignedSellerId, source: 'admin_generated', stockReservedAt: new Date().toISOString(), rentalStockTracked:true, rentalReturn:{status:'pendiente',stockRestored:false,refundedAmount:0}, ...(selectedCustomer ? { customerId: selectedCustomer.id } : {}), ...result.order };
   const previousProducts = result.stockProducts.map(product => ({ ...product }));
   let updatedProducts;
   try {
@@ -4208,7 +4224,7 @@ app.get('/api/admin/resumen-financiero', requireAdmin, (req, res) => {
   const salesBySeller = new Map();
 
   for (const order of filteredOrders) {
-    sales += Number(order.total || 0);
+    sales += Number(order.total || 0) - Number(order.depositTotal || 0);
     shipping += Number(order.shippingCost ?? order.delivery?.cost ?? 0);
     for (const item of Array.isArray(order.items) ? order.items : []) {
       if (item.purchaseMode !== 'purchase') continue;
@@ -4219,7 +4235,7 @@ app.get('/api/admin/resumen-financiero', requireAdmin, (req, res) => {
     const sellerId = order.assignedSellerId || 'unassigned';
     const sellerName = order.assignedSellerName || sellerMap.get(String(order.assignedSellerId || ''))?.name || (sellerId === 'unassigned' ? 'Sin vendedor' : 'Vendedor');
     const seller = salesBySeller.get(sellerId) || { sellerId, sellerName, total: 0, orders: 0 };
-    seller.total += Number(order.total || 0);
+    seller.total += Number(order.total || 0) - Number(order.depositTotal || 0);
     seller.orders += 1;
     salesBySeller.set(sellerId, seller);
   }
@@ -4906,7 +4922,7 @@ app.post('/api/admin/calculo-comision/pagar', requireAdmin, (req, res) => {
   for (const sale of historySales) {
     const date = localDate(sale.notifiedAt || sale.createdAt);
     if (!date || date < from || date > to || !qualifyingStatuses.has(String(sale.status || 'Enviado'))) continue;
-    if (isManager || String(sale.assignedSellerId || '') === String(user.id)) sales += Number(sale.total || 0);
+    if (isManager || String(sale.assignedSellerId || '') === String(user.id)) sales += Number(sale.total || 0)-Number(sale.depositTotal || 0);
   }
   sales = Math.round(sales * 100) / 100;
   const grossAmount = Math.round(sales * (rate / 100) * 100) / 100;
@@ -5033,7 +5049,7 @@ app.patch('/api/admin/historial-ventas/:id/nota', requireAdmin, (req,res)=>{
   return res.json(decorateOrderAssignment(sale));
 });
 app.delete('/api/admin/historial-ventas/:id', requireAdmin, (req,res)=>{
-  const sales=readSales(), sale=sales.find(s=>s.id===req.params.id); if(!sale)return res.status(404).json({error:'Venta no encontrada en Historial de ventas.'}); const orders=readOrders(), index=orders.findIndex(o=>String(o.id)===String(sale.orderId));
+  const sales=readSales(), sale=sales.find(s=>s.id===req.params.id); if(!sale)return res.status(404).json({error:'Venta no encontrada en Historial de ventas.'}); if(Number(sale.depositTotal||0)>0 || (sale.rentalStockTracked&& (sale.items||[]).some(item=>item.purchaseMode==='rental'))) return res.status(409).json({error:'Esta venta incluye alquiler o garantía. No puede eliminarse del historial porque se perdería el control de devoluciones. Contacta a administración para conciliación.'}); const orders=readOrders(), index=orders.findIndex(o=>String(o.id)===String(sale.orderId));
   if(index>=0){const order=orders[index];delete order.salesNotifiedAt;delete order.salesHistoryId;order.updatedAt=new Date().toISOString();orders[index]=order;writeOrders(orders);} writeSales(sales.filter(s=>s.id!==req.params.id)); const payments=readPayments(); const relatedPayments=payments.filter(p=>String(p.saleId)===String(sale.id)); if(relatedPayments.length) writePayments(payments.filter(p=>String(p.saleId)!==String(sale.id))); auditLog(req,'Venta eliminada del historial','Historial de ventas',{salesId:sale.id,orderId:sale.orderId,orderNumber:sale.orderNumber,total:sale.total,deletedPayments:relatedPayments.length}); return res.status(204).end();
 });
 app.get('/api/admin/historial-ventas/:id/pdf', requireOrdersAccess, (req,res)=>{
@@ -5045,7 +5061,130 @@ app.get('/api/admin/ventas-generales', requireOrdersAccess, (req,res)=>{
   const from=/^\d{4}-\d{2}-\d{2}$/.test(String(req.query.from||''))?String(req.query.from):''; const to=/^\d{4}-\d{2}-\d{2}$/.test(String(req.query.to||''))?String(req.query.to):''; const status=String(req.query.status||'all'); const localDate=v=>{const d=new Date(v);return Number.isNaN(d.getTime())?'':d.toLocaleDateString('en-CA',{timeZone:'America/Guayaquil'});};
   sales=sales.filter(s=>{const date=localDate(s.notifiedAt||s.createdAt);return date&&(!from||date>=from)&&(!to||date<=to)&&(status==='all'||String(s.status||'')===status);});
   const users=readUsers(), sellers=users.filter(u=>isSellerRole(u.role)).map(u=>({id:u.id,name:u.name,username:u.username,active:u.active!==false})); const rows=new Map(sellers.map(u=>[String(u.id),{sellerId:u.id,sellerName:u.name,username:u.username,active:u.active,orderCount:0,subtotal:0,shipping:0,total:0}])); const unassigned={sellerId:null,sellerName:'Sin vendedor',username:'',active:true,orderCount:0,subtotal:0,shipping:0,total:0};
-  for(const s of sales){const row=rows.get(String(s.assignedSellerId||''))||unassigned;row.orderCount++;row.subtotal+=Number(s.subtotal||0);row.shipping+=Number(s.shippingCost||s.delivery?.cost||0);row.total+=Number(s.total||0);} const round=v=>Math.round(Number(v||0)*100)/100; const normalized=[...rows.values()].map(r=>({...r,subtotal:round(r.subtotal),shipping:round(r.shipping),total:round(r.total)}));if(unassigned.orderCount)normalized.push({...unassigned,subtotal:round(unassigned.subtotal),shipping:round(unassigned.shipping),total:round(unassigned.total)}); return res.json({rows:normalized,totals:{orderCount:sales.length,subtotal:round(normalized.reduce((a,r)=>a+r.subtotal,0)),shipping:round(normalized.reduce((a,r)=>a+r.shipping,0)),total:round(normalized.reduce((a,r)=>a+r.total,0))},filters:{from,to,status},statuses:['Enviado','Entregado']});
+  for(const s of sales){const row=rows.get(String(s.assignedSellerId||''))||unassigned;row.orderCount++;row.subtotal+=Number(s.subtotal||0);row.shipping+=Number(s.shippingCost||s.delivery?.cost||0);row.total+=Number(s.total||0)-Number(s.depositTotal||0);} const round=v=>Math.round(Number(v||0)*100)/100; const normalized=[...rows.values()].map(r=>({...r,subtotal:round(r.subtotal),shipping:round(r.shipping),total:round(r.total)}));if(unassigned.orderCount)normalized.push({...unassigned,subtotal:round(unassigned.subtotal),shipping:round(unassigned.shipping),total:round(unassigned.total)}); return res.json({rows:normalized,totals:{orderCount:sales.length,subtotal:round(normalized.reduce((a,r)=>a+r.subtotal,0)),shipping:round(normalized.reduce((a,r)=>a+r.shipping,0)),total:round(normalized.reduce((a,r)=>a+r.total,0))},filters:{from,to,status},statuses:['Enviado','Entregado']});
+});
+
+// YHORS · Control independiente de trajes y garantías reembolsables.
+// Solo los pedidos nuevos tienen rentalStockTracked: alquileres históricos no descontaron stock.
+function rentalRecordForId(id) {
+  const orders = readOrders(), sales = readSales();
+  const orderIndex = orders.findIndex(row => String(row.id) === String(id) || String(row.orderNumber) === String(id));
+  const saleIndex = sales.findIndex(row => String(row.id) === String(id) || String(row.orderId) === String(id) || String(row.orderNumber) === String(id));
+  const doc = saleIndex >= 0 ? sales[saleIndex] : (orderIndex >= 0 ? orders[orderIndex] : null);
+  return {orders,sales,orderIndex,saleIndex,doc};
+}
+function saveRentalRecord(ctx, updated) {
+  if (ctx.orderIndex >= 0) {
+    ctx.orders[ctx.orderIndex] = {...ctx.orders[ctx.orderIndex],...updated};
+    writeOrders(ctx.orders);
+  }
+  if (ctx.saleIndex >= 0) {
+    ctx.sales[ctx.saleIndex] = {...ctx.sales[ctx.saleIndex],...updated};
+    writeSales(ctx.sales);
+  }
+}
+function rentalOnlyDemand(order) {
+  const demand = new Map();
+  for (const item of (order.items || [])) {
+    if (item.purchaseMode !== 'rental') continue;
+    const id = String(item.productId || ''), quantity = Number(item.quantity || 0);
+    if (!id || !Number.isInteger(quantity) || quantity < 1) continue;
+    demand.set(id, (demand.get(id)||0) + quantity);
+  }
+  return demand;
+}
+function rentDayDeadline(deliveredAt, items) {
+  const days = Math.max(1, ...(items || []).filter(item=>item.purchaseMode==='rental').map(item=>Math.min(10,Number(item.rentalDays)||1)));
+  const date = new Date(deliveredAt);
+  date.setDate(date.getDate() + days);
+  return date.toISOString();
+}
+function rentalVisibleForSession(doc, session) {
+  if (!doc) return false;
+  return !isSellerRole(session.role) || String(doc.assignedSellerId||'') === String(session.accountId||'');
+}
+app.get('/api/admin/alquileres', requireOrdersAccess, (req,res) => {
+  const session = getSession(req);
+  const payments = readPayments();
+  const all = new Map();
+  readOrders().forEach(row => { if ((row.items||[]).some(item=>item.purchaseMode==='rental')) all.set(String(row.id),row); });
+  readSales().forEach(row => { if ((row.items||[]).some(item=>item.purchaseMode==='rental')) all.set(String(row.orderId||row.id),row); });
+  const rows = [...all.values()].filter(row=>rentalVisibleForSession(row,session)).map(row => {
+    const rentalItems = (row.items||[]).filter(item=>item.purchaseMode==='rental');
+    const state = row.rentalReturn || {status:'historico',stockRestored:false,refundedAmount:0};
+    const orderId=String(row.orderId||row.id);
+    const paidAmount=payments.filter(payment => (String(payment.orderId||'')===orderId || (row.orderId && String(payment.saleId||'')===String(row.id))) && payment.sourceType!=='rental_deposit_refund').reduce((sum,payment)=>sum+paymentMovementAmount(payment),0);
+    return {id:row.orderId||row.id,number:row.orderNumber,status:row.status,createdAt:row.createdAt,customer:row.customer,assignedSellerName:row.assignedSellerName||'',rentalItems,depositTotal:Number(row.depositTotal||0),paidAmount:Math.round(paidAmount*100)/100,paymentComplete:paidAmount+0.001>=Number(row.total||0),rentalReturn:state,rentalStockTracked:row.rentalStockTracked===true,days:Math.max(...rentalItems.map(item=>Number(item.rentalDays||1)),1)};
+  }).sort((x,y)=>String(y.createdAt).localeCompare(String(x.createdAt)));
+  return res.json(rows);
+});
+app.post('/api/admin/alquileres/:id/entregar', requireOrdersAccess, (req,res) => {
+  const ctx = rentalRecordForId(req.params.id), row=ctx.doc, session=getSession(req);
+  if(!row)return res.status(404).json({error:'Alquiler no encontrado.'});
+  if(!rentalVisibleForSession(row,session))return res.status(403).json({error:'Alquiler no asignado a tu usuario.'});
+  if(!row.rentalStockTracked)return res.status(409).json({error:'Alquiler anterior a este control. Registra sus existencias antes de activarlo.'});
+  if(row.status==='Cancelado'||row.rentalReturn?.status==='cancelado')return res.status(409).json({error:'El alquiler está cancelado.'});
+  if(row.rentalReturn?.status==='devuelto')return res.status(409).json({error:'El traje ya fue devuelto.'});
+  if(row.rentalReturn?.deliveredAt)return res.status(409).json({error:'La entrega ya está registrada.'});
+  const paid=readPayments().filter(payment=>(String(payment.orderId||'')===String(row.orderId||row.id)||(ctx.saleIndex>=0&&String(payment.saleId||'')===String(ctx.sales[ctx.saleIndex].id)))&&payment.sourceType!=='rental_deposit_refund').reduce((sum,p)=>sum+paymentMovementAmount(p),0);
+  if(paid+0.001<Number(row.total||0))return res.status(409).json({error:'Primero registra el pago completo del alquiler y de la garantía antes de entregar el traje.'});
+  const now=new Date().toISOString(), current=row.rentalReturn||{};
+  const updated={rentalReturn:{...current,status:'entregado',deliveredAt:now,dueAt:rentDayDeadline(now,row.items),deliveredBy:session.accountId||null},updatedAt:now};
+  saveRentalRecord(ctx,updated);
+  auditLog(req,'Traje alquilado entregado','Alquileres',{orderId:row.orderId||row.id,number:row.orderNumber,dueAt:updated.rentalReturn.dueAt});
+  return res.json(updated.rentalReturn);
+});
+app.post('/api/admin/alquileres/:id/devolver-prenda', requireOrdersAccess, (req,res) => {
+  const ctx=rentalRecordForId(req.params.id),row=ctx.doc,session=getSession(req);
+  if(!row)return res.status(404).json({error:'Alquiler no encontrado.'});
+  if(!rentalVisibleForSession(row,session))return res.status(403).json({error:'Alquiler no asignado a tu usuario.'});
+  if(!row.rentalStockTracked)return res.status(409).json({error:'Esta orden es histórica y no descontó stock por alquiler. Requiere conciliación manual.'});
+  if(row.rentalReturn?.stockRestored)return res.status(409).json({error:'El stock de este alquiler ya fue devuelto.'});
+  if(!row.rentalReturn?.deliveredAt)return res.status(409).json({error:'Primero registra la entrega física del traje.'});
+  const demand=rentalOnlyDemand(row),before=readProducts().map(normalizeProduct),now=new Date().toISOString();
+  const updatedProducts=before.map(product=>{
+    const units=demand.get(String(product.id))||0;
+    return units?normalizeProduct({...product,stock:Number(product.stock||0)+units,updatedAt:now}):product;
+  });
+  for(const id of demand.keys())if(!before.some(p=>String(p.id)===id))return res.status(409).json({error:`Falta el SKU ${id} en inventario. No se modificó el stock.`});
+  const updated={rentalReturn:{...(row.rentalReturn||{}),status:'devuelto',stockRestored:true,returnedAt:now,returnedBy:session.accountId||null,returnNotes:cleanText(req.body?.notes,500)},updatedAt:now};
+  try {writeProducts(updatedProducts);try{saveRentalRecord(ctx,updated);}catch(err){writeProducts(before);throw err;}}
+  catch(err){return res.status(500).json({error:'No se pudo confirmar la devolución física. Comprueba el inventario y vuelve a intentarlo.'});}
+  auditLog(req,'Traje alquilado devuelto','Alquileres',{orderId:row.orderId||row.id,number:row.orderNumber,inventory:auditStockMovementDiff(before,updatedProducts,'Devolución física de alquiler'),refundableDeposit:Number(row.depositTotal||0)-Number(row.rentalReturn?.refundedAmount||0)});
+  return res.json({ok:true,rentalReturn:updated.rentalReturn});
+});
+app.post('/api/admin/alquileres/:id/devolver-garantia', requireAdmin, (req,res) => {
+  const ctx=rentalRecordForId(req.params.id),row=ctx.doc;
+  if(!row)return res.status(404).json({error:'Alquiler no encontrado.'});
+  const depositTotal=Number(row.depositTotal||0), already=Number(row.rentalReturn?.refundedAmount||0);
+  const remaining=Math.round((depositTotal-already)*100)/100;
+  if(remaining<=0)return res.status(409).json({error:'No existe una garantía pendiente de devolución.'});
+  const state=row.rentalReturn?.status;
+  if(state!=='devuelto'&&state!=='cancelado')return res.status(409).json({error:'Primero registra la devolución del traje, o la cancelación previa a su entrega.'});
+  const amount=normalizeMoneyAmount(req.body?.amount);
+  if(!amount||amount>remaining+0.001)return res.status(400).json({error:`Importe inválido. Máximo disponible: $${remaining.toFixed(2)}.`});
+  const method=cleanText(req.body?.method,30);
+  if(!['cash','transfer','deposit','card'].includes(method))return res.status(400).json({error:'Selecciona efectivo, transferencia, depósito o tarjeta.'});
+  const bank=cleanText(req.body?.bank,100);
+  const reference=cleanText(req.body?.transactionNumber,120);
+  if(method!=='cash'&&(!bank||!reference))return res.status(400).json({error:'Indica banco/caja y referencia de la devolución.'});
+  const payments=readPayments();
+  const orderId=String(row.orderId||row.id);
+  const paid=payments.filter(payment=> (String(payment.orderId||'')===orderId || (ctx.saleIndex>=0 && String(payment.saleId||'')===String(ctx.sales[ctx.saleIndex].id))) && !['refund','rental_deposit_refund'].includes(payment.sourceType)).reduce((sum,p)=>sum+paymentMovementAmount(p),0);
+  if(paid + 0.001 < Number(row.total||0))return res.status(409).json({error:'El pedido aún no registra el pago completo del alquiler y la garantía. Revisa los cobros antes de reembolsar.'});
+  const now=new Date().toISOString(), session=getSession(req),refund={
+    id:crypto.randomUUID(),sourceType:'rental_deposit_refund',orderId,saleId:ctx.saleIndex>=0?ctx.sales[ctx.saleIndex].id:null,
+    saleNumber:row.orderNumber||'',customerId:row.customerId||null,customerName:row.customer?.name||'',customerCedula:row.customer?.cedula||'',
+    customerPhone:row.customer?.phone||'',customerEmail:row.customer?.email||'',sellerId:row.assignedSellerId||null,
+    method,bank:bank||'Caja principal',transactionNumber:reference||null,date:localDateEc(now),createdAt:now,
+    note:cleanText(req.body?.note,500)||'Garantía reembolsable de cosplay',refundReason:'Devolución de garantía de alquiler',amount:-amount,
+    createdBy:session.accountId||null,totalSale:Number(row.total||0)
+  };
+  const updated={rentalReturn:{...(row.rentalReturn||{}),refundedAmount:Math.round((already+amount)*100)/100,lastRefundAt:now,lastRefundBy:session.accountId||null},updatedAt:now};
+  try {saveRentalRecord(ctx,updated);try{payments.unshift(refund);writePayments(payments);}catch(e){saveRentalRecord(ctx,{rentalReturn:row.rentalReturn,updatedAt:row.updatedAt});throw e;}}
+  catch(e){return res.status(500).json({error:'No se pudo registrar la devolución de garantía; comprueba los movimientos antes de reintentar.'});}
+  auditLog(req,'Garantía devuelta','Alquileres',{orderId,orderNumber:row.orderNumber,customerName:row.customer?.name,amount,remaining:Math.max(0,remaining-amount),refundId:refund.id,method});
+  return res.json({ok:true,amount,remaining:Math.max(0,Math.round((remaining-amount)*100)/100),refundId:refund.id});
 });
 
 app.get('/api/admin/orders/:id/pdf', requireOrdersAccess, (req, res) => {
@@ -5149,6 +5288,7 @@ function buildEditedOrderItems(requestedItems, products) {
       category: product.category,
       purchaseMode,
       rentalDays,
+      rentalDeposit: purchaseMode === 'rental' ? Math.round(Math.max(0, Number(product.rentalDeposit) || 0) * 100) / 100 : 0,
       quantity,
       deviceIdentifiers,
       unitPrice: Math.round(price * 100) / 100,
@@ -5181,7 +5321,7 @@ function applyOrderItemStockDelta(currentOrder, nextItems) {
   if (!orderStatusUsesStock(currentOrder.status || 'Pendiente')) return [];
 
   const currentDemand = getStockDemand(currentOrder);
-  const nextDemand = getStockDemand({ items: nextItems });
+  const nextDemand = getStockDemand({ items: nextItems, rentalStockTracked: currentOrder.rentalStockTracked, rentalReturn: currentOrder.rentalReturn });
   const products = readProducts().map(normalizeProduct);
   const ids = new Set([...currentDemand.keys(), ...nextDemand.keys()]);
 
@@ -5241,6 +5381,7 @@ app.put('/api/admin/orders/:id', requireOrdersAccess, (req, res) => {
   const index = orders.findIndex(order => order.id === req.params.id);
   if (index < 0) return res.status(404).json({ error: 'Pedido no encontrado.' });
   const currentOrder = orders[index];
+  if ((currentOrder.rentalReturn?.status === 'devuelto' || currentOrder.rentalReturn?.status === 'cancelado') && (hasItems || (hasStatus && orderStatusUsesStock(body.status)))) return res.status(409).json({error:'Este alquiler ya fue devuelto o cancelado; no se puede volver a reservar su stock.'});
   if (currentOrder.salesNotifiedAt || currentOrder.salesHistoryId) return res.status(409).json({ error: 'Este pedido ya está en Historial de ventas. Primero elimina la venta desde Historial de ventas para volver a editarlo.' });
   if (isSellerRole(session.role) && currentOrder.assignedSellerId !== session.accountId) {
     return res.status(403).json({ error: 'Este pedido no está asignado a tu usuario.' });
@@ -5248,6 +5389,7 @@ app.put('/api/admin/orders/:id', requireOrdersAccess, (req, res) => {
 
   let nextItems = currentOrder.items || [];
   if (hasItems) {
+    if (currentOrder.rentalStockTracked && (currentOrder.status === 'Enviado' || currentOrder.status === 'Entregado')) return res.status(409).json({error:'No se pueden editar los trajes de un alquiler entregado. Registra primero su devolución.'});
     try {
       const products = readProducts().map(normalizeProduct);
       nextItems = buildEditedOrderItems(body.items, products);
@@ -5284,6 +5426,11 @@ app.put('/api/admin/orders/:id', requireOrdersAccess, (req, res) => {
   const previousUsesStock = orderStatusUsesStock(previousStatus);
   const nextUsesStock = orderStatusUsesStock(nextStatus);
   const statusChanged = previousStatus.toLocaleLowerCase('es-EC') !== nextStatus.toLocaleLowerCase('es-EC');
+  const hasTrackedRentals = currentOrder.rentalStockTracked === true && (currentOrder.items||[]).some(item => item.purchaseMode === 'rental');
+  if (hasTrackedRentals && previousStatus === 'Cancelado' && nextStatus !== 'Cancelado') return res.status(409).json({error:'No puedes reabrir un alquiler cancelado: crea un pedido nuevo para volver a reservar el stock y la garantía correctamente.'});
+  if (hasTrackedRentals && nextStatus === 'Cancelado' && ['Enviado','Entregado'].includes(previousStatus) && currentOrder.rentalReturn?.status !== 'devuelto') {
+    return res.status(409).json({error:'El traje ya fue entregado: registra su devolución física en Control de alquileres antes de cancelar.'});
+  }
 
   // V15.3 — El stock y la auditoría se actualizan como una sola operación.
   // Cada cambio deja trazabilidad de producto, cantidad y stock antes/después.
@@ -5306,16 +5453,18 @@ app.put('/api/admin/orders/:id', requireOrdersAccess, (req, res) => {
     updated.items = nextItems;
     updated.subtotal = Math.round(nextItems.reduce((sum, item) => sum + Number(item.subtotal || 0), 0) * 100) / 100;
     updated.shippingCost = Number(currentOrder.shippingCost ?? currentOrder.delivery?.cost ?? 0) || 0;
-    updated.total = Math.round((updated.subtotal + updated.shippingCost) * 100) / 100;
+    updated.depositTotal = Math.round(nextItems.reduce((sum, item) => sum + (item.purchaseMode==='rental' ? Number(item.rentalDeposit||0)*Number(item.quantity||0) : 0), 0)*100)/100;
+    updated.total = Math.round((updated.subtotal + updated.shippingCost + updated.depositTotal) * 100) / 100;
     updated.delivery = { ...(currentOrder.delivery || {}), cost: updated.shippingCost };
   }
   if (hasStatus) updated.status = normalizedStatus;
+  if (hasTrackedRentals && normalizedStatus === 'Cancelado' && previousUsesStock) updated.rentalReturn = {...currentOrder.rentalReturn,status:'cancelado',stockRestored:true,cancelledAt:new Date().toISOString()};
   if (orderStatusUsesStock(normalizedStatus)) {
     updated.stockReservedAt = currentOrder.stockReservedAt || new Date().toISOString();
     delete updated.stockRestoredAt;
   } else {
-    // Un alquiler no consume inventario: no debe marcarse como "stock restaurado"
-    // al cancelarse porque nunca hubo una salida de inventario.
+    // Si se cancela un alquiler reservado, su stock físico vuelve al inventario.
+    // La operación se calcula por unidades y nunca restaura dos veces.
     if (stockMovements.length) {
       updated.stockRestoredAt = currentOrder.stockRestoredAt || new Date().toISOString();
     } else {
@@ -5349,6 +5498,8 @@ app.delete('/api/admin/orders/:id', requireStoreManagerOrAdmin, (req, res) => {
   if (!order) return res.status(404).json({ error: 'Pedido no encontrado.' });
   if (order.salesNotifiedAt || order.salesHistoryId) return res.status(409).json({ error: 'Este pedido está en Historial de ventas. Elimínalo primero desde Historial de ventas.' });
 
+  if (order.rentalStockTracked && (order.items||[]).some(item => item.purchaseMode==='rental') && order.rentalReturn?.status !== 'devuelto' && order.rentalReturn?.status !== 'cancelado') return res.status(409).json({error:'Hay trajes pendientes de devolución. Registra la devolución en Control de alquileres antes de eliminar el pedido.'});
+  if (Number(order.depositTotal||0) > Number(order.rentalReturn?.refundedAmount||0) + 0.001) return res.status(409).json({error:'Este pedido tiene garantías pendientes de devolver. Completa el control de garantías antes de eliminarlo.'});
   let stockMovements = [];
   try {
     // Un pedido activo ya descontó/reservó stock al crearse.
@@ -5561,6 +5712,8 @@ app.get('/api/admin/catalog-products', requireOrdersAccess, (_, res) => {
     sku: product.sku || '',
     salePrice: Number(product.salePrice ?? product.price ?? 0),
     rentalPrice: product.rentalPrice ?? null,
+    rentalDeposit: product.rentalDeposit ?? 0,
+    isRental: product.isRental === true,
     stock: Number(product.stock || 0),
     published: product.published !== false,
     image: product.image || '',
@@ -5962,7 +6115,7 @@ app.get('/api/admin/dinero/resumen', requireOrdersAccess, (req, res) => {
     return true;
   }).sort((a,b)=>String(b.date||b.createdAt).localeCompare(String(a.date||a.createdAt)));
   const totals = { cash:0, deposit:0, transfer:0, card:0, total:0 };
-  filteredPayments.forEach(p=>{ totals[p.method] = (totals[p.method] || 0) + Number(p.amount || 0); totals.total += Number(p.amount || 0); });
+  filteredPayments.forEach(p=>{ const amount=paymentMovementAmount(p); totals[p.method] = (totals[p.method] || 0) + amount; totals.total += amount; });
   const paymentBySale = paymentTotalsForSales(visibleSales, paymentsAll);
   const paymentByOrder = paymentTotalsForOrders(visibleOrders, paymentsAll);
   const receivableRows = [];
@@ -5986,7 +6139,7 @@ app.get('/api/admin/orders/:id/payment-status', requireOrdersAccess, (req,res) =
   if(!order)return res.status(404).json({error:'Orden no encontrada.'});
   if(isSellerRole(session.role)&&String(order.assignedSellerId||'')!==String(session.accountId||''))return res.status(403).json({error:'Esta orden no está asignada a tu usuario.'});
   const payments=readPayments().filter(p=>String(p.orderId||'')===String(order.id));
-  const paid=payments.reduce((sum,p)=>sum+Number(p.amount||0),0);
+  const paid=payments.filter(p=>p.sourceType!=='rental_deposit_refund').reduce((sum,p)=>sum+paymentMovementAmount(p),0);
   const total=Number(order.total||0);
   return res.json({orderId:order.id,orderNumber:order.orderNumber,total,paid:Math.round(paid*100)/100,balance:Math.max(0,Math.round((total-paid)*100)/100),status:paid>=total-0.001?'PAGADO':paid>0?'ABONO':'PENDIENTE',payments:payments.map(p=>decoratePayment(p,[],[order]))});
 });
@@ -6110,7 +6263,7 @@ app.post('/api/admin/dinero/pagos', requireOrdersAccess, (req, res) => {
   const bank=cleanText(body.bank,100); if(!bank)return res.status(400).json({error:'Indica el banco o caja donde ingresó el dinero.'});
   const batch=cleanText(body.batch,100); const transactionNumber=cleanText(body.transactionNumber,120); const note=cleanText(body.note,500);
   if((method==='deposit'||method==='transfer'||method==='card')&&!transactionNumber)return res.status(400).json({error:'El número de transacción es obligatorio para depósitos, transferencias y tarjetas.'});
-  const payments=readPayments(); const already=payments.filter(p=>String(p.saleId)===saleId).reduce((sum,p)=>sum+paymentMovementAmount(p),0); const remaining=Math.max(0,Math.round((Number(sale.total||0)-already)*100)/100);
+  const payments=readPayments(); const already=payments.filter(p=>String(p.saleId)===saleId && p.sourceType!=='rental_deposit_refund').reduce((sum,p)=>sum+paymentMovementAmount(p),0); const remaining=Math.max(0,Math.round((Number(sale.total||0)-already)*100)/100);
   if(amount>remaining+0.001)return res.status(400).json({error:`El pago supera el saldo pendiente de ${remaining.toFixed(2)}.`});
   const now=new Date().toISOString(); const payment={id:crypto.randomUUID(),saleId:sale.id,saleNumber:sale.orderNumber,customerId:sale.customer?.id||null,customerName:sale.customer?.name||'',customerCedula:sale.customer?.cedula||'',sellerId:sale.assignedSellerId||null,sellerName:sale.assignedSellerName||'',method,date,batch:batch||null,transactionNumber:transactionNumber||null,bank,note:note||'',amount,totalSale:Number(sale.total||0),createdAt:now,createdBy:session.accountId||null}; payments.unshift(payment); writePayments(payments);
   const newPaid=already+amount; const status=newPaid>=Number(sale.total||0)-0.001?'PAGADO':'ABONO'; auditLog(req,'Pago registrado','Dinero',{paymentId:payment.id,saleId:sale.id,orderNumber:sale.orderNumber,method,amount,date,bank,batch,transactionNumber,status,balance:Math.max(0,Number(sale.total||0)-newPaid)});

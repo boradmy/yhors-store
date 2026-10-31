@@ -341,6 +341,7 @@ function getCart() {
 }
 function setCart(cart) { localStorage.setItem('yhors-cart', JSON.stringify(cart)); }
 function rentalDaysValue(value) { return Math.max(1, Math.min(10, Number.parseInt(value, 10) || 1)); }
+function cartDepositTotal(cart) { return Math.round((cart || []).reduce((sum,line) => sum + (line.purchaseMode === 'rental' ? Math.max(0,Number(line.rentalDeposit)||0)*Math.max(0,Number(line.quantity)||0) : 0),0)*100)/100; }
 function cartLineTotal(line) {
   const unit = Number(line.price || 0);
   const days = line.purchaseMode === 'rental' ? rentalDaysValue(line.rentalDays) : 1;
@@ -947,27 +948,27 @@ function wireCart(products, storefront) {
   };
   const clampQuantity = (line, requested) => {
     const minimum = Math.max(1, Number.parseInt(requested, 10) || 1);
-    if (line.purchaseMode === 'rental') return minimum;
     return Math.min(minimum, getAvailableStock(line));
   };
   const drawCart = () => {
     if (!area) return;
-    cart = cart.filter(line => line.purchaseMode !== 'purchase' || getAvailableStock(line) > 0);
+    cart = cart.filter(line => getAvailableStock(line) > 0);
     cart.forEach(line => {
-      if (line.purchaseMode === 'purchase') line.quantity = clampQuantity(line, line.quantity);
+      const actual=getProductForLine(line); if(line.purchaseMode==='rental'&&actual)line.rentalDeposit=Number(actual.rentalDeposit||0);
+      line.quantity = clampQuantity(line, line.quantity);
     });
     setCart(cart);
     area.innerHTML = cart.length ? cart.map(line => {
       const isRental = line.purchaseMode === 'rental';
       const days = isRental ? rentalDaysValue(line.rentalDays) : 1;
       const quantity = Math.max(1, Number(line.quantity) || 1);
-      const limit = isRental ? Infinity : getAvailableStock(line);
+      const limit = getAvailableStock(line);
       const actual = getProductForLine(line) || line;
       const sku = actual.sku || line.sku || "";
       const variant = actual.variantLabel || line.variantLabel || "";
-      return `<div class="cart-item"><img data-fallback src="${escapeHTML(productImages(line)[0])}" alt=""><div class="cart-item-main"><h4>${escapeHTML(line.name)}</h4>${sku ? `<small class="cart-product-sku">SKU: ${escapeHTML(sku)}</small>` : ""}${variant ? `<small class="cart-product-variant">Color / acabado: ${escapeHTML(variant)}</small>` : ""}${line.purchaseMode ? `<span class="cart-mode">${isRental ? `Alquiler · ${days} día${days === 1 ? '' : 's'}` : 'Compra'}</span>` : ''}${isRental ? `<label class="cart-rental-days">Días de alquiler<select data-rental-days="${escapeHTML(line.id)}">${Array.from({length:10},(_,i)=>i+1).map(day => `<option value="${day}" ${day === days ? 'selected' : ''}>${day} día${day === 1 ? '' : 's'}</option>`).join('')}</select></label>` : ''}<p class="cart-line-price">${money(Number(line.price) * (isRental ? days : 1))}${isRental ? ' <small>/ día × duración</small>' : ''}</p><div class="quantity-control"><button type="button" data-qty="${escapeHTML(line.id)}" data-change="-1" ${quantity <= 1 ? 'disabled' : ''}>−</button><input type="number" min="1" ${Number.isFinite(limit) ? `max="${limit}"` : ""} value="${quantity}" data-input="${escapeHTML(line.id)}"><button type="button" data-qty="${escapeHTML(line.id)}" data-change="1" ${quantity >= limit ? "disabled" : ""}>+</button></div></div><button class="remove" data-remove="${escapeHTML(line.id)}">Quitar</button></div>`;
+      return `<div class="cart-item"><img data-fallback src="${escapeHTML(productImages(line)[0])}" alt=""><div class="cart-item-main"><h4>${escapeHTML(line.name)}</h4>${sku ? `<small class="cart-product-sku">SKU: ${escapeHTML(sku)}</small>` : ""}${variant ? `<small class="cart-product-variant">Color / acabado: ${escapeHTML(variant)}</small>` : ""}${line.purchaseMode ? `<span class="cart-mode">${isRental ? `Alquiler · ${days} día${days === 1 ? '' : 's'}` : 'Compra'}</span>` : ''}${isRental ? `<label class="cart-rental-days">Días de alquiler<select data-rental-days="${escapeHTML(line.id)}">${Array.from({length:10},(_,i)=>i+1).map(day => `<option value="${day}" ${day === days ? 'selected' : ''}>${day} día${day === 1 ? '' : 's'}</option>`).join('')}</select></label>` : ''}<p class="cart-line-price">${money(Number(line.price) * (isRental ? days : 1))}${isRental ? ` <small>/ día × duración · Garantía ${money(Math.max(0,Number(actual.rentalDeposit)||0))} por traje (reembolsable)</small>` : ''}</p><div class="quantity-control"><button type="button" data-qty="${escapeHTML(line.id)}" data-change="-1" ${quantity <= 1 ? 'disabled' : ''}>−</button><input type="number" min="1" ${Number.isFinite(limit) ? `max="${limit}"` : ""} value="${quantity}" data-input="${escapeHTML(line.id)}"><button type="button" data-qty="${escapeHTML(line.id)}" data-change="1" ${quantity >= limit ? "disabled" : ""}>+</button></div></div><button class="remove" data-remove="${escapeHTML(line.id)}">Quitar</button></div>`;
     }).join('') : '<div class="empty cart-empty">Tu carrito está vacío.<br><small>Agrega algo que te guste.</small></div>';
-    const total = cart.reduce((sum, line) => sum + cartLineTotal(line), 0);
+    const total = cart.reduce((sum, line) => sum + cartLineTotal(line), 0) + cartDepositTotal(cart);
     const totalEl = document.querySelector('#cartTotal'); if (totalEl) totalEl.textContent = money(total);
     wireImageFallback(area);
     area.querySelectorAll('[data-rental-days]').forEach(select => select.addEventListener('change', () => {
@@ -997,13 +998,13 @@ function wireCart(products, storefront) {
     const price = purchaseMode === 'rental' ? Number(product.rentalPrice) : (product.category === 'cosplay' && Number.isFinite(Number(product.salePrice)) ? Number(product.salePrice) : Number(product.price));
     const cartKey = `${product.id}::${purchaseMode}::${days || ''}`;
     const existing = cart.find(item => (item.cartKey || item.id) === cartKey);
-    if (purchaseMode === 'purchase' && !inStock) {
+    if (!inStock) {
       button.disabled = true;
       button.innerHTML = '<span>Agotado</span><span>—</span>';
       return;
     }
     const requestedUnits = Math.max(1, Math.min(99, Math.floor(Number(requestedQuantity) || 1)));
-    if (existing && purchaseMode === 'purchase' && Number(existing.quantity || 0) >= getAvailableStock(existing)) {
+    if (existing && Number(existing.quantity || 0) >= getAvailableStock(existing)) {
       drawCart();
       return;
     }
@@ -1011,7 +1012,7 @@ function wireCart(products, storefront) {
       const currentQuantity = Number(existing.quantity) || 0;
       existing.quantity = clampQuantity(existing, currentQuantity + requestedUnits);
     } else {
-      cart.push({ ...product, id: cartKey, cartKey, productId: product.id, price, purchaseMode, rentalDays: days, quantity: purchaseMode === 'rental' ? requestedUnits : Math.min(requestedUnits, getAvailableStock(product)) });
+      cart.push({ ...product, id: cartKey, cartKey, productId: product.id, price, purchaseMode, rentalDays: days, quantity: Math.min(requestedUnits, getAvailableStock(product)) });
     }
     setCart(cart); updateCartCount(); drawCart();
     button.disabled = true;
@@ -1061,7 +1062,7 @@ async function renderAdminAfterLogin(session) {
   if (!isAdminRoute || current === ADMIN_PATH || current === `${ADMIN_PATH}/`) target = `${ADMIN_PATH}/inteligente`;
 
   if (limitedRole) {
-    const allowed = [`${ADMIN_PATH}/inteligente`, `${ADMIN_PATH}/ventas-generales`, `${ADMIN_PATH}/pedidos`, `${ADMIN_PATH}/generar-orden`, `${ADMIN_PATH}/buscar-productos`, `${ADMIN_PATH}/historial-ventas`, `${ADMIN_PATH}/clientes`, `${ADMIN_PATH}/dinero`];
+    const allowed = [`${ADMIN_PATH}/alquileres`, `${ADMIN_PATH}/inteligente`, `${ADMIN_PATH}/ventas-generales`, `${ADMIN_PATH}/pedidos`, `${ADMIN_PATH}/generar-orden`, `${ADMIN_PATH}/buscar-productos`, `${ADMIN_PATH}/historial-ventas`, `${ADMIN_PATH}/clientes`, `${ADMIN_PATH}/dinero`];
     if (!allowed.includes(target.replace(/\/$/, ''))) target = `${ADMIN_PATH}/pedidos`;
   }
 
@@ -1135,6 +1136,7 @@ async function renderCurrentRoute() {
   if (path === `${ADMIN_PATH}/calculo-comision` || path === `${ADMIN_PATH}/calculo-comision/`) return renderAdminCommission();
   if (path === `${ADMIN_PATH}/multas` || path === `${ADMIN_PATH}/multas/`) return renderAdminFines();
   if (path === `${ADMIN_PATH}/bonos` || path === `${ADMIN_PATH}/bonos/`) return renderAdminBonuses();
+  if (path === `${ADMIN_PATH}/alquileres` || path === `${ADMIN_PATH}/alquileres/`) return renderAdminRentalControl();
   if (path === `${ADMIN_PATH}/pedidos` || path === `${ADMIN_PATH}/pedidos/`) return renderAdminOrders();
   if (path === `${ADMIN_PATH}/generar-orden` || path === `${ADMIN_PATH}/generar-orden/`) return renderAdminGenerateOrder();
   if (path === `${ADMIN_PATH}/historial-ventas` || path === `${ADMIN_PATH}/historial-ventas/`) return renderAdminSalesHistory();
@@ -1194,7 +1196,7 @@ function checkoutPage() {
         </form>
       </section>
       <aside class="checkout-card order-review"><span class="eyebrow">Resumen</span><h2>Tu pedido</h2><div id="fullOrderItems">${cart.map(line=>{ const isRental=line.purchaseMode==='rental'; const days=isRental?rentalDaysValue(line.rentalDays):1; return `<div class="checkout-item"><div><strong>${escapeHTML(line.quantity)}× ${escapeHTML(line.name || 'Producto')}</strong><small>SKU: ${escapeHTML(line.sku || '—')}${isRental ? ` · Alquiler · ${days} día${days===1?'':'s'}` : ''}</small></div><strong>${money(cartLineTotal(line))}</strong></div>`; }).join('')}</div>
-        <div class="checkout-totals"><div><span>Subtotal</span><strong id="fullSubtotal">${money(subtotal())}</strong></div><div><span>Envío</span><strong id="fullShipping">Sin costo</strong></div><div class="checkout-grand"><span>Total</span><strong id="fullTotal">${money(subtotal())}</strong></div></div>
+        ${cartDepositTotal(cart)>0 ? `<p class="checkout-deposit-note">La garantía es reembolsable y se devuelve al recibir el traje. Se cobra junto al alquiler.</p>` : ''}<div class="checkout-totals"><div><span>Subtotal</span><strong id="fullSubtotal">${money(subtotal())}</strong></div><div><span>Envío</span><strong id="fullShipping">Sin costo</strong></div><div><span>Garantía reembolsable</span><strong id="fullDeposit">${money(cartDepositTotal(cart))}</strong></div><div class="checkout-grand"><span>Total a cobrar</span><strong id="fullTotal">${money(subtotal() + cartDepositTotal(cart))}</strong></div></div>
       </aside>
     </div>
   </div></main>`;
@@ -1213,7 +1215,7 @@ function checkoutPage() {
     if (mapsField) mapsField.classList.toggle('hidden', method !== 'local');
     if (mapsInput && method !== 'local') mapsInput.value = '';
     shippingEl.textContent = cost ? money(cost) : 'Sin costo';
-    totalEl.textContent = money(subtotal() + cost);
+    totalEl.textContent = money(subtotal() + cost + cartDepositTotal(cart));
   };
   document.querySelectorAll('input[name="deliveryMethod"]').forEach(r => r.addEventListener('change', updateDelivery));
   updateDelivery();
@@ -1584,8 +1586,8 @@ async function renderProductDetail(product, products, storefront) {
   let images = productImages(product);
   let fixedVariantGallery = [];
   let variantImageOwners = new Map();
-  updateSeoMeta({ title: `${product.name} | YHORS-STORE`, description: compactProductDescription(product.description || `${product.name} disponible en YHORS-STORE.`, 155), canonical: `${location.origin}${productHref(product)}`, image: images[0] && (images[0].startsWith('http') ? images[0] : `${location.origin}${images[0]}`) }); let selected = 0; const isCosplay = product.category === 'cosplay'; const hasRental = isCosplay && Number.isFinite(Number(product.rentalPrice));
-  const modeOptions = hasRental ? `<div class="purchase-choice"><span class="choice-label">¿Cómo quieres obtenerlo?</span><div class="purchase-options" role="radiogroup" aria-label="Modalidad"><button type="button" class="purchase-option active" data-purchase-mode="purchase"><strong>Comprar</strong><span>${productPriceLabel(product)}</span></button><button type="button" class="purchase-option" data-purchase-mode="rental"><strong>Alquilar</strong><span>Alquiler: ${money(product.rentalPrice)}</span></button></div><div class="rental-days-picker hidden" id="rentalDaysPicker"><label for="rentalDays">Días de alquiler</label><select id="rentalDays" name="rentalDays">${Array.from({length:10},(_,i)=>i+1).map(day=>`<option value="${day}" ${day===1?'selected':''}>${day} día${day===1?'':'s'}</option>`).join('')}</select><small class="field-help">Selecciona de 1 a 10 días.</small></div></div>` : '';
+  updateSeoMeta({ title: `${product.name} | YHORS-STORE`, description: compactProductDescription(product.description || `${product.name} disponible en YHORS-STORE.`, 155), canonical: `${location.origin}${productHref(product)}`, image: images[0] && (images[0].startsWith('http') ? images[0] : `${location.origin}${images[0]}`) }); let selected = 0; const isCosplay = product.category === 'cosplay'; const hasRental = isCosplay && product.isRental === true && Number(product.stock || 0) > 0 && product.rentalPrice != null && Number.isFinite(Number(product.rentalPrice));
+  const modeOptions = hasRental ? `<div class="purchase-choice"><span class="choice-label">¿Cómo quieres obtenerlo?</span><div class="purchase-options" role="radiogroup" aria-label="Modalidad"><button type="button" class="purchase-option active" data-purchase-mode="purchase"><strong>Comprar</strong><span>${productPriceLabel(product)}</span></button><button type="button" class="purchase-option" data-purchase-mode="rental"><strong>Alquilar</strong><span>Alquiler: ${money(product.rentalPrice)}</span></button></div><div class="rental-days-picker hidden" id="rentalDaysPicker"><label for="rentalDays">Días de alquiler</label><select id="rentalDays" name="rentalDays">${Array.from({length:10},(_,i)=>i+1).map(day=>`<option value="${day}" ${day===1?'selected':''}>${day} día${day===1?'':'s'}</option>`).join('')}</select><small class="field-help">Selecciona de 1 a 10 días. Se reserva el stock real del traje. Garantía reembolsable: ${money(product.rentalDeposit || 0)} por unidad, incluida en la orden.</small></div></div>` : '';
   const whatsappNumber = String(storefront?.whatsappNumber || '').replace(/\D/g, '');
   const variantBase = product.variantGroupId ? (products.find(item => String(item.variantGroupId || '') === String(product.variantGroupId) && item.published !== false) || product) : product;
   const productVariants = Array.isArray(product.variantOptions) && product.variantOptions.length
@@ -1753,7 +1755,7 @@ async function renderProductDetail(product, products, storefront) {
   const qtyInput = document.querySelector('#detailQty');
   const qtyMinus = document.querySelector('#detailQtyMinus');
   const qtyPlus = document.querySelector('#detailQtyPlus');
-  const qtyLimit = () => purchaseMode === 'rental' ? 99 : Math.max(0, Math.floor(Number(activeProduct?.stockAvailable) || 0));
+  const qtyLimit = () => Math.max(0, Math.floor(Number(activeProduct?.stockAvailable) || 0));
   const syncDetailQuantity = (reset = false) => {
     const limit = qtyLimit();
     const desired = reset ? 1 : Math.floor(Number(qtyInput.value) || 1);
@@ -1911,6 +1913,7 @@ function productForm(product = {}, classifications = {}) {
       ${isCosplay ? `<label><input type="checkbox" id="isRental" name="isRental" ${product.isRental ? 'checked' : ''} ${lock}> Disponible para alquiler</label>` : ''}
     </div>
     <div class="field ${isCosplay ? '' : 'hidden'}"><label for="rentalPrice">Precio de alquiler por día (USD)</label><input id="rentalPrice" name="rentalPrice" ${isCosplay ? 'required' : ''} ${lock} min="0" step="0.01" type="number" value="${escapeHTML(product.rentalPrice ?? '')}"><small class="field-help">Disponible para productos de Cosplay.</small></div>
+    <div class="field ${isCosplay ? '' : 'hidden'}"><label for="rentalDeposit">Garantía reembolsable por traje (USD)</label><input id="rentalDeposit" name="rentalDeposit" min="0" step="0.01" type="number" value="${escapeHTML(product.rentalDeposit ?? 0)}"><small class="field-help">No es un ingreso por alquiler: se cobra con la orden y se devuelve al recibir el traje.</small></div>
     <div class="field full product-section-heading section-5">05 · Fotografías</div><div class="field full"><span class="eyebrow image-section-label">Fotos del producto</span><small class="field-help">Haz clic en cada imagen para abrir el selector y elegir archivo o enlace.</small></div>
     ${[0,1,2,3].map((index) => { const slot=index+1, current=images[index] || (index===0 ? product.image || '' : ''); return `<div class="field full product-image-slot"><div class="product-image-slot-head"><div><strong>${index===0?'Imagen principal':`Imagen ${slot}`}</strong><small>${current ? 'Imagen cargada' : 'Sin imagen · puedes agregarla después'}</small></div><div class="product-image-slot-head-actions"><button type="button" class="button secondary small" data-open-image-picker="${slot}" ${lock}>${current ? 'Cambiar imagen' : '+ Agregar imagen'}</button>${current ? `<button type="button" class="button danger small" data-remove-product-image="${slot}" ${lock}>Eliminar foto</button>` : ''}</div></div><input type="hidden" id="image${index===0?'':slot}" name="image${index===0?'':slot}" value="${escapeHTML(current)}"><div class="product-image-slot-preview ${current?'has-image':''}"><img id="productImagePreview${slot}" data-fallback src="${escapeHTML(current || placeholder)}" alt="Imagen ${slot}"><span>${current ? '' : 'SIN IMAGEN'}</span></div></div>`; }).join('')}
     <div class="field full product-section-heading section-6">06 · Descripción del producto</div><div class="field full rich-description-field"><label for="descriptionEditor">Descripción completa</label><div class="rich-editor" data-rich-editor ${locked ? 'aria-disabled="true"' : ''}><div class="rich-editor-toolbar" role="toolbar" aria-label="Formato de descripción"><button type="button" class="rich-tool rich-tool-heading" data-rich-command="formatBlock" data-rich-value="h2" title="Título (H2) · activar/desactivar" aria-label="Título" ${locked ? 'disabled' : ''}><strong>Título</strong></button><span class="rich-tool-separator" aria-hidden="true"></span><button type="button" class="rich-tool" data-rich-command="bold" title="Negrita" aria-label="Negrita" ${locked ? 'disabled' : ''}><strong>B</strong></button><button type="button" class="rich-tool" data-rich-command="italic" title="Cursiva" aria-label="Cursiva" ${locked ? 'disabled' : ''}><em>I</em></button><button type="button" class="rich-tool" data-rich-command="underline" title="Subrayado" aria-label="Subrayado" ${locked ? 'disabled' : ''}><u>U</u></button><span class="rich-tool-separator" aria-hidden="true"></span><button type="button" class="rich-tool rich-tool-list" data-rich-command="insertUnorderedList" title="Lista con viñetas" aria-label="Lista con viñetas" ${locked ? 'disabled' : ''}>• Lista</button><button type="button" class="rich-tool rich-tool-list" data-rich-command="insertOrderedList" title="Lista numerada" aria-label="Lista numerada" ${locked ? 'disabled' : ''}>1. Lista</button><span class="rich-tool-separator" aria-hidden="true"></span><button type="button" class="rich-tool rich-tool-wide" data-rich-command="removeFormat" title="Quitar formato" ${locked ? 'disabled' : ''}>Limpiar</button></div><div id="descriptionEditor" class="rich-editor-content" contenteditable="${locked ? 'false' : 'true'}" role="textbox" aria-multiline="true" aria-label="Descripción completa">${richDescriptionHTML(product.description || '')}</div></div><textarea id="description" name="description" required maxlength="2000" rows="9" ${lock} hidden>${escapeHTML(product.description || '')}</textarea><small class="field-help">Escribe como en Word: <strong>negrita</strong>, <em>cursiva</em>, subrayado, títulos, viñetas y saltos de línea.</small></div>
@@ -2122,9 +2125,9 @@ function ordersListMarkup(orders = [], options = {}) {
     </button>
     <div class="admin-order-details" id="orderDetails-${escapeHTML(order.id)}" hidden>
       <div class="admin-order-head"><div><span class="eyebrow">${escapeHTML(date(order.createdAt))}</span><h3>#${escapeHTML(order.orderNumber)}</h3><strong>${escapeHTML(order.customer?.name || 'Cliente')}</strong></div><div class="order-status-wrap"><label>Estado</label><select class="status-select-${statusClass(order.status || 'Pendiente')}" data-order-status="${escapeHTML(order.id)}" disabled>${statuses.map(s => `<option ${s === order.status ? 'selected' : ''} value="${escapeHTML(s)}">${escapeHTML(s)}</option>`).join('')}</select></div></div>
-      <div class="admin-order-grid"><div><span class="order-label">Contacto</span><p>${escapeHTML(order.customer?.phone || '—')}${order.customer?.email ? `<br>${escapeHTML(order.customer.email)}` : ''}<br><strong>Cédula / RUC:</strong> ${escapeHTML(order.customer?.cedula || '—')}</p></div><div><span class="order-label">Entrega</span><p><strong>${escapeHTML(order.delivery?.label || '—')}</strong><br>${escapeHTML(order.customer?.city || '—')}${order.customer?.address ? ` · ${escapeHTML(order.customer.address)}` : ''}${order.customer?.mapsUrl ? `<br><a href="${escapeHTML(order.customer.mapsUrl)}" target="_blank" rel="noopener">📍 Abrir ubicación en Google Maps</a>` : ''}</p></div><div><span class="order-label">Total</span><p class="order-total">${money(order.total)}</p><small>Subtotal ${money(order.subtotal ?? order.total)} · Envío ${money(order.shippingCost ?? 0)}</small></div></div>
+      <div class="admin-order-grid"><div><span class="order-label">Contacto</span><p>${escapeHTML(order.customer?.phone || '—')}${order.customer?.email ? `<br>${escapeHTML(order.customer.email)}` : ''}<br><strong>Cédula / RUC:</strong> ${escapeHTML(order.customer?.cedula || '—')}</p></div><div><span class="order-label">Entrega</span><p><strong>${escapeHTML(order.delivery?.label || '—')}</strong><br>${escapeHTML(order.customer?.city || '—')}${order.customer?.address ? ` · ${escapeHTML(order.customer.address)}` : ''}${order.customer?.mapsUrl ? `<br><a href="${escapeHTML(order.customer.mapsUrl)}" target="_blank" rel="noopener">📍 Abrir ubicación en Google Maps</a>` : ''}</p></div><div><span class="order-label">Total</span><p class="order-total">${money(order.total)}</p><small>Subtotal ${money(order.subtotal ?? order.total)} · Envío ${money(order.shippingCost ?? 0)}${Number(order.depositTotal||0)>0 ? ` · Garantía reembolsable ${money(order.depositTotal)}` : ''}</small></div></div>
       <div class="order-payment-card ${paymentState}"><div class="order-payment-main"><div><span class="order-label">CONTROL DE PAGO</span><strong>${paymentLabel}</strong><small>Responsable: ${escapeHTML(responsible)}</small></div><span class="order-payment-badge">${paymentState === 'paid' ? '✓' : paymentState === 'partial' ? '!' : '$'}</span></div><div class="order-payment-numbers"><div><span>FACTURA</span><strong>${money(totalDue)}</strong></div><div><span>PAGADO</span><strong>${money(paid)}</strong></div><div class="order-payment-balance"><span>SALDO</span><strong>${money(balance)}</strong></div></div><div class="order-payment-footer"><small>${balance > 0.001 ? 'No se debe entregar hasta completar el pago.' : 'Pago completo registrado · entrega habilitada.'}</small><div class="order-payment-actions"><button type="button" class="button primary small" data-order-open-payment="${escapeHTML(order.id)}">${balance > 0.001 ? 'Ver / registrar dinero →' : 'Ver pagos'}</button><a href="${ADMIN_PATH}/dinero" data-smooth-route>Control de dinero</a></div></div></div>
-      <div class="admin-order-items" data-order-items-view="${escapeHTML(order.id)}">${(order.items || []).map(item => { const isRental=item.purchaseMode==='rental'; const days=Number(item.rentalDays||1); const ids=(item.deviceIdentifiers||[]).map(entry => `${entry.type==='imei'?'IMEI':'Serie'} ${entry.unit}: ${entry.primary}${entry.secondary?` / ${entry.secondary}`:''}`).join(' · '); return `<div class="admin-order-item"><span><strong>${escapeHTML(item.quantity)}×</strong> ${escapeHTML(item.name)} <small>SKU: ${escapeHTML(item.sku || '—')} · ${isRental ? `Alquiler · ${days} día${days===1?'':'s'} · ${money(item.unitPrice)}/día` : 'Compra'}${ids ? `<br><b class="order-device-id">${escapeHTML(ids)}</b>` : ''}</small></span><strong>${money(item.subtotal)}</strong></div>`; }).join('')}</div>
+      <div class="admin-order-items" data-order-items-view="${escapeHTML(order.id)}">${(order.items || []).map(item => { const isRental=item.purchaseMode==='rental'; const days=Number(item.rentalDays||1); const ids=(item.deviceIdentifiers||[]).map(entry => `${entry.type==='imei'?'IMEI':'Serie'} ${entry.unit}: ${entry.primary}${entry.secondary?` / ${entry.secondary}`:''}`).join(' · '); return `<div class="admin-order-item"><span><strong>${escapeHTML(item.quantity)}×</strong> ${escapeHTML(item.name)} <small>SKU: ${escapeHTML(item.sku || '—')} · ${isRental ? `Alquiler · ${days} día${days===1?'':'s'} · ${money(item.unitPrice)}/día · Garantía ${money(Number(item.rentalDeposit||0)*Number(item.quantity||0))}` : 'Compra'}${ids ? `<br><b class="order-device-id">${escapeHTML(ids)}</b>` : ''}</small></span><strong>${money(item.subtotal)}</strong></div>`; }).join('')}</div>
       <div class="admin-order-items-actions">
         <button class="button edit-note small" type="button" data-order-items-edit="${escapeHTML(order.id)}" disabled>Editar productos</button>
       </div>
@@ -2159,6 +2162,7 @@ function ordersListMarkup(orders = [], options = {}) {
           : `<div class="order-assignment-readonly">${escapeHTML(sellerName(order))}</div>`}
       </div>
       <div class="admin-order-footer">
+        ${(order.items||[]).some(item=>item.purchaseMode==='rental') ? `<a class="button secondary small" href="${ADMIN_PATH}/alquileres" data-smooth-route>Control de traje y garantía</a>` : ''}
         <button class="button pdf-order small" type="button" data-order-pdf="${escapeHTML(order.id)}" title="Generar PDF de esta orden">PDF ORDEN</button>
         ${['Enviado','Entregado'].includes(String(order.status || '')) ? `<button class="button primary small" type="button" data-order-notify-sale="${escapeHTML(order.id)}">NOTIFICAR VENTA</button>` : ''}
         ${canRefundCancelledRental ? `<button class="button secondary small" type="button" data-order-rental-refund="${escapeHTML(order.id)}">DEVOLVER DINERO</button>` : ''}
@@ -2182,7 +2186,7 @@ function ordersListMarkup(orders = [], options = {}) {
 function adminSectionNav(session = {}, active = '') {
   const role = String(session?.role || '').toLowerCase();
   const limitedOperations = role === 'vendedor' || role === 'orders' || role === 'store_manager';
-  const navIcons = { web:'🌐', 'buscar-productos':'⌕', inventario:'▣', compras:'▤', pedidos:'▤', 'generar-orden':'＋', 'historial-ventas':'✓', usuarios:'♙', 'series-imeis':'◉', auditoria:'◌', clientes:'♙', movimientos:'↕', reportes:'▥', backups:'◫', 'resumen-financiero':'◒', dinero:'$', 'ventas-generales':'◔', multas:'!', bonos:'+', 'calculo-comision':'%', devoluciones:'↩', };
+  const navIcons = { web:'🌐', 'buscar-productos':'⌕', inventario:'▣', compras:'▤', pedidos:'▤', 'alquileres':'↺', 'generar-orden':'＋', 'historial-ventas':'✓', usuarios:'♙', 'series-imeis':'◉', auditoria:'◌', clientes:'♙', movimientos:'↕', reportes:'▥', backups:'◫', 'resumen-financiero':'◒', dinero:'$', 'ventas-generales':'◔', multas:'!', bonos:'+', 'calculo-comision':'%', devoluciones:'↩', };
   const link = (key, href, label) => {
     const icon = navIcons[key];
     const iconMarkup = icon ? `<span class="admin-nav-icon" aria-hidden="true">${icon}</span>` : '';
@@ -2191,9 +2195,9 @@ function adminSectionNav(session = {}, active = '') {
   if (limitedOperations) {
     // Vendedores y jefes tienen dos áreas claras: primero agendar la venta
     // y luego las herramientas para darle seguimiento/gestión.
-    const saleItems = `${link('clientes', `${ADMIN_PATH}/clientes`, 'CLIENTES')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('generar-orden', `${ADMIN_PATH}/generar-orden`, 'GENERAR ORDEN')}`;
+    const saleItems = `${link('clientes', `${ADMIN_PATH}/clientes`, 'CLIENTES')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('alquileres', `${ADMIN_PATH}/alquileres`, 'ALQUILERES Y GARANTÍAS')}${link('generar-orden', `${ADMIN_PATH}/generar-orden`, 'GENERAR ORDEN')}`;
     const managementItems = `${link('buscar-productos', `${ADMIN_PATH}/buscar-productos`, 'BUSCAR PRODUCTOS')}${link('ventas-generales', `${ADMIN_PATH}/ventas-generales`, 'VENTAS GENERALES')}${link('historial-ventas', `${ADMIN_PATH}/historial-ventas`, 'HISTORIAL DE VENTAS')}${link('dinero', `${ADMIN_PATH}/dinero`, 'DINERO · COBROS')}${role === 'vendedor' || role === 'orders' ? '' : link('series-imeis', `${ADMIN_PATH}/series-imeis`, 'SERIES / IMEIS')}`;
-    const saleActive = ['clientes','pedidos','generar-orden'].includes(active);
+    const saleActive = ['clientes','pedidos','alquileres','generar-orden'].includes(active);
     const managementActive = ['buscar-productos','ventas-generales','historial-ventas','dinero','series-imeis'].includes(active);
     const limitedGroup = (label, items, isActive, extraClass = '') => `<details class="admin-nav-group admin-nav-group--limited ${extraClass}${isActive ? ' has-active' : ''}"><summary><span>${label}</span>${isActive ? '<i aria-hidden="true"></i>' : ''}</summary><div class="admin-nav-group-links admin-nav-group-links--limited">${items}</div></details>`;
     return `<div class="admin-navigation-stack admin-navigation-stack--limited"><nav class="admin-section-nav admin-section-nav--limited" id="adminSectionNav" aria-label="Navegación YHORS">${limitedGroup('AGENDAR VENTA', saleItems, saleActive, 'admin-nav-group--sales')}${limitedGroup('GESTIÓN', managementItems, managementActive, 'admin-nav-group--management')}</nav></div>`;
@@ -2202,7 +2206,7 @@ function adminSectionNav(session = {}, active = '') {
   return `<div class="admin-navigation-stack">
     <nav class="admin-section-nav" id="adminSectionNav" aria-label="Administración YHORS">
       <a href="${ADMIN_PATH}/inteligente" class="admin-section-link panel-home-link" data-smooth-route>⌂ &nbsp; INICIO / OVERVIEW</a>
-      ${group('Operación', ['web','inventario','buscar-productos','pedidos','generar-orden','historial-ventas','compras'], `${link('web', `${ADMIN_PATH}/web`, 'PÁGINA WEB')}${link('buscar-productos', `${ADMIN_PATH}/buscar-productos`, 'BUSCAR PRODUCTOS')}${link('inventario', `${ADMIN_PATH}/inventario`, 'INVENTARIO')}${link('compras', `${ADMIN_PATH}/compras`, 'COMPRAS / PROVEEDORES')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('generar-orden', `${ADMIN_PATH}/generar-orden`, 'GENERAR ORDEN')}${link('historial-ventas', `${ADMIN_PATH}/historial-ventas`, 'HISTORIAL DE VENTAS')}`)}
+      ${group('Operación', ['web','inventario','buscar-productos','pedidos','alquileres','generar-orden','historial-ventas','compras'], `${link('web', `${ADMIN_PATH}/web`, 'PÁGINA WEB')}${link('buscar-productos', `${ADMIN_PATH}/buscar-productos`, 'BUSCAR PRODUCTOS')}${link('inventario', `${ADMIN_PATH}/inventario`, 'INVENTARIO')}${link('compras', `${ADMIN_PATH}/compras`, 'COMPRAS / PROVEEDORES')}${link('pedidos', `${ADMIN_PATH}/pedidos`, 'PEDIDOS')}${link('alquileres', `${ADMIN_PATH}/alquileres`, 'ALQUILERES Y GARANTÍAS')}${link('generar-orden', `${ADMIN_PATH}/generar-orden`, 'GENERAR ORDEN')}${link('historial-ventas', `${ADMIN_PATH}/historial-ventas`, 'HISTORIAL DE VENTAS')}`)}
       ${group('Gestión', ['usuarios','series-imeis','auditoria','backups'], `${link('usuarios', `${ADMIN_PATH}/usuarios`, 'USUARIOS')}${link('series-imeis', `${ADMIN_PATH}/series-imeis`, 'SERIES/IMEIS')}${link('auditoria', `${ADMIN_PATH}/auditoria`, 'AUDITORÍA')}${link('backups', `${ADMIN_PATH}/backups`, 'BACKUPS')}`)}
       ${group('Empresa', ['clientes','movimientos','reportes'], `${link('clientes', `${ADMIN_PATH}/clientes`, 'CLIENTES · FICHERO')}${link('movimientos', `${ADMIN_PATH}/movimientos`, 'MOVIMIENTOS DE INVENTARIO')}${link('reportes', `${ADMIN_PATH}/reportes`, 'REPORTES')}`)}
       ${group('Finanzas', ['resumen-financiero','ventas-generales','dinero','devoluciones','multas','bonos','calculo-comision'], `${link('resumen-financiero', `${ADMIN_PATH}/resumen-financiero`, 'RESUMEN FINANCIERO')}${link('dinero', `${ADMIN_PATH}/dinero`, 'DINERO · COBROS')}${link('devoluciones', `${ADMIN_PATH}/devoluciones`, 'DEVOLUCIONES')}${link('ventas-generales', `${ADMIN_PATH}/ventas-generales`, 'VENTAS GENERALES')}${link('multas', `${ADMIN_PATH}/multas`, 'MULTAS')}${link('bonos', `${ADMIN_PATH}/bonos`, 'BONOS')}${link('calculo-comision', `${ADMIN_PATH}/calculo-comision`, 'CÁLCULO DE COMISIÓN')}`)}
@@ -2310,7 +2314,7 @@ async function renderAdminGenerateOrder() {
       <section class="generate-card generate-products-card"><div class="generate-card-head"><div><span class="generate-card-kicker">03 · Productos</span><h3>Detalle de la orden</h3></div><button type="button" class="button primary small" id="openProductPicker">+ Agregar productos</button></div><div class="generate-products-table-head"><span>Producto</span><span>Cant.</span><span>Precio</span><span>Total</span><span></span></div><div id="generateOrderLines">${generateOrderProductRows(lines)}</div></section>
       <section class="generate-bottom-grid">
         <section class="generate-card delivery-card"><div class="generate-card-kicker">04 · Entrega</div><h3>Forma de entrega</h3><div class="generate-delivery-options"><label><input type="radio" name="generateDelivery" value="office" checked><span><strong>Retiro en oficina</strong><small>Sin costo</small></span></label><label><input type="radio" name="generateDelivery" value="local"><span><strong>Envío YHORS</strong><small>$3,00</small></span></label><label><input type="radio" name="generateDelivery" value="courier"><span><strong>Courier</strong><small>$5,00</small></span></label></div><label class="generate-field"><span>Notas de la orden</span><textarea id="generateNotes" rows="4" maxlength="500" placeholder="Referencia, horario u otra indicación"></textarea></label></section>
-        <section class="generate-card totals-card"><div class="generate-card-kicker">Resumen</div><div class="generate-total-line"><span>Subtotal</span><strong id="generateSubtotal">$0,00</strong></div><div class="generate-total-line"><span>Envío</span><strong id="generateShipping">$0,00</strong></div><div class="generate-grand-total"><span>Total</span><strong id="generateTotal">$0,00</strong></div><div id="generateMessage" class="message" hidden></div><button type="button" class="button generate-submit" id="generateOrderSubmit">Generar orden <span>→</span></button></section>
+        <section class="generate-card totals-card"><div class="generate-card-kicker">Resumen</div><div class="generate-total-line"><span>Subtotal</span><strong id="generateSubtotal">$0,00</strong></div><div class="generate-total-line"><span>Envío</span><strong id="generateShipping">$0,00</strong></div><div class="generate-total-line"><span>Garantía reembolsable</span><strong id="generateDeposit">$0,00</strong></div><div class="generate-grand-total"><span>Total a cobrar</span><strong id="generateTotal">$0,00</strong></div><div id="generateMessage" class="message" hidden></div><button type="button" class="button generate-submit" id="generateOrderSubmit">Generar orden <span>→</span></button></section>
       </section>
     </section>
     <div class="generate-modal" id="customerModal" hidden><div class="generate-modal-backdrop" data-close-generate-modal="customerModal"></div><div class="generate-modal-dialog generate-customer-picker" role="dialog" aria-modal="true" aria-labelledby="customerModalTitle"><div class="generate-modal-head"><div><span class="eyebrow">Fichero de clientes</span><h2 id="customerModalTitle">Seleccionar cliente</h2><p class="generate-customer-modal-subtitle">Busca por nombre, cédula o teléfono. Si no existe, puedes registrarlo una sola vez.</p></div><button type="button" class="generate-modal-close" data-close-generate-modal="customerModal">×</button></div><div id="customerPickerView"><div class="generate-customer-searchbar"><span aria-hidden="true">⌕</span><input id="generateCustomerSearch" type="search" placeholder="Buscar nombre, cédula o teléfono…" autocomplete="off"><button type="button" class="button secondary small" id="generateNewCustomer">+ Nuevo cliente</button></div><div class="generate-customer-picker-count" id="generateCustomerPickerCount"></div><div class="generate-customer-picker-list" id="generateCustomerPickerList"></div></div><form id="generateCustomerForm" class="generate-new-customer-form" hidden><div class="generate-new-customer-head"><button type="button" class="button secondary small" id="backToCustomerSearch">← Volver a buscar</button><span class="eyebrow">Nuevo expediente</span></div><div class="form-grid"><div class="field full"><label for="genCustomerName">Nombre completo</label><input id="genCustomerName" required maxlength="100" placeholder="Nombre del cliente"></div><div class="field"><label for="genCustomerCedula">Cédula / RUC</label><input id="genCustomerCedula" required inputmode="numeric" maxlength="13" placeholder="0102030405"></div><div class="field"><label for="genCustomerPhone">Celular</label><input id="genCustomerPhone" required maxlength="40" placeholder="099 999 9999"></div><div class="field"><label for="genCustomerEmail">Correo</label><input id="genCustomerEmail" type="email" maxlength="120" placeholder="cliente@correo.com"></div><div class="field"><label for="genCustomerCity">Ciudad</label><input id="genCustomerCity" required maxlength="80" placeholder="Quito"></div><div class="field full"><label for="genCustomerAddress">Dirección</label><input id="genCustomerAddress" maxlength="240" placeholder="Dirección de entrega"></div><div class="field full"><label for="genCustomerMaps">Google Maps (opcional)</label><input id="genCustomerMaps" type="url" maxlength="500" placeholder="https://maps.google.com/..."></div></div><div class="generate-modal-actions"><button type="button" class="button secondary" id="cancelNewCustomer">Cancelar</button><button type="submit" class="button primary">Guardar y seleccionar</button></div><div id="generateCustomerMessage" class="message" hidden></div></form></div></div></div>
@@ -2494,9 +2498,9 @@ async function renderAdminGenerateOrder() {
   document.querySelector('#cancelNewCustomer')?.addEventListener('click', () => closeModal('customerModal'));
   document.querySelector('#openCustomerModal')?.addEventListener('click', openCustomerPicker);
   function drawLines() { document.querySelector('#generateOrderLines').innerHTML = generateOrderProductRows(lines); wireImageFallback(document.querySelector('#generateOrderLines')); updateTotals(); }
-  function updateTotals() { const subtotal = lines.reduce((sum, line) => sum + Number(line.price || 0) * Number(line.quantity || 0) * (line.purchaseMode === 'rental' ? Math.max(1, Number(line.rentalDays || 1)) : 1), 0); const delivery = document.querySelector('input[name="generateDelivery"]:checked')?.value || 'office'; const shipping = delivery === 'local' ? 3 : delivery === 'courier' ? 5 : 0; document.querySelector('#generateSubtotal').textContent = money(subtotal); document.querySelector('#generateShipping').textContent = money(shipping); document.querySelector('#generateTotal').textContent = money(subtotal + shipping); customer.deliveryMethod = delivery; document.querySelector('#customerSummary') && drawCustomer(); }
-  function addProduct(product, mode='purchase') { const rental = mode === 'rental'; if (rental && !(product.category === 'cosplay' && product.isRental === true && Number.isFinite(Number(product.rentalPrice)))) return; const id = `${product.id}::${mode}`; const existing = lines.find(line => line.id === id); if (existing) existing.quantity = Math.min(99, Number(existing.quantity || 0) + 1); else lines.push({ ...product, id, productId: product.id, requiresDeviceIdentifier: product.requiresDeviceIdentifier !== false, price: Number(rental ? product.rentalPrice : (product.salePrice ?? product.price)), purchaseMode: mode, rentalDays: rental ? 1 : null, quantity: 1 }); drawLines(); }
-  function drawPicker() { const query = (document.querySelector('#generateProductSearch')?.value || '').trim().toLowerCase(); const category = document.querySelector('#generateProductCategory')?.value || ''; const filtered = products.filter(product => { const hay = `${product.name || ''} ${product.sku || ''} ${product.brand || ''} ${product.productType || ''}`.toLowerCase(); return (!query || hay.includes(query)) && (!category || product.category === category); }); const list = document.querySelector('#generatePickerList'); list.innerHTML = filtered.length ? filtered.map(product => { const stock = Number(product.stock || 0); const rental = product.category === 'cosplay' && product.isRental === true && Number.isFinite(Number(product.rentalPrice)); return `<article class="generate-picker-product"><img src="${escapeHTML(productImages(product)[0])}" data-fallback alt=""><div class="generate-picker-info"><strong>${escapeHTML(product.name)}</strong><small>SKU: ${escapeHTML(product.sku || '—')}${product.variantLabel ? ` · Color: ${escapeHTML(product.variantLabel)}` : ''} · ${escapeHTML(categories[product.category] || product.category || 'Producto')}</small><b>${money(product.salePrice ?? product.price ?? 0)} · Stock ${stock}</b></div><div class="generate-picker-actions"><button type="button" class="button primary small" data-add-generate="${escapeHTML(product.id)}" data-mode="purchase">Agregar</button>${rental ? `<button type="button" class="button secondary small" data-add-generate="${escapeHTML(product.id)}" data-mode="rental">Alquiler</button>` : ''}</div></article>`; }).join('') : '<div class="generate-empty-state"><span>⌕</span><strong>No encontramos productos</strong><small>Prueba con otro nombre, SKU o categoría.</small></div>'; wireImageFallback(list); list.querySelectorAll('[data-add-generate]').forEach(button => button.addEventListener('click', () => { const product = products.find(item => item.id === button.dataset.addGenerate); if (product) addProduct(product, button.dataset.mode); })); }
+  function updateTotals() { const subtotal = lines.reduce((sum, line) => sum + Number(line.price || 0) * Number(line.quantity || 0) * (line.purchaseMode === 'rental' ? Math.max(1, Number(line.rentalDays || 1)) : 1), 0); const delivery = document.querySelector('input[name="generateDelivery"]:checked')?.value || 'office'; const shipping = delivery === 'local' ? 3 : delivery === 'courier' ? 5 : 0; document.querySelector('#generateSubtotal').textContent = money(subtotal); document.querySelector('#generateShipping').textContent = money(shipping); const deposit = cartDepositTotal(lines); document.querySelector('#generateDeposit').textContent=money(deposit); document.querySelector('#generateTotal').textContent = money(subtotal + shipping + deposit); customer.deliveryMethod = delivery; document.querySelector('#customerSummary') && drawCustomer(); }
+  function addProduct(product, mode='purchase') { const rental = mode === 'rental'; if (rental && !(product.category === 'cosplay' && product.isRental === true && Number(product.stock)>0 && Number.isFinite(Number(product.rentalPrice)))) return; const id = `${product.id}::${mode}`; const existing = lines.find(line => line.id === id); if (existing) existing.quantity = Math.min(Math.max(0,Number(product.stock||0)), Number(existing.quantity || 0) + 1); else { if(Number(product.stock||0)<=0)return; lines.push({ ...product, id, productId: product.id, requiresDeviceIdentifier: product.requiresDeviceIdentifier !== false, price: Number(rental ? product.rentalPrice : (product.salePrice ?? product.price)), purchaseMode: mode, rentalDays: rental ? 1 : null, quantity: 1 }); } drawLines(); }
+  function drawPicker() { const query = (document.querySelector('#generateProductSearch')?.value || '').trim().toLowerCase(); const category = document.querySelector('#generateProductCategory')?.value || ''; const filtered = products.filter(product => { const hay = `${product.name || ''} ${product.sku || ''} ${product.brand || ''} ${product.productType || ''}`.toLowerCase(); return (!query || hay.includes(query)) && (!category || product.category === category); }); const list = document.querySelector('#generatePickerList'); list.innerHTML = filtered.length ? filtered.map(product => { const stock = Number(product.stock || 0); const rental = product.category === 'cosplay' && product.isRental === true && stock > 0 && Number.isFinite(Number(product.rentalPrice)); return `<article class="generate-picker-product"><img src="${escapeHTML(productImages(product)[0])}" data-fallback alt=""><div class="generate-picker-info"><strong>${escapeHTML(product.name)}</strong><small>SKU: ${escapeHTML(product.sku || '—')}${product.variantLabel ? ` · Color: ${escapeHTML(product.variantLabel)}` : ''} · ${escapeHTML(categories[product.category] || product.category || 'Producto')}</small><b>${money(product.salePrice ?? product.price ?? 0)} · Stock ${stock}</b></div><div class="generate-picker-actions"><button type="button" class="button primary small" data-add-generate="${escapeHTML(product.id)}" data-mode="purchase">Agregar</button>${rental ? `<button type="button" class="button secondary small" data-add-generate="${escapeHTML(product.id)}" data-mode="rental">Alquiler</button>` : ''}</div></article>`; }).join('') : '<div class="generate-empty-state"><span>⌕</span><strong>No encontramos productos</strong><small>Prueba con otro nombre, SKU o categoría.</small></div>'; wireImageFallback(list); list.querySelectorAll('[data-add-generate]').forEach(button => button.addEventListener('click', () => { const product = products.find(item => item.id === button.dataset.addGenerate); if (product) addProduct(product, button.dataset.mode); })); }
   document.querySelector('#generateProductSearch')?.addEventListener('input', drawPicker); document.querySelector('#generateProductCategory')?.addEventListener('change', drawPicker);
   document.querySelector('#generateCustomerForm')?.addEventListener('submit', async event => {
     event.preventDefault();
@@ -3793,6 +3797,90 @@ async function renderAdminSales() {
   document.querySelector('#salesStatusFilter')?.addEventListener('change', loadSales);
   wireAccountMenu();
   await loadSales();
+}
+
+async function renderAdminRentalControl() {
+  const shortDate = value => { const d=new Date(value); return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString('es-EC',{dateStyle:'medium',timeStyle:'short'}); };
+  const session=await request('/api/admin/session').catch(()=>({authenticated:false}));
+  if(!session.authenticated)return renderLogin();
+  const role=String(session.role||'').toLowerCase();
+  if(!['admin','store_manager','vendedor','orders'].includes(role))return renderAdminOrders();
+  app.innerHTML=`<main class="admin-shell yh-rentals-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand admin-brand" href="${ADMIN_PATH}/inteligente" data-smooth-route><span class="admin-brand-word">YHORS</span><small>Panel Administrativo</small></a><h1 class="admin-title">Alquileres y garantías</h1><p class="admin-subtitle">Control de prendas entregadas, stock físico y dinero reembolsable.</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>${adminSectionNav(session,'alquileres')}<section class="yh-rental-dashboard"><div class="yh-rental-header"><div><span class="eyebrow">CONTROL DE ALQUILERES</span><h2>Trajes y garantías pendientes</h2><p>El stock se libera solamente cuando confirmas que el cliente devolvió físicamente el traje. La garantía se devuelve en un movimiento independiente.</p></div><button type="button" class="button secondary" id="refreshRentalDashboard">Actualizar ↻</button></div><div class="yh-rental-kpis" id="rentalKpis"></div><div class="yh-rental-filter"><input id="rentalSearch" placeholder="Buscar cliente, cédula, SKU o número de pedido" aria-label="Buscar alquiler"><select id="rentalStatusFilter"><option value="">Todos los alquileres</option><option value="active">Pendientes de devolver</option><option value="deposit">Garantía por devolver</option><option value="complete">Finalizados</option></select></div><div id="rentalDashboardMessage" class="message"></div><div id="rentalDashboardRows" class="yh-rental-rows"></div></section></div></main>`;
+  wireAccountMenu();
+  const list=document.querySelector('#rentalDashboardRows'), message=document.querySelector('#rentalDashboardMessage');
+  let data=[];
+  const render=()=>{
+    const search=(document.querySelector('#rentalSearch')?.value||'').trim().toLocaleLowerCase('es-EC');
+    const filter=document.querySelector('#rentalStatusFilter')?.value||'';
+    const tracked=data.filter(o=>o.rentalStockTracked), pending=tracked.filter(o=>!o.rentalReturn?.stockRestored&&o.status!=='Cancelado').length;
+    const deposit=data.reduce((sum,o)=>sum+(o.paymentComplete?Math.max(0,Number(o.depositTotal||0)-Number(o.rentalReturn?.refundedAmount||0)):0),0);
+    document.querySelector('#rentalKpis').innerHTML=`<div><span>Alquileres registrados</span><strong>${data.length}</strong></div><div><span>Trajes por recuperar</span><strong>${pending}</strong></div><div><span>Garantías pendientes</span><strong>${money(deposit)}</strong></div><div><span>Prendas devueltas</span><strong>${tracked.filter(o=>o.rentalReturn?.status==='devuelto').length}</strong></div>`;
+    const visible=data.filter(o=>{
+      const remaining=Math.max(0,Number(o.depositTotal||0)-Number(o.rentalReturn?.refundedAmount||0));
+      if(filter==='active'&&(o.rentalReturn?.stockRestored||o.status==='Cancelado'))return false;
+      if(filter==='deposit'&&(!o.paymentComplete||remaining<=0))return false;
+      if(filter==='complete'&&(!o.rentalReturn?.stockRestored||remaining>0))return false;
+      const text=[o.number,o.customer?.name,o.customer?.cedula,o.customer?.phone,...o.rentalItems.map(item=>item.name+' '+item.sku)].join(' ').toLocaleLowerCase('es-EC');
+      return !search||text.includes(search);
+    });
+    list.innerHTML=visible.length?visible.map(o=>{
+      const state=o.rentalReturn||{}, remaining=Math.max(0,Math.round((Number(o.depositTotal||0)-Number(state.refundedAmount||0))*100)/100);
+      const historical=!o.rentalStockTracked;
+      const status=historical?'Alquiler histórico · sin control automático':state.status==='devuelto'?'Traje devuelto':state.status==='cancelado'?'Cancelado':state.deliveredAt?'Traje entregado · pendiente de retorno':'Reservado · pendiente de entrega';
+      const rentalAmount=o.rentalItems.reduce((sum,item)=>sum+Number(item.subtotal||0),0);
+      return `<article class="yh-rental-row"><div class="yh-rental-row-top"><div><span class="eyebrow">#${escapeHTML(o.number||'—')} · ${escapeHTML(shortDate(o.createdAt)||'')}</span><h3>${escapeHTML(o.customer?.name||'Cliente')}</h3><small>Cédula: ${escapeHTML(o.customer?.cedula||'—')} · ${escapeHTML(o.customer?.phone||'—')}</small></div><span class="yh-rental-chip ${state.stockRestored?'is-returned':'is-active'}">${escapeHTML(status)}</span></div><div class="yh-rental-items">${o.rentalItems.map(item=>`<div><strong>${escapeHTML(item.quantity)}× ${escapeHTML(item.name)}</strong><small>SKU ${escapeHTML(item.sku||'—')} · ${Number(item.rentalDays||1)} día(s) · ${money(item.unitPrice)} / día</small></div>`).join('')}</div><div class="yh-rental-money"><div><span>Valor alquiler</span><strong>${money(rentalAmount)}</strong></div><div><span>Garantía del pedido</span><strong>${money(o.depositTotal||0)}</strong></div><div><span>Ya devuelta</span><strong>${money(state.refundedAmount||0)}</strong></div><div><span>Por devolver</span><strong>${o.paymentComplete?money(remaining):'Cobro pendiente'}</strong></div></div><p class="yh-rental-dates">${state.deliveredAt?`Entregado: ${escapeHTML(shortDate(state.deliveredAt))}`:'Entrega pendiente'} ${state.dueAt?`· Devolución prevista: ${escapeHTML(shortDate(state.dueAt))}`:''} ${state.returnedAt?`· Recibido: ${escapeHTML(shortDate(state.returnedAt))}`:''}</p>${historical?`<small class="yh-rental-warning">Este alquiler es anterior al nuevo control: no se descuenta ni restaura stock automáticamente. La garantía histórica debe conciliarse manualmente.</small>`:''}<div class="yh-rental-actions">${!historical&&!state.deliveredAt&&!state.stockRestored&&o.status!=='Cancelado'?`<button class="button secondary small" data-rental-deliver="${escapeHTML(o.id)}">Registrar entrega</button>`:''}${!historical&&state.deliveredAt&&!state.stockRestored?`<button class="button primary small" data-rental-return="${escapeHTML(o.id)}">Traje recibido · devolver stock</button>`:''}${remaining>0&&o.paymentComplete&&role==='admin'&&(state.status==='devuelto'||state.status==='cancelado')?`<button class="button primary small" data-rental-refund="${escapeHTML(o.id)}" data-refund-max="${remaining}">Devolver garantía</button>`:''}<a class="button secondary small" href="${ADMIN_PATH}/dinero" data-smooth-route>Consultar dinero</a></div></article>`;
+    }).join(''):'<p class="empty">No hay alquileres con esos filtros.</p>';
+  };
+  const load=async()=>{try{data=await request('/api/admin/alquileres');message.textContent='';render();}catch(e){message.className='message error';message.textContent=e.message||'No se pudo consultar el control de alquileres.';}};
+  const collectRentalDetails = (mode,max=0) => new Promise(resolve=>{
+    document.querySelector('#yhRentalActionModal')?.remove();
+    const refund=mode==='devolver-garantia';
+    const layer=document.createElement('div'); layer.id='yhRentalActionModal'; layer.className='yh-rental-modal-layer';
+    layer.innerHTML=`<div class="yh-rental-modal-backdrop" data-rental-cancel></div><div class="yh-rental-modal-card" role="dialog" aria-modal="true" aria-labelledby="yhRentalModalTitle"><div class="yh-rental-modal-top"><div><span class="eyebrow">YHORS · ALQUILERES</span><h2 id="yhRentalModalTitle">${refund?'Registrar devolución de garantía':'Recepción de traje'}</h2><p>${refund?'Indica el dinero que entregarás al cliente. Quedará como salida de dinero vinculada a la orden.':'Registra el estado físico de la prenda antes de devolverla al inventario.'}</p></div><button type="button" class="yh-rental-modal-close" data-rental-cancel aria-label="Cerrar">×</button></div><form id="yhRentalActionForm" class="yh-rental-action-form">${refund?`<div class="yh-rental-refund-max">Garantía pendiente: <strong>${money(max)}</strong></div><label for="yhRentalAmount">Monto a devolver ($)</label><input id="yhRentalAmount" type="number" inputmode="decimal" min="0.01" max="${max}" step="0.01" value="${max.toFixed(2)}" required><label for="yhRentalMethod">Método de devolución</label><select id="yhRentalMethod" required><option value="cash">Efectivo</option><option value="transfer">Transferencia bancaria</option><option value="deposit">Depósito</option><option value="card">Tarjeta</option></select><div id="yhRentalBankFields" hidden><label for="yhRentalBank">Banco / cuenta de salida</label><input id="yhRentalBank" maxlength="100" placeholder="Banco Pichincha, Guayaquil…"><label for="yhRentalReference">N.º de transferencia / comprobante</label><input id="yhRentalReference" maxlength="120" placeholder="Referencia de la operación"></div>`:''}<label for="yhRentalNote">${refund?'Observaciones (opcional)':'Estado del traje al recibirlo (opcional)'}</label><textarea id="yhRentalNote" maxlength="500" rows="3" placeholder="${refund?'Ej. Garantía completa entregada al cliente':'Ej. Entregado completo y sin daños'}"></textarea><p class="yh-rental-modal-error" id="yhRentalModalError" role="alert" hidden></p><div class="yh-rental-modal-footer"><button type="button" class="button secondary" data-rental-cancel>Cancelar</button><button type="submit" class="button primary">${refund?'Continuar con devolución':'Confirmar recepción'}</button></div></form></div>`;
+    document.body.appendChild(layer);
+    const form=layer.querySelector('#yhRentalActionForm');
+    const method=layer.querySelector('#yhRentalMethod');
+    const bank=layer.querySelector('#yhRentalBank');
+    const reference=layer.querySelector('#yhRentalReference');
+    const bankFields=layer.querySelector('#yhRentalBankFields');
+    const close=value=>{layer.remove();document.removeEventListener('keydown',onKey);resolve(value);};
+    const onKey=e=>{if(e.key==='Escape'){e.preventDefault();close(null);}};
+    document.addEventListener('keydown',onKey);
+    layer.querySelectorAll('[data-rental-cancel]').forEach(el=>el.addEventListener('click',()=>close(null)));
+    const sync=()=>{if(!refund)return;const show=method.value!=='cash';bankFields.hidden=!show;bank.required=show;reference.required=show;};
+    method?.addEventListener('change',sync);sync();
+    form.addEventListener('submit',e=>{
+      e.preventDefault();
+      if(!form.reportValidity())return;
+      if(!refund)return close({notes:layer.querySelector('#yhRentalNote').value.trim()});
+      const amount=Math.round(Number(layer.querySelector('#yhRentalAmount').value)*100)/100;
+      if(!Number.isFinite(amount)||amount<=0||amount>max){const err=layer.querySelector('#yhRentalModalError');err.textContent=`El monto debe estar entre $0,01 y ${money(max)}.`;err.hidden=false;return;}
+      close({amount,method:method.value,bank:bank.value.trim()||'Caja principal',transactionNumber:reference.value.trim(),note:layer.querySelector('#yhRentalNote').value.trim()});
+    });
+    (layer.querySelector(refund?'#yhRentalAmount':'#yhRentalNote'))?.focus();
+  });
+  document.querySelector('#refreshRentalDashboard')?.addEventListener('click',load);
+  document.querySelector('#rentalSearch')?.addEventListener('input',render);
+  document.querySelector('#rentalStatusFilter')?.addEventListener('change',render);
+  list.addEventListener('click',async event=>{
+    const button=event.target.closest('[data-rental-deliver],[data-rental-return],[data-rental-refund]');if(!button)return;
+    const id=button.dataset.rentalDeliver||button.dataset.rentalReturn||button.dataset.rentalRefund;
+    const operation=button.dataset.rentalDeliver?'entregar':button.dataset.rentalReturn?'devolver-prenda':'devolver-garantia';
+    let payload={};
+    if(operation==='devolver-garantia'||operation==='devolver-prenda'){
+      const value=await collectRentalDetails(operation,Number(button.dataset.refundMax||0));
+      if(!value)return;
+      payload=value;
+    }
+    const titles={entregar:'¿Confirmar entrega de traje?', 'devolver-prenda':'¿Confirmar recepción física del traje?', 'devolver-garantia':'¿Registrar devolución real de la garantía?'};
+    const descs={entregar:'Se registrará la fecha de entrega y la fecha prevista de devolución. El stock seguirá reservado.', 'devolver-prenda':'Se sumarán las unidades de alquiler al inventario una sola vez. La garantía seguirá pendiente hasta devolver el dinero.', 'devolver-garantia':'Se registrará una salida de dinero vinculada al cliente y pedido. Confirma que efectivamente estás entregando el importe.'};
+    const ok=await showYhorsConfirm(titles[operation],descs[operation],{confirmText:'Confirmar',cancelText:'Cancelar'});
+    if(!ok)return;
+    button.disabled=true;
+    try{await request(`/api/admin/alquileres/${encodeURIComponent(id)}/${operation}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});await load();}
+    catch(e){button.disabled=false;alert(e.message||'No se pudo registrar el movimiento.');}
+  });
+  await load();
 }
 
 async function renderAdminOrders() {
@@ -5301,6 +5389,7 @@ function inventoryPageMarkup(products = [], options = {}) {
           <label><span>Tipo de producto</span><select data-field="productType" disabled><option value="">Sin clasificación</option>${types.map(v=>`<option value="${escapeHTML(v)}" ${product.productType===v?'selected':''}>${escapeHTML(v)}</option>`).join('')}${product.productType && !types.includes(product.productType) ? `<option value="${escapeHTML(product.productType)}" selected>${escapeHTML(product.productType)}</option>` : ''}</select></label>
           <label class="inventory-tags-field"><span>Etiquetas / palabras clave <small>(opcional)</small></span><input type="text" value="${escapeHTML(tagText)}" data-field="tags" placeholder="Gaming, Xiaomi, 512GB…" disabled><small class="field-help">Sirven para encontrar el producto rápidamente con el buscador. Sepáralas con comas.</small></label>
           ${isCosplay ? `<label><span>Precio alquiler / día</span><div class="inventory-input-wrap"><span>$</span><input type="number" min="0" step="0.01" value="${escapeHTML(rentalValue)}" data-field="rentalPrice" disabled></div></label>` : ''}
+          ${isCosplay ? `<label><span>Garantía reembolsable por traje</span><div class="inventory-input-wrap"><span>$</span><input type="number" min="0" step="0.01" value="${escapeHTML(product.rentalDeposit ?? 0)}" data-field="rentalDeposit" disabled></div><small class="field-help">Se suma a la orden y se devuelve después de recibir el traje.</small></label>` : ''}
           ${isCosplay ? `<label><span>Días de alquiler</span><input type="number" min="1" max="10" step="1" value="${escapeHTML(product.rentalDays ?? 1)}" data-field="rentalDays" disabled></label>` : ''}
         </div>
 
@@ -5313,7 +5402,7 @@ function inventoryPageMarkup(products = [], options = {}) {
         <div class="inventory-image-status ${hasImages ? 'has-images' : 'missing-images'}"><span>${hasImages ? '✓' : '⚠'}</span><strong>${hasImages ? `${images.length} imagen${images.length === 1 ? '' : 'es'} cargada${images.length === 1 ? '' : 's'}` : 'SIN IMAGEN'}</strong>${!hasImages ? '<small>Agrega las fotos desde la ficha del producto cuando tengas tiempo.</small>' : ''}</div>
 
         </details>
-        <div class="inventory-record-actions">${inventoryReadOnly ? '<span class="inventory-readonly-note">Solo consulta · stock disponible</span>' : `<button class="button secondary small" type="button" data-inventory-edit>Editar ficha</button><button class="button secondary small" type="button" data-inventory-variant>+ Añadir variante</button><button class="button danger small" type="button" data-inventory-delete>Eliminar producto</button><span class="inventory-edit-hint">Los cambios se realizan desde “Editar ficha”.</span><span class="message" data-inventory-message></span>`}</div>
+        <div class="inventory-record-actions">${inventoryReadOnly ? '<span class="inventory-readonly-note">Solo consulta · stock disponible</span>' : `<button class="button secondary small" type="button" data-inventory-edit>Editar ficha</button><button class="button secondary small" type="button" data-inventory-variant>+ Añadir variante</button><button class="button danger small" type="button" data-inventory-delete>Eliminar producto</button><span class="inventory-edit-hint">Los cambios se realizan desde “Editar ficha”. Los alquileres reservan unidades reales y la garantía es reembolsable.</span><span class="message" data-inventory-message></span>`}</div>
       </div>
     </article>`;
   };
@@ -5362,7 +5451,7 @@ function inventoryPageMarkup(products = [], options = {}) {
           <button type="button" class="yh-stock-filter-btn is-active" data-stock-filter="all" aria-pressed="true">Todos</button>
           <button type="button" class="yh-stock-filter-btn" data-stock-filter="low" aria-pressed="false">Stock bajo <span id="yhStockLowCount"></span></button>
           <button type="button" class="yh-stock-filter-btn" data-stock-filter="zero" aria-pressed="false">Agotados <span id="yhStockZeroCount"></span></button>
-          <small>Stock bajo: productos publicados con 3 unidades o menos. Se muestran las variantes por separado.</small>
+          <small>Stock bajo: productos publicados con 1 a 3 unidades. Los de 0 unidades aparecen solo en Agotados. Se muestran las variantes por separado.</small>
         </div>
         <div class="inventory-toolbar inventory-toolbar-extended">
           <label class="inventory-search"><span aria-hidden="true">⌕</span><input id="inventoryPageSearch" type="search" placeholder="Buscar por nombre, SKU, marca, tipo o etiqueta…" autocomplete="off"><button id="clearInventoryPageSearch" type="button" aria-label="Limpiar búsqueda">×</button></label>
@@ -6004,7 +6093,7 @@ async function renderAdminInventory() {
     const categoryFilter = document.querySelector('#inventoryPageCategoryFilter')?.value || '';
     const typeFilter = document.querySelector('#inventoryPageTypeFilter')?.value || '';
     const brandFilter = document.querySelector('#inventoryPageBrandFilter')?.value || '';
-    const lowCount = products.filter(p => p.published !== false && Number(p.stock || 0) <= 3).length;
+    const lowCount = products.filter(p => p.published !== false && Number(p.stock || 0) > 0 && Number(p.stock || 0) <= 3).length;
     const zeroCount = products.filter(p => Number(p.stock || 0) <= 0).length;
     const lowLabel = document.querySelector('#yhStockLowCount');
     const zeroLabel = document.querySelector('#yhStockZeroCount');
@@ -6017,7 +6106,7 @@ async function renderAdminInventory() {
     });
     const matches = products.filter(p => {
       const stock = Number(p.stock || 0);
-      if (stockFilter === 'low' && (p.published === false || stock > 3)) return false;
+      if (stockFilter === 'low' && (p.published === false || stock <= 0 || stock > 3)) return false;
       if (stockFilter === 'zero' && stock > 0) return false;
       const haystack = [p.name, p.sku, p.brand, p.productType, p.category, categories[p.category], ...(Array.isArray(p.tags) ? p.tags : [])].filter(Boolean).join(' ').toLowerCase();
       const matchesQuery = !query || haystack.includes(query);
@@ -6146,19 +6235,20 @@ async function renderAdminInventory() {
           ? (rentalRaw === '' || rentalRaw == null ? null : Number(rentalRaw))
           : null;
         const rentalDays = nextCategory === 'cosplay' ? Math.max(1, Math.min(10, Number(get('rentalDays')?.value || 1))) : null;
+        const rentalDeposit = nextCategory === 'cosplay' ? Number(get('rentalDeposit')?.value || 0) : 0;
         const stock = Number(get('stock')?.value);
         const stockMin = Number(get('stockMin')?.value || 0);
         const tags = String(get('tags')?.value || '').split(',').map(v => v.trim()).filter(Boolean).slice(0, 30);
         const published = Boolean(get('published')?.checked);
         const requiresDeviceIdentifier = nextCategory === 'tech' ? Boolean(get('requiresDeviceIdentifier')?.checked) : false;
         const isRental = nextCategory === 'cosplay' ? Boolean(get('isRental')?.checked) : false;
-        const payload = { purchasePrice, salePrice, stock, stockMin, category: nextCategory, brand: nextBrand, productType: nextProductType, tags, published, requiresDeviceIdentifier, isRental, rentalDays };
+        const payload = { purchasePrice, salePrice, stock, stockMin, category: nextCategory, brand: nextBrand, productType: nextProductType, tags, published, requiresDeviceIdentifier, isRental, rentalDays, rentalDeposit };
         if (nextCategory === 'cosplay') payload.rentalPrice = isRental ? rentalPrice : null;
 
         if (!Number.isFinite(salePrice) || salePrice < 0 ||
             !Number.isFinite(purchasePrice) || purchasePrice < 0 ||
             !Number.isInteger(stock) || stock < 0 || !Number.isInteger(stockMin) || stockMin < 0 ||
-            (nextCategory === 'cosplay' && isRental && (rentalPrice === null || !Number.isFinite(rentalPrice) || rentalPrice < 0))) {
+            (nextCategory === 'cosplay' && isRental && (rentalPrice === null || !Number.isFinite(rentalPrice) || rentalPrice < 0)) || (nextCategory === 'cosplay' && (!Number.isFinite(rentalDeposit) || rentalDeposit < 0))) {
           const msg=record.querySelector('[data-inventory-message]'); msg.className='message error'; msg.textContent='Revisa precio de compra, precio de venta y stock.'; return;
         }
 
@@ -6538,7 +6628,7 @@ async function renderAdminReports() {
   const session=await request('/api/admin/session').catch(()=>({authenticated:false})); if(!session.authenticated)return renderLogin(); if(String(session.role||'').toLowerCase()!=='admin')return renderAdminOrders();
   const nav=adminSectionNav(session,'reportes'); const today=new Date().toLocaleDateString('en-CA',{timeZone:'America/Guayaquil'});
   const [orders,sales,products,customers]=await Promise.all([request('/api/admin/orders').catch(()=>[]),request(`/api/admin/historial-ventas?from=2000-01-01&to=${today}`).catch(()=>[]),request('/api/admin/catalog-products').catch(()=>[]),request(`/api/admin/clientes?_=${Date.now()}`).catch(()=>[])]);
-  const salesTotal=sales.reduce((a,x)=>a+Number(x.total||0),0); const stockUnits=products.reduce((a,x)=>a+Number(x.stock||0),0); const low=products.filter(x=>Number(x.stock||0)<=3).length;
+  const salesTotal=sales.reduce((a,x)=>a+Number(x.total||0),0); const stockUnits=products.reduce((a,x)=>a+Number(x.stock||0),0); const low=products.filter(x=>Number(x.stock||0)>0&&Number(x.stock||0)<=3).length;
   app.innerHTML=`<main class="admin-shell"><div class="admin-wrap"><div class="admin-top"><div><a class="brand admin-brand" href="${ADMIN_PATH}/inteligente" data-smooth-route><span class="admin-brand-mark"><img src="/favicon.svg" alt=""></span><span class="admin-brand-word">YHORS</span><span class="admin-brand-divider"></span><small>Panel Administrativo</small></a><h1 class="admin-title">Reportes</h1><p class="admin-subtitle">Información de gestión para tomar decisiones sin depender de Excel.</p></div><div class="admin-top-actions">${accountMenu(session)}</div></div>${nav}<section class="admin-panel reports-panel"><div class="report-grid"><article><span>VENTAS REGISTRADAS</span><strong>${money(salesTotal)}</strong><small>${sales.length} ventas</small></article><article><span>PEDIDOS ACTIVOS</span><strong>${orders.length}</strong><small>Operación pendiente</small></article><article><span>UNIDADES EN STOCK</span><strong>${stockUnits}</strong><small>${products.length} productos</small></article><article><span>STOCK BAJO</span><strong>${low}</strong><small>3 unidades o menos</small></article><article><span>CLIENTES</span><strong>${customers.length}</strong><small>Fichero comercial</small></article></div><div class="report-actions"><button class="button primary" id="exportSalesCsv">Exportar ventas CSV</button><button class="button" id="exportInventoryCsv">Exportar inventario CSV</button><a class="button secondary" href="${ADMIN_PATH}/movimientos" data-smooth-route>Ver kardex de inventario →</a><a class="button secondary" href="${ADMIN_PATH}/resumen-financiero" data-smooth-route>Resumen financiero →</a></div></section></div></main>`;wireAccountMenu();
   const downloadCsv=(name,rows)=>{if(!rows.length)return;const headers=Object.keys(rows[0]);const csv=[headers.join(','),...rows.map(row=>headers.map(h=>`"${String(row[h]??'').replace(/"/g,'""')}"`).join(','))].join('\n');const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();URL.revokeObjectURL(a.href);};
   document.querySelector('#exportSalesCsv').addEventListener('click',()=>downloadCsv(`YHORS-ventas-${today}.csv`,sales.map(s=>({fecha:s.notifiedAt||s.createdAt,venta:s.orderNumber,cliente:s.customer?.name||'',vendedor:s.assignedSellerName||'',estado:s.status,total:s.total}))));
@@ -6578,7 +6668,7 @@ async function renderYhorsInteligente() {
   const readyToShip = activeOrders.filter(order => ['Pendiente', 'Confirmado', 'Preparado'].includes(String(order.status || '')));
   const preparing = activeOrders.filter(order => String(order.status || '') === 'Preparado');
   const unassigned = activeOrders.filter(order => !order.assignedSellerId);
-  const lowStock = catalog.filter(product => product.published !== false && Number(product.stock || 0) <= 3);
+  const lowStock = catalog.filter(product => product.published !== false && Number(product.stock || 0) > 0 && Number(product.stock || 0) <= 3);
   const salesTotal = confirmedSales.reduce((sum, sale) => sum + Number(sale.total || 0), 0);
   const commissionEligible = confirmedSales.filter(sale => ['Enviado', 'Entregado'].includes(String(sale.status || ''))).length;
   const receivables = Array.isArray(moneyOverview?.receivables) ? moneyOverview.receivables.filter(row => Number(row.balance || 0) > 0) : [];

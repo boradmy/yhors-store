@@ -7551,3 +7551,52 @@ body[class*="yh-public-season-"]:not(.yh-public-season-none) .yh-season-greeting
  .yh-news-prev{left:6px}.yh-news-next{right:6px}
  .yh-news-dots{bottom:7px}.yh-news-dots button{height:4px;width:18px}
 }
+
+/* YHORS · Control de alquileres y garantías / 2026-10-31 */
+.yh-rentals-shell .yh-rental-dashboard{background:#f7f5f0;border:1px solid #dfd7cb;border-radius:23px;padding:clamp(18px,3vw,34px);color:#1e1c19;margin:24px 0 50px;box-shadow:0 16px 48px rgba(27,22,14,.045)}
+.yh-rentals-shell .yh-rental-header{display:flex;align-items:center;justify-content:space-between;gap:20px;margin-bottom:24px}
+.yh-rentals-shell .yh-rental-header h2{font-size:clamp(23px,3vw,34px);font-weight:800;margin:6px 0 9px;color:#1d1b18;line-height:1.18}
+.yh-rentals-shell .yh-rental-header p{margin:0;color:#756c62;line-height:1.55;max-width:640px;font-size:14px}
+.yh-rentals-shell .yh-rental-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:18px 0 22px}
+.yh-rentals-shell .yh-rental-kpis>div{background:#fff;border:1px solid #e6e0d8;border-radius:15px;padding:18px;display:flex;flex-direction:column;gap:6px}
+.yh-rentals-shell .yh-rental-kpis span{font-size:12px;color:#746a5e;font-weight:700}
+.yh-rentals-shell .yh-rental-kpis strong{font-size:clamp(21px,3vw,29px);letter-spacing:-.035em;color:#25221e}
+.yh-rentals-shell .yh-rental-filter{display:flex;gap:12px;margin:0 0 20px}
+.yh-rentals-shell .yh-rental-filter input{flex:1;min-width:0}
+.yh-rentals-shell .yh-rental-filter input,.yh-rentals-shell .yh-rental-filter select{border:1px solid #d8cfc3;border-radius:11px;background:#fff;color:#24211d;padding:12px 15px;min-height:45px;font-size:14px}
+.yh-rentals-shell .yh-rental-rows{display:grid;gap:15px}
+.yh-rentals-shell .yh-rental-row{background:#fff;border:1px solid #e1dbd1;border-radius:17px;padding:clamp(16px,2.5vw,25px);box-shadow:0 10px 25px rgba(30,25,15,.025)}
+.yh-rentals-shell .yh-rental-row-top{display:flex;align-items:flex-start;justify-content:space-between;gap:15px}
+.yh-rentals-shell .yh-rental-row-top h3{font-size:20px;font-weight:800;color:#24211d;margin:6px 0}
+.yh-rentals-shell .yh-rental-row-top small{color:#71695d;font-size:13px}
+.yh-rentals-shell .yh-rental-chip{font-size:11px;font-weight:800;line-height:1.4;padding:8px 12px;border-radius:100px;background:#fff5e6;color:#855b19;border:1px solid #ecd5ab;max-width:240px;text-align:center}
+.yh-rentals-shell .yh-rental-chip.is-returned{background:#e9f6ed;color:#247346;border-color:#bce1c5}
+.yh-rentals-shell .yh-rental-items{padding:16px 0;border-block:1px solid #eae3db;margin:18px 0;display:grid;gap:10px}
+.yh-rentals-shell .yh-rental-items>div{display:flex;justify-content:space-between;gap:12px;align-items:baseline}
+.yh-rentals-shell .yh-rental-items strong{font-size:14px;color:#27231e}
+.yh-rentals-shell .yh-rental-items small{font-size:12px;color:#777166}
+.yh-rentals-shell .yh-rental-money{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.yh-rentals-shell .yh-rental-money>div{display:grid;gap:5px;padding:12px;border-radius:11px;background:#f8f6f1}
+.yh-rentals-shell .yh-rental-money span{font-size:11px;color:#7a7064}
+.yh-rentals-shell .yh-rental-money strong{font-size:17px;color:#252019}
+.yh-rentals-shell .yh-rental-dates{font-size:12px;color:#75695a;margin:15px 0}
+.yh-rentals-shell .yh-rental-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:15px}
+.yh-rentals-shell .yh-rental-actions .button{color:#28221c}
+.yh-rentals-shell .yh-rental-warning{display:block;background:#fff6e7;border:1px solid #f0dbb8;padding:12px;border-radius:10px;color:#875d21;line-height:1.5}
+@media(max-width:850px){.yh-rentals-shell .yh-rental-kpis,.yh-rentals-shell .yh-rental-money{grid-template-columns:repeat(2,minmax(0,1fr))}.yh-rentals-shell .yh-rental-header{align-items:flex-start;flex-direction:column}.yh-rentals-shell .yh-rental-filter{flex-direction:column}.yh-rentals-shell .yh-rental-row-top,.yh-rentals-shell .yh-rental-items>div{align-items:flex-start;flex-direction:column}}
+@media(max-width:480px){.yh-rentals-shell .yh-rental-kpis strong{font-size:21px}.yh-rentals-shell .yh-rental-row{padding:15px}.yh-rentals-shell .yh-rental-money strong{font-size:15px}.yh-rentals-shell .yh-rental-actions .button{width:100%;justify-content:center;text-align:center}}
+
+/* Diálogo accesible de recepción y devolución de garantías */
+.yh-rental-modal-layer{position:fixed;inset:0;z-index:99999;display:grid;place-items:center;padding:16px}
+.yh-rental-modal-backdrop{position:absolute;inset:0;background:rgba(16,15,15,.76);backdrop-filter:blur(5px)}
+.yh-rental-modal-card{position:relative;background:#faf9f6;color:#24221c;border-radius:20px;padding:clamp(18px,3vw,28px);width:min(510px,100%);max-height:min(90vh,800px);overflow:auto;border:1px solid #decdb2;box-shadow:0 28px 80px rgba(0,0,0,.3)}
+.yh-rental-modal-top{display:flex;align-items:start;justify-content:space-between;gap:15px;margin-bottom:20px}
+.yh-rental-modal-top h2{font-size:24px;line-height:1.16;margin:8px 0;color:#1c1915}
+.yh-rental-modal-top p{font-size:13px;color:#70665c;line-height:1.55;margin:0}
+.yh-rental-modal-close{border:0;background:#eee9e1;border-radius:100%;font-size:25px;width:34px;height:34px;color:#29241e;cursor:pointer;flex:none}
+.yh-rental-action-form{display:grid;gap:9px}.yh-rental-action-form label{font-size:12px;font-weight:800;color:#564c3c;margin-top:7px}
+.yh-rental-action-form input,.yh-rental-action-form select,.yh-rental-action-form textarea{width:100%;min-height:44px;padding:11px;border:1px solid #cfc5b8;background:white;border-radius:9px;color:#1c1915;font:inherit}
+.yh-rental-action-form textarea{resize:vertical}.yh-rental-action-form #yhRentalBankFields:not([hidden]){display:grid;gap:9px}
+.yh-rental-refund-max{background:#f3eadc;color:#5c421c;border:1px solid #e4ceaa;border-radius:11px;padding:12px;font-size:13px}.yh-rental-refund-max strong{font-size:18px;margin-left:8px}
+.yh-rental-modal-error{font-size:12px;color:#a42c20}.yh-rental-modal-footer{display:flex;justify-content:flex-end;gap:10px;margin-top:14px;flex-wrap:wrap}
+@media(max-width:480px){.yh-rental-modal-footer .button{flex:1}.yh-rental-modal-card{padding:16px}}
