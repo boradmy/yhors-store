@@ -2776,10 +2776,10 @@ function restoreOrderPurchaseStock(order) {
   return changeOrderStock(order, 1);
 }
 
-function readSales() {
+function readSales(includeAnnulled = false) {
   try {
     const parsed = JSON.parse(fs.readFileSync(SALES_FILE, 'utf8'));
-    return Array.isArray(parsed) ? parsed.map(decryptOrder) : [];
+    return Array.isArray(parsed) ? parsed.map(decryptOrder).filter(s => includeAnnulled || s.status !== 'Anulada') : [];
   } catch { return []; }
 }
 function writeSales(sales) {
@@ -4976,7 +4976,7 @@ app.post('/api/admin/calculo-comision/pagar', requireAdmin, (req, res) => {
 });
 
 app.get('/api/admin/historial-ventas', requireOrdersAccess, (req, res) => {
-  const session = getSession(req); let sales = readSales();
+  const session = getSession(req); let sales = readSales(true);
   if (isSellerRole(session.role)) sales = sales.filter(s => String(s.assignedSellerId||'')===String(session.accountId||''));
   const from=/^\d{4}-\d{2}-\d{2}$/.test(String(req.query.from||''))?String(req.query.from):'';
   const to=/^\d{4}-\d{2}-\d{2}$/.test(String(req.query.to||''))?String(req.query.to):'';
@@ -5037,7 +5037,7 @@ app.post('/api/admin/orders/:id/notificar-venta', requireOrdersAccess, (req,res)
   return res.status(201).json(decorateOrderAssignment(sale));
 });
 app.patch('/api/admin/historial-ventas/:id/nota', requireAdmin, (req,res)=>{
-  const sales=readSales(); const index=sales.findIndex(s=>s.id===req.params.id);
+  const sales=readSales(true); const index=sales.findIndex(s=>s.id===req.params.id);
   if(index<0)return res.status(404).json({error:'Venta no encontrada en Historial de ventas.'});
   const note=cleanText(req.body?.internalNote,5000);
   const sale=sales[index];
@@ -5048,8 +5048,51 @@ app.patch('/api/admin/historial-ventas/:id/nota', requireAdmin, (req,res)=>{
   auditLog(req,'Nota interna de venta actualizada','Historial de ventas',{salesId:sale.id,orderId:sale.orderId,orderNumber:sale.orderNumber});
   return res.json(decorateOrderAssignment(sale));
 });
+// Anulación excepcional de ventas de prueba: conserva trazabilidad, nunca borra cobros.
+// Úsala ÚNICAMENTE cuando no hubo entrada real de dinero ni entrega física.
+app.post('/api/admin/historial-ventas/:id/anular-prueba', requireAdmin, (req,res)=>{
+  if(req.body?.confirmacion !== 'SIN_DINERO_REAL_NI_ENTREGA') return res.status(400).json({error:'Confirma expresamente que fue una prueba sin dinero ni entrega reales.'});
+  const motivo=cleanText(req.body?.motivo,250);
+  if(motivo.length<8)return res.status(400).json({error:'Indica el motivo de la anulación (mínimo 8 caracteres).'});
+  const sales=readSales(true), si=sales.findIndex(s=>String(s.id)===String(req.params.id));
+  if(si<0)return res.status(404).json({error:'Venta no encontrada.'});
+  const sale=sales[si];
+  if(sale.status==='Anulada')return res.status(409).json({error:'Esta venta ya está anulada. No se modificó el inventario.'});
+  const orders=readOrders(), oi=orders.findIndex(o=>String(o.id)===String(sale.orderId));
+  if(oi<0)return res.status(409).json({error:'El pedido original no existe; requiere conciliación manual.'});
+  const order=orders[oi];
+  if(String(order.status||'').toLowerCase()==='cancelado')return res.status(409).json({error:'El pedido ya está cancelado. Revisa antes de anular la venta.'});
+  const rental=(order.items||[]).some(i=>i.purchaseMode==='rental');
+  if(rental && (order.rentalReturn?.deliveredAt || sale.rentalReturn?.deliveredAt))return res.status(409).json({error:'El traje fue marcado como entregado. Registra primero su devolución física y concilia la garantía; no uses anulación de prueba.'});
+  if(rental && (Number(order.rentalReturn?.refundedAmount||0)>0 || Number(sale.rentalReturn?.refundedAmount||0)>0))return res.status(409).json({error:'Hay devoluciones de garantía registradas. Requiere conciliación manual.'});
+  const payments=readPayments();
+  const related=payments.filter(p=>String(p.saleId||'')===String(sale.id)||String(p.orderId||'')===String(order.id));
+  if(related.some(p=>['refund','rental_deposit_refund'].includes(String(p.sourceType||''))))return res.status(409).json({error:'Esta operación tiene reembolsos registrados y requiere conciliación manual.'});
+  const now=new Date().toISOString(), actor=getSession(req)?.accountId||null;
+  const updatedSale={...sale,status:'Anulada',annulledAt:now,annulledBy:actor,annulledReason:motivo,annulledAsTest:true,updatedAt:now};
+  const updatedOrder={...order,status:'Cancelado',annulledAt:now,annulledBy:actor,annulledReason:motivo,updatedAt:now,
+    rentalReturn:rental?{...(order.rentalReturn||{}),status:'cancelado',stockRestored:true,cancelledAt:now}:order.rentalReturn};
+  // Restauración única: solo los items efectivamente reservados, nunca alquileres antiguos.
+  // Si ya fue devuelto el stock, getStockDemand no incluye esos alquileres.
+  const demand=getStockDemand(orderStatusUsesStock(order.status)?order:{items:[]});
+  const before=readProducts().map(normalizeProduct);
+  const missing=[...demand.keys()].filter(id=>!before.some(p=>String(p.id)===id));
+  if(missing.length)return res.status(409).json({error:'Hay productos del pedido que ya no existen. Requiere conciliación manual; no se anuló.'});
+  const updatedProducts=before.map(product=>{const n=demand.get(String(product.id))||0;return n?normalizeProduct({...product,stock:Number(product.stock||0)+n,updatedAt:now}):product;});
+  const updatedPayments=payments.map(p=>(String(p.saleId||'')===String(sale.id)||String(p.orderId||'')===String(order.id))?{...p,status:'anulada',annulledAt:now,annulledBy:actor,annulledReason:`Venta de prueba: ${motivo}`} : p);
+  const oldSales=sales.slice(),oldOrders=orders.slice();
+  sales[si]=updatedSale;orders[oi]=updatedOrder;
+  try{
+    writeProducts(updatedProducts);writeSales(sales);writeOrders(orders);writePayments(updatedPayments);
+  }catch(e){
+    try{writeProducts(before);writeSales(oldSales);writeOrders(oldOrders);writePayments(payments);}catch{}
+    return res.status(500).json({error:'No se completó la anulación. Verifica inventario y respaldos antes de reintentar.'});
+  }
+  auditLog(req,'Venta de prueba anulada','Historial de ventas',{saleId:sale.id,orderId:order.id,orderNumber:sale.orderNumber,motivo,annulledPayments:related.length,restoredStock:[...demand.entries()]});
+  return res.json({ok:true,orderNumber:sale.orderNumber,status:'Anulada',paymentsAnnulled:related.length});
+});
 app.delete('/api/admin/historial-ventas/:id', requireAdmin, (req,res)=>{
-  const sales=readSales(), sale=sales.find(s=>s.id===req.params.id); if(!sale)return res.status(404).json({error:'Venta no encontrada en Historial de ventas.'}); if(Number(sale.depositTotal||0)>0 || (sale.rentalStockTracked&& (sale.items||[]).some(item=>item.purchaseMode==='rental'))) return res.status(409).json({error:'Esta venta incluye alquiler o garantía. No puede eliminarse del historial porque se perdería el control de devoluciones. Contacta a administración para conciliación.'}); const orders=readOrders(), index=orders.findIndex(o=>String(o.id)===String(sale.orderId));
+  const sales=readSales(true), sale=sales.find(s=>s.id===req.params.id); if(!sale)return res.status(404).json({error:'Venta no encontrada en Historial de ventas.'}); if(sale.status==='Anulada')return res.status(409).json({error:'Una venta anulada debe conservarse para auditoría.'}); if(Number(sale.depositTotal||0)>0 || (sale.rentalStockTracked&& (sale.items||[]).some(item=>item.purchaseMode==='rental'))) return res.status(409).json({error:'Esta venta incluye alquiler o garantía. No puede eliminarse del historial porque se perdería el control de devoluciones. Contacta a administración para conciliación.'}); const orders=readOrders(), index=orders.findIndex(o=>String(o.id)===String(sale.orderId));
   if(index>=0){const order=orders[index];delete order.salesNotifiedAt;delete order.salesHistoryId;order.updatedAt=new Date().toISOString();orders[index]=order;writeOrders(orders);} writeSales(sales.filter(s=>s.id!==req.params.id)); const payments=readPayments(); const relatedPayments=payments.filter(p=>String(p.saleId)===String(sale.id)); if(relatedPayments.length) writePayments(payments.filter(p=>String(p.saleId)!==String(sale.id))); auditLog(req,'Venta eliminada del historial','Historial de ventas',{salesId:sale.id,orderId:sale.orderId,orderNumber:sale.orderNumber,total:sale.total,deletedPayments:relatedPayments.length}); return res.status(204).end();
 });
 app.get('/api/admin/historial-ventas/:id/pdf', requireOrdersAccess, (req,res)=>{
