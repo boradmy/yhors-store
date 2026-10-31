@@ -1451,10 +1451,10 @@ function wireNewsBanners(){
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')clearInterval(timer);else restart();},{once:false});paint();restart();
 }
 
-async function renderHome() {
+async function renderHome(initialData = null) {
   updateSeoMeta({ title: 'YHORS-STORE | Tecnología, detalles, cosplay y más', description: 'YHORS-STORE: tecnología, celulares, accesorios, cosplay, detalles, regalos, mascotas y coleccionables. Descubre productos seleccionados en Ecuador.', canonical: `${location.origin}/` });
   let products = [], storefront = { heroProductIds: [], featuredProductIds: [], whatsappNumber: '' }, classifications = {};
-  try { ({ products, storefront, classifications } = await loadStoreData()); }
+  try { ({ products, storefront, classifications } = initialData || await loadStoreData()); }
   catch (error) {
     // Conserva el HTML SSR que recibió el crawler. No lo sustituyas por un
     // contenedor vacío si la API pública está temporalmente indisponible.
@@ -1550,11 +1550,11 @@ async function renderHome() {
   if (searchTerm) renderSearchResults(searchResults);
 }
 
-async function renderCategoryPage(categoryKey) {
+async function renderCategoryPage(categoryKey, initialData = null) {
   const label = categories[categoryKey] || 'YHORS';
   updateSeoMeta({ title: `${label} | YHORS-STORE`, description: categoryDescriptions[categoryKey] || 'Productos seleccionados en YHORS-STORE.', canonical: `${location.origin}/categoria/${encodeURIComponent(categoryKey === 'all' ? 'principal' : categoryKey)}` });
   let products = [], storefront = { whatsappNumber: '', categorySectionOrder: {} }, classifications = {};
-  try { ({ products, storefront, classifications } = await loadStoreData()); }
+  try { ({ products, storefront, classifications } = initialData || await loadStoreData()); }
   catch (error) {
     console.warn('[YHORS SEO] Se conserva el HTML SSR de categoría:', error?.message || error);
     return;
@@ -1802,8 +1802,8 @@ async function renderProductDetail(product, products, storefront) {
 
 async function renderStore() {
   const categoryKey = currentCategoryFromPath();
-  let products = [], storefront = { whatsappNumber: '', heroProductIds: [], featuredProductIds: [] };
-  try { ({ products, storefront } = await loadStoreData()); }
+  let products = [], storefront = { whatsappNumber: '', heroProductIds: [], featuredProductIds: [] }, classifications = {};
+  try { ({ products, storefront, classifications } = await loadStoreData()); }
   catch (error) {
     // Las rutas públicas ya tienen HTML SSR. Ante un fallo temporal de la API,
     // no debemos borrar ese contenido ni convertir la página en una Soft 404.
@@ -1826,8 +1826,8 @@ async function renderStore() {
   }
   const productId = new URLSearchParams(location.search).get('producto');
   if (productId) { const product = getProduct(productId, products); if (product) return renderProductDetail(product, products, storefront); }
-  if (categoryKey) return renderCategoryPage(categoryKey);
-  return renderHome();
+  if (categoryKey) return renderCategoryPage(categoryKey, { products, storefront, classifications });
+  return renderHome({ products, storefront, classifications });
 }
 
 function productImagePickerModal(slot, current = '') {
@@ -7529,7 +7529,20 @@ document.addEventListener('click', event => {
 });
 
 window.addEventListener('popstate', () => renderCurrentRoute());
-renderCurrentRoute();
+// El HTML SEO inicial no es la tienda completa: no mostrarlo al usuario mientras
+// el render cliente aún espera API. Solo retirar la transición cuando esté lista.
+const yhInitialServerContent = app.firstElementChild;
+Promise.resolve().then(() => renderCurrentRoute()).then(() => {
+  if (app.firstElementChild && app.firstElementChild !== yhInitialServerContent) {
+    window.yhorsBootComplete?.();
+  } else {
+    // Si falla el catálogo, conservar el HTML SEO y ofrecer recuperación explícita.
+    window.yhorsBootFailed?.();
+  }
+}).catch(error => {
+  console.error('[YHORS] No se pudo iniciar la tienda:', error);
+  window.yhorsBootFailed?.();
+});
 
 document.addEventListener('change', e => { const file=e.target.closest('input[type=file][id^=\"imageFile\"]'); if(!file)return; const num=file.id==='imageFile'?1:Number(file.id.replace('imageFile','')); const preview=document.querySelector(`#productImagePreview${num}`); if(preview&&file.files?.[0]){const r=new FileReader();r.onload=()=>preview.src=r.result;r.readAsDataURL(file.files[0]);}});
 document.addEventListener('input', e => { const input=e.target.closest('input[type=url][id^=\"image\"]'); if(!input)return; const num=input.id==='image'?1:Number(input.id.replace('image','')); const preview=document.querySelector(`#productImagePreview${num}`); if(preview&&input.value.trim())preview.src=input.value.trim();});

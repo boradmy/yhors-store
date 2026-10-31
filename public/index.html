@@ -15,21 +15,97 @@
     <link rel="alternate" type="text/markdown" href="/llms.txt" title="LLM instructions">
     <link rel="alternate" type="application/json" href="/.well-known/ai-catalog.json" title="AI catalog">
     <link rel="alternate" type="application/json" href="/.well-known/ard.json" title="Agentic Resource Discovery">
-    <!-- Evita mostrar la portada SSR antigua mientras se prepara la tienda interactiva.
-         Sin JavaScript, el HTML SSR sigue visible y rastreable. -->
-    <script>document.documentElement.classList.add('yh-store-booting');</script>
+    <!-- El HTML de productos continúa en #app para SEO y acceso sin JavaScript.
+         Solo los navegadores con JS muestran esta transición visual. -->
+    <script>
+      document.documentElement.classList.add('yh-store-booting');
+      (function () {
+        var completed = false;
+        var slowTimer;
+        var actionTimer;
+        function get(id) { return document.getElementById(id); }
+        function finish() {
+          if (completed) return;
+          completed = true;
+          clearTimeout(slowTimer);
+          clearTimeout(actionTimer);
+          document.documentElement.classList.remove('yh-store-booting');
+          var screen = get('yhBootScreen');
+          if (screen) {
+            screen.setAttribute('aria-hidden', 'true');
+            screen.classList.add('yh-boot-finished');
+            setTimeout(function () { screen.remove(); }, 650);
+          }
+        }
+        function showRecovery(message) {
+          if (completed) return;
+          var status = get('yhBootStatus');
+          if (status) status.textContent = message || 'La tienda está tardando más de lo habitual.';
+          var recovery = get('yhBootRecovery');
+          if (recovery) recovery.hidden = false;
+        }
+        window.yhorsBootComplete = finish;
+        window.yhorsBootFailed = function () {
+          showRecovery('No pudimos completar la carga del catálogo.');
+        };
+        window.yhorsBootShowCatalog = finish;
+        window.addEventListener('DOMContentLoaded', function () {
+          var retry = get('yhBootRetry');
+          var catalog = get('yhBootBasicCatalog');
+          if (retry) retry.addEventListener('click', function () { location.reload(); });
+          if (catalog) catalog.addEventListener('click', finish);
+          slowTimer = setTimeout(function () {
+            var status = get('yhBootStatus');
+            if (!completed && status) status.textContent = 'Preparando tus productos y promociones…';
+          }, 7000);
+          actionTimer = setTimeout(function () {
+            showRecovery('La conexión está tardando. Puedes reintentar o abrir el catálogo básico.');
+          }, 20000);
+        });
+        window.addEventListener('error', function (event) {
+          if (event.target && event.target.tagName === 'SCRIPT' && /app\.js/.test(event.target.src || '')) {
+            showRecovery('No se pudo cargar la tienda. Prueba a actualizar la página.');
+          }
+        }, true);
+      }());
+    </script>
     <style>
-      html.yh-store-booting #app { visibility: hidden !important; }
-      html.yh-store-booting body::before {
-        content: ""; position: fixed; inset: 0; z-index: 2147483646;
-        background: #171717; pointer-events: none;
+      html.yh-store-booting, html.yh-store-booting body { overflow: hidden !important; }
+      /* El HTML SSR permanece en el DOM para buscadores y lectores; una cubierta opaca impide verlo durante la carga. */
+      #yhBootScreen {
+        position: fixed; inset: 0; z-index: 2147483645;
+        display: flex; align-items: center; justify-content: center;
+        opacity: 0; visibility: hidden; pointer-events: none;
+        background: radial-gradient(ellipse at 80% 15%, rgba(172,129,62,.14), transparent 43%),
+                    radial-gradient(ellipse at 10% 95%, rgba(122,83,35,.11), transparent 53%), #141414;
+        color: #fff; font-family: Arial, Helvetica, sans-serif;
+        transition: opacity .45s ease, visibility .45s;
       }
-      html.yh-store-booting body::after {
-        content: "Y H O R S"; position: fixed; inset: 0; z-index: 2147483647;
-        display: grid; place-items: center; color: #fff;
-        font: 700 clamp(24px, 6vw, 44px)/1.2 Arial, sans-serif;
-        letter-spacing: .3em; text-indent: .3em; pointer-events: none;
+      html.yh-store-booting #yhBootScreen {
+        opacity: 1; visibility: visible; pointer-events: auto;
       }
+      #yhBootScreen::before { content:''; position:absolute; top:0; left:0; width:100%; height:3px;
+        background: linear-gradient(90deg,transparent,#ae8951 33%,#e4c17e 50%,#ae8951 67%,transparent); }
+      .yh-boot-layout { width:min(88vw,470px); text-align:center; position:relative; }
+      .yh-boot-emblem { display:inline-flex; align-items:baseline; justify-content:center; gap:13px; }
+      .yh-boot-emblem strong { font-size:clamp(29px,7vw,55px); font-weight:800; letter-spacing:.33em; padding-left:.33em; line-height:1.2; }
+      .yh-boot-emblem small { color:#c5a469; letter-spacing:.28em; font-size:10px; font-weight:700; }
+      .yh-boot-rule { width:80px; height:1px; margin:23px auto 25px; background:#bd995d; }
+      .yh-boot-title { font-family: Georgia,serif; font-size:clamp(20px,4vw,28px); font-weight:400; margin:0 0 10px; }
+      .yh-boot-subtitle { font-size:12px; line-height:1.6; color:#a9a39a; margin:0; letter-spacing:.06em; }
+      .yh-boot-progress { display:flex; justify-content:center; align-items:center; gap:7px; margin:30px auto 15px; }
+      .yh-boot-progress span { width:7px; height:7px; border-radius:50%; background:#c5a469; animation:yh-boot-pulse 1.3s ease-in-out infinite; }
+      .yh-boot-progress span:nth-child(2) { animation-delay:.2s; }
+      .yh-boot-progress span:nth-child(3) { animation-delay:.4s; }
+      @keyframes yh-boot-pulse { 0%,75%,100%{opacity:.26;transform:scale(.85)} 35%{opacity:1;transform:scale(1.13)} }
+      .yh-boot-recovery { margin:24px auto 0; max-width:380px; }
+      .yh-boot-recovery[hidden] { display:none !important; }
+      .yh-boot-actions { display:flex;justify-content:center;gap:10px;flex-wrap:wrap;margin-top:16px; }
+      .yh-boot-actions button { border:1px solid #a78958; border-radius:9px; padding:11px 17px;
+        background:#c6a265; color:#181818; font:700 12px Arial,sans-serif; cursor:pointer; }
+      .yh-boot-actions button+button { background:transparent; color:#e4cfaa; }
+      .yh-boot-finished { opacity:0; visibility:hidden; pointer-events:none; transition:opacity .45s ease,visibility .45s; }
+      @media (prefers-reduced-motion: reduce) { .yh-boot-progress span{animation:none;opacity:1} .yh-boot-finished {transition:none} }
     </style>
 
     <style>
@@ -47,38 +123,26 @@
       .yh-ssr-categories{background:#faf8f4}.yh-ssr-universes{display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:12px;margin-top:26px}.yh-ssr-universe{min-height:116px;padding:18px;border:1px solid #ddd4c8;border-radius:14px;text-decoration:none;color:#1a1a1a;font-size:19px;font-weight:700;display:flex;flex-direction:column;justify-content:space-between}.yh-ssr-universe span{font-size:12px;color:#9b743e}
       @media(max-width:680px){.yh-ssr-top{justify-content:center}.yh-ssr-top nav{justify-content:center;gap:12px}.yh-ssr-intro{min-height:270px}.yh-ssr-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
     </style>
-    <link rel="stylesheet" href="/styles.css?v=16.8.2-inicio-moderno">
+    <link rel="stylesheet" href="/styles.css?v=16.8.3-arranque-estable">
   </head>
   <body>
     <div id="app"></div>
-    <script>
-      // El servidor mantiene HTML SEO en #app, pero se reemplaza al hidratar la tienda.
-      // Solo mostramos la interfaz nueva cuando el primer render real termina.
-      (function () {
-        var root = document.getElementById('app');
-        var booting = document.documentElement.classList.contains('yh-store-booting');
-        if (!root || !booting) return;
-        var finished = false;
-        var observer;
-        function reveal() {
-          if (finished) return;
-          finished = true;
-          if (observer) observer.disconnect();
-          document.documentElement.classList.remove('yh-store-booting');
-        }
-        observer = new MutationObserver(function (mutations) {
-          // Reactuar ante el reemplazo del contenido SSR por la app interactiva.
-          if (mutations.some(function (entry) { return entry.type === 'childList'; })) reveal();
-        });
-        observer.observe(root, { childList: true });
-        // Si falla la API o el script, mostrar HTML SSR en lugar de pantalla vacía.
-        window.setTimeout(reveal, 9000);
-        window.addEventListener('error', function (event) {
-          if (event.target && event.target.tagName === 'SCRIPT') reveal();
-        }, true);
-      }());
-    </script>
-    <script src="/app.js?v=16.8.2-inicio-moderno" defer></script>
+    <div id="yhBootScreen" role="status" aria-live="polite" aria-label="Preparando YHORS STORE">
+      <div class="yh-boot-layout">
+        <div class="yh-boot-emblem"><strong>YHORS</strong><small>STORE</small></div>
+        <div class="yh-boot-rule" aria-hidden="true"></div>
+        <h2 class="yh-boot-title">Tu universo YHORS</h2>
+        <p class="yh-boot-subtitle" id="yhBootStatus">Preparando una mejor experiencia de compra…</p>
+        <div class="yh-boot-progress" aria-hidden="true"><span></span><span></span><span></span></div>
+        <div class="yh-boot-recovery" id="yhBootRecovery" hidden>
+          <div class="yh-boot-actions">
+            <button type="button" id="yhBootRetry">Volver a intentar</button>
+            <button type="button" id="yhBootBasicCatalog">Ver catálogo básico</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script src="/app.js?v=16.8.3-arranque-estable" defer></script>
     <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => navigator.serviceWorker.register('/store-sw.js', {scope:'/'}).catch(() => {}));

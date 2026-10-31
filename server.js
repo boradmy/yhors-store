@@ -2068,6 +2068,15 @@ app.get('/sitemap.xml', (_, res) => {
     .send(xml);
 });
 
+// El HTML SSR siempre se revalida tras un despliegue; los navegadores no
+// deben conservar una portada antigua mientras el JS ya corresponde a otra versión.
+app.use((req, res, next) => {
+  if (req.method === 'GET' && (req.path === '/' || /^\/(?:categoria|producto)\//.test(req.path))) {
+    res.setHeader('Cache-Control', 'no-cache, must-revalidate, max-age=0');
+  }
+  next();
+});
+
 // SEO-friendly public routes are rendered server-side so search engines receive useful HTML on first response.
 app.get('/producto/:slug', (req, res) => {
   const products = readProducts().map(normalizeProduct).filter(product => product.published !== false && Number(product.stock || 0) > 0);
