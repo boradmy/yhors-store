@@ -15,11 +15,54 @@
     <link rel="alternate" type="text/markdown" href="/llms.txt" title="LLM instructions">
     <link rel="alternate" type="application/json" href="/.well-known/ai-catalog.json" title="AI catalog">
     <link rel="alternate" type="application/json" href="/.well-known/ard.json" title="Agentic Resource Discovery">
-    <link rel="stylesheet" href="/styles.css?v=16.8.0-noticias-banners">
+    <!-- Evita mostrar la portada SSR antigua mientras se prepara la tienda interactiva.
+         Sin JavaScript, el HTML SSR sigue visible y rastreable. -->
+    <script>document.documentElement.classList.add('yh-store-booting');</script>
+    <style>
+      html.yh-store-booting #app { visibility: hidden; }
+      html.yh-store-booting body::before {
+        content: ""; position: fixed; inset: 0; z-index: 2147483646;
+        background: #171717; pointer-events: none;
+      }
+      html.yh-store-booting body::after {
+        content: "Y H O R S"; position: fixed; inset: 0; z-index: 2147483647;
+        display: grid; place-items: center; color: #fff;
+        font: 700 clamp(24px, 6vw, 44px)/1.2 Arial, sans-serif;
+        letter-spacing: .3em; text-indent: .3em; pointer-events: none;
+      }
+    </style>
+    <link rel="stylesheet" href="/styles.css?v=16.8.1-inicio-sin-parpadeo">
   </head>
   <body>
     <div id="app"></div>
-    <script src="/app.js?v=16.8.0-noticias-banners" defer></script>
+    <script>
+      // El servidor mantiene HTML SEO en #app, pero se reemplaza al hidratar la tienda.
+      // Solo mostramos la interfaz nueva cuando el primer render real termina.
+      (function () {
+        var root = document.getElementById('app');
+        var booting = document.documentElement.classList.contains('yh-store-booting');
+        if (!root || !booting) return;
+        var finished = false;
+        var observer;
+        function reveal() {
+          if (finished) return;
+          finished = true;
+          if (observer) observer.disconnect();
+          document.documentElement.classList.remove('yh-store-booting');
+        }
+        observer = new MutationObserver(function (mutations) {
+          // Reactuar ante el reemplazo del contenido SSR por la app interactiva.
+          if (mutations.some(function (entry) { return entry.type === 'childList'; })) reveal();
+        });
+        observer.observe(root, { childList: true });
+        // Si falla la API o el script, mostrar HTML SSR en lugar de pantalla vacía.
+        window.setTimeout(reveal, 9000);
+        window.addEventListener('error', function (event) {
+          if (event.target && event.target.tagName === 'SCRIPT') reveal();
+        }, true);
+      }());
+    </script>
+    <script src="/app.js?v=16.8.1-inicio-sin-parpadeo" defer></script>
     <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => navigator.serviceWorker.register('/store-sw.js', {scope:'/'}).catch(() => {}));
