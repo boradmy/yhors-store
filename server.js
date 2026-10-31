@@ -5051,7 +5051,7 @@ app.patch('/api/admin/historial-ventas/:id/nota', requireAdmin, (req,res)=>{
 // Anulación excepcional de ventas de prueba: conserva trazabilidad, nunca borra cobros.
 // Úsala ÚNICAMENTE cuando no hubo entrada real de dinero ni entrega física.
 app.post('/api/admin/historial-ventas/:id/anular-prueba', requireAdmin, (req,res)=>{
-  if(req.body?.confirmacion !== 'SIN_DINERO_REAL_NI_ENTREGA') return res.status(400).json({error:'Confirma expresamente que fue una prueba sin dinero ni entrega reales.'});
+  if(req.body?.confirmacion !== 'SIN_DINERO_REAL_NI_ENTREGA') return res.status(400).json({error:'Confirma que la operación fue solo de prueba, sin movimientos reales de dinero ni entrega pendiente.'});
   const motivo=cleanText(req.body?.motivo,250);
   if(motivo.length<8)return res.status(400).json({error:'Indica el motivo de la anulación (mínimo 8 caracteres).'});
   const sales=readSales(true), si=sales.findIndex(s=>String(s.id)===String(req.params.id));
@@ -5063,15 +5063,22 @@ app.post('/api/admin/historial-ventas/:id/anular-prueba', requireAdmin, (req,res
   const order=orders[oi];
   if(String(order.status||'').toLowerCase()==='cancelado')return res.status(409).json({error:'El pedido ya está cancelado. Revisa antes de anular la venta.'});
   const rental=(order.items||[]).some(i=>i.purchaseMode==='rental');
-  if(rental && (order.rentalReturn?.deliveredAt || sale.rentalReturn?.deliveredAt))return res.status(409).json({error:'El traje fue marcado como entregado. Registra primero su devolución física y concilia la garantía; no uses anulación de prueba.'});
-  if(rental && (Number(order.rentalReturn?.refundedAmount||0)>0 || Number(sale.rentalReturn?.refundedAmount||0)>0))return res.status(409).json({error:'Hay devoluciones de garantía registradas. Requiere conciliación manual.'});
+  // Una prueba que se marcó entregada solo puede anularse si el traje ya fue
+  // recibido y su stock repuesto. Conservamos TODO el historial de devoluciones.
+  const rentalState={...(sale.rentalReturn||{}),...(order.rentalReturn||{})};
+  const wasDelivered=!!(order.rentalReturn?.deliveredAt||sale.rentalReturn?.deliveredAt);
+  const wasReturned=!!rentalState.returnedAt && rentalState.stockRestored===true;
+  if(rental && wasDelivered && !wasReturned)return res.status(409).json({error:'La prenda figura entregada. Registra primero la devolución del traje en Alquileres y garantías antes de anular la prueba.'});
   const payments=readPayments();
   const related=payments.filter(p=>String(p.saleId||'')===String(sale.id)||String(p.orderId||'')===String(order.id));
-  if(related.some(p=>['refund','rental_deposit_refund'].includes(String(p.sourceType||''))))return res.status(409).json({error:'Esta operación tiene reembolsos registrados y requiere conciliación manual.'});
+  const hasRefunds=related.some(p=>['refund','rental_deposit_refund'].includes(String(p.sourceType||'')))||Number(rentalState.refundedAmount||0)>0;
+  if(rental && hasRefunds && !wasReturned)return res.status(409).json({error:'Hay una garantía devuelta pero el traje aún no figura recibido. Concilia la devolución primero.'});
+  const expectedDeposit=Math.max(0,Number(order.depositTotal||sale.depositTotal||0));
+  if(rental && wasReturned && expectedDeposit>0 && Number(rentalState.refundedAmount||0)+0.005<expectedDeposit)return res.status(409).json({error:'La garantía todavía tiene un saldo por devolver. Concilia la garantía antes de anular esta prueba.'});
   const now=new Date().toISOString(), actor=getSession(req)?.accountId||null;
   const updatedSale={...sale,status:'Anulada',annulledAt:now,annulledBy:actor,annulledReason:motivo,annulledAsTest:true,updatedAt:now};
   const updatedOrder={...order,status:'Cancelado',annulledAt:now,annulledBy:actor,annulledReason:motivo,updatedAt:now,
-    rentalReturn:rental?{...(order.rentalReturn||{}),status:'cancelado',stockRestored:true,cancelledAt:now}:order.rentalReturn};
+    rentalReturn:rental?{...(order.rentalReturn||{}),status:wasReturned?'devuelto':'cancelado',stockRestored:true,cancelledAt:now}:order.rentalReturn};
   // Restauración única: solo los items efectivamente reservados, nunca alquileres antiguos.
   // Si ya fue devuelto el stock, getStockDemand no incluye esos alquileres.
   const demand=getStockDemand(orderStatusUsesStock(order.status)?order:{items:[]});
