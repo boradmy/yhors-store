@@ -7600,3 +7600,13 @@ body[class*="yh-public-season-"]:not(.yh-public-season-none) .yh-season-greeting
 .yh-rental-refund-max{background:#f3eadc;color:#5c421c;border:1px solid #e4ceaa;border-radius:11px;padding:12px;font-size:13px}.yh-rental-refund-max strong{font-size:18px;margin-left:8px}
 .yh-rental-modal-error{font-size:12px;color:#a42c20}.yh-rental-modal-footer{display:flex;justify-content:flex-end;gap:10px;margin-top:14px;flex-wrap:wrap}
 @media(max-width:480px){.yh-rental-modal-footer .button{flex:1}.yh-rental-modal-card{padding:16px}}
+
+/* YHORS · Selector compra/alquiler y garantía de cosplay */
+.purchase-option:disabled{opacity:.64;cursor:not-allowed;background:#f3f0e9;color:#746b60;box-shadow:none}
+.purchase-option:disabled:hover{border-color:var(--line,#ded7ca);background:#f3f0e9;color:#746b60}
+.yh-detail-rental-guarantee{display:flex;flex-direction:column;gap:6px;margin-top:12px;padding:14px 16px;border-radius:12px;border:1px solid #d8c29c;background:#faf5e9;color:#332b21}
+.yh-detail-rental-guarantee strong{font-size:.86rem}
+.yh-detail-rental-guarantee small{font-size:.74rem;line-height:1.55;color:#63564a}
+.yh-detail-rental-unavailable{font-size:.76rem;line-height:1.5;margin:10px 0 0;color:#6b6258}
+.purchase-option:hover:not(:disabled),.purchase-option:focus-visible:not(:disabled){color:#171513}
+.purchase-option.active:hover,.purchase-option.active:focus-visible{color:#fff}
